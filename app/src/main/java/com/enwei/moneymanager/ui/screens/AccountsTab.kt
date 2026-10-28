@@ -559,12 +559,15 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
         var ocrMsg by remember { mutableStateOf<String?>(null) }
         var found by remember { mutableStateOf<List<com.enwei.moneymanager.core.BalanceExtractor.Candidate>>(emptyList()) }
         fun plain(minor: Long) = if (minor % 100 == 0L) (minor / 100).toString() else "%.2f".format(minor / 100.0)
-        fun readImage(load: suspend () -> List<String>) {
+        fun readImage(uri: android.net.Uri) {
             reading = true; ocrMsg = null; found = emptyList()
             scope.launch {
-                val lines = runCatching { load() }.getOrElse { ocrMsg = "讀取圖片失敗：${it.message}"; reading = false; return@launch }
+                val lines = runCatching { com.enwei.moneymanager.ocr.ScreenOcr.read(ctx, uri) }.getOrElse { ocrMsg = "讀取圖片失敗：${it.message}"; reading = false; return@launch }
                 found = com.enwei.moneymanager.core.BalanceExtractor.candidates(lines)
-                val ai = com.enwei.moneymanager.net.GroqAi.pickBalance(acc.name, lines)
+                // 先讓看圖模型直接看截圖，不行再用手機讀出的文字問一般模型
+                val seen = lines.flatMap { com.enwei.moneymanager.core.BalanceExtractor.amounts(it) }.toSet()
+                val ai = com.enwei.moneymanager.net.GroqAi.readBalanceFromImage(ctx, uri, acc.name, seen)
+                    ?: com.enwei.moneymanager.net.GroqAi.pickBalance(acc.name, lines)
                 val best = ai ?: found.firstOrNull()?.amountMinor
                 ocrMsg = when {
                     best == null -> "圖片裡找不到餘額，請手動輸入（截圖請包含「餘額」字樣與金額）"
@@ -577,14 +580,14 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
         }
         val pickShot = androidx.activity.compose.rememberLauncherForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
-        ) { uri -> if (uri != null) readImage { com.enwei.moneymanager.ocr.ScreenOcr.read(ctx, uri) } }
+        ) { uri -> if (uri != null) readImage(uri) }
         val photoUri = remember {
             val f = java.io.File(ctx.cacheDir, "photos").apply { mkdirs() }.let { java.io.File(it, "balance.jpg") }
             androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
         }
         val takePhoto = androidx.activity.compose.rememberLauncherForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.TakePicture(),
-        ) { ok -> if (ok) readImage { com.enwei.moneymanager.ocr.ScreenOcr.read(ctx, photoUri) } }
+        ) { ok -> if (ok) readImage(photoUri) }
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { reconcileOpen = false },
             title = { Text("對帳：${acc.name}") },

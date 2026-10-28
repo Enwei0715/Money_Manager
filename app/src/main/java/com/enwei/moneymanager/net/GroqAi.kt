@@ -41,6 +41,8 @@ object GroqAi {
     const val DEFAULT_MODEL = "openai/gpt-oss-20b"
     /** 較難的推估（整理「不明」花費）用的大模型；失敗時退回 [DEFAULT_MODEL] */
     const val HARD_MODEL = "openai/gpt-oss-120b"
+    /** 看得懂圖片的模型（截圖對帳用） */
+    const val VISION_MODEL = "qwen/qwen3.8-27b"
     /** 已停止提供的模型，自動改用預設模型 */
     val RETIRED_MODELS = setOf("llama-3.1-8b-instant", "llama3-8b-8192", "llama-3.3-70b-versatile")
 
@@ -72,7 +74,10 @@ object GroqAi {
         null
     }
 
-    private fun call(key: String, model: String, jsonMode: Boolean, system: String, user: String, maxTokens: Int, effort: String = "low"): Pair<JsonObject?, Fail> {
+    private fun call(
+        key: String, model: String, jsonMode: Boolean, system: String, user: String, maxTokens: Int, effort: String = "low",
+        imageDataUrl: String? = null,
+    ): Pair<JsonObject?, Fail> {
         // gpt-oss 等推理模型的思考過程也算在 max_tokens 裡，要多留空間並把推理強度調低
         val reasoning = model.startsWith("openai/gpt-oss") || model.contains("qwen3") || model.contains("deepseek")
         val body = buildJsonObject {
@@ -83,7 +88,14 @@ object GroqAi {
             if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
             put("messages", buildJsonArray {
                 add(buildJsonObject { put("role", "system"); put("content", system) })
-                add(buildJsonObject { put("role", "user"); put("content", user) })
+                add(buildJsonObject {
+                    put("role", "user")
+                    if (imageDataUrl == null) put("content", user)
+                    else put("content", buildJsonArray {
+                        add(buildJsonObject { put("type", "text"); put("text", user) })
+                        add(buildJsonObject { put("type", "image_url"); put("image_url", buildJsonObject { put("url", imageDataUrl) }) })
+                    })
+                })
             })
         }.toString()
         val req = Request.Builder().url(URL)
@@ -107,7 +119,9 @@ object GroqAi {
                     }
                     return@use null to (fail ?: Fail.NONE)
                 }
-                val content = Http.json.parseToJsonElement(text).jsonObject["choices"]
+                val root = Http.json.parseToJsonElement(text).jsonObject
+                recordUsage((root["usage"] as? JsonObject)?.get("total_tokens")?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0)
+                val content = root["choices"]
                     ?.let { (it as? kotlinx.serialization.json.JsonArray)?.firstOrNull() }
                     ?.jsonObject?.get("message")?.jsonObject?.get("content")
                     ?.let { (it as? JsonPrimitive)?.contentOrNull }
@@ -119,6 +133,44 @@ object GroqAi {
                 Http.json.parseToJsonElement(content.substring(a, b + 1)).jsonObject to Fail.NONE
             }
         }.getOrElse { lastError = it.message ?: it.javaClass.simpleName; null to Fail.NONE }
+    }
+
+    /** 今天的用量（請求數、tokens），每天重新計算；Groq 免費方案每個模型約每天 1,000 次請求、20 萬 tokens。 */
+    private fun recordUsage(tokens: Long) {
+        val today = java.time.LocalDate.now().toEpochDay()
+        MoneyApp.repo.settings.update { s ->
+            if (s.aiUsageDay != today) s.copy(aiUsageDay = today, aiUsageRequests = 1, aiUsageTokens = tokens)
+            else s.copy(aiUsageRequests = s.aiUsageRequests + 1, aiUsageTokens = s.aiUsageTokens + tokens)
+        }
+    }
+
+    /**
+     * 用視覺模型直接看截圖找餘額。只接受圖片文字（手機 OCR）裡真的出現過的金額；OCR 什麼都沒讀到時才直接採用（仍需使用者確認）。
+     * 模型不能用時回傳 null，改用文字判斷。
+     */
+    suspend fun readBalanceFromImage(context: android.content.Context, uri: android.net.Uri, accountName: String, ocrAmounts: Set<Long>): Long? =
+        withContext(Dispatchers.IO) {
+            val s = MoneyApp.repo.settings.value
+            if (!enabled) return@withContext null
+            val dataUrl = runCatching { imageDataUrl(context, uri) }.getOrNull() ?: return@withContext null
+            val system = "你是記帳 App 的助理。看這張銀行或錢包 App 的畫面，找出帳戶「$accountName」目前的餘額（優先：可用餘額、帳戶餘額）。" +
+                "交易金額、額度、帳號、日期都不是餘額。只回 JSON：{\"balance\": number|null}"
+            val model = s.aiModelVision.trim().ifBlank { VISION_MODEL }
+            var (r, fail) = call(s.groqKey.trim(), model, true, system, "找出餘額", 300, imageDataUrl = dataUrl)
+            if (r == null && fail == Fail.NO_JSON_MODE) r = call(s.groqKey.trim(), model, false, system, "找出餘額", 300, imageDataUrl = dataUrl).first
+            val v = r?.str("balance")?.replace(",", "")?.toDoubleOrNull() ?: return@withContext null
+            val minor = Math.round(v * 100)
+            minor.takeIf { ocrAmounts.isEmpty() || it in ocrAmounts || -it in ocrAmounts }
+        }
+
+    /** 圖片縮到長邊 1280、JPEG 壓縮後轉成 data URL（Groq 限制 4MB）。 */
+    private fun imageDataUrl(context: android.content.Context, uri: android.net.Uri): String? {
+        val bmp = context.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) } ?: return null
+        val scale = minOf(1f, 1280f / maxOf(bmp.width, bmp.height))
+        val scaled = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true) else bmp
+        val out = java.io.ByteArrayOutputStream()
+        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out)
+        return "data:image/jpeg;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
     }
 
     private fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() && it != "null" }

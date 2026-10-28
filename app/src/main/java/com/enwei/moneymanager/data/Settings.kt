@@ -185,6 +185,12 @@ data class AppSettings(
     val aiModel: String = "openai/gpt-oss-20b",
     /** 較難推估（整理不明花費）用的大模型 */
     val aiModelHard: String = "openai/gpt-oss-120b",
+    /** 看圖模型（截圖對帳） */
+    val aiModelVision: String = "qwen/qwen3.8-27b",
+    /** AI 今日用量：日期（epochDay）、請求數、tokens */
+    val aiUsageDay: Long = 0,
+    val aiUsageRequests: Int = 0,
+    val aiUsageTokens: Long = 0,
     /** AI 建議的分類（待使用者確認） */
     val aiSuggestions: List<AiSuggestion> = emptyList(),
     /** 上次提醒「扣款帳戶餘額不足」的內容，避免同一件事重複通知 */
@@ -272,6 +278,10 @@ class SettingsStore(context: Context) {
         aiModel = prefs.getString("aiModel", "openai/gpt-oss-20b")!!.let { if (it == "llama-3.1-8b-instant") "openai/gpt-oss-20b" else it },
         fundingWarnKey = prefs.getString("fundingWarnKey", "")!!,
         aiModelHard = prefs.getString("aiModelHard", "openai/gpt-oss-120b")!!,
+        aiModelVision = prefs.getString("aiModelVision", "qwen/qwen3.8-27b")!!,
+        aiUsageDay = prefs.getLong("aiUsageDay", 0),
+        aiUsageRequests = prefs.getInt("aiUsageRequests", 0),
+        aiUsageTokens = prefs.getLong("aiUsageTokens", 0),
         aiSuggestions = runCatching { json.decodeFromString(aiSuggestionSerializer, prefs.getString("aiSuggestions", "[]")!!) }.getOrDefault(emptyList()),
         cardBank = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardBank", "{}")!!) }.getOrDefault(emptyMap()),
         cardDueOffset = runCatching { json.decodeFromString(longIntSerializer, prefs.getString("cardDueOffset", "{}")!!) }.getOrDefault(emptyMap()),
@@ -396,6 +406,10 @@ class SettingsStore(context: Context) {
             .putString("aiModel", s.aiModel)
             .putString("fundingWarnKey", s.fundingWarnKey)
             .putString("aiModelHard", s.aiModelHard)
+            .putString("aiModelVision", s.aiModelVision)
+            .putLong("aiUsageDay", s.aiUsageDay)
+            .putInt("aiUsageRequests", s.aiUsageRequests)
+            .putLong("aiUsageTokens", s.aiUsageTokens)
             .putString("aiSuggestions", json.encodeToString(aiSuggestionSerializer, s.aiSuggestions))
             .putString("cardDueOffset", json.encodeToString(longIntSerializer, s.cardDueOffset))
             .apply()
