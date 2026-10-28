@@ -52,6 +52,7 @@ fun <T> ReorderableColumn(
     row: @Composable (item: T, handle: Modifier) -> Unit,
 ) {
     val list = remember(items) { items.toMutableStateList() }
+    val currentList by rememberUpdatedState(list)
     val heights = remember { mutableStateMapOf<Any, Int>() }
     var dragging by remember { mutableStateOf<Any?>(null) }
     var offset by remember { mutableFloatStateOf(0f) }
@@ -59,16 +60,19 @@ fun <T> ReorderableColumn(
 
     Column {
         list.forEach { item ->
+          // 以 key 綁定每一列：交換位置時拖曳中的手勢跟著該列移動，不會被中斷
+          androidx.compose.runtime.key(key(item)) {
             val k = key(item)
             val isDragging = dragging == k
-            val handle = Modifier.pointerInput(k, list) {
+            val handle = Modifier.pointerInput(k) {
                 detectDragGestures(
                     onDragStart = { dragging = k; offset = 0f },
-                    onDragEnd = { dragging = null; offset = 0f; commit(list.toList()) },
+                    onDragEnd = { dragging = null; offset = 0f; commit(currentList.toList()) },
                     onDragCancel = { dragging = null; offset = 0f },
                     onDrag = { change, d ->
                         change.consume()
                         offset += d.y
+                        val list = currentList
                         val i = list.indexOfFirst { key(it) == k }
                         if (i < 0) return@detectDragGestures
                         if (offset > 0 && i < list.lastIndex) {
@@ -86,6 +90,7 @@ fun <T> ReorderableColumn(
                     .zIndex(if (isDragging) 1f else 0f)
                     .graphicsLayer { translationY = if (isDragging) offset else 0f; shadowElevation = if (isDragging) 8f else 0f },
             ) { row(item, handle) }
+          }
         }
     }
 }
