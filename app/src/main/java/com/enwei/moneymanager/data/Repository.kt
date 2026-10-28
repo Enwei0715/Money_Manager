@@ -988,9 +988,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val fx = currentFx()
         val accounts = db.accounts().all()
         accounts.filter {
-            it.type == AccountType.CREDIT_CARD && it.autopayFromId != null && it.statementDay != null && it.dueDay != null && !it.archived
+            it.type == AccountType.CREDIT_CARD && it.autopayFromId != null && !it.archived
         }.forEach { card ->
-            val cycle = settings.value.cycleFor(card)!!
+            // 繳款日為固定日或「結帳日＋N 天」都適用
+            val cycle = settings.value.cycleFor(card) ?: return@forEach
             // 第一次設定時只從今天開始，不回溯
             var cursor = card.autopayLastRun?.let(LocalDate::ofEpochDay) ?: today.minusDays(1)
             while (true) {
@@ -1049,8 +1050,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
         return db.accounts().all().filter { it.type == AccountType.CREDIT_CARD }.associate { card ->
             val owed = maxOf(0, -balanceAsOf(card, txns, Long.MAX_VALUE, fx))
-            if (card.statementDay == null || card.dueDay == null) return@associate card.id to CardStatus(owed, 0, null)
-            val cycle = settings.value.cycleFor(card)!!
+            // 繳款日可以是固定日，也可以是「結帳日＋N 天」（依銀行代碼帶入），兩種都要算
+            val cycle = settings.value.cycleFor(card) ?: return@associate card.id to CardStatus(owed, 0, null)
             val lastStatement = cycle.lastStatementOnOrBefore(today)
             val cutoff = lastStatement.plusDays(1).toMillis(LocalTime.MIDNIGHT)
             val billed = maxOf(0, -balanceAsOf(card, txns, cutoff, fx))
@@ -1094,9 +1095,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     suspend fun upcomingCardBills(today: LocalDate = LocalDate.now()): List<Triple<AccountEntity, LocalDate, Long>> {
         val fx = currentFx()
         val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
-        return db.accounts().all().filter { it.type == AccountType.CREDIT_CARD && it.statementDay != null && it.dueDay != null && !it.archived }
-            .map { card ->
-                val cycle = settings.value.cycleFor(card)!!
+        return db.accounts().all().filter { it.type == AccountType.CREDIT_CARD && !it.archived }
+            .mapNotNull { card ->
+                val cycle = settings.value.cycleFor(card) ?: return@mapNotNull null
                 val due = cycle.nextDueDate(today.minusDays(1))
                 val statement = cycle.statementDateFor(due)
                 val cutoff = if (statement.isAfter(today)) Long.MAX_VALUE else statement.plusDays(1).toMillis(LocalTime.MIDNIGHT)

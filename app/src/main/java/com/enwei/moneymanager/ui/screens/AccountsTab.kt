@@ -438,7 +438,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         Text(
                             listOfNotNull(
                                 acc.statementDay?.let { "結帳日 $it 日" },
-                                acc.dueDay?.let { "繳款日 $it 日" },
+                                settings.cardDueOffset[acc.id]?.let { "結帳後 $it 天繳款" } ?: acc.dueDay?.let { "繳款日 $it 日" },
                                 st?.autopayDate?.let { "${it.monthValue}/${it.dayOfMonth} 由「${lk.account(acc.autopayFromId)?.name}」自動扣繳" } ?: "未設定自動扣繳",
                             ).joinToString(" · "),
                             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
