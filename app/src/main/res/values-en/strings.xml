@@ -3,7 +3,7 @@
     <string name="listener_label">Ledgerly auto recording</string>
     <string name="widget_description">This month\'s spending, category pie and quick cash entry</string>
     <string name="wallet_reader_label">Ledgerly wallet reader</string>
-    <string name="wallet_reader_description">Only when you open a wallet app you checked in Ledgerly (e.g. JKO, Easy Wallet), reads the merchant, amount and date on its transaction page and imports them. No other apps are read; data stays on your phone.</string>
+    <string name="wallet_reader_description">Only when you open a wallet app you checked in Ledgerly (e.g. JKO, Easy Wallet), reads the merchant, amount and date on its transaction page and imports them. It also reads notification text as a backup for notification auto-recording (used when Android 15 hides content from the notification listener); only apps you enabled there are recorded. Data stays on your phone.</string>
     <string name="widget_quick_description">One-tap entry</string>
     <string name="widget_today_description">Today and this month\'s spending</string>
     <string name="widget_stocks_description">Stock value and P/L</string>
