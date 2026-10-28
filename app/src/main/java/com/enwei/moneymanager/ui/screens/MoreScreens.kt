@@ -72,11 +72,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
-import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
-import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.CurrencyExchange
 import androidx.compose.material.icons.outlined.Inbox
@@ -114,15 +111,15 @@ private val timeFmt = SimpleDateFormat("M/d HH:mm", Locale.TAIWAN)
 fun MoreScreen(nav: NavController) {
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
     val entries = listOf(
-        Triple("config", "設定", Icons.Outlined.Settings),
-        Triple("backup", "備份", Icons.Outlined.SettingsBackupRestore),
-        Triple("notif", "通知記帳", Icons.Outlined.NotificationsActive),
-        Triple("walletreader", "錢包讀取", Icons.Outlined.AccountBalanceWallet),
-        Triple("invest", "股票", Icons.AutoMirrored.Outlined.ShowChart),
-        Triple("recurring", "週期扣款", Icons.Outlined.EventRepeat),
-        Triple("fx", "匯率", Icons.Outlined.CurrencyExchange),
-        Triple("pending", "待確認", Icons.Outlined.Inbox),
-        Triple("settings", "App 更新", Icons.Outlined.SystemUpdate),
+        Triple("config", "設定", com.enwei.moneymanager.ui.components.LineIcons.Settings),
+        Triple("backup", "備份", com.enwei.moneymanager.ui.components.LineIcons.Backup),
+        Triple("notif", "通知記帳", com.enwei.moneymanager.ui.components.LineIcons.Notification),
+        Triple("walletreader", "錢包讀取", com.enwei.moneymanager.ui.components.LineIcons.Wallet),
+        Triple("invest", "股票", com.enwei.moneymanager.ui.components.LineIcons.Stocks),
+        Triple("recurring", "週期扣款", com.enwei.moneymanager.ui.components.LineIcons.Recurring),
+        Triple("fx", "匯率", com.enwei.moneymanager.ui.components.LineIcons.Exchange),
+        Triple("pending", "待確認", com.enwei.moneymanager.ui.components.LineIcons.Inbox),
+        Triple("settings", "App 更新", com.enwei.moneymanager.ui.components.LineIcons.Update),
     )
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -149,7 +146,7 @@ fun MoreScreen(nav: NavController) {
                 ) {
                     androidx.compose.material3.BadgedBox(badge = {
                         if (route == "pending" && pending.isNotEmpty()) Badge { Text("${pending.size}") }
-                    }) { Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), modifier = Modifier.size(36.dp)) }
+                    }) { Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(34.dp)) }
                     Spacer(Modifier.height(10.dp))
                     Text(label, fontSize = 15.sp)
                 }
