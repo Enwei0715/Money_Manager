@@ -101,6 +101,10 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val open = holdings.filter { it.shares > 0.0001 }
     val closed = holdings.filter { it.shares <= 0.0001 }
+    val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
+    val byBroker by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
+    val brokers = balances.filter { it.account.type == AccountType.BROKERAGE && !it.account.archived }
+        .sortedWith(compareBy({ it.account.sortOrder }, { it.account.id }))
 
     // 畫面開著時每 30 秒更新一次報價；手動按更新時 refreshTick 會變動
     LaunchedEffect(refreshTick, holdings.isNotEmpty()) {
@@ -128,7 +132,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
             SummaryBarCustom(
                 listOf(
                     "市值" to (Money.full(totalValue) to MaterialTheme.colorScheme.onSurface),
-                    "未實現損益" to (Money.full(unreal) to pnlColor(unreal.toDouble())),
+                    "預估損益" to (Money.full(unreal) to pnlColor(unreal.toDouble())),
                     "今日" to (Money.full(dayChange) to pnlColor(dayChange.toDouble())),
                 ),
             )
@@ -143,6 +147,44 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                 )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+        // 證券帳戶：現金＋持股市值，小字標示預估損益；新增證券帳戶也在這裡
+        item {
+            Row(
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("證券帳戶（${brokers.size}）", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = { nav.navigate("account/0?type=BROKERAGE") }) { Text("＋ 新增證券帳戶") }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+        items(brokers, key = { "b${it.account.id}" }) { b ->
+            val hs = byBroker[b.account.id].orEmpty().filter { it.shares > 0.0001 }
+            val stock = hs.sumOf { lk.fx.convert(Money.toMinor(it.marketValue), it.currency) }
+            val pnl = hs.sumOf { lk.fx.convert(Money.toMinor(it.unrealized), it.currency) }
+            val cost = hs.sumOf { lk.fx.convert(Money.toMinor(it.netCost), it.currency) }
+            val cashV = lk.fx.convert(b.balance, b.account.currency)
+            Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { nav.navigate("acct/${b.account.id}") }.padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(b.account.name, fontSize = 16.sp)
+                        Text(
+                            "持股 ${hs.size} 檔 ${Money.withSymbol(stock, lk.base)} · 現金 ${Money.withSymbol(cashV, lk.base)}",
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (hs.isNotEmpty()) Text(
+                            "預估損益 ${if (pnl > 0) "+" else ""}${Money.full(pnl)}（${formatPct(if (cost > 0) pnl * 100.0 / cost else 0.0)}）",
+                            fontSize = 12.sp, color = pnlColor(pnl.toDouble()),
+                        )
+                    }
+                    Text(Money.withSymbol(stock + cashV, lk.base), fontSize = 16.sp)
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
         }
         if (open.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {

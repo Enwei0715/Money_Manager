@@ -156,3 +156,19 @@ class LotCalcTest {
         assertEquals(300.0, book.lots[1].dividends, 1e-9)
     }
 }
+
+class StatementShiftTest {
+    @Test fun weekendShift() {
+        // 2026/10/17 是週六
+        val cycle = CardCycle(17, 2, StatementShift.FRI_SAT_TO_SUN)
+        assertEquals(java.time.LocalDate.of(2026, 10, 18), cycle.statementIn(java.time.YearMonth.of(2026, 10)))
+        // 2026/04/17 是週五 → 週日 4/19
+        assertEquals(java.time.LocalDate.of(2026, 4, 19), cycle.statementIn(java.time.YearMonth.of(2026, 4)))
+        // 週六順延到週一
+        assertEquals(java.time.LocalDate.of(2026, 10, 19), CardCycle(17, 2, StatementShift.SAT_SUN_TO_MON).statementIn(java.time.YearMonth.of(2026, 10)))
+        // 10/17 當天還沒到實際結帳日（10/18），最近一次結帳日是 9/17（週四）
+        assertEquals(java.time.LocalDate.of(2026, 9, 17), cycle.lastStatementOnOrBefore(java.time.LocalDate.of(2026, 10, 17)))
+        assertEquals(java.time.LocalDate.of(2026, 10, 18), cycle.lastStatementOnOrBefore(java.time.LocalDate.of(2026, 10, 18)))
+        assertEquals(java.time.LocalDate.of(2026, 10, 17), CardCycle(17, 2).statementIn(java.time.YearMonth.of(2026, 10)))
+    }
+}

@@ -82,6 +82,7 @@ data class Backup(
     val brokerRebates: Map<Long, RebateRule> = emptyMap(),
     val learnedSources: List<LearnedSource> = emptyList(),
     val cashCounts: Map<Long, Map<Int, Int>> = emptyMap(),
+    val cardShift: Map<Long, String> = emptyMap(),
 )
 
 data class CardStatus(val payable: Long, val outstanding: Long, val dueDate: LocalDate?, val autopayDate: LocalDate? = null)
@@ -245,6 +246,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 defaultAccountId = s.defaultAccountId.takeIf { it != a.id },
                 notifAccountMap = s.notifAccountMap.filterValues { it != a.id },
                 cashCounts = s.cashCounts - a.id,
+                cardShift = s.cardShift - a.id,
                 brokerRebates = s.brokerRebates - a.id,
                 learnedSources = s.learnedSources.map { if (it.accountId == a.id) it.copy(accountId = null) else it },
             )
@@ -742,7 +744,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         accounts.filter {
             it.type == AccountType.CREDIT_CARD && it.autopayFromId != null && it.statementDay != null && it.dueDay != null && !it.archived
         }.forEach { card ->
-            val cycle = CardCycle(card.statementDay!!, card.dueDay!!)
+            val cycle = CardCycle(card.statementDay!!, card.dueDay!!, settings.value.shiftFor(card.id))
             // 第一次設定時只從今天開始，不回溯
             var cursor = card.autopayLastRun?.let(LocalDate::ofEpochDay) ?: today.minusDays(1)
             while (true) {
@@ -802,9 +804,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return db.accounts().all().filter { it.type == AccountType.CREDIT_CARD }.associate { card ->
             val owed = maxOf(0, -balanceAsOf(card, txns, Long.MAX_VALUE, fx))
             if (card.statementDay == null || card.dueDay == null) return@associate card.id to CardStatus(owed, 0, null)
-            val cycle = CardCycle(card.statementDay, card.dueDay)
-            val thisMonth = Recurrence.dayInMonth(java.time.YearMonth.from(today), card.statementDay)
-            val lastStatement = if (thisMonth.isAfter(today)) Recurrence.dayInMonth(java.time.YearMonth.from(today).minusMonths(1), card.statementDay) else thisMonth
+            val cycle = CardCycle(card.statementDay, card.dueDay, settings.value.shiftFor(card.id))
+            val lastStatement = cycle.lastStatementOnOrBefore(today)
             val cutoff = lastStatement.plusDays(1).toMillis(LocalTime.MIDNIGHT)
             val billed = maxOf(0, -balanceAsOf(card, txns, cutoff, fx))
             val paid = txns.filter { it.type == TxnType.TRANSFER && it.toAccountId == card.id && it.date >= cutoff }.sumOf { it.toAmount ?: it.amount }
@@ -820,7 +821,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
         return db.accounts().all().filter { it.type == AccountType.CREDIT_CARD && it.statementDay != null && it.dueDay != null && !it.archived }
             .map { card ->
-                val cycle = CardCycle(card.statementDay!!, card.dueDay!!)
+                val cycle = CardCycle(card.statementDay!!, card.dueDay!!, settings.value.shiftFor(card.id))
                 val due = cycle.nextDueDate(today.minusDays(1))
                 val statement = cycle.statementDateFor(due)
                 val cutoff = if (statement.isAfter(today)) Long.MAX_VALUE else statement.plusDays(1).toMillis(LocalTime.MIDNIGHT)
@@ -930,6 +931,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             brokerRebates = settings.value.brokerRebates,
             learnedSources = settings.value.learnedSources,
             cashCounts = settings.value.cashCounts,
+            cardShift = settings.value.cardShift,
         ),
     )
 
@@ -950,6 +952,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 bookmarks = b.bookmarks, memos = b.memos, budgets = b.budgets,
                 notifPackages = it.notifPackages + b.notifPackages, notifAccountMap = it.notifAccountMap + b.notifAccountMap,
                 brokerRebates = b.brokerRebates, learnedSources = it.learnedSources + b.learnedSources, cashCounts = b.cashCounts,
+                cardShift = b.cardShift,
             )
         }
         return b

@@ -267,8 +267,14 @@ private fun AppScaffold(nav: NavHostController) {
                 TxnEditScreen(nav, a.getLong("id"), a.getString("type"), a.getLong("bookmark"), a.getLong("date").takeIf { it != Long.MIN_VALUE }, a.getLong("account").takeIf { it > 0 },
                     a.getLong("to").takeIf { it > 0 }, a.getLong("amount").takeIf { it > 0 })
             }
-            composable("account/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->
-                AccountEditScreen(nav, e.arguments!!.getLong("id"))
+            composable(
+                "account/{id}?type={type}",
+                arguments = listOf(
+                    navArgument("id") { type = NavType.LongType },
+                    navArgument("type") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
+            ) { e ->
+                AccountEditScreen(nav, e.arguments!!.getLong("id"), e.arguments?.getString("type"))
             }
             composable("recurring") { RecurringScreen(nav) }
             composable("recurring/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->

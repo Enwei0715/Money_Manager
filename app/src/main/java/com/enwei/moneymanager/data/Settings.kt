@@ -113,6 +113,8 @@ data class AppSettings(
     val dismissedDividends: Set<String> = emptySet(),
     /** 已清理過舊版自動建立的預設帳戶 */
     val seedCleaned: Boolean = false,
+    /** 信用卡 id → 結帳日遇週末的調整（StatementShift 名稱） */
+    val cardShift: Map<Long, String> = emptyMap(),
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee, oddLotMinFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -129,6 +131,7 @@ class SettingsStore(context: Context) {
     private val budgetSerializer = MapSerializer(Long.serializer(), Long.serializer())
     private val pkgMapSerializer = MapSerializer(String.serializer(), Long.serializer())
     private val rebateSerializer = MapSerializer(Long.serializer(), RebateRule.serializer())
+    private val longStrSerializer = MapSerializer(Long.serializer(), String.serializer())
     private val learnedSerializer = ListSerializer(LearnedSource.serializer())
     private val strMapSerializer = MapSerializer(String.serializer(), String.serializer())
     private val cashSerializer = MapSerializer(Long.serializer(), MapSerializer(Int.serializer(), Int.serializer()))
@@ -180,6 +183,7 @@ class SettingsStore(context: Context) {
         widgetOpacity = prefs.getInt("widgetOpacity", 100),
         accountGroupOrder = prefs.getString("accountGroupOrder", "")!!.split(',').filter { it.isNotBlank() },
         seedCleaned = prefs.getBoolean("seedCleaned", false),
+        cardShift = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardShift", "{}")!!) }.getOrDefault(emptyMap()),
         dismissedDividends = prefs.getStringSet("dismissedDividends", emptySet())!!.toSet(),
         brokerRebates = runCatching { json.decodeFromString(rebateSerializer, prefs.getString("brokerRebates", "{}")!!) }.getOrDefault(emptyMap()),
         learnedSources = runCatching { json.decodeFromString(learnedSerializer, prefs.getString("learnedSources", "[]")!!) }.getOrDefault(emptyList()),
@@ -237,6 +241,7 @@ class SettingsStore(context: Context) {
             .putString("brokerRebates", json.encodeToString(rebateSerializer, s.brokerRebates))
             .putStringSet("dismissedDividends", s.dismissedDividends)
             .putBoolean("seedCleaned", s.seedCleaned)
+            .putString("cardShift", json.encodeToString(longStrSerializer, s.cardShift))
             .apply()
         state.value = s
     }
@@ -257,3 +262,6 @@ fun AppSettings.learnedFor(pkg: String, title: String?, text: String?): LearnedS
 
 fun learnKey(title: String?, text: String?): String =
     title?.trim()?.takeIf { it.isNotEmpty() } ?: text.orEmpty().trim().take(8)
+
+fun AppSettings.shiftFor(cardId: Long): com.enwei.moneymanager.core.StatementShift =
+    cardShift[cardId]?.let { n -> com.enwei.moneymanager.core.StatementShift.entries.find { it.name == n } } ?: com.enwei.moneymanager.core.StatementShift.NONE

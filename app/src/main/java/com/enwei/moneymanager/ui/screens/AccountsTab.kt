@@ -133,10 +133,11 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
     val st by repo.settings.flow.collectAsStateWithLifecycle()
     val groupRank = st.groupOrder()
 
-    val visible = balances.filter { showHidden || !it.account.archived }.sortedWith(compareBy({ it.account.sortOrder }, { it.account.id }))
-    val counted = balances.filter { !it.account.archived && it.account.includeInNetWorth }
-    val stockValue = holdings.sumOf { lk.fx.convert(Money.toMinor(it.marketValue), it.currency) }
-    val assets = counted.filter { it.balance > 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) } + stockValue
+    // 帳戶頁只放一般帳戶；證券帳戶與股票資產在「股票」分頁另外計算
+    val visible = balances.filter { (showHidden || !it.account.archived) && it.account.type != AccountType.BROKERAGE }
+        .sortedWith(compareBy({ it.account.sortOrder }, { it.account.id }))
+    val counted = balances.filter { !it.account.archived && it.account.includeInNetWorth && it.account.type != AccountType.BROKERAGE }
+    val assets = counted.filter { it.balance > 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
     val debts = -counted.filter { it.balance < 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
 
     Scaffold(
@@ -247,20 +248,6 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                                 Text(Money.withSymbol(v, lk.base), color = balanceColor(v, MaterialTheme.colorScheme.onSurface))
                             } else Text(Money.withSymbol(b.balance, a.currency), color = balanceColor(b.balance, MaterialTheme.colorScheme.onSurface))
                         }
-                    }
-                }
-            }
-            // 沒有指定證券帳戶的持股
-            val orphan = byBroker[null].orEmpty().filter { it.shares > 0 }
-            if (orphan.isNotEmpty()) {
-                item(key = "ginv") { GrayHeader("股票（未指定證券帳戶）") { Text(Money.withSymbol(stockOf(null), lk.base), color = IncomeColor) } }
-                item(key = "inv") {
-                    val oPnl = orphan.sumOf { lk.fx.convert(Money.toMinor(it.unrealized), it.currency) }
-                    AccountLine(
-                        "持股 ${orphan.size} 檔", { section = 1 }, "到股票分頁編輯交易，指定證券帳戶",
-                        "股票損益 ${if (oPnl > 0) "+" else ""}${Money.full(oPnl)}" to (if (oPnl >= 0) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown),
-                    ) {
-                        Text(Money.withSymbol(stockOf(null), lk.base), color = IncomeColor)
                     }
                 }
             }

@@ -52,6 +52,7 @@ import com.enwei.moneymanager.core.CardCycle
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.data.AccountEntity
 import com.enwei.moneymanager.data.AccountType
+import com.enwei.moneymanager.data.shiftFor
 import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.FormInput
 import com.enwei.moneymanager.ui.components.FormLine
@@ -61,12 +62,12 @@ import java.time.LocalDate
 
 /** 帳戶資訊：群組、名稱、金額、說明；信用卡另有結帳日、繳款日、自動扣繳。 */
 @Composable
-fun AccountEditScreen(nav: NavController, id: Long) {
+fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
     var original by remember { mutableStateOf<AccountEntity?>(null) }
     var name by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf(AccountType.BANK) }
+    var type by remember { mutableStateOf(initType?.let { t -> AccountType.entries.find { it.name == t } } ?: AccountType.BANK) }
     var currency by remember { mutableStateOf(lk.base) }
     var initial by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -85,6 +86,7 @@ fun AccountEditScreen(nav: NavController, id: Long) {
     var linkedId by remember { mutableStateOf<Long?>(null) }
     var feeDiscount by remember { mutableStateOf("") }
     var rebate by remember { mutableStateOf("") }
+    var shift by remember { mutableStateOf(com.enwei.moneymanager.core.StatementShift.NONE) }
     val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
     // 「金額」欄位以目前餘額表示；儲存時換算回期初餘額
     val currentBalance = balances.find { it.account.id == id }?.balance
@@ -99,6 +101,7 @@ fun AccountEditScreen(nav: NavController, id: Long) {
         linkedId = a.linkedAccountId
         feeDiscount = a.feeDiscount?.toString().orEmpty()
         rebate = repo.settings.value.brokerRebates[a.id]?.discount?.toString().orEmpty()
+        shift = repo.settings.value.shiftFor(a.id)
         description = a.description.orEmpty()
         limit = if (a.creditLimit > 0) Money.fromMinor(a.creditLimit).stripTrailingZeros().toPlainString() else ""
         last4 = a.cardLast4.orEmpty(); statementDay = a.statementDay?.toString().orEmpty(); dueDay = a.dueDay?.toString().orEmpty(); autopayDay = a.autopayDay?.toString().orEmpty()
@@ -161,8 +164,9 @@ fun AccountEditScreen(nav: NavController, id: Long) {
                         }
                     }
                 }
+                DropdownLine("結帳日遇週末", shift.label, com.enwei.moneymanager.core.StatementShift.entries.map { it to it.label }) { shift = it }
                 if (sDay != null && dDay != null) {
-                    val cycle = CardCycle(sDay, dDay)
+                    val cycle = CardCycle(sDay, dDay, shift)
                     val due = cycle.nextDueDate(LocalDate.now().minusDays(1))
                     val apDay = autopayDay.toIntOrNull()?.takeIf { it in 1..31 }
                     Text(
@@ -232,6 +236,12 @@ fun AccountEditScreen(nav: NavController, id: Long) {
                     scope.launch {
                         val savedId = repo.saveAccount(a)
                         val r = rebate.toDoubleOrNull()?.takeIf { it > 0 && it < 1 && type == AccountType.BROKERAGE }
+                        repo.settings.update { st ->
+                            st.copy(
+                                cardShift = if (type == AccountType.CREDIT_CARD && shift != com.enwei.moneymanager.core.StatementShift.NONE)
+                                    st.cardShift + (savedId to shift.name) else st.cardShift - savedId,
+                            )
+                        }
                         repo.settings.update { st ->
                             val old = st.brokerRebates[savedId]
                             st.copy(
