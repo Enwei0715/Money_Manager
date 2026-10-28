@@ -62,6 +62,7 @@ import com.enwei.moneymanager.data.HoldingView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.core.StockCalc
@@ -488,7 +489,13 @@ fun TradeEditScreen(
                             .border(if (sel) 1.5.dp else 1.dp, if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
                             .clickable { side = sd },
                         contentAlignment = Alignment.Center,
-                    ) { Text(sd.label, fontSize = 13.sp, color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
+                    ) {
+                        Text(
+                            sd.label, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                            color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 2.dp),
+                        )
+                    }
                 }
             }
             DropdownLine("證券帳戶", broker?.name ?: if (brokers.isEmpty()) "尚未建立（帳戶 → 新增 → 群組選證券）" else "未指定",

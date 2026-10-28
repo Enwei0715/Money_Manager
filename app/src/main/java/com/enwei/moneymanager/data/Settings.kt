@@ -30,7 +30,22 @@ data class Bookmark(
 
 /** 交易頁「備註」分頁的備忘。 */
 @Serializable
-data class Memo(val id: Long, val date: Long, val text: String)
+data class Memo(
+    val id: Long,
+    val date: Long,
+    val text: String,
+    val title: String = "",
+    /** 主題色（[memoColors] 的索引，0 = 無） */
+    val color: Int = 0,
+    /** 置頂 */
+    val pinned: Boolean = false,
+)
+
+/** 備註主題色（0 為不上色）。 */
+val memoColors: List<Long> = listOf(
+    0x00000000, 0xFFFF7468, 0xFFFFB14A, 0xFFFFE97A, 0xFFB2FF6E, 0xFF52F5D1,
+    0xFF63E8FF, 0xFF45A6FF, 0xFFC27BFF, 0xFFFFA3E3, 0xFFD6B98A, 0xFFB5B5B5,
+)
 
 /** 證券帳戶手續費月退：成交先收全額，次月 [payDay] 日退回差額。 */
 @Serializable

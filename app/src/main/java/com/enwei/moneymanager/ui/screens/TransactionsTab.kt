@@ -26,6 +26,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin as OutlinedPushPin
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
@@ -231,7 +233,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface,
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
             ) {
-                subTabs.forEachIndexed { i, t ->
+                // 英文時用短標籤，避免五個分頁被截斷
+                (if (com.enwei.moneymanager.ui.I18n.english) listOf("Daily", "Cal.", "Month", "Total", "Notes") else subTabs).forEachIndexed { i, t ->
                     Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t, fontSize = 14.sp, maxLines = 1) },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -726,34 +729,89 @@ private fun KV(k: String, v: String, color: Color = Color.Unspecified) {
 @Composable
 private fun MemoView(memos: List<Memo>, onEdit: (Memo) -> Unit) {
     if (memos.isEmpty()) { NoData(); return }
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(memos.sortedByDescending { it.date }, key = { it.id }) { m ->
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item { Spacer(Modifier.height(4.dp)) }
+        // 置頂的排前面，其餘依日期新到舊
+        items(memos.sortedWith(compareByDescending<Memo> { it.pinned }.thenByDescending { it.date }), key = { it.id }) { m ->
             val d = m.date.toLocalDate()
-            Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { onEdit(m) }) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                    Text("${d.monthValue}/${d.dayOfMonth}（${Recurrence.weekdayName(d.dayOfWeek)}）", color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(110.dp))
-                    Text(m.text, Modifier.weight(1f))
+            val tint = com.enwei.moneymanager.data.memoColors.getOrElse(m.color) { 0L }
+            val bg = if (tint == 0L) MaterialTheme.colorScheme.surface else Color(tint).copy(alpha = 0.22f)
+            Surface(
+                shape = RoundedCornerShape(10.dp), color = bg,
+                border = if (tint == 0L) null else androidx.compose.foundation.BorderStroke(1.dp, Color(tint).copy(alpha = 0.7f)),
+                modifier = Modifier.fillMaxWidth().clickable { onEdit(m) },
+            ) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("${d.monthValue}.${d.dayOfMonth}（${Recurrence.weekdayName(d.dayOfWeek)}）", fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                        if (m.pinned) Icon(Icons.Filled.PushPin, "置頂",
+                            tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                    }
+                    if (m.title.isNotBlank()) Text(m.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    if (m.text.isNotBlank()) Text(m.text, fontSize = 14.sp, maxLines = 6, overflow = TextOverflow.Ellipsis)
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
         item { Spacer(Modifier.height(96.dp)) }
     }
 }
 
+/** 備註：維持小視窗，可設定標題、內容、主題色與置頂。 */
 @Composable
 private fun MemoDialog(memo: Memo, onDismiss: () -> Unit) {
+    var title by remember(memo) { mutableStateOf(memo.title) }
     var text by remember(memo) { mutableStateOf(memo.text) }
+    var color by remember(memo) { mutableStateOf(memo.color) }
+    var pinned by remember(memo) { mutableStateOf(memo.pinned) }
+    val tint = com.enwei.moneymanager.data.memoColors.getOrElse(color) { 0L }
+    val d = memo.date.toLocalDate()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (memo.id == 0L) "新增備註" else "編輯備註") },
-        text = { OutlinedTextField(text, { text = it }, placeholder = { Text("") }, modifier = Modifier.fillMaxWidth()) },
+        containerColor = if (tint == 0L) MaterialTheme.colorScheme.surfaceContainerHigh
+        else androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.surfaceContainerHigh, Color(tint), 0.18f),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (memo.id == 0L) "新增備註" else "編輯備註", Modifier.weight(1f))
+                IconButton(onClick = { pinned = !pinned }) {
+                    Icon(
+                        if (pinned) Icons.Filled.PushPin else Icons.Outlined.OutlinedPushPin, "置頂",
+                        tint = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("${d.monthValue}.${d.dayOfMonth}（${Recurrence.weekdayName(d.dayOfWeek)}）", fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(title, { title = it }, label = { Text("標題") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(text, { text = it }, label = { Text("內容") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+                Text("主題色", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // 12 種主題色，兩排各 6 個；第一個為不上色
+                com.enwei.moneymanager.data.memoColors.chunked(6).forEachIndexed { row, list ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        list.forEachIndexed { j, c ->
+                            val idx = row * 6 + j
+                            val sel = idx == color
+                            Box(
+                                Modifier.size(30.dp)
+                                    .border(if (sel) 2.dp else 1.dp, if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                                    .padding(3.dp)
+                                    .background(if (c == 0L) Color.Transparent else Color(c), CircleShape)
+                                    .clickable { color = idx },
+                            )
+                        }
+                    }
+                }
+            }
+        },
         confirmButton = {
-            TextButton(enabled = text.isNotBlank(), onClick = {
+            TextButton(enabled = text.isNotBlank() || title.isNotBlank(), onClick = {
                 repo.settings.update { s ->
-                    val updated = if (memo.id == 0L) s.memos + memo.copy(id = System.currentTimeMillis(), text = text.trim())
-                    else s.memos.map { if (it.id == memo.id) it.copy(text = text.trim()) else it }
+                    val edited = memo.copy(title = title.trim(), text = text.trim(), color = color, pinned = pinned)
+                    val updated = if (memo.id == 0L) s.memos + edited.copy(id = System.currentTimeMillis())
+                    else s.memos.map { if (it.id == memo.id) edited else it }
                     s.copy(memos = updated)
                 }
                 onDismiss()

@@ -51,9 +51,21 @@ object I18n {
         return cache.getOrPut(s) { translate(s) }
     }
 
+    private val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    private val yearMonth = Regex("(\\d{4})\\s*年\\s*(\\d{1,2})\\s*月")
+    private val monthOnly = Regex("(?<![\\d年])(\\d{1,2})\\s*月(?![\\u4e00-\\u9fff])")
+    private val yearOnly = Regex("(\\d{4})\\s*年(?![\\u4e00-\\u9fff])")
+    private val everyMonthDay = Regex("每月\\s*(\\d{1,2})\\s*日")
+
+    private fun month(n: String) = n.toIntOrNull()?.takeIf { it in 1..12 }?.let { months[it - 1] } ?: n
+
     private fun translate(src: String): String {
         exact[src]?.let { return it }
-        var s = src
+        // 日期格式：2026年10月 → Oct 2026、10月 → Oct、每月 5 日 → Day 5 of month
+        var s = src.replace(yearMonth) { "${month(it.groupValues[2])} ${it.groupValues[1]}" }
+            .replace(everyMonthDay) { "Day ${it.groupValues[1]} of month" }
+            .replace(monthOnly) { month(it.groupValues[1]) }
+            .replace(yearOnly) { it.groupValues[1] }
         for (k in keys) {
             var from = 0
             while (true) {

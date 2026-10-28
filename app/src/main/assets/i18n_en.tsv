@@ -354,8 +354,8 @@ App 更新	App update
 其他收入	Other income
 卡費扣繳	Card bill autopay
 投資收益	Investment income
-現金股利	Cash dividend
-股票股利	Stock dividend
+現金股利	Cash div.
+股票股利	Stock div.
 自動扣繳	Autopay
 自動除息	Auto dividend
 證券交割	Brokerage
@@ -465,7 +465,7 @@ App 更新	App update
 記帳輸入	Entry
 設定 A	Set A
 設定 B	Set B
-證券帳戶	Brokerage accounts
+證券帳戶	Brokerage
 變更密碼	Change passcode
 起始畫面	Start screen
 跟隨系統	System
@@ -819,3 +819,7 @@ App 名稱也會跟著語言切換（帳理／Ledgerly）。	The app name change
 遇假日（含國定假日）順延至下一營業日	Holiday (incl. national) → next business day
 遇週六、日順延至週一	Sat/Sun → Monday
 遇週五、六延至週日	Fri/Sat → Sunday
+標題	Title
+主題色	Color
+置頂	Pin
+取消置頂	Unpin

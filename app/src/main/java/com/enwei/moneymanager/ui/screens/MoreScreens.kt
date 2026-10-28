@@ -129,7 +129,7 @@ fun MoreScreen(nav: NavController) {
         topBar = {
             androidx.compose.material3.TopAppBar(
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
-                title = { Text("設定") },
+                title = { Text("更多") },
                 actions = {
                     Text("Ledgerly " + BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp,
                         modifier = Modifier.padding(end = 16.dp))
