@@ -4,7 +4,7 @@ import androidx.room.withTransaction
 import com.enwei.moneymanager.core.CardCycle
 import com.enwei.moneymanager.core.CategoryGuesser
 import com.enwei.moneymanager.core.FxConverter
-import com.enwei.moneymanager.core.Invoice
+import com.enwei.moneymanager.core.ParsedKind
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.core.NotificationParser
 import com.enwei.moneymanager.core.ParsedType
@@ -62,6 +62,8 @@ data class Backup(
 )
 
 data class CardStatus(val payable: Long, val outstanding: Long, val dueDate: LocalDate?)
+
+private const val TRANSFER_TAG = "#轉帳"
 
 data class IngestResult(val kind: String, val txnId: Long? = null, val message: String)
 
@@ -153,7 +155,7 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
     }
 
     private suspend fun learnMerchant(t: TxnEntity) {
-        val merchant = t.merchant?.trim()?.takeIf { it.length >= 2 } ?: return
+        val merchant = t.merchant?.trim()?.takeIf { it.length >= 2 && !CategoryGuesser.isGenericMerchant(it) } ?: return
         val cat = t.categoryId ?: return
         if (t.type == TxnType.TRANSFER) return
         db.rules().upsert(MerchantRuleEntity(merchant, cat))
@@ -211,16 +213,18 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
         // 同一則通知可能因更新而重複送達
         if (log.countSame(pkg, title, text, postedAt - 10 * 60_000) > 0) return null
         val enabled = pkg in s.notifPackages
+        fun logAs(result: String, txnId: Long? = null) =
+            NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = result, txnId = txnId)
 
         val fill = NotificationParser.parseStockFill(title, text)
         val parsed = if (fill == null) NotificationParser.parse(title, text) else null
         if (fill == null && parsed == null) {
-            if (enabled) log.insert(NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = "UNPARSED"))
+            if (enabled) log.insert(logAs("UNPARSED"))
             return null
         }
         if (!enabled) {
             // 看起來像交易通知但未啟用的 App：記錄下來讓使用者決定是否啟用
-            log.insert(NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = "CANDIDATE"))
+            log.insert(logAs("CANDIDATE"))
             return null
         }
 
@@ -233,41 +237,136 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
                     market = market, symbol = fill.symbol, name = fill.name, side = fill.side, shares = fill.shares,
                     price = fill.price, fee = fee, tax = tax, date = postedAt.toLocalDate().toEpochDay(),
                     cashAccountId = brokerage?.id, source = TxnSource.NOTIFICATION, note = "由成交通知自動建立",
-                    externalKey = "N:${pkg}:${(title + text).hashCode()}:${postedAt / 60_000}",
+                    externalKey = "N:${fill.symbol}:${fill.side}:${fill.shares}:${fill.price}:${postedAt / 60_000}",
                 ),
             )
-            log.insert(NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = "STOCK"))
+            if (id <= 0) { log.insert(logAs("DUPLICATE")); return null }
+            log.insert(logAs("STOCK"))
             val sideLabel = if (fill.side == StockSide.SELL) "賣出" else "買進"
             return IngestResult("STOCK", id, "$sideLabel ${fill.symbol} ${fill.shares.toLong()} 股 @ ${fill.price}")
         }
 
         val p = parsed!!
+        val occurred = p.occurredAt?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli() ?: postedAt
+        // 通知內有交易時間時，以「金額＋時間」去重：同一筆交易的通知晚點再跳一次也不會重複記帳
+        val key = p.occurredAt?.let { "N:${p.amountMinor}:${it.withNano(0)}" }
+        if (key != null && db.txns().byExternalKey(key) != null) { log.insert(logAs("DUPLICATE")); return null }
+
+        val accounts = db.accounts().all().filter { !it.archived }
+        val account = p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
+            ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
+            ?: accounts.firstOrNull { it.id == s.defaultAccountId }
+        val status = if (s.notifAutoConfirm) TxnStatus.CONFIRMED else TxnStatus.PENDING
+        val raw = listOfNotNull(title, text).joinToString("\n")
+        val window = 10 * 60_000L
+        val nearby = db.txns().all().filter {
+            it.source == TxnSource.NOTIFICATION && it.amount == p.amountMinor && kotlin.math.abs(it.date - occurred) <= window
+        }
+
+        suspend fun insert(t: TxnEntity, result: String, message: String): IngestResult? {
+            val id = db.txns().insert(t)
+            if (id <= 0) { log.insert(logAs("DUPLICATE")); return null }
+            log.insert(logAs(result, id))
+            log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
+            return IngestResult("RECORDED", id, message)
+        }
+        suspend fun merged(existing: TxnEntity, updated: TxnEntity, message: String): IngestResult {
+            db.txns().upsert(updated)
+            log.insert(logAs("MERGED", existing.id))
+            return IngestResult("RECORDED", existing.id, message)
+        }
+        fun wallet(): AccountEntity? {
+            val wallets = accounts.filter { it.type == AccountType.EWALLET }
+            val aliases = p.walletHint?.let { NotificationParser.walletAliases[it] }.orEmpty()
+            return wallets.firstOrNull { w -> aliases.any { w.name.contains(it, ignoreCase = true) } }
+                ?: s.notifAccountMap[pkg]?.let { id -> wallets.firstOrNull { it.id == id } }
+                ?: wallets.singleOrNull()
+        }
+        val amountText = Money.format(p.amountMinor, p.currency)
+        val base = TxnEntity(
+            type = TxnType.EXPENSE, amount = p.amountMinor, currency = p.currency, accountId = account?.id,
+            date = occurred, source = TxnSource.NOTIFICATION, status = status, externalKey = key, rawText = raw,
+        )
+
+        when (p.kind) {
+            ParsedKind.WITHDRAWAL -> {
+                val cash = accounts.firstOrNull { it.type == AccountType.CASH }
+                if (cash != null && cash.id != account?.id) {
+                    return insert(base.copy(type = TxnType.TRANSFER, toAccountId = cash.id, merchant = "提款"), "RECORDED",
+                        "提款 $amountText → ${cash.name}")
+                }
+            }
+            ParsedKind.TOPUP_OUT -> {
+                val w = wallet()
+                // 錢包端的儲值通知先到：補上扣款帳戶
+                nearby.firstOrNull { it.type == TxnType.TRANSFER && it.accountId == null && (w == null || it.toAccountId == w.id) }?.let {
+                    return merged(it, it.copy(accountId = account?.id), "儲值 $amountText：${account?.name ?: "?"} → ${lookupName(it.toAccountId)}")
+                }
+                if (w != null && w.id != account?.id) {
+                    return insert(base.copy(type = TxnType.TRANSFER, toAccountId = w.id, merchant = "電支儲值"), "RECORDED",
+                        "儲值 $amountText：${account?.name ?: "?"} → ${w.name}")
+                }
+                return insert(base.copy(merchant = "電支儲值", status = TxnStatus.PENDING), "RECORDED", "電支儲值 $amountText（請選擇轉入的錢包）")
+            }
+            ParsedKind.TOPUP_IN -> {
+                val w = wallet() ?: account
+                if (nearby.any { it.type == TxnType.TRANSFER && it.toAccountId == w?.id }) { log.insert(logAs("DUPLICATE")); return null }
+                // 銀行扣款通知先到（被記成支出）：改成轉帳
+                nearby.firstOrNull { it.type == TxnType.EXPENSE && it.accountId != w?.id }?.let {
+                    return merged(it, it.copy(type = TxnType.TRANSFER, toAccountId = w?.id, categoryId = null, merchant = "電支儲值"),
+                        "儲值 $amountText → ${w?.name ?: "?"}")
+                }
+                return insert(base.copy(type = TxnType.TRANSFER, accountId = null, toAccountId = w?.id, merchant = "電支儲值", status = TxnStatus.PENDING),
+                    "RECORDED", "儲值 $amountText → ${w?.name ?: "?"}（等待扣款通知）")
+            }
+            ParsedKind.TRANSFER_OUT, ParsedKind.TRANSFER_IN -> {
+                // 自己兩個帳戶之間的轉帳：一邊轉出、一邊轉入，金額相同且時間相近 → 合併成一筆轉帳
+                val isOut = p.kind == ParsedKind.TRANSFER_OUT
+                nearby.firstOrNull {
+                    it.type == (if (isOut) TxnType.INCOME else TxnType.EXPENSE) && it.rawText?.startsWith(TRANSFER_TAG) == true &&
+                        it.accountId != account?.id
+                }?.let { other ->
+                    val from = if (isOut) account?.id else other.accountId
+                    val to = if (isOut) other.accountId else account?.id
+                    return merged(other, other.copy(type = TxnType.TRANSFER, accountId = from, toAccountId = to, categoryId = null, merchant = "轉帳"),
+                        "轉帳 $amountText：${lookupName(from)} → ${lookupName(to)}")
+                }
+            }
+            ParsedKind.NORMAL -> Unit
+        }
+
         val type = if (p.type == ParsedType.INCOME) TxnType.INCOME else TxnType.EXPENSE
-        // 多個 App 可能同時通知同一筆消費（例如信用卡 + LINE Pay）
-        val dupes = db.txns().findSimilar(type, p.amountMinor, postedAt - 3 * 60_000, postedAt + 3 * 60_000)
-        if (dupes.any { it.source == TxnSource.NOTIFICATION }) {
-            log.insert(NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = "DUPLICATE", txnId = dupes.first().id))
+        // 多個 App 同時通知同一筆消費（例如信用卡 + 支付 App）
+        if (nearby.any { it.type == type && kotlin.math.abs(it.date - occurred) <= 3 * 60_000 }) {
+            log.insert(logAs("DUPLICATE", nearby.first().id))
             return null
         }
-        val accounts = db.accounts().all()
-        val account = p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
-            ?: accounts.firstOrNull { it.id == s.defaultAccountId }
-        val txn = TxnEntity(
-            type = type,
-            amount = p.amountMinor,
-            currency = p.currency,
-            accountId = account?.id,
-            categoryId = guessCategory(p.merchant, type),
-            merchant = p.merchant,
-            date = postedAt,
-            source = TxnSource.NOTIFICATION,
-            status = if (s.notifAutoConfirm) TxnStatus.CONFIRMED else TxnStatus.PENDING,
-            rawText = listOfNotNull(title, text).joinToString("\n"),
+        val tagged = if (p.kind == ParsedKind.TRANSFER_OUT || p.kind == ParsedKind.TRANSFER_IN) "$TRANSFER_TAG\n$raw" else raw
+        val merchant = p.merchant ?: when (p.kind) {
+            ParsedKind.TRANSFER_OUT -> "轉出"
+            ParsedKind.TRANSFER_IN -> "轉入"
+            else -> null
+        }
+        return insert(
+            base.copy(type = type, categoryId = guessCategory(p.merchant, type), merchant = merchant, rawText = tagged),
+            "RECORDED", "${type.label} $amountText ${p.merchant.orEmpty()}",
         )
-        val id = db.txns().insert(txn)
-        log.insert(NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = "RECORDED", txnId = id))
-        log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
-        return IngestResult("RECORDED", id, "${type.label} ${Money.format(p.amountMinor, p.currency)} ${p.merchant.orEmpty()}")
+    }
+
+    private suspend fun lookupName(id: Long?) = id?.let { db.accounts().get(it)?.name } ?: "?"
+
+    /** 對帳：輸入帳戶實際餘額，差額記成一筆調整交易（適用於沒有通知的電子錢包）。 */
+    suspend fun reconcile(account: AccountEntity, currentBalance: Long, actual: Long, categoryId: Long?): Long? {
+        val diff = actual - currentBalance
+        if (diff == 0L) return null
+        return db.txns().insert(
+            TxnEntity(
+                type = if (diff < 0) TxnType.EXPENSE else TxnType.INCOME, amount = kotlin.math.abs(diff), currency = account.currency,
+                accountId = account.id, categoryId = categoryId, merchant = "餘額調整（對帳）",
+                note = "對帳：記錄餘額 ${Money.format(currentBalance)} → 實際 ${Money.format(actual)}",
+                date = System.currentTimeMillis(), source = TxnSource.MANUAL,
+            ),
+        )
     }
 
     // ---------- 週期交易與信用卡自動扣繳 ----------
@@ -414,49 +513,8 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
     suspend fun allTrades() = db.stocks().allTrades()
     suspend fun saveFx(list: List<FxRateEntity>) = db.fx().upsertAll(list)
 
-    // ---------- 電子發票（載具） ----------
-
-    /** 匯入發票：已存在同金額、日期相近的支出就合併明細，否則新增一筆待確認支出。 */
-    suspend fun importInvoices(invoices: List<Invoice>): Pair<Int, Int> {
-        var added = 0
-        var merged = 0
-        val s = settings.value
-        db.withTransaction {
-            invoices.forEach { inv ->
-                val key = "INV:${inv.number}"
-                if (db.txns().byExternalKey(key) != null) return@forEach
-                val itemsText = inv.items.joinToString("、") { it.name }
-                val date = inv.date.toMillis()
-                val match = db.txns().findSimilar(
-                    TxnType.EXPENSE, inv.amountMinor,
-                    inv.date.minusDays(2).toMillis(LocalTime.MIDNIGHT), inv.date.plusDays(3).toMillis(LocalTime.MIDNIGHT),
-                ).firstOrNull { it.externalKey == null }
-                if (match != null) {
-                    db.txns().upsert(
-                        match.copy(
-                            merchant = match.merchant ?: inv.sellerName,
-                            note = listOfNotNull(match.note, itemsText.takeIf { it.isNotBlank() }).joinToString("\n"),
-                            externalKey = key,
-                        ),
-                    )
-                    merged++
-                } else {
-                    val merchant = inv.sellerName.ifBlank { null }
-                    db.txns().insert(
-                        TxnEntity(
-                            type = TxnType.EXPENSE, amount = inv.amountMinor, accountId = s.invoiceAccountId ?: s.defaultAccountId,
-                            categoryId = guessCategory(merchant + " " + itemsText, TxnType.EXPENSE),
-                            merchant = merchant, note = itemsText.ifBlank { null }, date = date,
-                            source = TxnSource.INVOICE, status = TxnStatus.PENDING, externalKey = key,
-                            rawText = "發票 ${inv.number}（${inv.carrierName}）",
-                        ),
-                    )
-                    added++
-                }
-            }
-        }
-        return added to merged
-    }
+    suspend fun usedCurrencies(): Set<String> =
+        (db.accounts().all().map { it.currency } + db.stocks().allTrades().map { it.currency }).toSet()
 
     // ---------- 備份 ----------
 

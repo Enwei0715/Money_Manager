@@ -9,6 +9,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import java.net.URLEncoder
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 object FxService {
     /** 即時匯率（open.er-api.com，免金鑰，每日更新多次）。 */
@@ -18,6 +21,24 @@ object FxService {
         val rates = root.obj("rates") as? JsonObject ?: return emptyList()
         val now = System.currentTimeMillis()
         return rates.mapNotNull { (cur, v) -> (v as? JsonPrimitive)?.doubleOrNull?.let { FxRateEntity(cur, it, now) } }
+    }
+
+    /**
+     * 即時匯率：以 Yahoo Finance 外匯報價（盤中即時）覆蓋指定幣別，其餘用每日匯率。
+     * Yahoo 代碼 "USDTWD=X" 的價格是 1 USD 可換多少 TWD，換成「1 基準幣可換多少該幣別」需取倒數。
+     */
+    suspend fun fetchRealtime(base: String, currencies: Collection<String>): List<FxRateEntity> = coroutineScope {
+        val now = System.currentTimeMillis()
+        currencies.filter { !it.equals(base, true) }.distinct().map { cur ->
+            async {
+                runCatching {
+                    val sym = URLEncoder.encode("${cur.uppercase()}${base.uppercase()}=X", "UTF-8")
+                    val root = Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/$sym?range=1d&interval=1d")
+                    val meta = (root.obj("chart").obj("result") as? JsonArray)?.firstOrNull().obj("meta")
+                    meta.num("regularMarketPrice")?.takeIf { it > 0 }?.let { FxRateEntity(cur.uppercase(), 1.0 / it, now) }
+                }.getOrNull()
+            }
+        }.awaitAll().filterNotNull()
     }
 
     val common = listOf("USD", "JPY", "EUR", "CNY", "HKD", "KRW", "GBP", "AUD", "SGD", "THB", "CAD", "CHF", "VND", "MYR")

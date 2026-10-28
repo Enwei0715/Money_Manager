@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -81,7 +82,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.BuildConfig
-import com.enwei.moneymanager.core.InvoiceCsvParser
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.core.NotificationParser
 import com.enwei.moneymanager.data.CategoryEntity
@@ -112,8 +112,7 @@ fun MoreScreen(nav: NavController) {
         Triple("config", "設定", Icons.Outlined.Settings),
         Triple("backup", "備份", Icons.Outlined.SettingsBackupRestore),
         Triple("notif", "通知記帳", Icons.Outlined.NotificationsActive),
-        Triple("invoice", "電子發票", Icons.AutoMirrored.Outlined.ReceiptLong),
-        Triple("invest", "投資", Icons.AutoMirrored.Outlined.ShowChart),
+        Triple("invest", "股票", Icons.AutoMirrored.Outlined.ShowChart),
         Triple("recurring", "週期扣款", Icons.Outlined.EventRepeat),
         Triple("fx", "匯率", Icons.Outlined.CurrencyExchange),
         Triple("pending", "待確認", Icons.Outlined.Inbox),
@@ -241,6 +240,21 @@ fun NotificationSettingsScreen(nav: NavController) {
                     )
                 }
             }
+            item {
+                Card(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("自動轉帳與沒有通知的錢包", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "• 跨行提款／ATM 領出 → 記成「銀行 → 現金」轉帳\n" +
+                                "• 銀行「電支交易」扣款（例如街口自動儲值）→ 記成「銀行 → 錢包」轉帳；錢包名稱需含「街口」「悠遊付」等字樣，或只有一個電子支付帳戶\n" +
+                                "• 兩個自己的帳戶一邊轉出、一邊轉入，金額相同且 10 分鐘內 → 合併成一筆轉帳\n" +
+                                "• 街口、悠遊付等不推播消費的錢包：到「帳戶 → 錢包 → 對帳」輸入實際餘額，差額自動記成支出\n" +
+                                "• 通知內有交易時間時，以「金額＋時間」去重，重複跳出的通知不會重複記帳",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
             item { SectionTitle("測試辨識") }
             item {
                 Column(Modifier.padding(horizontal = 16.dp)) {
@@ -251,7 +265,14 @@ fun NotificationSettingsScreen(nav: NavController) {
                         Text(
                             when {
                                 fill != null -> "股票成交：${fill.side} ${fill.symbol} ${fill.name.orEmpty()} ${fill.shares} 股 @ ${fill.price}"
-                                p != null -> "${if (p.type.name == "INCOME") "收入" else "支出"} ${Money.format(p.amountMinor, p.currency)}" +
+                                p != null -> when (p.kind) {
+                                    com.enwei.moneymanager.core.ParsedKind.WITHDRAWAL -> "提款（轉帳到現金）"
+                                    com.enwei.moneymanager.core.ParsedKind.TOPUP_OUT -> "電支儲值扣款（轉帳到錢包${p.walletHint?.let { "：$it" } ?: ""}）"
+                                    com.enwei.moneymanager.core.ParsedKind.TOPUP_IN -> "錢包儲值入帳${p.walletHint?.let { "：$it" } ?: ""}"
+                                    com.enwei.moneymanager.core.ParsedKind.TRANSFER_OUT -> "轉出（若有對應轉入會合併為轉帳）"
+                                    com.enwei.moneymanager.core.ParsedKind.TRANSFER_IN -> "轉入（若有對應轉出會合併為轉帳）"
+                                    else -> if (p.type.name == "INCOME") "收入" else "支出"
+                                } + " ${Money.format(p.amountMinor, p.currency)}" + (p.occurredAt?.let { " · 交易時間 $it" } ?: "") +
                                     (p.merchant?.let { " · 商家：$it" } ?: "") + (p.cardLast4?.let { " · 末四碼 $it" } ?: "")
                                 else -> "無法辨識為交易"
                             },
@@ -270,7 +291,29 @@ fun NotificationSettingsScreen(nav: NavController) {
                 val on = a.pkg in settings.notifPackages
                 ListItem(
                     headlineContent = { Text(a.label) },
-                    supportingContent = { Text(a.pkg, style = MaterialTheme.typography.labelSmall) },
+                    supportingContent = {
+                        if (on) {
+                            // 這個 App 的通知記到哪個帳戶（信用卡會優先用末四碼對應）
+                            var menu by remember { mutableStateOf(false) }
+                            Box {
+                                Text(
+                                    "記入：" + (settings.notifAccountMap[a.pkg]?.let { lk.account(it)?.name } ?: "依卡號／預設帳戶") + " ▾",
+                                    color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.clickable { menu = true }.padding(vertical = 4.dp),
+                                )
+                                androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                                    androidx.compose.material3.DropdownMenuItem(text = { Text("依卡號／預設帳戶") }, onClick = {
+                                        repo.settings.update { it.copy(notifAccountMap = it.notifAccountMap - a.pkg) }; menu = false
+                                    })
+                                    lk.accounts.filter { !it.archived }.forEach { acc ->
+                                        androidx.compose.material3.DropdownMenuItem(text = { Text(acc.name) }, onClick = {
+                                            repo.settings.update { it.copy(notifAccountMap = it.notifAccountMap + (a.pkg to acc.id)) }; menu = false
+                                        })
+                                    }
+                                }
+                            }
+                        } else Text(a.pkg, style = MaterialTheme.typography.labelSmall)
+                    },
                     trailingContent = { Checkbox(on, { toggle(a.pkg, it) }) },
                     modifier = Modifier.clickable { toggle(a.pkg, !on) },
                 )
@@ -278,7 +321,7 @@ fun NotificationSettingsScreen(nav: NavController) {
             item { SectionTitle("最近處理紀錄") }
             items(log.take(30), key = { "log${it.id}" }) { e ->
                 val label = when (e.result) {
-                    "RECORDED" -> "已記帳"; "STOCK" -> "股票成交"; "DUPLICATE" -> "重複略過"; "UNPARSED" -> "無法辨識"; else -> "未啟用來源"
+                    "RECORDED" -> "已記帳"; "STOCK" -> "股票成交"; "DUPLICATE" -> "重複略過"; "MERGED" -> "合併為轉帳"; "UNPARSED" -> "無法辨識"; else -> "未啟用來源"
                 }
                 ListItem(
                     overlineContent = { Text("${labelOf[e.packageName] ?: e.packageName} · ${timeFmt.format(Date(e.postedAt))} · $label") },
@@ -289,57 +332,6 @@ fun NotificationSettingsScreen(nav: NavController) {
             item { Spacer(Modifier.height(32.dp)) }
         }
     }
-}
-
-@Composable
-fun InvoiceScreen(nav: NavController) {
-    val ctx = LocalContext.current
-    val lk = rememberLookups()
-    val scope = rememberCoroutineScope()
-    val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    var result by remember { mutableStateOf<String?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            result = runCatching {
-                val text = withContext(Dispatchers.IO) { readTextAutoCharset(ctx, uri) }
-                val invoices = InvoiceCsvParser.parse(text)
-                if (invoices.isEmpty()) "檔案中沒有找到發票資料，請確認是財政部平台匯出的載具消費明細 CSV。"
-                else {
-                    val (added, merged) = repo.importInvoices(invoices)
-                    "讀到 ${invoices.size} 張發票：新增 $added 筆待確認、合併 $merged 筆既有交易、其餘已匯入過。"
-                }
-            }.getOrElse { "匯入失敗：${it.message}" }
-        }
-    }
-    Scaffold(topBar = { BackTopBar("電子發票載具", { nav.popBackStack() }) }) { pad ->
-        Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("匯入手機條碼載具的消費發票", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "1. 到「財政部電子發票整合服務平台」登入手機條碼。\n" +
-                    "2. 進入「消費／載具 → 載具消費明細查詢」，選擇月份後點「匯出 CSV」（也可設定每月寄送到 Email）。\n" +
-                    "3. 回到這裡選擇下載的 CSV 檔。\n\n" +
-                    "記帳本會自動：\n• 以發票號碼去重，重複匯入不會重複記帳\n• 與通知已記下的同金額消費合併，補上店名與品項\n• 依店名、品項推測分類，先放在「待確認」",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            DropdownField(
-                "發票預設記入帳戶", lk.accounts.filter { !it.archived }, lk.account(settings.invoiceAccountId ?: settings.defaultAccountId),
-                { "${it.type.icon} ${it.name}" }, { a -> repo.settings.update { it.copy(invoiceAccountId = a.id) } },
-            )
-            Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/vnd.ms-excel", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) {
-                Text("選擇 CSV 檔匯入")
-            }
-            result?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
-            OutlinedButton(onClick = { nav.navigate("pending") }, modifier = Modifier.fillMaxWidth()) { Text("查看待確認") }
-        }
-    }
-}
-
-/** 財政部匯出檔有時是 Big5，若 UTF-8 解碼出現亂碼就改用 Big5。 */
-private fun readTextAutoCharset(ctx: Context, uri: android.net.Uri): String {
-    val bytes = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
-    val utf8 = String(bytes, Charsets.UTF_8)
-    return if (utf8.contains('�')) String(bytes, charset("Big5")) else utf8
 }
 
 @Composable
@@ -356,7 +348,13 @@ fun FxScreen(nav: NavController) {
         status = "更新中…"
         status = runCatching { SyncWorker.refreshFx(repo) }.fold({ "已更新" }, { "更新失敗：${it.message}" })
     }
-    LaunchedEffect(Unit) { if (System.currentTimeMillis() - settings.lastFxUpdate > 3600_000) refresh() }
+    // 畫面開著時每分鐘更新即時匯率
+    LaunchedEffect(Unit) {
+        while (true) {
+            status = runCatching { SyncWorker.refreshFx(repo) }.fold({ "即時報價" }, { "更新失敗：${it.message}" })
+            kotlinx.coroutines.delay(60_000)
+        }
+    }
 
     Scaffold(topBar = {
         BackTopBar("即時匯率", { nav.popBackStack() }) { IconButton(onClick = { refresh() }) { Icon(Icons.Filled.Refresh, "更新") } }

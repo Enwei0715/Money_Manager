@@ -63,8 +63,6 @@ import com.enwei.moneymanager.ui.screens.CategoryStatScreen
 import com.enwei.moneymanager.ui.screens.ConfigScreen
 import com.enwei.moneymanager.ui.screens.FxScreen
 import com.enwei.moneymanager.ui.screens.HoldingScreen
-import com.enwei.moneymanager.ui.screens.InvestScreen
-import com.enwei.moneymanager.ui.screens.InvoiceScreen
 import com.enwei.moneymanager.ui.screens.LockScreen
 import com.enwei.moneymanager.ui.screens.MoreScreen
 import com.enwei.moneymanager.ui.screens.NotificationSettingsScreen
@@ -170,7 +168,7 @@ private fun BottomTabs(current: String?, onSelect: (String) -> Unit) {
 private fun AppScaffold(nav: NavHostController) {
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination?.route
-    val showBar = tabs.any { it.route == current } || current == "invest"
+    val showBar = tabs.any { it.route == current }
     val startScreen = remember { MoneyApp.repo.settings.value.startScreen }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -188,7 +186,7 @@ private fun AppScaffold(nav: NavHostController) {
             composable("txns") { TransactionsTab(nav, initialTab = if (startScreen == 1) 1 else 0) }
             composable("stats") { StatsTab(nav) }
             composable("accounts") { AccountsTab(nav, showBack = nav.previousBackStackEntry?.destination?.route.let { it != null && tabs.none { t -> t.route == it } }) }
-            composable("invest") { InvestScreen(nav) }
+            composable("invest") { AccountsTab(nav, showBack = true, initialTab = 1) }
             composable("more") { MoreScreen(nav) }
             composable(
                 "search?filter={filter}",
@@ -241,7 +239,6 @@ private fun AppScaffold(nav: NavHostController) {
             }
             composable("pending") { PendingScreen(nav) }
             composable("notif") { NotificationSettingsScreen(nav) }
-            composable("invoice") { InvoiceScreen(nav) }
             composable("fx") { FxScreen(nav) }
             composable("categories") { CategoriesScreen(nav) }
             composable("backup") { BackupScreen(nav) }

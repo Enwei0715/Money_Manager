@@ -84,7 +84,7 @@ data class TxnEntity(
     val date: Long,
     val source: TxnSource = TxnSource.MANUAL,
     val status: TxnStatus = TxnStatus.CONFIRMED,
-    /** 去重用：發票號碼、週期規則日期等 */
+    /** 去重用：通知的金額＋交易時間、週期規則日期等 */
     val externalKey: String? = null,
     val recurringId: Long? = null,
     val rawText: String? = null,

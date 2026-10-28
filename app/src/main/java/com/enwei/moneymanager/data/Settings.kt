@@ -37,7 +37,6 @@ data class AppSettings(
     val defaultAccountId: Long? = null,
     val notifAutoConfirm: Boolean = false,
     val notifPackages: Set<String> = emptySet(),
-    val invoiceAccountId: Long? = null,
     val feeDiscount: Double = 1.0,
     val minFee: Double = 20.0,
     val usFee: Double = 0.0,
@@ -64,6 +63,8 @@ data class AppSettings(
     val memos: List<Memo> = emptyList(),
     /** 每月預算：key 為分類 id，0 代表總預算；值為最小單位金額 */
     val budgets: Map<Long, Long> = emptyMap(),
+    /** 通知來源 App → 記入的帳戶 */
+    val notifAccountMap: Map<String, Long> = emptyMap(),
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -78,6 +79,7 @@ class SettingsStore(context: Context) {
     private val bookmarkSerializer = ListSerializer(Bookmark.serializer())
     private val memoSerializer = ListSerializer(Memo.serializer())
     private val budgetSerializer = MapSerializer(Long.serializer(), Long.serializer())
+    private val pkgMapSerializer = MapSerializer(String.serializer(), Long.serializer())
     private val state = MutableStateFlow(read())
     val flow: StateFlow<AppSettings> = state.asStateFlow()
     val value: AppSettings get() = state.value
@@ -88,7 +90,6 @@ class SettingsStore(context: Context) {
         defaultAccountId = prefs.getLong("defaultAccountId", -1).takeIf { it > 0 },
         notifAutoConfirm = prefs.getBoolean("notifAutoConfirm", false),
         notifPackages = prefs.getStringSet("notifPackages", emptySet())!!.toSet(),
-        invoiceAccountId = prefs.getLong("invoiceAccountId", -1).takeIf { it > 0 },
         feeDiscount = prefs.getFloat("feeDiscount", 1f).toDouble(),
         minFee = prefs.getFloat("minFee", 20f).toDouble(),
         usFee = prefs.getFloat("usFee", 0f).toDouble(),
@@ -109,6 +110,7 @@ class SettingsStore(context: Context) {
         carryOver = prefs.getBoolean("carryOver", true),
         memos = runCatching { json.decodeFromString(memoSerializer, prefs.getString("memos", "[]")!!) }.getOrDefault(emptyList()),
         budgets = runCatching { json.decodeFromString(budgetSerializer, prefs.getString("budgets", "{}")!!) }.getOrDefault(emptyMap()),
+        notifAccountMap = runCatching { json.decodeFromString(pkgMapSerializer, prefs.getString("notifAccountMap", "{}")!!) }.getOrDefault(emptyMap()),
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
@@ -119,7 +121,6 @@ class SettingsStore(context: Context) {
             .putLong("defaultAccountId", s.defaultAccountId ?: -1)
             .putBoolean("notifAutoConfirm", s.notifAutoConfirm)
             .putStringSet("notifPackages", s.notifPackages)
-            .putLong("invoiceAccountId", s.invoiceAccountId ?: -1)
             .putFloat("feeDiscount", s.feeDiscount.toFloat())
             .putFloat("minFee", s.minFee.toFloat())
             .putFloat("usFee", s.usFee.toFloat())
@@ -140,6 +141,7 @@ class SettingsStore(context: Context) {
             .putBoolean("carryOver", s.carryOver)
             .putString("memos", json.encodeToString(memoSerializer, s.memos))
             .putString("budgets", json.encodeToString(budgetSerializer, s.budgets))
+            .putString("notifAccountMap", json.encodeToString(pkgMapSerializer, s.notifAccountMap))
             .apply()
         state.value = s
     }

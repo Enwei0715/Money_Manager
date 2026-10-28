@@ -1,6 +1,11 @@
 package com.enwei.moneymanager.core
 
+import java.time.LocalDateTime
+
 enum class ParsedType { EXPENSE, INCOME }
+
+/** 通知的性質：一般收支、提款、電子支付儲值（扣款方／入帳方）、帳戶間轉帳。 */
+enum class ParsedKind { NORMAL, WITHDRAWAL, TOPUP_OUT, TOPUP_IN, TRANSFER_OUT, TRANSFER_IN }
 
 data class ParsedTransaction(
     val type: ParsedType,
@@ -8,6 +13,11 @@ data class ParsedTransaction(
     val currency: String,
     val merchant: String?,
     val cardLast4: String?,
+    val kind: ParsedKind = ParsedKind.NORMAL,
+    /** 通知內文中的交易時間（用來去重與作為記帳時間） */
+    val occurredAt: LocalDateTime? = null,
+    /** 內文提到的電子支付名稱（例如「街口」），用來對應錢包帳戶 */
+    val walletHint: String? = null,
 )
 
 data class ParsedStockFill(
@@ -35,6 +45,24 @@ object NotificationParser {
 
     private val expenseKeywords = listOf(
         "消費", "刷卡", "付款", "扣款", "支付", "轉出", "提款", "繳費", "支出", "購買", "交易成功", "已付", "簽帳", "交易金額",
+        "出帳", "扣帳",
+    )
+
+    private val withdrawalKeywords = listOf("提款", "領出", "提領", "ATM", "領現")
+    private val topupKeywords = listOf("儲值", "加值", "電支交易", "電子支付交易")
+    private val debitKeywords = listOf("扣款", "出帳", "扣帳", "支出", "電支交易", "電子支付交易", "轉出", "付款")
+    private val transferOutKeywords = listOf("轉出", "匯出")
+    private val transferInKeywords = listOf("轉入", "匯入")
+
+    /** 電子支付名稱 → 用於比對帳戶名稱的別名 */
+    val walletAliases: Map<String, List<String>> = linkedMapOf(
+        "街口" to listOf("街口", "JKO"),
+        "悠遊付" to listOf("悠遊付", "悠遊卡", "Easy Wallet", "EasyWallet", "悠遊"),
+        "一卡通" to listOf("一卡通", "iPASS", "iPass"),
+        "全支付" to listOf("全支付", "PX Pay"),
+        "全盈" to listOf("全盈"),
+        "LINE Pay" to listOf("LINE Pay", "LINEPAY", "LINE Pay Money", "一卡通Money"),
+        "台灣Pay" to listOf("台灣Pay", "台灣 Pay"),
     )
 
     // 金額前的幣別標示 → ISO 幣別
@@ -58,9 +86,11 @@ object NotificationParser {
     private val suffixedAmount = Regex("$number\\s*(元|圓|円)")
     private val notAmountContext = listOf("餘額", "額度", "累積", "累計", "回饋", "紅利", "點數", "可用")
 
-    private val cardLast4Regex = Regex("(?:末四碼|末4碼|尾號|末碼|後四碼|卡號末四碼)\\s*[:：]?\\s*\\*{0,4}(\\d{4})")
+    private val cardLast4Regex = Regex("(?:末四碼|末4碼|尾號|末碼|後四碼|卡號末四碼|末五碼|末5碼)\\s*[:：]?\\s*\\*{0,4}(\\d{4,5})")
 
     private val merchantPatterns = listOf(
+        // 國泰：「於 2026/10/26 16:22 在全聯福利中心 - 中正南海 刷卡」，店名可含空白
+        Regex("在\\s*([^，,。！!\\n]{2,40}?)\\s*(?:刷卡|消費|付款)"),
         Regex("(?:於|在)\\s*([^，,。\\s]{2,30}?)\\s*(?:消費|刷卡|付款|支付|交易|扣款)"),
         Regex("(?:商店|特店|店家|商家|消費地點|收款方|付款對象)\\s*(?:名稱)?\\s*[:：]\\s*([^，,。\\n]{2,30})"),
         Regex("(?:付款給|支付給|轉帳給|付給)\\s*([^，,。\\s]{2,30})"),
@@ -69,31 +99,63 @@ object NotificationParser {
 
     fun shouldIgnore(text: String): Boolean = ignoreKeywords.any { text.contains(it, ignoreCase = true) }
 
-    fun parse(title: String?, text: String?): ParsedTransaction? {
+    fun parse(title: String?, text: String?, now: LocalDateTime = LocalDateTime.now()): ParsedTransaction? {
         val full = listOfNotNull(title, text).joinToString(" ").replace('\n', ' ')
         if (full.isBlank() || shouldIgnore(full)) return null
 
         val hasIncome = incomeKeywords.any { full.contains(it) }
         val hasExpense = expenseKeywords.any { full.contains(it) }
-        val type = when {
+        val has = { list: List<String> -> list.any { full.contains(it, ignoreCase = true) } }
+        val (type, kind) = when {
             // 退款、退貨即使含「消費」字樣仍屬收入
-            full.contains("退款") || full.contains("退貨") -> ParsedType.INCOME
-            hasExpense -> ParsedType.EXPENSE
-            hasIncome -> ParsedType.INCOME
+            full.contains("退款") || full.contains("退貨") -> ParsedType.INCOME to ParsedKind.NORMAL
+            has(withdrawalKeywords) && !full.contains("存入") -> ParsedType.EXPENSE to ParsedKind.WITHDRAWAL
+            has(topupKeywords) -> if (has(debitKeywords)) ParsedType.EXPENSE to ParsedKind.TOPUP_OUT else ParsedType.INCOME to ParsedKind.TOPUP_IN
+            has(transferOutKeywords) -> ParsedType.EXPENSE to ParsedKind.TRANSFER_OUT
+            has(transferInKeywords) -> ParsedType.INCOME to ParsedKind.TRANSFER_IN
+            hasExpense -> ParsedType.EXPENSE to ParsedKind.NORMAL
+            hasIncome -> ParsedType.INCOME to ParsedKind.NORMAL
             else -> return null
         }
 
         val (amount, currency) = findAmount(full) ?: return null
         if (amount <= 0) return null
 
+        val wallet = walletAliases.entries.firstOrNull { (_, keys) -> keys.any { full.contains(it, ignoreCase = true) } }?.key
         return ParsedTransaction(
             type = type,
             amountMinor = amount,
             currency = currency,
-            merchant = findMerchant(full),
-            cardLast4 = cardLast4Regex.find(full)?.groupValues?.get(1),
+            merchant = if (kind == ParsedKind.NORMAL) findMerchant(full) else null,
+            cardLast4 = cardLast4Regex.find(full)?.groupValues?.get(1)?.takeLast(4),
+            kind = kind,
+            occurredAt = findDateTime(full, now),
+            walletHint = wallet,
         )
     }
+
+    private val fullDateTime = Regex("(\\d{4})[/-](\\d{1,2})[/-](\\d{1,2})\\s*(\\d{1,2}):(\\d{2})(?::(\\d{2}))?")
+    private val rocCompact = Regex("(?<!\\d)(1\\d{2})(\\d{2})(\\d{2})[_\\s](\\d{1,2}):(\\d{2})")
+    private val shortDateTime = Regex("(?<![\\d/])(\\d{1,2})/(\\d{1,2})\\s*(\\d{1,2}):(\\d{2})")
+
+    /** 內文中的交易時間；只有月日時，年份取最接近 [now] 的那一年。 */
+    fun findDateTime(text: String, now: LocalDateTime = LocalDateTime.now()): LocalDateTime? = runCatching {
+        fullDateTime.find(text)?.let { m ->
+            val g = m.groupValues
+            return@runCatching LocalDateTime.of(g[1].toInt(), g[2].toInt(), g[3].toInt(), g[4].toInt(), g[5].toInt(), g[6].ifEmpty { "0" }.toInt())
+        }
+        rocCompact.find(text)?.let { m ->
+            val g = m.groupValues
+            return@runCatching LocalDateTime.of(g[1].toInt() + 1911, g[2].toInt(), g[3].toInt(), g[4].toInt(), g[5].toInt())
+        }
+        shortDateTime.find(text)?.let { m ->
+            val g = m.groupValues
+            var dt = LocalDateTime.of(now.year, g[1].toInt(), g[2].toInt(), g[3].toInt(), g[4].toInt())
+            if (dt.isAfter(now.plusDays(1))) dt = dt.minusYears(1)
+            return@runCatching dt
+        }
+        null
+    }.getOrNull()
 
     internal fun findAmount(text: String): Pair<Long, String>? {
         data class Candidate(val index: Int, val minor: Long, val currency: String)

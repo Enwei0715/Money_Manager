@@ -148,7 +148,6 @@ fun ConfigScreen(nav: NavController) {
                     } else pickTime = true
                 }
                 ConfigRow("通知自動記帳") { nav.navigate("notif") }
-                ConfigRow("電子發票載具") { nav.navigate("invoice") }
                 ConfigRow("即時匯率") { nav.navigate("fx") }
                 ConfigRow("股票手續費與 App 更新") { nav.navigate("settings") }
                 ConfigRow("備份與還原") { nav.navigate("backup") }

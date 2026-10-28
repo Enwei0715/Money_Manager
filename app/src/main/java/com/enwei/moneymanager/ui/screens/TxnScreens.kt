@@ -184,7 +184,7 @@ fun PendingScreen(nav: NavController) {
         LazyColumn(Modifier.padding(pad)) {
             item {
                 Text(
-                    "從通知、電子發票、週期規則自動建立的交易會先放在這裡。點選可修改分類或帳戶後確認；確認後會記住商家對應的分類。",
+                    "從通知、週期規則自動建立的交易會先放在這裡。點選可修改分類或帳戶後確認；確認後會記住商家對應的分類。",
                     style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp),
                 )
             }

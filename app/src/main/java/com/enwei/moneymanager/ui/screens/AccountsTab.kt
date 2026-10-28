@@ -21,8 +21,11 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -110,7 +113,11 @@ private fun GrayHeader(title: String, right: @Composable () -> Unit = {}) {
 }
 
 @Composable
-fun AccountsTab(nav: NavController, showBack: Boolean = false) {
+fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int = 0) {
+    var section by rememberSaveable { mutableStateOf(initialTab) }
+    var refreshTick by remember { mutableStateOf(0) }
+    val snack = remember { androidx.compose.material3.SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val lk = rememberLookups()
     val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
     val holdings by repo.holdings.collectAsStateWithLifecycle(emptyList())
@@ -131,11 +138,15 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false) {
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
-                title = { Text("帳戶") },
+                title = { Text(if (section == 0) "帳戶" else "股票") },
                 navigationIcon = {
                     if (showBack) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
                 },
                 actions = {
+                  if (section == 1) {
+                    IconButton(onClick = { refreshTick++ }) { Icon(Icons.Filled.Refresh, "更新股價") }
+                    IconButton(onClick = { nav.navigate("trade/0") }) { Icon(Icons.Filled.Add, "新增股票交易") }
+                  } else {
                     IconButton(onClick = { nav.navigate("totalstats") }) { Icon(Icons.Outlined.BarChart, "總資產統計") }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "選單") }
@@ -145,11 +156,24 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false) {
                             DropdownMenuItem(text = { Text("修改順序") }, onClick = { menu = false; nav.navigate("accountorder") })
                         }
                     }
+                  }
                 },
             )
         },
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snack) },
     ) { pad ->
-        LazyColumn(Modifier.padding(pad).fillMaxSize()) {
+        Column(Modifier.padding(pad).fillMaxSize()) {
+        TabRow(
+            selectedTabIndex = section, containerColor = MaterialTheme.colorScheme.surface,
+            indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[section]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
+        ) {
+            listOf("帳戶", "股票").forEachIndexed { i, t ->
+                Tab(section == i, { section = i }, text = { Text(t, fontSize = 16.sp) },
+                    selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (section == 1) StockContent(nav, refreshTick) { msg -> scope.launch { snack.showSnackbar(msg) } }
+        else LazyColumn(Modifier.fillMaxSize()) {
             item {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 SummaryBarCustom(
@@ -198,15 +222,16 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false) {
                 }
             }
             if (holdings.any { it.shares > 0 }) {
-                item(key = "ginv") { GrayHeader("投資") { Text(Money.withSymbol(stockValue, lk.base), color = IncomeColor) } }
+                item(key = "ginv") { GrayHeader("股票") { Text(Money.withSymbol(stockValue, lk.base), color = IncomeColor) } }
                 item(key = "inv") {
-                    AccountLine("股票持股（${holdings.count { it.shares > 0 }} 檔）", { nav.navigate("invest") }) {
+                    AccountLine("股票持股（${holdings.count { it.shares > 0 }} 檔）", { section = 1 }) {
                         Text(Money.withSymbol(stockValue, lk.base), color = IncomeColor)
                     }
                 }
             }
             if (balances.isEmpty()) item { EmptyHint("點右上角 ⋮ → 新增帳戶") }
             item { Spacer(Modifier.height(24.dp)) }
+        }
         }
     }
 }
@@ -265,6 +290,8 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
     val withdrawal = -inRange.sumOf { minOf(0, deltaFor(it, id)) }
     val endBalance = balanceBefore(current, id, end.plusDays(1).toMillis(LocalTime.MIDNIGHT), all, trades)
     val cur = acc?.currency ?: lk.base
+    var reconcileOpen by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -301,6 +328,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         Text(if (tab == 2) "全部" else "${start.monthValue}.${start.dayOfMonth}.${start.year % 100} ~ ${end.monthValue}.${end.dayOfMonth}.${end.year % 100}",
                             fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                     }
+                    IconButton(onClick = { reconcileOpen = true }) { Icon(Icons.Outlined.FactCheck, "對帳") }
                     IconButton(onClick = { chart = !chart }) {
                         Icon(if (chart) Icons.AutoMirrored.Filled.List else Icons.Outlined.BarChart, if (chart) "列表" else "圖表")
                     }
@@ -314,6 +342,13 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         "合計" to (Money.full(deposit - withdrawal) to MaterialTheme.colorScheme.onSurface),
                         "餘額" to (Money.full(endBalance) to balanceColor(endBalance, MaterialTheme.colorScheme.onSurface)),
                     ),
+                )
+            }
+            if (acc?.type == AccountType.EWALLET) item {
+                Text(
+                    "這個錢包若不會推播消費通知，按上方「對帳」輸入 App 裡的實際餘額，差額會自動記成一筆支出。",
+                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 20.dp, vertical = 10.dp),
                 )
             }
             if (chart) {
@@ -367,6 +402,54 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
+    }
+    if (reconcileOpen && acc != null) {
+        var actualText by remember { mutableStateOf("") }
+        var catId by remember { mutableStateOf(lk.categories.firstOrNull { it.kind == TxnType.EXPENSE && it.name == "其他" }?.id) }
+        var catMenu by remember { mutableStateOf(false) }
+        val actual = Money.parseMinor(actualText)
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { reconcileOpen = false },
+            title = { Text("對帳：${acc.name}") },
+            text = {
+                Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+                    Text("記帳本目前餘額：${Money.withSymbol(current, acc.currency)}")
+                    androidx.compose.material3.OutlinedTextField(
+                        actualText, { actualText = it.filter { c -> c.isDigit() || c == '.' || c == '-' } },
+                        label = { Text("App 裡的實際餘額") }, singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                    )
+                    if (actual != null) {
+                        val diff = actual - current
+                        Text(
+                            when {
+                                diff < 0 -> "將記一筆支出 ${Money.withSymbol(-diff, acc.currency)}"
+                                diff > 0 -> "將記一筆收入 ${Money.withSymbol(diff, acc.currency)}"
+                                else -> "餘額相符，不需調整"
+                            },
+                            color = if (diff < 0) ExpenseColor else IncomeColor,
+                        )
+                        if (diff < 0) Box {
+                            Text("分類：${lk.category(catId)?.name ?: "未分類"} ▾", color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { catMenu = true }.padding(vertical = 6.dp))
+                            DropdownMenu(catMenu, { catMenu = false }) {
+                                lk.categories.filter { it.kind == TxnType.EXPENSE && !it.archived }.forEach { c ->
+                                    DropdownMenuItem(text = { Text(c.name) }, onClick = { catId = c.id; catMenu = false })
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(enabled = actual != null, onClick = {
+                    val a = actual ?: return@TextButton
+                    scope.launch { repo.reconcile(acc, current, a, if (a < current) catId else null) }
+                    reconcileOpen = false
+                }) { Text("確定") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { reconcileOpen = false }) { Text("取消") } },
+        )
     }
 }
 

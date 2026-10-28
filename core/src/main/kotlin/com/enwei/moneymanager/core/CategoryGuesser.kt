@@ -17,8 +17,14 @@ object CategoryGuesser {
         "教育" to listOf("書局", "補習", "課程", "Hahow", "Udemy", "學費"),
     )
 
+    /** 支付工具名稱（LINE Pay、街口…）不代表實際商家，不拿來學習或推測分類。 */
+    private val genericMerchants = listOf("LINE Pay", "LINEPAY", "街口", "JKO", "全支付", "悠遊付", "Apple Pay", "Google Pay", "GOOGLE*WALLET", "台灣Pay", "Samsung Pay")
+
+    fun isGenericMerchant(merchant: String?): Boolean =
+        merchant != null && genericMerchants.any { merchant.replace(" ", "").contains(it.replace(" ", ""), ignoreCase = true) }
+
     fun guess(merchant: String?, userRules: Map<String, String> = emptyMap()): String? {
-        if (merchant.isNullOrBlank()) return null
+        if (merchant.isNullOrBlank() || isGenericMerchant(merchant)) return null
         userRules.entries
             .sortedByDescending { it.key.length }
             .firstOrNull { merchant.contains(it.key, ignoreCase = true) }

@@ -49,6 +49,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.core.Market
+import com.enwei.moneymanager.data.HoldingView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.core.StockCalc
 import com.enwei.moneymanager.core.StockSide
@@ -78,97 +83,114 @@ private val StockSide.label get() = when (this) {
 
 private fun pnlColor(v: Double) = if (v >= 0) StockUp else StockDown
 
+/** 帳戶頁的「股票」分頁：持股、即時股價、損益（台股漲紅跌綠）。 */
 @Composable
-fun InvestScreen(nav: NavController) {
+fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -> Unit = {}) {
     val lk = rememberLookups()
-    val scope = rememberCoroutineScope()
-    val snack = remember { SnackbarHostState() }
     val holdings by repo.holdings.collectAsStateWithLifecycle(emptyList())
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    var refreshing by remember { mutableStateOf(false) }
     val open = holdings.filter { it.shares > 0.0001 }
     val closed = holdings.filter { it.shares <= 0.0001 }
 
-    fun refresh() {
-        refreshing = true
-        scope.launch {
+    // 畫面開著時每 30 秒更新一次報價；手動按更新時 refreshTick 會變動
+    LaunchedEffect(refreshTick, holdings.isNotEmpty()) {
+        if (holdings.isEmpty()) return@LaunchedEffect
+        var first = true
+        while (true) {
             val r = runCatching { SyncWorker.refreshQuotes(repo) }
-            refreshing = false
-            snack.showSnackbar(if (r.isSuccess) "股價已更新" else "更新失敗：${r.exceptionOrNull()?.message}")
+            if (first && refreshTick > 0) onMessage(if (r.isSuccess) "股價已更新" else "更新失敗：${r.exceptionOrNull()?.message}")
+            first = false
+            kotlinx.coroutines.delay(30_000)
         }
-    }
-    LaunchedEffect(Unit) {
-        if (System.currentTimeMillis() - settings.lastQuoteUpdate > 10 * 60_000 && holdings.isNotEmpty()) refresh()
     }
 
     val totalValue = open.sumOf { lk.fx.convert(Money.toMinor(it.marketValue), it.currency) }
     val totalCost = open.sumOf { lk.fx.convert(Money.toMinor(it.cost), it.currency) }
     val dayChange = open.sumOf { lk.fx.convert(Money.toMinor(it.dayChange), it.currency) }
     val realized = holdings.sumOf { lk.fx.convert(Money.toMinor(it.realizedPnl + it.dividends), it.currency) }
+    val unreal = totalValue - totalCost
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("投資") }, actions = {
-                IconButton(onClick = { refresh() }, enabled = !refreshing) { Icon(Icons.Filled.Refresh, "更新股價") }
-            })
-        },
-        floatingActionButton = { FloatingActionButton(onClick = { nav.navigate("trade/0") }) { Icon(Icons.Filled.Add, "新增交易") } },
-        snackbarHost = { SnackbarHost(snack) },
-    ) { pad ->
-        LazyColumn(Modifier.padding(pad)) {
-            item {
-                Card(Modifier.fillMaxWidth().padding(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                    Column(Modifier.padding(20.dp)) {
-                        Text("持股市值（${lk.base}）", style = MaterialTheme.typography.labelLarge)
-                        Text(Money.format(totalValue, lk.base), style = MaterialTheme.typography.headlineMedium)
-                        Spacer(Modifier.height(12.dp))
-                        val unreal = Money.toDouble(totalValue - totalCost)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            LabelValue("未實現損益", Money.format(totalValue - totalCost, lk.base) +
-                                if (totalCost > 0) " (${formatPct(unreal / Money.toDouble(totalCost) * 100)})" else "", valueColor = pnlColor(unreal))
-                            LabelValue("今日", Money.format(dayChange, lk.base), valueColor = pnlColor(dayChange.toDouble()))
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        LabelValue("已實現損益＋股利", Money.format(realized, lk.base), valueColor = pnlColor(realized.toDouble()))
-                        if (settings.lastQuoteUpdate > 0) Text(
-                            "報價更新於 " + SimpleDateFormat("M/d HH:mm", Locale.TAIWAN).format(Date(settings.lastQuoteUpdate)),
-                            style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                }
-            }
-            if (open.isEmpty()) item {
-                EmptyHint("尚無持股。點右下角＋新增買進紀錄，或在「通知自動記帳」啟用券商 App，成交回報會自動記錄。")
-            }
-            items(open, key = { "${it.market}:${it.symbol}" }) { h ->
-                ListItem(
-                    headlineContent = { Text("${h.symbol}  ${h.name.orEmpty()}") },
-                    supportingContent = {
-                        Text("${formatNum(h.shares, 0)} 股 · 均價 ${formatNum(h.avgCost)} · 現價 ${h.price?.let { formatNum(it) } ?: "—"}")
-                    },
-                    trailingContent = {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(Money.format(Money.toMinor(h.marketValue), h.currency), style = MaterialTheme.typography.titleSmall)
-                            Text(formatPct(h.unrealizedPct), color = pnlColor(h.unrealized), style = MaterialTheme.typography.labelMedium)
-                        }
-                    },
-                    modifier = Modifier.clickable { nav.navigate("holding/${h.market}/${h.symbol}") },
+    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        item {
+            SummaryBarCustom(
+                listOf(
+                    "市值" to (Money.full(totalValue) to MaterialTheme.colorScheme.onSurface),
+                    "未實現損益" to (Money.full(unreal) to pnlColor(unreal.toDouble())),
+                    "今日" to (Money.full(dayChange) to pnlColor(dayChange.toDouble())),
+                ),
+            )
+            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 20.dp, vertical = 8.dp)) {
+                Text(
+                    if (totalCost > 0) "報酬率 ${formatPct(Money.toDouble(unreal) / Money.toDouble(totalCost) * 100)}" else "",
+                    color = pnlColor(unreal.toDouble()), fontSize = 13.sp, modifier = Modifier.weight(1f),
+                )
+                Text(
+                    if (settings.lastQuoteUpdate > 0) "報價 " + SimpleDateFormat("HH:mm:ss", Locale.TAIWAN).format(Date(settings.lastQuoteUpdate)) + "（每 30 秒更新）" else "",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (closed.isNotEmpty()) {
-                item { Text("已出清", Modifier.padding(16.dp), style = MaterialTheme.typography.titleSmall) }
-                items(closed, key = { "c${it.market}:${it.symbol}" }) { h ->
-                    ListItem(
-                        headlineContent = { Text("${h.symbol}  ${h.name.orEmpty()}") },
-                        trailingContent = {
-                            Text(Money.format(Money.toMinor(h.realizedPnl + h.dividends), h.currency), color = pnlColor(h.realizedPnl + h.dividends))
-                        },
-                        modifier = Modifier.clickable { nav.navigate("holding/${h.market}/${h.symbol}") },
-                    )
-                }
-            }
-            item { Spacer(Modifier.height(88.dp)) }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
+        if (open.isEmpty()) item {
+            Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("尚無持股", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 17.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("按右上角＋輸入股票代號與買進價格；\n或在「通知記帳」啟用券商 App，成交回報會自動記錄。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = { nav.navigate("trade/0") }) { Text("新增股票") }
+            }
+        } else {
+            item {
+                StockHeader("持股（${open.size}）", Money.withSymbol(totalValue, lk.base))
+            }
+            items(open, key = { "${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
+        }
+        if (closed.isNotEmpty()) {
+            item { StockHeader("已出清", "") }
+            items(closed, key = { "c${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
+        }
+        if (holdings.isNotEmpty()) item {
+            StockHeader("已實現損益＋股利", Money.withSymbol(realized, lk.base), pnlColor(realized.toDouble()))
+        }
+        item { Spacer(Modifier.height(32.dp)) }
+    }
+}
+
+@Composable
+private fun StockHeader(title: String, right: String, color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 22.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
+        Text(right, color = color)
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+@Composable
+private fun HoldingRow(h: HoldingView, onClick: () -> Unit) {
+    val dayPct = if (h.price != null && h.previousClose != null && h.previousClose > 0) (h.price - h.previousClose) / h.previousClose * 100 else null
+    Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("${h.symbol}  ${h.name.orEmpty()}", fontSize = 17.sp, maxLines = 1)
+                Text(
+                    if (h.shares > 0.0001) "${formatNum(h.shares, 0)} 股 · 均價 ${formatNum(h.avgCost)}" else "已實現 ${formatNum(h.realizedPnl + h.dividends, 0)}",
+                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(Money.withSymbol(Money.toMinor(h.marketValue), h.currency), fontSize = 16.sp)
+                if (h.price != null) Text(
+                    "${formatNum(h.price)} " + (dayPct?.let { (if (it >= 0) "▲" else "▼") + formatPct(it) } ?: ""),
+                    fontSize = 13.sp, color = pnlColor(dayPct ?: 0.0),
+                )
+                if (h.shares > 0.0001) Text("損益 ${formatNum(h.unrealized, 0)} (${formatPct(h.unrealizedPct)})", fontSize = 12.sp, color = pnlColor(h.unrealized))
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 

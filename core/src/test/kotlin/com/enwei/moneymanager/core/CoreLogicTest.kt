@@ -36,23 +36,6 @@ class CoreLogicTest {
         assertEquals(LocalDate.of(2026, 11, 10), c2.nextDueDate(LocalDate.of(2026, 10, 28)))
     }
 
-    @Test fun invoiceCsv() {
-        val csv = """
-            表頭=M|載具自訂名稱|載具號碼|發票日期|商店統編|商店店名|發票號碼|總金額|發票狀態|
-            明細=D|發票號碼|小計|品項名稱|
-            M|手機條碼|/ABC1234|20261020|22555003|統一超商股份有限公司|AB12345678|85|開立|
-            D|AB12345678|45|鮮奶|
-            D|AB12345678|40|御飯糰|
-            M|手機條碼|/ABC1234|20261021|12345678|某商店|CD87654321|100|作廢|
-        """.trimIndent()
-        val list = InvoiceCsvParser.parse(csv)
-        assertEquals(1, list.size)
-        assertEquals(8500L, list[0].amountMinor)
-        assertEquals(2, list[0].items.size)
-        assertEquals(LocalDate.of(2026, 10, 20), list[0].date)
-        assertEquals(LocalDate.of(2024, 10, 28), InvoiceCsvParser.parseDate("113/10/28"))
-    }
-
     @Test fun twStockFeesAndPositions() {
         val s = FeeSettings(discount = 0.6, minFee = 20.0)
         assertEquals(20.0, StockCalc.twFee(10_000.0, s), 0.0)

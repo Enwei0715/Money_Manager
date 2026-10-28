@@ -43,7 +43,13 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
         suspend fun refreshFx(repo: Repository) {
             val base = repo.settings.value.baseCurrency
-            repo.saveFx(FxService.fetch(base))
+            val daily = runCatching { FxService.fetch(base) }
+            daily.getOrNull()?.let { repo.saveFx(it) }
+            // 自己用到的幣別再用即時報價覆蓋
+            val used = repo.usedCurrencies() + repo.settings.value.subCurrency + FxService.common.take(8)
+            val live = FxService.fetchRealtime(base, used)
+            if (live.isNotEmpty()) repo.saveFx(live)
+            if (daily.isFailure && live.isEmpty()) daily.getOrThrow()
             repo.settings.update { it.copy(lastFxUpdate = System.currentTimeMillis()) }
         }
 
