@@ -8,6 +8,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -190,7 +193,14 @@ private fun AppScaffold(nav: NavHostController) {
             }
         },
     ) { inner ->
-        NavHost(nav, startDestination = "txns", modifier = Modifier.padding(bottom = if (showBar) inner.calculateBottomPadding() else 0.dp)
+        NavHost(
+            nav, startDestination = "txns",
+            // 預設轉場約 0.7 秒太慢，改為快速淡入淡出
+            enterTransition = { fadeIn(tween(120)) },
+            exitTransition = { fadeOut(tween(80)) },
+            popEnterTransition = { fadeIn(tween(120)) },
+            popExitTransition = { fadeOut(tween(80)) },
+            modifier = Modifier.padding(bottom = if (showBar) inner.calculateBottomPadding() else 0.dp)
                 .consumeWindowInsets(WindowInsets.navigationBars.only(if (showBar) WindowInsetsSides.Bottom else WindowInsetsSides.Top))) {
             composable("txns") { TransactionsTab(nav, initialTab = if (startScreen == 1) 1 else 0) }
             composable("stats") { StatsTab(nav) }
