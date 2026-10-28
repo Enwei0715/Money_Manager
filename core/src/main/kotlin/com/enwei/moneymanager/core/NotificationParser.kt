@@ -106,8 +106,27 @@ object NotificationParser {
     fun shouldIgnore(text: String): Boolean =
         ignoreKeywords.any { text.contains(it, ignoreCase = true) } || englishIgnore.any { text.contains(it, ignoreCase = true) }
 
+    /**
+     * 從其他 App 複製或推播的文字常混有外觀相同、編碼不同的字：康熙部首（⾦、⽇）、相容漢字、
+     * 全形數字，以及「∶」「︰」等冒號。先換成一般字元，關鍵字與數字才比對得到。
+     */
+    fun clean(s: String): String {
+        val sb = StringBuilder(s.length)
+        for (ch in s) {
+            val c = ch.code
+            when {
+                c in 0x2F00..0x2FDF || c in 0x2E80..0x2EFF || c in 0xF900..0xFAFF || c in 0xFF10..0xFF19 ->
+                    sb.append(java.text.Normalizer.normalize(ch.toString(), java.text.Normalizer.Form.NFKC))
+                ch == '∶' || ch == '︰' || ch == '﹕' -> sb.append('：')
+                ch == '\u00A0' || ch == '\u3000' || ch == '\u200B' || ch == '\uFEFF' -> sb.append(if (ch == '\u200B' || ch == '\uFEFF') "" else " ")
+                else -> sb.append(ch)
+            }
+        }
+        return sb.toString()
+    }
+
     fun parse(title: String?, text: String?, now: LocalDateTime = LocalDateTime.now()): ParsedTransaction? {
-        val full = listOfNotNull(title, text).joinToString(" ").replace('\n', ' ')
+        val full = clean(listOfNotNull(title, text).joinToString(" ").replace('\n', ' '))
         if (full.isBlank() || shouldIgnore(full)) return null
 
         val hasIncome = incomeKeywords.any { full.contains(it) } || englishIncome.any { full.contains(it, ignoreCase = true) }
@@ -152,7 +171,7 @@ object NotificationParser {
      * 使用者「教過」的通知來源：不靠關鍵字，只要找得到金額就依指定的收支類型建立交易。
      */
     fun parseLearned(title: String?, text: String?, type: ParsedType, now: LocalDateTime = LocalDateTime.now()): ParsedTransaction? {
-        val full = listOfNotNull(title, text).joinToString(" ").replace('\n', ' ')
+        val full = clean(listOfNotNull(title, text).joinToString(" ").replace('\n', ' '))
         if (full.isBlank() || shouldIgnore(full)) return null
         val (amount, currency) = findAmount(full) ?: return null
         if (amount <= 0) return null
@@ -234,7 +253,7 @@ object NotificationParser {
 
     /** 券商「成交回報」通知 → 股票交易。 */
     fun parseStockFill(title: String?, text: String?): ParsedStockFill? {
-        val full = listOfNotNull(title, text).joinToString(" ").replace('\n', ' ')
+        val full = clean(listOfNotNull(title, text).joinToString(" ").replace('\n', ' '))
         if (!full.contains("成交")) return null
         if (full.contains("未成交") || full.contains("委託失敗") || full.contains("刪單")) return null
         val sideToken = sideRegex.find(full)?.value ?: return null

@@ -403,12 +403,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             ?: return false to "看不出是交易（找不到金額，或沒有「消費／付款／入帳」等字樣）。若這是交易通知，按「教它辨識」。"
         val accounts = db.accounts().all().filter { !it.archived }
         val raw0 = listOfNotNull(title, text).joinToString("\n")
-        val account = learned?.accountId?.let { id -> accounts.firstOrNull { it.id == id } }
-            ?: p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
-            ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
-            ?: (if (pkg == LINE_PACKAGE) accounts.firstOrNull { it.type != AccountType.CREDIT_CARD && it.name.contains("line", ignoreCase = true) } else null)
-            ?: bankSrc?.let { bankAccount(it, wantsCard(p, raw0), accounts) }
-            ?: accounts.firstOrNull { it.id == s.defaultAccountId }
+        val account = resolveAccount(pkg, p, raw0, learned, bankSrc, accounts)
         val what = when (p.kind) {
             ParsedKind.WITHDRAWAL -> "提款 → 記成轉帳到現金"
             ParsedKind.TOPUP_OUT -> "電支儲值扣款 → 記成轉帳到錢包"
@@ -432,6 +427,73 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             if (!enabled) "這個 App 尚未勾選監聽，勾選後才會自動記帳" else null,
         )
         return (enabled && account != null) to lines.joinToString("\n")
+    }
+
+    /** 這則通知要記到哪個帳戶：教過的格式 → 卡號末四碼 → 指定的帳戶 → LINE → 同一家銀行的帳戶 → 預設帳戶。 */
+    private fun resolveAccount(
+        pkg: String, p: com.enwei.moneymanager.core.ParsedTransaction, raw: String, learned: LearnedSource?,
+        bankSrc: BankDirectory.Bank?, accounts: List<AccountEntity>,
+    ): AccountEntity? {
+        val s = settings.value
+        return learned?.accountId?.let { id -> accounts.firstOrNull { it.id == id } }
+            ?: p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
+            ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
+            ?: (if (pkg == LINE_PACKAGE) accounts.firstOrNull { it.type != AccountType.CREDIT_CARD && it.name.contains("line", ignoreCase = true) } else null)
+            ?: bankSrc?.let { bankAccount(it, wantsCard(p, raw), accounts) }
+            ?: accounts.firstOrNull { it.id == s.defaultAccountId }
+    }
+
+    /** 一則通知在測試頁的試算結果。 */
+    data class NotePreview(val pkg: String, val title: String?, val text: String?, val postedAt: Long)
+
+    /**
+     * 試算通知列上的一批通知，並和實際記帳一樣推算轉帳：
+     * 一邊轉出、一邊轉入（金額相同、10 分鐘內、不同帳戶）會合併成一筆轉帳；
+     * 銀行的轉帳 Email 寫有轉入銀行時，會把同一家銀行剛剛的轉出改成轉帳。
+     */
+    suspend fun previewBatch(list: List<NotePreview>): List<Pair<Boolean, String>> {
+        val base = list.map { previewNotification(it.pkg, it.title, it.text) }.toMutableList()
+        val s = settings.value
+        val accounts = db.accounts().all().filter { !it.archived }
+        data class Side(val i: Int, val out: Boolean, val amount: Long, val at: Long, val account: AccountEntity?, val bank: BankDirectory.Bank?)
+        val sides = list.mapIndexedNotNull { i, n ->
+            if (n.pkg == GMAIL_PACKAGE || isRedacted(n.text)) return@mapIndexedNotNull null
+            val learned = s.learnedFor(n.pkg, n.title, n.text)
+            val p = learned?.let { NotificationParser.parseLearned(n.title, n.text, if (it.income) ParsedType.INCOME else ParsedType.EXPENSE) }
+                ?: NotificationParser.parse(n.title, n.text) ?: return@mapIndexedNotNull null
+            if (p.kind != ParsedKind.TRANSFER_OUT && p.kind != ParsedKind.TRANSFER_IN) return@mapIndexedNotNull null
+            val bank = sourceBank(n.pkg, n.title)
+            val at = p.occurredAt?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli() ?: n.postedAt
+            Side(i, p.kind == ParsedKind.TRANSFER_OUT, p.amountMinor, at, resolveAccount(n.pkg, p, listOfNotNull(n.title, n.text).joinToString("\n"), learned, bank, accounts), bank)
+        }
+        val paired = HashSet<Int>()
+        sides.filter { it.out }.forEach { o ->
+            val inn = sides.firstOrNull { it.i !in paired && !it.out && it.amount == o.amount && kotlin.math.abs(it.at - o.at) <= 10 * 60_000 &&
+                it.account != null && o.account != null && it.account.id != o.account.id } ?: return@forEach
+            paired += o.i; paired += inn.i
+            val msg = "→ 會和另一則通知合併成轉帳：${o.account!!.name} → ${inn.account!!.name} ${Money.format(o.amount, "TWD")}"
+            base[o.i] = true to base[o.i].second + "\n" + msg
+            base[inn.i] = true to base[inn.i].second + "\n" + msg
+        }
+        // 轉帳 Email：補上轉入銀行
+        list.forEachIndexed { i, n ->
+            if (n.pkg != GMAIL_PACKAGE) return@forEachIndexed
+            val src = BankDirectory.of(n.title) ?: return@forEachIndexed
+            val dest = BankDirectory.transferDestination(n.text) ?: return@forEachIndexed
+            val to = bankAccount(dest, false, accounts)
+            val amount = NotificationParser.findAmount(listOfNotNull(n.title, n.text).joinToString("\n"))?.first
+            val o = sides.filter { it.out && it.i !in paired && it.bank?.key == src.key && kotlin.math.abs(it.at - n.postedAt) <= 20 * 60_000 &&
+                (amount == null || it.amount == amount) }.minByOrNull { kotlin.math.abs(it.at - n.postedAt) } ?: return@forEachIndexed
+            if (to == null || o.account == null || to.id == o.account.id) {
+                base[i] = false to base[i].second + "\n（你沒有「${dest.key}」的帳戶，無法記成轉帳）"
+                return@forEachIndexed
+            }
+            paired += o.i
+            val msg = "→ 依 Email 的轉入銀行記成轉帳：${o.account.name} → ${to.name} ${Money.format(o.amount, "TWD")}"
+            base[o.i] = true to base[o.i].second + "\n" + msg
+            base[i] = true to base[i].second + "\n" + msg
+        }
+        return base
     }
 
     /** 通知來自哪家銀行：Gmail 看寄件者（標題），其他 App 看 App 名稱與套件名稱。 */
@@ -548,7 +610,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val p = parsed!!
         val occurred = p.occurredAt?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli() ?: postedAt
         // 通知內有交易時間時，以「金額＋時間」去重：同一筆交易的通知晚點再跳一次也不會重複記帳
-        val key = p.occurredAt?.let { "N:${p.amountMinor}:${it.withNano(0)}" }
+        // 方向要算進去：自己兩個帳戶互轉時，轉出與轉入通知常是同一秒、同金額，不能被當成重複
+        val sign = if (p.type == ParsedType.INCOME) "+" else "-"
+        val key = p.occurredAt?.let { "N:$sign${p.amountMinor}:${it.withNano(0)}" }
         if (key != null && db.txns().byExternalKey(key) != null) { log.insert(logAs("DUPLICATE")); return null }
 
         val raw0 = listOfNotNull(title, text).joinToString("\n")
@@ -559,12 +623,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             log.insert(logAs("DUPLICATE")); return null
         }
         val accounts = db.accounts().all().filter { !it.archived }
-        val account = learned?.accountId?.let { id -> accounts.firstOrNull { it.id == id } }
-            ?: p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
-            ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
-            ?: (if (isLine) accounts.firstOrNull { it.type != AccountType.CREDIT_CARD && it.name.contains("line", ignoreCase = true) } else null)
-            ?: bankSrc?.let { bankAccount(it, wantsCard(p, raw0), accounts) }
-            ?: accounts.firstOrNull { it.id == s.defaultAccountId }
+        val account = resolveAccount(pkg, p, raw0, learned, bankSrc, accounts)
         // 銀行的股利入帳通知：已由「自動除息」記到這個帳戶時不再重複記收入
         if (p.type == ParsedType.INCOME && account != null && listOf("股利", "股息", "配息").any { raw0.contains(it) }) {
             val day = java.time.Instant.ofEpochMilli(occurred).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
@@ -699,7 +758,11 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             else -> null
         }
         return insert(
-            base.copy(type = type, categoryId = suggestCategory(p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId, merchant = merchant, rawText = tagged),
+            base.copy(
+                type = type, merchant = merchant, rawText = tagged,
+                // 轉出／轉入多半是自己帳戶間的轉帳（之後會合併），不猜分類
+                categoryId = if (p.kind == ParsedKind.NORMAL) suggestCategory(p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId else null,
+            ),
             "RECORDED", "${type.label} $amountText ${p.merchant.orEmpty()}",
         )
     }

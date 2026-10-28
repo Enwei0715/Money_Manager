@@ -402,3 +402,14 @@ class DawhoFillPastedTest {
         assertEquals(2000.0, g?.shares)
     }
 }
+
+class LookAlikeCharsTest {
+    @Test fun kangxiAndFullWidth() {
+        // 「成交價」的「價」正常，「⾦額」用康熙部首⾦，數字用全形
+        val f = NotificationParser.parseStockFill(null, "您委託買入的【６５１５穎崴】已成交︰成交價∶４９００.００ 成交數︰１股 2026/10/28 13:01:17")
+        assertEquals("6515", f?.symbol)
+        assertEquals(4900.0, f?.price)
+        val p = NotificationParser.parse("國泰世華銀行", "【帳戶出帳通知】您於2026/10/29 00:27:05電子轉出,⾦額為NT\$１００元")
+        assertEquals(10000L, p?.amountMinor)
+    }
+}

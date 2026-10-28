@@ -163,14 +163,12 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     val inPeriod = remember(all, range) { all.filter { inRange(it.date.toLocalDate(), range) } }
 
     // 上期結轉（同 Money Manager）：本期之前所有收入－支出的累計，加上計入總額帳戶的期初餘額。
-    // 轉帳、股票買賣不算收支，所以本期的結轉一定等於上一期的「合計」。
+    // 篩選條件必須和本期收支（totalsOf）完全相同，本期的結轉才會一定等於上一期的「合計」；
+    // 以前排除了不計入總額或隱藏帳戶的交易，本期收支卻有算，兩邊一不一致結轉就對不上。
     val carry = if (settings.carryOver && tab != 3) {
         val cutoff = range.first.toMillis(LocalTime.MIDNIGHT)
-        fun counted(id: Long?) = lk.account(id)?.let { it.includeInNetWorth && !it.archived } ?: true
         val opening = lk.accounts.filter { it.includeInNetWorth && !it.archived }.sumOf { lk.fx.convert(it.initialBalance, it.currency) }
-        opening + all.asSequence()
-            .filter { it.date < cutoff && it.status == TxnStatus.CONFIRMED && it.type != TxnType.TRANSFER && counted(it.accountId) }
-            .sumOf { val v = lk.fx.convert(it.amount, it.currency); if (it.type == TxnType.INCOME) v else -v }
+        opening + totalsOf(all.filter { it.date < cutoff }, lk.fx).total
     } else 0L
     val base = totalsOf(inPeriod, lk.fx)
     val totals = Totals(base.income + maxOf(0, carry), base.expense + maxOf(0, -carry))

@@ -54,6 +54,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import com.enwei.moneymanager.ui.components.Text
+import com.enwei.moneymanager.data.Repository
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -201,7 +202,7 @@ fun NotificationSettingsScreen(nav: NavController) {
         val n = TxnNotificationListener.activeNotes()
         testMsg = if (n == null) "還讀不到通知列：請確認已開啟通知存取權（開啟後可能要稍等幾秒）" else if (n.isEmpty()) "通知列目前沒有通知" else null
         val list = n.orEmpty()
-        val pv = list.map { repo.previewNotification(it.pkg, it.title, it.text) }
+        val pv = repo.previewBatch(list.map { Repository.NotePreview(it.pkg, it.title, it.text, it.postedAt) })
         // 看得出是交易的排前面
         val order = list.indices.sortedBy { i -> if (pv[i].second.startsWith("看不出") || pv[i].second.startsWith("LINE 聊天")) 1 else 0 }
         notes = order.map { list[it] }
