@@ -128,7 +128,7 @@ fun MoreScreen(nav: NavController) {
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 title = { Text("設定") },
                 actions = {
-                    Text(BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 20.sp,
+                    Text(BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp,
                         modifier = Modifier.padding(end = 16.dp))
                 },
             )
@@ -141,14 +141,14 @@ fun MoreScreen(nav: NavController) {
             items(entries.size) { i ->
                 val (route, label, icon) = entries[i]
                 Column(
-                    Modifier.height(130.dp).clickable { nav.navigate(route) },
+                    Modifier.height(112.dp).clickable { nav.navigate(route) },
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
                 ) {
                     androidx.compose.material3.BadgedBox(badge = {
                         if (route == "pending" && pending.isNotEmpty()) Badge { Text("${pending.size}") }
-                    }) { Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), modifier = Modifier.size(44.dp)) }
-                    Spacer(Modifier.height(14.dp))
-                    Text(label, fontSize = 17.sp)
+                    }) { Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), modifier = Modifier.size(36.dp)) }
+                    Spacer(Modifier.height(10.dp))
+                    Text(label, fontSize = 15.sp)
                 }
             }
         }
@@ -413,11 +413,25 @@ fun CategoriesScreen(nav: NavController) {
         LazyColumn(Modifier.padding(pad)) {
             listOf(TxnType.EXPENSE, TxnType.INCOME).forEach { k ->
                 item(key = k.name) { SectionTitle(k.label + "分類") }
-                items(cats.filter { it.kind == k }, key = { it.id }) { c ->
-                    ListItem(
-                        headlineContent = { Text("${c.icon} ${c.name}" + if (c.archived) "（隱藏）" else "") },
-                        modifier = Modifier.clickable { editing = c },
-                    )
+                val parents = cats.filter { it.kind == k && it.parentId == null }.sortedBy { it.sortOrder }
+                parents.forEach { c ->
+                    item(key = c.id) {
+                        ListItem(
+                            headlineContent = { Text("${if (c.icon == "📁") "" else c.icon + " "}${c.name}" + if (c.archived) "（隱藏）" else "") },
+                            trailingContent = {
+                                TextButton(onClick = { editing = CategoryEntity(name = "", kind = c.kind, icon = "•", sortOrder = cats.size, parentId = c.id) }) {
+                                    Text("＋子分類")
+                                }
+                            },
+                            modifier = Modifier.clickable { editing = c },
+                        )
+                    }
+                    items(cats.filter { it.parentId == c.id }.sortedBy { it.sortOrder }, key = { it.id }) { sub ->
+                        ListItem(
+                            headlineContent = { Text("　└ ${sub.name}" + if (sub.archived) "（隱藏）" else "", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            modifier = Modifier.clickable { editing = sub },
+                        )
+                    }
                 }
             }
             if (rules.isNotEmpty()) {
@@ -440,12 +454,12 @@ fun CategoriesScreen(nav: NavController) {
         var archived by remember(c) { mutableStateOf(c.archived) }
         AlertDialog(
             onDismissRequest = { editing = null },
-            title = { Text(if (c.id == 0L) "新增分類" else "編輯分類") },
+            title = { Text(if (c.id == 0L) (if (c.parentId != null) "新增子分類" else "新增分類") else "編輯分類") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(name, { name = it }, label = { Text("名稱") }, singleLine = true)
                     OutlinedTextField(icon, { icon = it.take(4) }, label = { Text("圖示（Emoji）") }, singleLine = true)
-                    if (c.id == 0L) DropdownField("類型", listOf(TxnType.EXPENSE, TxnType.INCOME), kind, { it.label }, { kind = it })
+                    if (c.id == 0L && c.parentId == null) DropdownField("類型", listOf(TxnType.EXPENSE, TxnType.INCOME), kind, { it.label }, { kind = it })
                     Row(verticalAlignment = Alignment.CenterVertically) { Text("隱藏", Modifier.weight(1f)); Switch(archived, { archived = it }) }
                 }
             },
@@ -477,8 +491,51 @@ fun BackupScreen(nav: NavController) {
         }
     }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> confirmUri = uri }
+    var mmUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val mmImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> mmUri = uri }
+    val mmExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = true
+        scope.launch {
+            status = runCatching {
+                val tmp = java.io.File(ctx.cacheDir, "export.mmbak")
+                com.enwei.moneymanager.data.MmbakIO.export(ctx, repo, tmp)
+                withContext(Dispatchers.IO) { ctx.contentResolver.openOutputStream(uri)!!.use { o -> tmp.inputStream().use { it.copyTo(o) } } }
+                tmp.delete()
+                "已匯出 .mmbak（Money Manager 備份格式）"
+            }.getOrElse { "匯出失敗：${it.message}" }
+            busy = false
+        }
+    }
+    fun runMmImport(uri: android.net.Uri, replace: Boolean) {
+        busy = true
+        scope.launch {
+            status = runCatching {
+                val tmp = java.io.File(ctx.cacheDir, "import.mmbak")
+                withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)!!.use { i -> tmp.outputStream().use { i.copyTo(it) } } }
+                val r = com.enwei.moneymanager.data.MmbakIO.import(ctx, repo, tmp, replace)
+                tmp.delete()
+                "匯入完成：新增 ${r.accounts} 個帳戶、${r.categories} 個分類、${r.transactions} 筆交易" +
+                    (if (r.skipped > 0) "（${r.skipped} 筆已存在略過）" else "") +
+                    "、${r.memos} 則備忘、${r.recurring} 個週期設定。\n請到「帳戶」核對餘額；信用卡的結帳日、繳款日已帶入，扣繳帳戶與日期請再確認。"
+            }.getOrElse { "匯入失敗：${it.message}" }
+            busy = false
+        }
+    }
     Scaffold(topBar = { BackTopBar("備份與還原", { nav.popBackStack() }) }) { pad ->
-        Column(Modifier.padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Money Manager 備份檔（.mmbak）", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "在 Money Manager 的「更多 → 備份 → 匯出」取得 .mmbak 檔，在這裡匯入即可搬移所有帳戶、分類（含子分類）、交易、轉帳、餘額調整與備忘。也可以把記帳本的資料匯出成 .mmbak。",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(enabled = !busy, onClick = { mmImporter.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("從 .mmbak 匯入") }
+            OutlinedButton(enabled = !busy, onClick = { mmExporter.launch("記帳本-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.mmbak") },
+                modifier = Modifier.fillMaxWidth()) { Text("匯出為 .mmbak") }
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            HorizontalDivider()
+            Text("記帳本備份（JSON）", style = MaterialTheme.typography.titleMedium)
             Text("所有資料都只存在這支手機。建議定期匯出備份到 Google 雲端硬碟或電腦；換手機時在新手機匯入即可。", style = MaterialTheme.typography.bodyMedium)
             Button(onClick = { exporter.launch("記帳本備份-${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.json") }, modifier = Modifier.fillMaxWidth()) {
                 Text("匯出備份（JSON）")
@@ -488,6 +545,20 @@ fun BackupScreen(nav: NavController) {
             }
             status?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         }
+    }
+    mmUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { mmUri = null },
+            title = { Text("匯入 Money Manager 資料") },
+            text = { Text("「合併」會保留記帳本現有資料，已匯入過的交易不會重複；「取代」會先清空記帳本的帳戶、分類、交易與週期設定（股票紀錄保留）。") },
+            confirmButton = { TextButton(onClick = { mmUri = null; runMmImport(uri, replace = false) }) { Text("合併") } },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { mmUri = null; runMmImport(uri, replace = true) }) { Text("取代") }
+                    TextButton(onClick = { mmUri = null }) { Text("取消") }
+                }
+            },
+        )
     }
     confirmUri?.let { uri ->
         AlertDialog(

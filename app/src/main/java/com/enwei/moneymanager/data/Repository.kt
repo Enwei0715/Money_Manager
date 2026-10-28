@@ -73,7 +73,7 @@ private const val TRANSFER_TAG = "#轉帳"
 
 data class IngestResult(val kind: String, val txnId: Long? = null, val message: String)
 
-class Repository(private val db: AppDatabase, val settings: SettingsStore) {
+class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     val accounts = db.accounts().observeAll()
     val categories = db.categories().observeAll()
     val transactions = db.txns().observeAll()
@@ -102,13 +102,15 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
     ): List<AccountBalance> {
         val currencyOf = accs.associate { it.id to it.currency }
         val delta = HashMap<Long, Long>()
+        // 交易幣別與帳戶幣別不同（例如台幣信用卡刷美金）時，依匯率換算成帳戶幣別
+        fun inAcc(amount: Long, cur: String, acc: Long) = fx.convert(amount, cur, currencyOf[acc] ?: cur)
         txns.filter { it.status == TxnStatus.CONFIRMED }.forEach { t ->
             when (t.type) {
-                TxnType.EXPENSE -> t.accountId?.let { delta.merge(it, -t.amount, ::sumLong) }
-                TxnType.INCOME -> t.accountId?.let { delta.merge(it, t.amount, ::sumLong) }
+                TxnType.EXPENSE -> t.accountId?.let { delta.merge(it, -inAcc(t.amount, t.currency, it), ::sumLong) }
+                TxnType.INCOME -> t.accountId?.let { delta.merge(it, inAcc(t.amount, t.currency, it), ::sumLong) }
                 TxnType.TRANSFER -> {
-                    t.accountId?.let { delta.merge(it, -t.amount, ::sumLong) }
-                    t.toAccountId?.let { delta.merge(it, t.toAmount ?: t.amount, ::sumLong) }
+                    t.accountId?.let { delta.merge(it, -inAcc(t.amount, t.currency, it), ::sumLong) }
+                    t.toAccountId?.let { delta.merge(it, t.toAmount ?: inAcc(t.amount, t.currency, it), ::sumLong) }
                 }
             }
         }
@@ -197,7 +199,20 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
     suspend fun deleteAccount(a: AccountEntity) {
         db.withTransaction {
             db.txns().detachAccount(a.id)
+            db.txns().detachToAccount(a.id)
+            db.stocks().detachCash(a.id)
+            db.stocks().detachBroker(a.id)
+            db.accounts().detachAutopay(a.id)
+            db.accounts().detachLinked(a.id)
+            db.recurring().detachAccount(a.id)
             db.accounts().delete(a)
+        }
+        settings.update { s ->
+            s.copy(
+                defaultAccountId = s.defaultAccountId.takeIf { it != a.id },
+                notifAccountMap = s.notifAccountMap.filterValues { it != a.id },
+                cashCounts = s.cashCounts - a.id,
+            )
         }
     }
 
@@ -229,6 +244,7 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
         val log = db.notificationLog()
         // 同一則通知可能因更新而重複送達
         if (log.countSame(pkg, title, text, postedAt - 10 * 60_000) > 0) return null
+        log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
         val enabled = pkg in s.notifPackages
         fun logAs(result: String, txnId: Long? = null) =
             NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = result, txnId = txnId)
@@ -273,6 +289,13 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
         val key = p.occurredAt?.let { "N:${p.amountMinor}:${it.withNano(0)}" }
         if (key != null && db.txns().byExternalKey(key) != null) { log.insert(logAs("DUPLICATE")); return null }
 
+        val raw0 = listOfNotNull(title, text).joinToString("\n")
+        // 同一則通知隔幾小時又跳出（內文完全相同）：已經記過或已合併成轉帳的不再處理
+        val dayMs = 24L * 3600 * 1000
+        val rawWindow = if (p.occurredAt != null) dayMs else 30L * 60 * 1000
+        if (db.txns().all().any { it.rawText != null && kotlin.math.abs(it.date - occurred) <= rawWindow && it.rawText.contains(raw0) }) {
+            log.insert(logAs("DUPLICATE")); return null
+        }
         val accounts = db.accounts().all().filter { !it.archived }
         val account = p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
             ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
@@ -292,7 +315,8 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
             return IngestResult("RECORDED", id, message)
         }
         suspend fun merged(existing: TxnEntity, updated: TxnEntity, message: String): IngestResult {
-            db.txns().upsert(updated)
+            // 合併時保留這則通知原文，之後同一則通知再跳出時可辨識為重複
+            db.txns().upsert(updated.copy(rawText = listOfNotNull(updated.rawText, raw).joinToString("\n—\n")))
             log.insert(logAs("MERGED", existing.id))
             return IngestResult("RECORDED", existing.id, message)
         }
@@ -521,6 +545,7 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
     /** 信用卡自動扣繳：每到繳款日，從扣款帳戶轉帳「結帳日當時的欠款 − 之後已繳金額」到信用卡。 */
     suspend fun runCardAutopay(today: LocalDate = LocalDate.now()): Int {
         var created = 0
+        val fx = currentFx()
         val accounts = db.accounts().all()
         accounts.filter {
             it.type == AccountType.CREDIT_CARD && it.autopayFromId != null && it.statementDay != null && it.dueDay != null && !it.archived
@@ -534,7 +559,7 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
                 if (deduct.isAfter(today)) break
                 val statement = cycle.statementDateFor(due)
                 val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
-                val owed = -balanceAsOf(card, txns, statement.plusDays(1).toMillis(LocalTime.MIDNIGHT))
+                val owed = -balanceAsOf(card, txns, statement.plusDays(1).toMillis(LocalTime.MIDNIGHT), fx)
                 val paidSince = txns.filter {
                     it.type == TxnType.TRANSFER && it.toAccountId == card.id &&
                         it.date >= statement.plusDays(1).toMillis(LocalTime.MIDNIGHT) &&
@@ -559,15 +584,19 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
         return created
     }
 
-    private fun balanceAsOf(acc: AccountEntity, txns: List<TxnEntity>, beforeMillis: Long): Long {
+    private suspend fun currentFx(): FxConverter =
+        FxConverter(settings.value.baseCurrency, db.fx().all().associate { it.currency to it.rate })
+
+    private fun balanceAsOf(acc: AccountEntity, txns: List<TxnEntity>, beforeMillis: Long, fx: FxConverter): Long {
         var b = acc.initialBalance
+        fun conv(t: TxnEntity) = fx.convert(t.amount, t.currency, acc.currency)
         txns.filter { it.date < beforeMillis }.forEach { t ->
             when (t.type) {
-                TxnType.EXPENSE -> if (t.accountId == acc.id) b -= t.amount
-                TxnType.INCOME -> if (t.accountId == acc.id) b += t.amount
+                TxnType.EXPENSE -> if (t.accountId == acc.id) b -= conv(t)
+                TxnType.INCOME -> if (t.accountId == acc.id) b += conv(t)
                 TxnType.TRANSFER -> {
-                    if (t.accountId == acc.id) b -= t.amount
-                    if (t.toAccountId == acc.id) b += t.toAmount ?: t.amount
+                    if (t.accountId == acc.id) b -= conv(t)
+                    if (t.toAccountId == acc.id) b += t.toAmount ?: conv(t)
                 }
             }
         }
@@ -576,15 +605,16 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
 
     /** 信用卡：應繳金額（已出帳未繳）、未出帳金額、下次繳款日。 */
     suspend fun cardStatus(today: LocalDate = LocalDate.now()): Map<Long, CardStatus> {
+        val fx = currentFx()
         val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
         return db.accounts().all().filter { it.type == AccountType.CREDIT_CARD }.associate { card ->
-            val owed = maxOf(0, -balanceAsOf(card, txns, Long.MAX_VALUE))
+            val owed = maxOf(0, -balanceAsOf(card, txns, Long.MAX_VALUE, fx))
             if (card.statementDay == null || card.dueDay == null) return@associate card.id to CardStatus(owed, 0, null)
             val cycle = CardCycle(card.statementDay, card.dueDay)
             val thisMonth = Recurrence.dayInMonth(java.time.YearMonth.from(today), card.statementDay)
             val lastStatement = if (thisMonth.isAfter(today)) Recurrence.dayInMonth(java.time.YearMonth.from(today).minusMonths(1), card.statementDay) else thisMonth
             val cutoff = lastStatement.plusDays(1).toMillis(LocalTime.MIDNIGHT)
-            val billed = maxOf(0, -balanceAsOf(card, txns, cutoff))
+            val billed = maxOf(0, -balanceAsOf(card, txns, cutoff, fx))
             val paid = txns.filter { it.type == TxnType.TRANSFER && it.toAccountId == card.id && it.date >= cutoff }.sumOf { it.toAmount ?: it.amount }
             val payable = maxOf(0, billed - paid)
             val due = cycle.nextDueDate(lastStatement)
@@ -594,6 +624,7 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
 
     /** 首頁「即將到來」：信用卡繳款日與預估金額。 */
     suspend fun upcomingCardBills(today: LocalDate = LocalDate.now()): List<Triple<AccountEntity, LocalDate, Long>> {
+        val fx = currentFx()
         val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
         return db.accounts().all().filter { it.type == AccountType.CREDIT_CARD && it.statementDay != null && it.dueDay != null && !it.archived }
             .map { card ->
@@ -601,7 +632,7 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
                 val due = cycle.nextDueDate(today.minusDays(1))
                 val statement = cycle.statementDateFor(due)
                 val cutoff = if (statement.isAfter(today)) Long.MAX_VALUE else statement.plusDays(1).toMillis(LocalTime.MIDNIGHT)
-                val owed = -balanceAsOf(card, txns, cutoff)
+                val owed = -balanceAsOf(card, txns, cutoff, fx)
                 Triple(card, due, maxOf(0, owed))
             }.sortedBy { it.second }
     }

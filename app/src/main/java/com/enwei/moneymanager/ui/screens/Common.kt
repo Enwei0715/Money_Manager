@@ -21,6 +21,11 @@ class Lookups(val accounts: List<AccountEntity>, val categories: List<CategoryEn
     private val catMap = categories.associateBy { it.id }
     fun account(id: Long?) = id?.let { accMap[it] }
     fun category(id: Long?) = id?.let { catMap[it] }
+    /** 子分類回傳所屬大分類 id，大分類回傳自己 */
+    fun rootId(id: Long?): Long? = category(id)?.let { it.parentId ?: it.id } ?: id
+    fun children(id: Long): List<CategoryEntity> = categories.filter { it.parentId == id && !it.archived }.sortedBy { it.sortOrder }
+    /** 「食物／Dinner」形式的完整名稱 */
+    fun catLabel(id: Long?): String? = category(id)?.let { c -> c.parentId?.let { p -> "${category(p)?.name ?: ""}／${c.name}" } ?: c.name }
 }
 
 @Composable

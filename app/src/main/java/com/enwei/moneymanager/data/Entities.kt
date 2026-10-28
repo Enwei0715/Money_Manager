@@ -65,6 +65,8 @@ data class CategoryEntity(
     val icon: String,
     val sortOrder: Int = 0,
     val archived: Boolean = false,
+    /** 子分類所屬的大分類 */
+    val parentId: Long? = null,
 )
 
 @Serializable

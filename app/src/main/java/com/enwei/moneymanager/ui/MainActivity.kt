@@ -14,6 +14,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -174,6 +178,8 @@ private fun AppScaffold(nav: NavHostController) {
     val startScreen = remember { MoneyApp.repo.settings.value.startScreen }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        // 外層只負責底部分頁列；狀態列與導覽列的留白交給各頁自己的標題列處理，才會依手機實際高度自動調整
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (showBar) BottomTabs(current) { route ->
                 nav.navigate(route) {
@@ -184,7 +190,8 @@ private fun AppScaffold(nav: NavHostController) {
             }
         },
     ) { inner ->
-        NavHost(nav, startDestination = "txns", modifier = Modifier.padding(bottom = if (showBar) inner.calculateBottomPadding() else 0.dp).consumeWindowInsets(inner)) {
+        NavHost(nav, startDestination = "txns", modifier = Modifier.padding(bottom = if (showBar) inner.calculateBottomPadding() else 0.dp)
+                .consumeWindowInsets(WindowInsets.navigationBars.only(if (showBar) WindowInsetsSides.Bottom else WindowInsetsSides.Top))) {
             composable("txns") { TransactionsTab(nav, initialTab = if (startScreen == 1) 1 else 0) }
             composable("stats") { StatsTab(nav) }
             composable("accounts") { AccountsTab(nav, showBack = nav.previousBackStackEntry?.destination?.route.let { it != null && tabs.none { t -> t.route == it } }) }

@@ -133,7 +133,7 @@ fun StatsTab(nav: NavController) {
     }
     val inRange = remember(all, range) { all.filter { it.status == TxnStatus.CONFIRMED }.inRange(range) }
     val totals = totalsOf(inRange, lk.fx)
-    val byCat = inRange.filter { it.type == kind }.groupBy { it.categoryId }
+    val byCat = inRange.filter { it.type == kind }.groupBy { lk.rootId(it.categoryId) }
         .map { (cid, list) -> cid to list.sumOf { lk.fx.convert(it.amount, it.currency) } }
         .sortedByDescending { it.second }
     val sum = byCat.sumOf { it.second }
@@ -144,7 +144,7 @@ fun StatsTab(nav: NavController) {
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(x = (-12).dp)) {
                     if (period != Period.CUSTOM) IconButton(onClick = { anchor = shift(period, anchor, -1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
-                    Text(range.title, fontSize = if (period == Period.CUSTOM) 16.sp else 20.sp,
+                    Text(range.title, fontSize = if (period == Period.CUSTOM) 15.sp else 18.sp,
                         modifier = Modifier.clickable { if (period == Period.CUSTOM) pickRange = true else anchor = LocalDate.now() })
                     if (period != Period.CUSTOM) IconButton(onClick = { anchor = shift(period, anchor, 1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                 }
@@ -155,7 +155,7 @@ fun StatsTab(nav: NavController) {
                         Modifier.border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(8.dp)).clickable { menu = true }
                             .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                    ) { Text(period.label, fontSize = 16.sp); Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp)) }
+                    ) { Text(period.label, fontSize = 15.sp); Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp)) }
                     DropdownMenu(menu, { menu = false }) {
                         Period.entries.forEach { p ->
                             DropdownMenuItem(text = { Text(p.label) }, onClick = { period = p; menu = false; if (p == Period.CUSTOM) pickRange = true })
@@ -294,8 +294,8 @@ fun CategoryStatScreen(nav: NavController, categoryId: Long, kind: TxnType, peri
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val cat = lk.category(categoryId.takeIf { it > 0 })
     val anchor = LocalDate.ofEpochDay(anchorDay)
-    val mine = remember(all, categoryId, kind) {
-        all.filter { it.status == TxnStatus.CONFIRMED && it.type == kind && (it.categoryId ?: 0L) == categoryId }
+    val mine = remember(all, categoryId, kind, lk) {
+        all.filter { it.status == TxnStatus.CONFIRMED && it.type == kind && (lk.rootId(it.categoryId) ?: 0L) == categoryId }
     }
     val ranges = (5 downTo 0).map { rangeOf(period, shift(period, anchor, -it.toLong())) }
     val values = ranges.map { r -> mine.inRange(r).sumOf { lk.fx.convert(it.amount, it.currency) } }

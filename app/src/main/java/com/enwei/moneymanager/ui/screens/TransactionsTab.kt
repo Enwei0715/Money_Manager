@@ -161,7 +161,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     val carry = if (settings.carryOver && tab != 3) {
         val cutoff = range.first.toMillis(LocalTime.MIDNIGHT)
         balances.filter { !it.account.archived && it.account.includeInNetWorth }
-            .sumOf { lk.fx.convert(balanceBefore(it.balance, it.account.id, cutoff, all, trades), it.account.currency) }
+            .sumOf { lk.fx.convert(balanceBefore(it.balance, it.account.id, cutoff, all, trades, lk.fx, it.account.currency), it.account.currency) }
     } else 0L
     val base = totalsOf(inPeriod, lk.fx)
     val totals = Totals(base.income + maxOf(0, carry), base.expense + maxOf(0, -carry))
@@ -176,7 +176,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         IconButton(onClick = { month = if (yearly) month.minusYears(1) else month.minusMonths(1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
                         Text(
                             if (yearly) "${month.year}" else "${month.year}年${month.monthValue}月",
-                            fontSize = 20.sp, modifier = Modifier.clickable { month = Periods.monthOf(LocalDate.now(), startDay) },
+                            fontSize = 18.sp, modifier = Modifier.clickable { month = Periods.monthOf(LocalDate.now(), startDay) },
                         )
                         IconButton(onClick = { month = if (yearly) month.plusYears(1) else month.plusMonths(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                     }
@@ -214,7 +214,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
             ) {
                 subTabs.forEachIndexed { i, t ->
-                    Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t, fontSize = 15.sp, maxLines = 1) },
+                    Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t, fontSize = 14.sp, maxLines = 1) },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -247,7 +247,7 @@ fun SummaryBar(t: Totals, base: String) {
 private fun SummaryCell(label: String, value: String, color: Color, modifier: Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
-        Text(value, color = color, fontSize = 19.sp, maxLines = 1)
+        Text(value, color = color, fontSize = 17.sp, maxLines = 1)
     }
 }
 
@@ -309,7 +309,7 @@ fun DayBlock(day: LocalDate, txns: List<TxnEntity>, lk: Lookups, nav: NavControl
     Column(Modifier.padding(top = 10.dp).background(MaterialTheme.colorScheme.surface)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("${day.dayOfMonth}", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("${day.dayOfMonth}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(6.dp))
             val chip = when (day.dayOfWeek) { DayOfWeek.SUNDAY -> SundayColor; DayOfWeek.SATURDAY -> SaturdayColor; else -> Color(0xFF8C8C8C) }
             Surface(color = chip, shape = RoundedCornerShape(3.dp)) {
@@ -318,8 +318,8 @@ fun DayBlock(day: LocalDate, txns: List<TxnEntity>, lk: Lookups, nav: NavControl
             Spacer(Modifier.width(8.dp))
             Text("${"%02d".format(day.monthValue)}.${day.year}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.weight(1f))
-            Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = 16.sp, modifier = Modifier.width(118.dp), textAlign = TextAlign.End)
-            Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = 16.sp, modifier = Modifier.width(118.dp), textAlign = TextAlign.End)
+            Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = 15.sp, modifier = Modifier.width(112.dp), textAlign = TextAlign.End)
+            Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = 15.sp, modifier = Modifier.width(112.dp), textAlign = TextAlign.End)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         txns.sortedByDescending { it.date }.forEach { MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
@@ -341,21 +341,23 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.width(96.dp)) {
-            Text(if (t.type == TxnType.TRANSFER) "轉帳" else cat?.name ?: "未分類", color = gray, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val parent = cat?.parentId?.let { lk.category(it) }
+            Text(if (t.type == TxnType.TRANSFER) "轉帳" else (parent ?: cat)?.name ?: "未分類", color = gray, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (parent != null && t.type != TxnType.TRANSFER) Text(cat!!.name, color = gray, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val sub = when {
                 t.status == TxnStatus.PENDING -> "待確認"
-                t.source != TxnSource.MANUAL -> t.source.label
+                t.source != TxnSource.MANUAL && t.source != TxnSource.IMPORT -> t.source.label
                 else -> null
             }
             if (sub != null) Text(sub, color = if (t.status == TxnStatus.PENDING) MaterialTheme.colorScheme.primary else gray, fontSize = 12.sp)
         }
         Column(Modifier.weight(1f)) {
-            if (title != null) Text(title, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (title != null) Text(title, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(accountText, color = gray, fontSize = if (title != null) 14.sp else 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
-            Text(Money.withSymbol(t.amount, t.currency), color = color, fontSize = 17.sp)
+            Text(Money.withSymbol(t.amount, t.currency), color = color, fontSize = 16.sp)
             if (balanceAfter != null) Text("(${Money.full(balanceAfter)})", fontSize = 12.sp, color = gray)
             else if (t.currency != lk.base && lk.fx.hasRate(t.currency)) Text("≈" + Money.full(lk.fx.convert(t.amount, t.currency)), fontSize = 12.sp, color = gray)
         }
@@ -532,7 +534,7 @@ private fun TotalView(list: List<TxnEntity>, all: List<TxnEntity>, lk: Lookups, 
     val cardExpense = confirmed.filter { it.type == TxnType.EXPENSE && isCardLike(it.accountId) }.sumOf { lk.fx.convert(it.amount, it.currency) }
     val cardPayable = cards.values.sumOf { it.payable + it.outstanding }
     val transferOut = confirmed.filter { it.type == TxnType.TRANSFER && !isCardLike(it.accountId) }.sumOf { lk.fx.convert(it.amount, it.currency) }
-    val byCat = confirmed.filter { it.type == TxnType.EXPENSE }.groupBy { it.categoryId ?: 0L }.mapValues { (_, l) -> l.sumOf { lk.fx.convert(it.amount, it.currency) } }
+    val byCat = confirmed.filter { it.type == TxnType.EXPENSE }.groupBy { lk.rootId(it.categoryId) ?: 0L }.mapValues { (_, l) -> l.sumOf { lk.fx.convert(it.amount, it.currency) } }
 
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult

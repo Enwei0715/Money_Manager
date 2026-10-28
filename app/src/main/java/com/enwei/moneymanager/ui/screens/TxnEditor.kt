@@ -310,7 +310,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                     }
                 } else {
                     FormRow("分類", color, panel == Panel.CATEGORY, onClick = { focusManager.clearFocus(); panel = Panel.CATEGORY }) {
-                        PlaceholderText(lk.category(categoryId)?.name, "")
+                        PlaceholderText(lk.catLabel(categoryId), "")
                     }
                     FormRow("帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
                         PlaceholderText(lk.account(accountId)?.name, "")
@@ -534,15 +534,29 @@ private fun BottomPanel(
                 Keypad(expr, calcMode, onExpr, onToggleCalc, onDoneAmount)
             }
             Panel.CATEGORY -> {
-                val cats = lk.categories.filter { it.kind == type && !it.archived }
+                // 先選大分類；有子分類時再展開子分類
+                var openParent by remember(type) { mutableStateOf<Long?>(null) }
+                val parent = openParent?.let { lk.category(it) }
+                val cells: List<Pair<Long?, String>> = if (parent == null) {
+                    lk.categories.filter { it.kind == type && !it.archived && it.parentId == null }.sortedBy { it.sortOrder }
+                        .map { c -> c.id to (if (c.icon == "📁") c.name else "${c.icon} ${c.name}") + if (lk.children(c.id).isNotEmpty()) " ›" else "" }
+                } else {
+                    listOf<Pair<Long?, String>>(null to "‹ 返回", parent.id to "全部${parent.name}") + lk.children(parent.id).map { it.id to it.name }
+                }
                 LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(280.dp)) {
-                    items(cats, key = { it.id }) { c ->
-                        val sel = c.id == selectedCategory
+                    items(cells, key = { "${openParent}_${it.first}" }) { (id, label) ->
+                        val sel = id != null && (id == selectedCategory || (parent == null && id == lk.rootId(selectedCategory)))
                         Box(
                             Modifier.height(56.dp).background(if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
-                                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { onCategory(c.id) },
+                                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable {
+                                    when {
+                                        id == null -> openParent = null
+                                        parent == null && lk.children(id).isNotEmpty() -> openParent = id
+                                        else -> onCategory(id)
+                                    }
+                                }.padding(horizontal = 4.dp),
                             contentAlignment = Alignment.Center,
-                        ) { Text("${c.icon} ${c.name}", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        ) { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (id == null) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified) }
                     }
                 }
             }

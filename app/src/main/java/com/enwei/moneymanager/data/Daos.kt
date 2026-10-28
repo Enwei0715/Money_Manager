@@ -25,6 +25,12 @@ interface AccountDao {
     @Delete
     suspend fun delete(a: AccountEntity)
 
+    @Query("UPDATE accounts SET autopayFromId = NULL WHERE autopayFromId = :id")
+    suspend fun detachAutopay(id: Long)
+
+    @Query("UPDATE accounts SET linkedAccountId = NULL WHERE linkedAccountId = :id")
+    suspend fun detachLinked(id: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(list: List<AccountEntity>)
 
@@ -91,6 +97,9 @@ interface TxnDao {
     @Query("UPDATE transactions SET accountId = NULL WHERE accountId = :accountId")
     suspend fun detachAccount(accountId: Long)
 
+    @Query("UPDATE transactions SET toAccountId = NULL WHERE toAccountId = :accountId")
+    suspend fun detachToAccount(accountId: Long)
+
     @Query("DELETE FROM transactions")
     suspend fun clear()
 }
@@ -114,6 +123,9 @@ interface RecurringDao {
 
     @Query("DELETE FROM recurring WHERE id = :id")
     suspend fun delete(id: Long)
+
+    @Query("UPDATE recurring SET enabled = 0 WHERE accountId = :id OR toAccountId = :id")
+    suspend fun detachAccount(id: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(list: List<RecurringEntity>)
@@ -141,6 +153,12 @@ interface StockDao {
 
     @Query("DELETE FROM stock_trades WHERE id = :id")
     suspend fun deleteTrade(id: Long)
+
+    @Query("UPDATE stock_trades SET cashAccountId = NULL WHERE cashAccountId = :id")
+    suspend fun detachCash(id: Long)
+
+    @Query("UPDATE stock_trades SET brokerAccountId = NULL WHERE brokerAccountId = :id")
+    suspend fun detachBroker(id: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTrades(list: List<StockTradeEntity>)

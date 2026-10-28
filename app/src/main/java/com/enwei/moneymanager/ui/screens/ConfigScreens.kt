@@ -62,7 +62,7 @@ import java.time.DayOfWeek
 private fun SectionHeader(title: String) {
     Text(
         title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 17.sp,
-        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 24.dp, top = 28.dp, bottom = 12.dp),
+        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 24.dp, top = 22.dp, bottom = 10.dp),
     )
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
@@ -70,7 +70,7 @@ private fun SectionHeader(title: String) {
 @Composable
 private fun ConfigRow(title: String, value: String? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 20.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, Modifier.weight(1f), fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -290,7 +290,7 @@ fun BudgetScreen(nav: NavController) {
                     fontSize = 14.sp, modifier = Modifier.padding(20.dp))
                 FormLine("總預算") { FormInput(fields.value[0L].orEmpty(), { set(0L, it) }, "0", number = true) }
             }
-            items(lk.categories.filter { it.kind == TxnType.EXPENSE && !it.archived }, key = { it.id }) { c ->
+            items(lk.categories.filter { it.kind == TxnType.EXPENSE && !it.archived && it.parentId == null }, key = { it.id }) { c ->
                 FormLine("${c.icon} ${c.name}") { FormInput(fields.value[c.id].orEmpty(), { set(c.id, it) }, "", number = true) }
             }
             item { Spacer(Modifier.height(32.dp)) }
