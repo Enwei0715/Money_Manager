@@ -79,7 +79,7 @@ class SummaryWidget : AppWidgetProvider() {
             val cash = repo.accounts.first().firstOrNull { it.type == AccountType.CASH && !it.archived }
 
             val views = RemoteViews(context.packageName, R.layout.widget_summary).apply {
-                setTextViewText(R.id.widget_title, "${month.monthValue} 月支出")
+                setTextViewText(R.id.widget_title, com.enwei.moneymanager.ui.tr("${month.monthValue} 月支出"))
                 setTextViewText(R.id.widget_expense, Money.withSymbol(expenseTotal, s.baseCurrency))
                 setTextViewText(R.id.widget_income, "收入 ${Money.withSymbol(incomeTotal, s.baseCurrency)}　結餘 ${Money.full(incomeTotal - expenseTotal)}")
                 setTextViewText(R.id.widget_legend, legend)
@@ -87,7 +87,10 @@ class SummaryWidget : AppWidgetProvider() {
                 setOnClickPendingIntent(R.id.widget_stats, open(context, 10, "stats"))
                 setOnClickPendingIntent(R.id.widget_cash, open(context, 11, "txn/0?type=EXPENSE&account=${cash?.id ?: 0}"))
                 setOnClickPendingIntent(R.id.widget_income_btn, open(context, 12, "txn/0?type=INCOME"))
-                setOnClickPendingIntent(R.id.widget_pending, open(context, 13, "bookmarks"))
+                setOnClickPendingIntent(R.id.widget_pending, open(context, 13, "txn/0?type=TRANSFER"))
+                setTextViewText(R.id.widget_cash, com.enwei.moneymanager.ui.tr("－ 現金支出"))
+                setTextViewText(R.id.widget_income_btn, com.enwei.moneymanager.ui.tr("＋ 收入"))
+                setTextViewText(R.id.widget_pending, com.enwei.moneymanager.ui.tr("⇄ 轉帳"))
                 // 小工具設定：深淺色與背景不透明度
                 val dark = when (s.widgetTheme) {
                     1 -> false

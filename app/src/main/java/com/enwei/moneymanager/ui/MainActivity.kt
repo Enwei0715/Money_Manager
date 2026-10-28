@@ -36,7 +36,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import com.enwei.moneymanager.ui.components.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -108,6 +108,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             val settings by MoneyApp.repo.settings.flow.collectAsStateWithLifecycle()
             ColorPrefs.setB = settings.colorSetB
             val dark = isDarkTheme(settings.themeMode)
+            androidx.compose.runtime.remember(settings.language) { I18n.init(applicationContext, settings.language) }
             // 狀態列、導覽列的圖示顏色跟著 App 主題（不是系統主題）切換
             LaunchedEffect(dark) {
                 val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)

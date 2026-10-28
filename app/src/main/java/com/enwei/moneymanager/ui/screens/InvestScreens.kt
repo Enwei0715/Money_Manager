@@ -37,7 +37,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
+import com.enwei.moneymanager.ui.components.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -564,7 +564,12 @@ fun TradeEditScreen(
                     ).let { e ->
                         // 改過的自動除息不再被自動同步覆蓋
                         val k = e.externalKey
-                        if (k != null && k.startsWith("DIV:")) e.copy(externalKey = "DIVM:" + k.removePrefix("DIV:"), source = TxnSource.MANUAL) else e
+                        when {
+                            k == null -> e
+                            k.startsWith("DIV:") -> e.copy(externalKey = "DIVM:" + k.removePrefix("DIV:"), source = TxnSource.MANUAL)
+                            k.startsWith("SDIV:") -> e.copy(externalKey = "SDIVM:" + k.removePrefix("SDIV:"), source = TxnSource.MANUAL)
+                            else -> e
+                        }
                     }
                     // 用 App 層級的 scope，離開畫面後仍會完成儲存與報價更新
                     MoneyApp.instance.appScope.launch {

@@ -91,8 +91,10 @@ object LotCalc {
     }
 }
 
-/** 一次除息事件：除息日與每股現金股利。 */
-data class DividendEvent(val exEpochDay: Long, val perShare: Double)
+/**
+ * 一次除權息事件：除權息日、每股現金股利、每股配股數（配股率，例如每股配 0.05 股；分割 2:1 則為 1）。
+ */
+data class DividendEvent(val exEpochDay: Long, val perShare: Double, val stockPerShare: Double = 0.0)
 
 object DividendCalc {
     /**
@@ -105,6 +107,18 @@ object DividendCalc {
         val held = LotCalc.build(trades.filter { it.epochDay < event.exEpochDay && it.side != StockSide.CASH_DIVIDEND })
             .lots.filter { it.shares > 0 }.sortedWith(compareBy({ it.epochDay }, { it.tradeId }))
         if (held.isEmpty() || event.perShare <= 0) return emptyList()
+        return allocateCash(held, event)
+    }
+
+    /** 配股（除權）：各批＝股數×配股率，無條件捨去到整股（零碎股券商以現金發放，不計入）。 */
+    fun allocateStock(trades: List<TradeRecord>, event: DividendEvent): List<Pair<Long, Double>> {
+        if (event.stockPerShare <= 0) return emptyList()
+        val held = LotCalc.build(trades.filter { it.epochDay < event.exEpochDay && it.side != StockSide.CASH_DIVIDEND })
+            .lots.filter { it.shares > 0 }.sortedWith(compareBy({ it.epochDay }, { it.tradeId }))
+        return held.map { it.tradeId to floor(it.shares * event.stockPerShare + 1e-9) }.filter { it.second > 0 }
+    }
+
+    private fun allocateCash(held: List<Lot>, event: DividendEvent): List<Pair<Long, Double>> {
         val total = floor(held.sumOf { it.shares } * event.perShare + 1e-6)
         val out = ArrayList<Pair<Long, Double>>()
         var used = 0.0

@@ -137,6 +137,18 @@ class LotCalcTest {
         assertEquals(setOf(1L, 2L), late.keys)
     }
 
+    @Test fun stockDividend() {
+        val buys = trades.filter { it.side == StockSide.BUY }
+        // 每股配 0.05 股：15 股→0（0.75 捨去）、5 股→0；1000 股→50
+        assertEquals(emptyList<Pair<Long, Double>>(), DividendCalc.allocateStock(buys, DividendEvent(20680, 0.0, 0.05)))
+        val big = listOf(TradeRecord("2884", StockSide.BUY, 1000.0, 30.0, 20.0, 0.0, 1, id = 9))
+        assertEquals(listOf(9L to 50.0), DividendCalc.allocateStock(big, DividendEvent(10, 0.0, 0.05)))
+        // 配股後成為一批 0 成本的新庫存
+        val book = LotCalc.build(big + TradeRecord("2884", StockSide.STOCK_DIVIDEND, 50.0, 0.0, 0.0, 0.0, 10, id = 10, lotId = 9))
+        assertEquals(1050.0, book.shares, 0.0)
+        assertEquals(30020.0, book.cost, 1e-9)
+    }
+
     @Test fun fillsExplainFee() {
         // 5/13 買 15 股 @4,825：一次成交 103，分 10 股＋5 股兩次成交各自捨去 = 68 + 34 = 102（帳單金額）
         val fees = FeeSettings(discount = 1.0, minFee = 20.0, oddLotMinFee = 1.0)
@@ -179,17 +191,34 @@ class TaiwanBanksTest {
         assertEquals("國泰世華", TaiwanBanks.find("13")!!.name)
         assertEquals("永豐銀行", TaiwanBanks.find("永豐信用卡")!!.name)
         assertEquals("連線銀行（LINE Bank）", TaiwanBanks.find("824")!!.name)
-        // 永豐：結帳日 16 日 → 繳款截止日次月 1 日（結帳日＋15 天）
+        // 永豐：結帳日 16 日＋15 天 = 10/31（週六）→ 順延至 11/2（週一）
         val c = CardCycle(16, 1, dueOffsetDays = 15)
         val s = c.statementIn(java.time.YearMonth.of(2026, 10))
-        assertEquals(java.time.LocalDate.of(2026, 10, 31), c.dueFor(s))
-        assertEquals(java.time.LocalDate.of(2026, 10, 31), c.nextDueDate(java.time.LocalDate.of(2026, 10, 20)))
-        assertEquals(s, c.statementDateFor(java.time.LocalDate.of(2026, 10, 31)))
+        assertEquals(java.time.LocalDate.of(2026, 11, 2), c.dueFor(s))
+        assertEquals(java.time.LocalDate.of(2026, 11, 2), c.nextDueDate(java.time.LocalDate.of(2026, 10, 20)))
+        assertEquals(s, c.statementDateFor(java.time.LocalDate.of(2026, 11, 2)))
         // 彰化：月底結帳＋18 天
         val ch = CardCycle(-1, 1, dueOffsetDays = 18)
         assertEquals(java.time.LocalDate.of(2026, 2, 28), ch.statementIn(java.time.YearMonth.of(2026, 2)))
         assertEquals(java.time.LocalDate.of(2026, 3, 18), ch.dueFor(ch.statementIn(java.time.YearMonth.of(2026, 2))))
         // 舊模式（固定繳款日）不變
         assertEquals(java.time.LocalDate.of(2026, 11, 2), CardCycle(17, 2).nextDueDate(java.time.LocalDate.of(2026, 10, 20)))
+    }
+}
+
+class DueRuleTest {
+    @Test fun dueFromNominalAndRollToMonday() {
+        // 國泰：結帳日 17 日、結帳日＋16 天；結帳日遇週五六延至週日
+        val c = CardCycle(17, 1, StatementShift.FRI_SAT_TO_SUN, 16)
+        // 2026/10/17（週六）實際結帳 10/18，但截止日用名目 10/17＋16 = 11/2（週一）
+        val st = c.statementIn(java.time.YearMonth.of(2026, 10))
+        assertEquals(java.time.LocalDate.of(2026, 10, 18), st)
+        assertEquals(java.time.LocalDate.of(2026, 11, 2), c.dueFor(st))
+        // 2026/05/17 是週日 → 名目＋16 = 6/2（週二）
+        assertEquals(java.time.LocalDate.of(2026, 6, 2), c.dueFor(c.statementIn(java.time.YearMonth.of(2026, 5))))
+        // 截止日落在週六 → 順延週一：2026/08/17＋16 = 9/2（週三）不變；找一個週六：2026/09/17+16=10/3（週六）→ 10/5
+        assertEquals(java.time.LocalDate.of(2026, 10, 5), c.dueFor(c.statementIn(java.time.YearMonth.of(2026, 9))))
+        assertEquals(c.statementIn(java.time.YearMonth.of(2026, 9)), c.statementDateFor(java.time.LocalDate.of(2026, 10, 5)))
+        assertEquals(java.time.LocalDate.of(2026, 10, 5), c.nextDueDate(java.time.LocalDate.of(2026, 9, 20)))
     }
 }

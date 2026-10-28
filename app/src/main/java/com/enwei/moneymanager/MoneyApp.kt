@@ -23,6 +23,8 @@ class MoneyApp : Application() {
         super.onCreate()
         instance = this
         repo = Repository(AppDatabase.build(this), SettingsStore(this))
+        com.enwei.moneymanager.ui.I18n.init(this, repo.settings.value.language)
+        com.enwei.moneymanager.ui.applyAppLocale(this, repo.settings.value.language)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL_RECORDS, "自動記帳", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "從通知自動建立交易時提示"
@@ -34,9 +36,10 @@ class MoneyApp : Application() {
             repo.runFeeRebates()
         }
         SyncWorker.schedule(this)
+        com.enwei.moneymanager.work.BackupWorker.schedule(this)
         // 資料有變動就更新桌面小工具
         appScope.launch {
-            repo.transactions.debounce(1500).collect { com.enwei.moneymanager.widget.SummaryWidget.refresh(this@MoneyApp) }
+            repo.transactions.debounce(1500).collect { com.enwei.moneymanager.widget.Widgets.refreshAll(this@MoneyApp) }
         }
         com.enwei.moneymanager.work.ReminderWorker.schedule(this)
         com.enwei.moneymanager.notify.QuickAdd.sync(this, repo.settings.value.quickAdd)

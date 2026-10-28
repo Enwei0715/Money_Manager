@@ -120,6 +120,13 @@ data class AppSettings(
     val cardBank: Map<Long, String> = emptyMap(),
     /** 信用卡 id → 繳款截止日＝結帳日＋幾天（依銀行規則） */
     val cardDueOffset: Map<Long, Int> = emptyMap(),
+    /** 介面語言：0 跟隨系統、1 繁體中文、2 English */
+    val language: Int = 1,
+    /** 自動雲端備份：目標檔案（SAF URI）、間隔天數（0 關閉）、上次成功時間、上次錯誤 */
+    val autoBackupUri: String = "",
+    val autoBackupDays: Int = 1,
+    val lastAutoBackup: Long = 0,
+    val lastAutoBackupError: String = "",
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee, oddLotMinFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -189,6 +196,11 @@ class SettingsStore(context: Context) {
         widgetOpacity = prefs.getInt("widgetOpacity", 100),
         accountGroupOrder = prefs.getString("accountGroupOrder", "")!!.split(',').filter { it.isNotBlank() },
         seedCleaned = prefs.getBoolean("seedCleaned", false),
+        language = prefs.getInt("language", 1),
+        autoBackupUri = prefs.getString("autoBackupUri", "")!!,
+        autoBackupDays = prefs.getInt("autoBackupDays", 1),
+        lastAutoBackup = prefs.getLong("lastAutoBackup", 0),
+        lastAutoBackupError = prefs.getString("lastAutoBackupError", "")!!,
         cardBank = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardBank", "{}")!!) }.getOrDefault(emptyMap()),
         cardDueOffset = runCatching { json.decodeFromString(longIntSerializer, prefs.getString("cardDueOffset", "{}")!!) }.getOrDefault(emptyMap()),
         cardShift = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardShift", "{}")!!) }.getOrDefault(emptyMap()),
@@ -200,7 +212,9 @@ class SettingsStore(context: Context) {
 
     @Synchronized
     /** 匯出所有設定（完整備份用）；GitHub Token 屬於憑證，不放進備份檔。 */
-    fun exportRaw(): Map<String, kotlinx.serialization.json.JsonElement> = prefs.all.filterKeys { it != "githubToken" }.mapNotNull { (k, v) ->
+    fun exportRaw(): Map<String, kotlinx.serialization.json.JsonElement> = prefs.all.filterKeys {
+        it !in setOf("githubToken", "autoBackupUri", "lastAutoBackup", "lastAutoBackupError")
+    }.mapNotNull { (k, v) ->
         val e: kotlinx.serialization.json.JsonElement = when (v) {
             is Boolean -> kotlinx.serialization.json.buildJsonObject { put("t", "b"); put("v", v) }
             is Int -> kotlinx.serialization.json.buildJsonObject { put("t", "i"); put("v", v) }
@@ -219,6 +233,7 @@ class SettingsStore(context: Context) {
     @Synchronized
     fun importRaw(map: Map<String, kotlinx.serialization.json.JsonElement>) {
         val token = prefs.getString("githubToken", "")
+        val keepUri = prefs.getString("autoBackupUri", "")
         val ed = prefs.edit().clear()
         map.forEach { (k, e) ->
             val o = e as? kotlinx.serialization.json.JsonObject ?: return@forEach
@@ -234,7 +249,7 @@ class SettingsStore(context: Context) {
                 "ss" -> (v as? kotlinx.serialization.json.JsonArray)?.let { arr -> ed.putStringSet(k, arr.map { (it as kotlinx.serialization.json.JsonPrimitive).content }.toSet()) }
             }
         }
-        ed.putString("githubToken", token).commit()
+        ed.putString("githubToken", token).putString("autoBackupUri", keepUri).commit()
         state.value = read()
     }
 
@@ -290,6 +305,11 @@ class SettingsStore(context: Context) {
             .putBoolean("seedCleaned", s.seedCleaned)
             .putString("cardShift", json.encodeToString(longStrSerializer, s.cardShift))
             .putString("cardBank", json.encodeToString(longStrSerializer, s.cardBank))
+            .putInt("language", s.language)
+            .putString("autoBackupUri", s.autoBackupUri)
+            .putInt("autoBackupDays", s.autoBackupDays)
+            .putLong("lastAutoBackup", s.lastAutoBackup)
+            .putString("lastAutoBackupError", s.lastAutoBackupError)
             .putString("cardDueOffset", json.encodeToString(longIntSerializer, s.cardDueOffset))
             .apply()
         state.value = s

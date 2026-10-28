@@ -53,7 +53,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import com.enwei.moneymanager.ui.components.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -560,8 +560,54 @@ fun BackupScreen(nav: NavController) {
             busy = false
         }
     }
+    val bs by repo.settings.flow.collectAsStateWithLifecycle()
+    // 自動雲端備份：選一次備份檔位置（雲端硬碟、OneDrive、Dropbox、手機資料夾皆可），之後自動覆寫
+    val autoTarget = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            ctx.contentResolver.takePersistableUriPermission(
+                uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        repo.settings.update { it.copy(autoBackupUri = uri.toString(), autoBackupDays = it.autoBackupDays.coerceAtLeast(1)) }
+        com.enwei.moneymanager.work.BackupWorker.runNow(ctx)
+    }
+    var freqMenu by remember { mutableStateOf(false) }
     Scaffold(topBar = { BackTopBar("備份與還原", { nav.popBackStack() }) }) { pad ->
         Column(Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("自動雲端備份", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "選一個備份檔位置（Google 雲端硬碟、OneDrive、Dropbox 或手機資料夾都可以），帳理會定期把完整備份覆寫到那個檔案，不需要任何帳號設定或金鑰。" +
+                    "另外，Android 系統的「Google 備份」也會自動備份帳理的資料（設定 → 系統 → 備份），重新安裝時可自動還原。",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            val target = bs.autoBackupUri.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
+            Text(
+                if (target == null) "尚未選擇備份位置"
+                else "備份位置：" + (target.lastPathSegment?.substringAfterLast('/') ?: target.toString()) +
+                    "\n上次備份：" + (if (bs.lastAutoBackup > 0) timeFmt.format(Date(bs.lastAutoBackup)) else "尚未備份") +
+                    (if (bs.lastAutoBackupError.isNotBlank()) "\n上次失敗：${bs.lastAutoBackupError}" else ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (bs.lastAutoBackupError.isNotBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { autoTarget.launch("帳理自動備份.lgbak") }) { Text(if (target == null) "選擇備份位置" else "更換位置") }
+                if (target != null) OutlinedButton(onClick = { com.enwei.moneymanager.work.BackupWorker.runNow(ctx) }) { Text("立即備份") }
+            }
+            if (target != null) Box {
+                Text(
+                    "頻率：" + when (bs.autoBackupDays) { 0 -> "關閉"; 1 -> "每天"; 7 -> "每週"; else -> "每 ${bs.autoBackupDays} 天" } + " ▾",
+                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { freqMenu = true }.padding(vertical = 6.dp),
+                )
+                androidx.compose.material3.DropdownMenu(freqMenu, { freqMenu = false }) {
+                    listOf(1 to "每天", 3 to "每 3 天", 7 to "每週", 0 to "關閉").forEach { (d, l) ->
+                        androidx.compose.material3.DropdownMenuItem(text = { Text(l) }, onClick = {
+                            repo.settings.update { it.copy(autoBackupDays = d) }; freqMenu = false
+                        })
+                    }
+                }
+            }
+            HorizontalDivider()
             Text("Money Manager 備份檔（.mmbak）", style = MaterialTheme.typography.titleMedium)
             Text(
                 "在 Money Manager 的「更多 → 備份 → 匯出」取得 .mmbak 檔，在這裡匯入即可搬移所有帳戶、分類（含子分類）、交易、轉帳、餘額調整與備忘。也可以把帳理的資料匯出成 .mmbak。",

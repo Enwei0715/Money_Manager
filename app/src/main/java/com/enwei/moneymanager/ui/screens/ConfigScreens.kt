@@ -28,7 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import com.enwei.moneymanager.ui.components.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
@@ -190,6 +190,13 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("主題", listOf("跟隨系統", "淺色", "深色")[s.themeMode.coerceIn(0, 2)]) {
                     ask("主題", listOf(0 to "跟隨系統", 1 to "淺色", 2 to "深色"), s.themeMode) { v -> repo.settings.update { it.copy(themeMode = v) } }
                 }
+                ConfigRow("語言", listOf("跟隨系統", "繁體中文", "English")[s.language.coerceIn(0, 2)]) {
+                    ask("語言", listOf(0 to "跟隨系統", 1 to "繁體中文", 2 to "English"), s.language, "App 名稱也會跟著語言切換（帳理／Ledgerly）。") { v ->
+                        repo.settings.update { it.copy(language = v) }
+                        com.enwei.moneymanager.ui.I18n.init(ctx, v)
+                        com.enwei.moneymanager.ui.applyAppLocale(ctx, v)
+                    }
+                }
                 ConfigRow("介面大小", uiScaleLabel(s.uiScale)) {
                     ask("介面大小", listOf(0.8f to "較小（80%）", 0.85f to "小（85%）", 0.9f to "標準（90%）", 1f to "原始（100%）", 1.1f to "大（110%）"), s.uiScale) { v ->
                         repo.settings.update { it.copy(uiScale = v) }
@@ -220,13 +227,13 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("小工具主題", listOf("跟隨系統", "淺色", "深色")[s.widgetTheme.coerceIn(0, 2)]) {
                     ask("小工具主題", listOf(0 to "跟隨系統", 1 to "淺色", 2 to "深色"), s.widgetTheme) { v ->
                         repo.settings.update { it.copy(widgetTheme = v) }
-                        com.enwei.moneymanager.widget.SummaryWidget.refresh(ctx)
+                        com.enwei.moneymanager.widget.Widgets.refreshAll(ctx)
                     }
                 }
                 ConfigRow("小工具背景不透明度", "${s.widgetOpacity}%") {
                     ask("小工具背景不透明度", listOf(100, 85, 70, 50, 30, 0).map { it to "$it%" }, s.widgetOpacity) { v ->
                         repo.settings.update { it.copy(widgetOpacity = v) }
-                        com.enwei.moneymanager.widget.SummaryWidget.refresh(ctx)
+                        com.enwei.moneymanager.widget.Widgets.refreshAll(ctx)
                     }
                 }
 

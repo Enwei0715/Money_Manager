@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 帳理圖示：珊瑚紅底上的白色小豬撲滿（原創扁平風格） -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M7.32,3.0h9.36a2.16,2.16 0 0 1 2.16,2.16v13.68a2.16,2.16 0 0 1 -2.16,2.16h-9.36a2.16,2.16 0 0 1 -2.16,-2.16v-13.68a2.16,2.16 0 0 1 2.16,-2.16zM8.112,3.7199999999999998h0.21600000000000008a0.432,0.432 0 0 1 0.432,0.432v15.695999999999998a0.432,0.432 0 0 1 -0.432,0.432h-0.21600000000000008a0.432,0.432 0 0 1 -0.432,-0.432v-15.695999999999998a0.432,0.432 0 0 1 0.432,-0.432zM11.532,6.96h4.176a0.612,0.612 0 0 1 0.612,0.612v0.0a0.612,0.612 0 0 1 -0.612,0.612h-4.176a0.612,0.612 0 0 1 -0.612,-0.612v-0.0a0.612,0.612 0 0 1 0.612,-0.612zM11.532,10.02h2.7359999999999998a0.612,0.612 0 0 1 0.612,0.612v0.0a0.612,0.612 0 0 1 -0.612,0.612h-2.7359999999999998a0.612,0.612 0 0 1 -0.612,-0.612v-0.0a0.612,0.612 0 0 1 0.612,-0.612z" />
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:pivotX="54" android:pivotY="56" android:scaleX="1.55" android:scaleY="1.55" android:translateY="-2">
+    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M29,57a24,18.5 0 1 0 48,0a24,18.5 0 1 0 -48,0zM47.7,43h9.6a1.7,1.7 0 0 1 1.7,1.7v0.0a1.7,1.7 0 0 1 -1.7,1.7h-9.6a1.7,1.7 0 0 1 -1.7,-1.7v-0.0a1.7,1.7 0 0 1 1.7,-1.7zM64.8,52a2.2,2.2 0 1 0 4.4,0a2.2,2.2 0 1 0 -4.4,0z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M57.5,42 Q60,33 64,33.5 Q67.5,34 67,43 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M77.0,50h0.5a4.5,4.5 0 0 1 4.5,4.5v4.0a4.5,4.5 0 0 1 -4.5,4.5h-0.5a4.5,4.5 0 0 1 -4.5,-4.5v-4.0a4.5,4.5 0 0 1 4.5,-4.5z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M42,67h0.5a4,4 0 0 1 4,4v4a4,4 0 0 1 -4,4h-0.5a4,4 0 0 1 -4,-4v-4a4,4 0 0 1 4,-4z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M62,67h0.5a4,4 0 0 1 4,4v4a4,4 0 0 1 -4,4h-0.5a4,4 0 0 1 -4,-4v-4a4,4 0 0 1 4,-4z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M30,53 c-3.4,-0.6 -5.6,-3.3 -5,-6.4 c0.3,-1.5 2.5,-1.4 2.6,0.1 c0.1,1.8 1.4,3.2 3.3,3.6 z" />
+    </group>
 </vector>

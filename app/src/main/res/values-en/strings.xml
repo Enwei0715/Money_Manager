@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">Ledgerly</string>
+    <string name="listener_label">Ledgerly auto recording</string>
+    <string name="widget_description">This month\'s spending, category pie and quick cash entry</string>
+    <string name="wallet_reader_label">Ledgerly wallet reader</string>
+    <string name="wallet_reader_description">Only when you open a wallet app you checked in Ledgerly (e.g. JKO, Easy Wallet), reads the merchant, amount and date on its transaction page and imports them. No other apps are read; data stays on your phone.</string>
+    <string name="widget_quick_description">One-tap entry</string>
+    <string name="widget_today_description">Today and this month\'s spending</string>
+    <string name="widget_stocks_description">Stock value and P/L</string>
+    <string name="widget_accounts_description">Net worth and balances</string>
+    <string name="widget_recent_description">Recent transactions and budget</string>
+    <string name="widget_quick_label">New entry</string>
+    <string name="widget_today_label">Today</string>
+    <string name="widget_stocks_label">Stocks</string>
+    <string name="widget_accounts_label">Balances</string>
+    <string name="widget_recent_label">Recent</string>
+    <string name="widget_summary_label">Ledgerly stats</string>
+</resources>

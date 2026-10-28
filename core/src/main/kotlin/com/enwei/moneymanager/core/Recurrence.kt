@@ -116,13 +116,6 @@ data class CardCycle(
     fun statementIn(ym: YearMonth): LocalDate =
         shift.apply(if (statementDay < 0) ym.atEndOfMonth() else Recurrence.dayInMonth(ym, statementDay))
 
-    /** 某次結帳的繳款截止日。 */
-    fun dueFor(statement: LocalDate): LocalDate = dueOffsetDays?.let { statement.plusDays(it.toLong()) } ?: run {
-        val ym = YearMonth.from(statement)
-        val same = Recurrence.dayInMonth(ym, dueDay)
-        if (same.isAfter(statement)) same else Recurrence.dayInMonth(ym.plusMonths(1), dueDay)
-    }
-
     /** 今天（含）以前最近一次的結帳日。 */
     fun lastStatementOnOrBefore(today: LocalDate): LocalDate {
         val ym = YearMonth.from(today)
@@ -130,17 +123,36 @@ data class CardCycle(
         return if (thisMonth.isAfter(today)) statementIn(ym.minusMonths(1)) else thisMonth
     }
 
-    /** 對應某繳款日的結帳日（繳款日在結帳日之後；若繳款日數字較小則屬於上個月的帳單）。 */
-    fun statementDateFor(dueDate: LocalDate): LocalDate {
-        if (dueOffsetDays != null) {
-            val ym = YearMonth.from(dueDate)
-            return (-3..1).map { statementIn(ym.plusMonths(it.toLong())) }.filter { !dueFor(it).isAfter(dueDate) }.maxOrNull()
-                ?: statementIn(ym.minusMonths(1))
+    /** 名目結帳日（未套用週末調整）。 */
+    fun nominalStatementIn(ym: YearMonth): LocalDate =
+        if (statementDay < 0) ym.atEndOfMonth() else Recurrence.dayInMonth(ym, statementDay)
+
+    /** 實際結帳日對應的名目結帳日。 */
+    private fun nominalFor(statement: LocalDate): LocalDate {
+        val ym = YearMonth.from(statement)
+        return listOf(ym, ym.minusMonths(1)).firstOrNull { statementIn(it) == statement }?.let { nominalStatementIn(it) } ?: statement
+    }
+
+    /**
+     * 某次結帳的繳款截止日：名目結帳日（不受假日影響）＋天數，或每月固定繳款日；
+     * 落在週六、日時順延到下週一。自動扣繳日跟隨這一天。
+     */
+    fun dueFor(statement: LocalDate): LocalDate {
+        val raw = dueOffsetDays?.let { nominalFor(statement).plusDays(it.toLong()) } ?: run {
+            val ym = YearMonth.from(statement)
+            val same = Recurrence.dayInMonth(ym, dueDay)
+            if (same.isAfter(statement)) same else Recurrence.dayInMonth(ym.plusMonths(1), dueDay)
         }
-        val dueYm = YearMonth.from(dueDate)
-        val sameMonth = Recurrence.dayInMonth(dueYm, statementDay)
-        return if (dueDay > statementDay && sameMonth.isBefore(dueDate)) statementIn(dueYm)
-        else statementIn(dueYm.minusMonths(1))
+        return StatementShift.SAT_SUN_TO_MON.apply(raw)
+    }
+
+    /** 對應某繳款日的結帳日。 */
+    fun statementDateFor(dueDate: LocalDate): LocalDate {
+        val ym = YearMonth.from(dueDate)
+        // 取繳款截止日最接近的那一期（傳入的日期可能是順延前的名目日期）
+        return (-3..1).map { statementIn(ym.plusMonths(it.toLong())) }
+            .filter { !it.isAfter(dueDate) }
+            .minBy { kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(dueFor(it), dueDate)) }
     }
 
     /** 帳單期間 (上期結帳日, 本期結帳日]。 */
@@ -151,7 +163,6 @@ data class CardCycle(
 
     /** [after] 之後（不含）的下一個繳款截止日。 */
     fun nextDueDate(after: LocalDate): LocalDate {
-        if (dueOffsetDays == null) return Recurrence.next(Frequency.MONTHLY, 1, after.withDayOfMonth(1), after, dueDay)
         val ym = YearMonth.from(after)
         return (-2..2).map { dueFor(statementIn(ym.plusMonths(it.toLong()))) }.filter { it.isAfter(after) }.min()
     }

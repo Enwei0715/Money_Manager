@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.R
 import com.enwei.moneymanager.ui.MainActivity
+import com.enwei.moneymanager.ui.tr
 import kotlinx.coroutines.launch
 
 /** 監聽銀行、信用卡、電子支付、券商 App 的推播並自動記帳。 */
@@ -45,7 +46,10 @@ class TxnNotificationListener : NotificationListenerService() {
         val app = application as MoneyApp
         app.appScope.launch {
             val result = runCatching { app.repo.ingestNotification(sbn.packageName, title, text, sbn.postTime) }.getOrNull() ?: return@launch
-            notifyRecorded(this@TxnNotificationListener, result.message, result.kind)
+            val pending = !app.repo.settings.value.notifAutoConfirm && result.kind == "RECORDED"
+            QuickActions.notifyRecorded(
+                this@TxnNotificationListener, result.txnId.takeIf { result.kind != "STOCK" }, tr(result.message), pending,
+            )
         }
     }
 

@@ -59,6 +59,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             if (symbols.isEmpty()) return
             repo.saveQuotes(QuoteService.fetch(symbols))
             repo.settings.update { it.copy(lastQuoteUpdate = System.currentTimeMillis()) }
+            com.enwei.moneymanager.widget.Widgets.refreshAll(MoneyApp.instance)
         }
 
         /** 自動除息：抓持有過的台股除息資料並分配到各批庫存。 */

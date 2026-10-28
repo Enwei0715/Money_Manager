@@ -4,4 +4,15 @@
     <string name="widget_description">本月支出、分類圓餅圖與快速記現金</string>
     <string name="wallet_reader_label">帳理錢包讀取</string>
     <string name="wallet_reader_description">只在你打開於帳理中勾選的錢包 App（例如街口、悠遊付）時，讀取交易紀錄畫面上的商家、金額與日期並匯入帳理。不讀取其他 App，資料只存在手機中。</string>
+    <string name="widget_quick_description">一鍵記帳</string>
+    <string name="widget_today_description">今日與本月支出</string>
+    <string name="widget_stocks_description">股票市值與損益</string>
+    <string name="widget_accounts_description">淨資產與帳戶餘額</string>
+    <string name="widget_recent_description">最近交易與預算進度</string>
+    <string name="widget_quick_label">記一筆</string>
+    <string name="widget_today_label">今日支出</string>
+    <string name="widget_stocks_label">股票</string>
+    <string name="widget_accounts_label">帳戶餘額</string>
+    <string name="widget_recent_label">最近交易</string>
+    <string name="widget_summary_label">帳理統計</string>
 </resources>

@@ -133,6 +133,6 @@ fun StatusLine(ok: Boolean, text: String) {
             modifier = Modifier.size(20.dp),
         )
         androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
-        androidx.compose.material3.Text(text, style = MaterialTheme.typography.titleSmall)
+        com.enwei.moneymanager.ui.components.Text(text, style = MaterialTheme.typography.titleSmall)
     }
 }

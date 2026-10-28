@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 帳理圖示：珊瑚紅底上的白色小豬撲滿（原創扁平風格） -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M41,29h26a6,6 0 0 1 6,6v38a6,6 0 0 1 -6,6h-26a6,6 0 0 1 -6,-6v-38a6,6 0 0 1 6,-6zM43.2,31h0.6000000000000001a1.2,1.2 0 0 1 1.2,1.2v43.6a1.2,1.2 0 0 1 -1.2,1.2h-0.6000000000000001a1.2,1.2 0 0 1 -1.2,-1.2v-43.6a1.2,1.2 0 0 1 1.2,-1.2zM52.7,40h11.6a1.7,1.7 0 0 1 1.7,1.7v0.0a1.7,1.7 0 0 1 -1.7,1.7h-11.6a1.7,1.7 0 0 1 -1.7,-1.7v-0.0a1.7,1.7 0 0 1 1.7,-1.7zM52.7,48.5h7.6a1.7,1.7 0 0 1 1.7,1.7v0.0a1.7,1.7 0 0 1 -1.7,1.7h-7.6a1.7,1.7 0 0 1 -1.7,-1.7v-0.0a1.7,1.7 0 0 1 1.7,-1.7z" />
+    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M29,57a24,18.5 0 1 0 48,0a24,18.5 0 1 0 -48,0zM47.7,43h9.6a1.7,1.7 0 0 1 1.7,1.7v0.0a1.7,1.7 0 0 1 -1.7,1.7h-9.6a1.7,1.7 0 0 1 -1.7,-1.7v-0.0a1.7,1.7 0 0 1 1.7,-1.7zM64.8,52a2.2,2.2 0 1 0 4.4,0a2.2,2.2 0 1 0 -4.4,0z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M57.5,42 Q60,33 64,33.5 Q67.5,34 67,43 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M77.0,50h0.5a4.5,4.5 0 0 1 4.5,4.5v4.0a4.5,4.5 0 0 1 -4.5,4.5h-0.5a4.5,4.5 0 0 1 -4.5,-4.5v-4.0a4.5,4.5 0 0 1 4.5,-4.5z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M42,67h0.5a4,4 0 0 1 4,4v4a4,4 0 0 1 -4,4h-0.5a4,4 0 0 1 -4,-4v-4a4,4 0 0 1 4,-4z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M62,67h0.5a4,4 0 0 1 4,4v4a4,4 0 0 1 -4,4h-0.5a4,4 0 0 1 -4,-4v-4a4,4 0 0 1 4,-4z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M30,53 c-3.4,-0.6 -5.6,-3.3 -5,-6.4 c0.3,-1.5 2.5,-1.4 2.6,0.1 c0.1,1.8 1.4,3.2 3.3,3.6 z" />
 </vector>

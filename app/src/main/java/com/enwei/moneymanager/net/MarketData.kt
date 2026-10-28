@@ -87,16 +87,28 @@ object QuoteService {
         val candidates = if (market == Market.TW) listOf("$symbol.TW", "$symbol.TWO") else listOf(symbol)
         for (ys in candidates) {
             val root = runCatching {
-                Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(ys, "UTF-8")}?range=10y&interval=1mo&events=div")
+                Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(ys, "UTF-8")}?range=10y&interval=1mo&events=div%2Csplits")
             }.getOrNull() ?: continue
             val result = (root.obj("chart").obj("result") as? JsonArray)?.firstOrNull() ?: continue
-            val divs = result.obj("events").obj("dividends") as? JsonObject ?: return emptyList()
             val zone = java.time.ZoneId.of(if (market == Market.TW) "Asia/Taipei" else "America/New_York")
-            return divs.values.mapNotNull { e ->
+            fun day(ts: Long) = java.time.Instant.ofEpochSecond(ts).atZone(zone).toLocalDate().toEpochDay()
+            // 現金股利
+            val cash = (result.obj("events").obj("dividends") as? JsonObject)?.values?.mapNotNull { e ->
                 val ts = e.num("date")?.toLong() ?: return@mapNotNull null
                 val amt = e.num("amount") ?: return@mapNotNull null
-                com.enwei.moneymanager.core.DividendEvent(java.time.Instant.ofEpochSecond(ts).atZone(zone).toLocalDate().toEpochDay(), amt)
-            }.sortedBy { it.exEpochDay }
+                day(ts) to amt
+            }.orEmpty()
+            // 配股（Yahoo 以 split 表示，例如 1050:1000 → 每股配 0.05 股）
+            val stock = (result.obj("events").obj("splits") as? JsonObject)?.values?.mapNotNull { e ->
+                val ts = e.num("date")?.toLong() ?: return@mapNotNull null
+                val num = e.num("numerator") ?: return@mapNotNull null
+                val den = e.num("denominator")?.takeIf { it > 0 } ?: return@mapNotNull null
+                (num / den - 1).takeIf { it > 1e-6 }?.let { day(ts) to it }
+            }.orEmpty()
+            val days = (cash.map { it.first } + stock.map { it.first }).toSortedSet()
+            return days.map { d ->
+                com.enwei.moneymanager.core.DividendEvent(d, cash.filter { it.first == d }.sumOf { it.second }, stock.filter { it.first == d }.sumOf { it.second })
+            }
         }
         return emptyList()
     }

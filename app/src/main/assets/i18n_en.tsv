@@ -1,0 +1,816 @@
+開啟後，帳理會讀取你勾選的銀行、信用卡、電子支付或簡訊 App 的通知，自動辨識金額、商家與卡號末四碼。資料只存在手機中。\n若顯示「受限制的設定」無法開啟：設定 → 應用程式 → 帳理 → 右上角 ⋮ →「允許受限制的設定」。	When on, Ledgerly reads notifications from the bank, card, e-wallet or SMS apps you check and detects amount, merchant and card digits. Data stays on your phone.\nIf it says "Restricted setting": Settings → Apps → Ledgerly → ⋮ → "Allow restricted settings".
+街口、悠遊付不會推播每筆消費。開啟後，只要打開下方勾選的 App 並進入「交易紀錄」頁，帳理就會讀取畫面上的商家、金額、日期並自動匯入（重複的不會再匯入；已由銀行通知記成轉帳的儲值也會自動略過）。只讀取勾選的 App。	JKO and Easy Wallet don't notify every payment. Once enabled, open a checked app's "Transactions" page and Ledgerly reads merchants, amounts and dates and imports them (no duplicates; top-ups already recorded from bank notifications are skipped). Only checked apps are read.
+在 Money Manager 的「更多 → 備份 → 匯出」取得 .mmbak 檔，在這裡匯入即可搬移所有帳戶、分類（含子分類）、交易、轉帳、餘額調整與備忘。也可以把帳理的資料匯出成 .mmbak。	Export a .mmbak file in Money Manager (More → Backup → Export) and import it here to move all accounts, categories (with subcategories), transactions, transfers, adjustments and memos. You can also export Ledgerly data as .mmbak.
+到 GitHub → Settings → Developer settings → Fine-grained tokens 建立，只勾選此儲存庫的 Contents: Read-only	Create at GitHub → Settings → Developer settings → Fine-grained tokens, with only this repository and Contents: Read-only
+股票買賣的金額會進出「交割帳戶」；這個證券帳戶的價值 = 持股市值 ＋ 證券戶現金（台股通常為 0，複委託可填外幣餘額）。持股在「帳戶 → 股票」或本帳戶明細新增。	Trade amounts move in/out of the "settlement account"; this brokerage's value = holdings market value + brokerage cash (usually 0 for TW stocks). Add holdings in "Stocks" or this account's details.
+帳理專屬的備份檔，包含所有帳戶、交易、股票、週期、分類、商家規則、通知紀錄與全部設定。所有資料都只存在這支手機，建議定期匯出到雲端硬碟；換手機時在新手機還原即可。	Ledgerly's own backup file with all accounts, transactions, stocks, recurring items, categories, merchant rules, notification log and settings. Data lives only on this phone — export regularly to cloud storage and restore on a new phone.
+訂閱、房租、保費、薪水、定期定額等固定收支。到期時自動產生交易（離線也會補上）。\n信用卡「帳單」自動扣繳請到 帳戶 → 信用卡 設定結帳日、繳款日與扣款帳戶。	Subscriptions, rent, insurance, salary, regular investments... Transactions are created when due (even if the app was closed).\nFor card bill autopay, set the statement day, due day and payment account in Accounts → card.
+月退：成交時先收全額手續費，次月 15 日退回差額。填了之後，每月 15 日會自動在交割帳戶記一筆「手續費退佣」收入（從現在這個月的交易開始計算）。	Monthly rebate: the full fee is charged at trade time and the difference is refunded on the 15th of the next month. A "fee rebate" income is then recorded in the settlement account each month (starting with this month's trades).
+若系統顯示「受限制的設定」而無法開啟：設定 → 應用程式 → 帳理 → 右上角 ⋮ →「允許受限制的設定」，再回來開啟。通知存取權也是同樣步驟。	If Android says "Restricted setting": Settings → Apps → Ledgerly → ⋮ → "Allow restricted settings", then come back. Same for notification access.
+預估損益＝各批（市值－賣出手續費與交易稅－原幣成本）加總；原幣成本＝價金＋買進手續費－該批除息金額（同券商「除息試算」）。賣出以先進先出計算。	Est. P/L = sum over lots of (market value − selling fee & tax − cost); cost = amount + buy fee − dividends for that lot (same as the broker). Sells use FIFO.
+• 銀行「電支交易」扣款（例如街口自動儲值）→ 記成「銀行 → 錢包」轉帳；錢包名稱需含「街口」「悠遊付」等字樣，或只有一個電子支付帳戶	• Bank "e-payment" debits (e.g. JKO auto top-up) → recorded as a "bank → wallet" transfer; the wallet name must contain "JKO" / "Easy Wallet" etc., or you have only one e-wallet account
+並在 Permissions → Repository permissions 把 Contents 設為 Read-only。	and set Permissions → Repository permissions → Contents to Read-only.
+張數會記住，下次打開可直接增減。花掉或收到現金時記得也在這裡調整，或直接按「以點鈔金額對帳」把差額記成一筆支出（分類：其他）。	Counts are remembered. Adjust them when you spend or receive cash, or tap "Reconcile with count" to record the difference as an expense (category: Other).
+設定自動儲值的扣款銀行後，該銀行的「電支交易」通知會自動記成轉帳到這個錢包。錢包本身若不推播消費，請在帳戶明細用「對帳」補記。	With a top-up bank set, that bank's "e-payment" notifications become transfers into this wallet. If the wallet doesn't notify payments, use "Reconcile" in the account.
+在「交易」頁點選一筆交易，下方有「刪除」「複製」「書籤」按鈕，按「書籤」即可加入。也可以在記帳頁輸入金額後按右上角的星號。	Open a transaction and tap "Bookmark" at the bottom, or tap the star at the top right of the entry screen after entering an amount.
+「合併」會保留帳理現有資料，已匯入過的交易不會重複；「取代」會先清空帳理的帳戶、分類、交易與週期設定（股票紀錄保留）。	"Merge" keeps existing data and skips transactions already imported; "Replace" first clears accounts, categories, transactions and recurring items (stock records are kept).
+請確認 Token 的 Repository access 選了「Only select repositories →	Make sure the token's Repository access is "Only select repositories →
+• 街口、悠遊付等不推播消費的錢包：用「更多 → 錢包讀取」，打開錢包的交易紀錄頁就會自動匯入；或在帳戶明細「對帳」	• Wallets without payment notifications (JKO, Easy Wallet): use "More → Wallet reader" and open the wallet's history page, or use "Reconcile" in the account
+從通知、週期規則自動建立的交易會先放在這裡。點選可修改分類或帳戶後確認；確認後會記住商家對應的分類。	Transactions created from notifications and recurring rules wait here. Tap to adjust category or account, then confirm; the merchant's category is remembered.
+預設收入顯示藍色、支出顯示紅色，也可以反過來。\n\nA. 收入：藍、支出：紅\nB. 收入：紅、支出：藍	By default income is blue and expenses red; you can swap them.\n\nA. Income: blue, Expenses: red\nB. Income: red, Expenses: blue
+不用刷卡也能確認：讀取通知列上現有的通知，顯示每一則「會被怎麼記」。漏記的可以按「記下這筆」補記；	Check without spending money: reads the notifications in your shade and shows how each would be recorded. Tap "Record this" for missed ones; 
+安裝時若出現「應用程式與現有套件衝突」，表示目前手機上的版本簽章不同（1.0.15 以前的版本）。	If installing says "App conflicts with an existing package", the installed version has a different signature (1.0.15 or older).
+提示：在帳戶中填寫信用卡「末四碼」，通知就會自動記到對應的卡片。券商的成交回報會自動建立股票交易。	Tip: enter a card's "last 4 digits" in the account so notifications go to the right card. Broker fill reports create stock trades automatically.
+看不出是交易（找不到金額，或沒有「消費／付款／入帳」等字樣）。若這是交易通知，按「教它辨識」。	Doesn't look like a transaction (no amount, or no words like "purchase / payment / deposit"). If it is one, tap "Teach it".
+提醒：請先到「帳戶」新增群組為「電子支付」的帳戶（例如：街口、悠遊付），匯入的交易才有地方記。	Note: first add an account in the "E-wallet" group (e.g. JKO, Easy Wallet) so imported transactions have somewhere to go.
+這個錢包若不會推播消費通知，按上方「對帳」輸入 App 裡的實際餘額，差額會自動記成一筆支出。	If this wallet doesn't send payment notifications, tap "Reconcile" above and enter the balance shown in its app; the difference is recorded as an expense.
+開啟後，分類可以再細分子分類（例如 餐飲 → 早餐、午餐）。記帳時左欄選大分類、右欄選子分類。	When on, categories can have subcategories (e.g. Food → Breakfast, Lunch). Pick the category on the left and the subcategory on the right.
+個週期設定。\n請到「帳戶」核對餘額；信用卡的結帳日、繳款日已帶入，扣繳帳戶與日期請再確認。	recurring items.\nPlease check balances in "Accounts"; card statement/due days were imported — confirm the autopay account and date.
+按右上角＋輸入股票代號與買進價格；\n或在「通知記帳」啟用券商 App，成交回報會自動記錄。	Tap + at the top right to enter a symbol and price,\nor enable your broker app in "Notification recording" to record fills automatically.
+請先到 更多 → 備份 匯出備份，解除安裝後再安裝新版並還原；之後的版本都能直接覆蓋更新。	Export a backup in More → Backup, uninstall, install the new version and restore; later versions update in place.
+• 兩個自己的帳戶一邊轉出、一邊轉入，金額相同且 10 分鐘內 → 合併成一筆轉帳	• An outgoing and incoming transfer of the same amount between your accounts within 10 minutes → merged into one transfer
+」轉帳「結帳日欠款 − 已繳金額」到這張卡；銀行若傳來扣繳通知，會以實際金額校正。	" to this card (balance at statement − amount paid); a bank autopay notification will correct the amount.
+Token 看不到這個儲存庫（GitHub 對無權限的私人儲存庫回傳 404）。	The token can't see this repository (GitHub returns 404 for private repos it can't access).
+群組對應固定的帳戶類型（影響信用卡帳單、證券持股等功能），因此只能改名與排序。	Groups map to fixed account types (used by card bills, brokerage holdings, etc.), so they can only be renamed and reordered.
+請以券商帳單上的手續費為準：分次成交時每次各自捨去，可能比估算少 1～2 元	Use the fee on your broker statement: split fills are rounded down separately and may be 1–2 lower than estimated
+在通知列常駐「記一筆」捷徑，不用開 App 就能快速新增支出、收入或轉帳。	Keep a "New entry" shortcut in the notification shade to add expenses, income or transfers without opening the app.
+相關交易會保留但不再屬於任何帳戶。若只是不再使用，建議改用「顯示／隱藏」。	Its transactions are kept but no longer belong to an account. If you just stopped using it, consider "Show / hide" instead.
+• 通知內有交易時間時，以「金額＋時間」去重，重複跳出的通知不會重複記帳	• When a notification includes the time, "amount + time" is used to avoid duplicates
+例如發薪日是 5 號，設成 5 日就會以 5 號到下月 4 號為一個月。	E.g. if payday is the 5th, set 5 and each month runs from the 5th to the 4th.
+開啟後打開下方勾選的錢包 App 的交易紀錄頁，再回到這裡查看讀到什麼	Turn on, open a checked wallet app's transaction page, then come back here to see what was read
+看不懂的格式可以按「教它辨識」，之後同樣標題的通知就會照你教的記帳。	For unknown formats tap "Teach it"; notifications with the same title will then be recorded the way you taught.
+（GitHub Token 不會放進備份；股價與匯率會自動重新抓取）	(GitHub token isn't included; quotes and FX are re-fetched automatically)
+提示：新規則若開始日期在過去，會自動補上從開始日到今天的所有交易。	Tip: if the start date is in the past, all transactions from then until today are created.
+子分類功能已關閉，可在 設定 → 分類與預算 → 子分類 開啟。	Subcategories are off. Turn them on in Settings → Categories & budget → Subcategories.
+日期,時間,類型,分類,帳戶,轉入帳戶,內容,說明,金額,幣別\n	Date,Time,Type,Category,Account,To account,Content,Note,Amount,Currency\n
+行文字，但沒有符合交易紀錄的格式（請打開「交易紀錄／明細」頁）	lines of text, but nothing matched a transaction list (open the "Transactions / History" page)
+還讀不到通知列：請確認已開啟通知存取權（開啟後可能要稍等幾秒）	Can't read notifications yet: make sure notification access is on (it may take a few seconds)
+已匯出完整備份（所有帳戶、交易、股票、週期、分類、規則與設定）	Full backup exported (all accounts, transactions, stocks, recurring, categories, rules and settings)
+修改「目前餘額」會自動調整期初餘額，不會新增或改動任何交易。	Changing "Current balance" adjusts the opening balance; no transactions are added or changed.
+把上個期間結束時的淨資產顯示在本期第一天，方便看到累計結餘。	Show the running total from previous periods on the first day of the period.
+台股交易稅：一般股票 0.3%、ETF 0.1%，自動計算。	TW transaction tax: 0.3% for stocks, 0.1% for ETFs, calculated automatically.
+已匯出 .mmbak（Money Manager 備份格式）	Exported .mmbak (Money Manager format)
+• 跨行提款／ATM 領出 → 記成「銀行 → 現金」轉帳	• ATM withdrawals → recorded as a "bank → cash" transfer
+• 信用卡自動扣繳通知：校正排程扣繳的金額，不會重複記帳	• Card autopay notifications correct the scheduled autopay amount (no duplicates)
+每月預算，留空代表不設定。進度顯示在「交易 → 總計」。	Monthly budget; leave empty for none. Progress shows in "Transactions → Total".
+檢查失敗：私人儲存庫需要填入 GitHub Token	Check failed: a GitHub token is required for a private repository
+離開 App 超過這段時間再回來，就需要輸入密碼。	Require the passcode after leaving the app for this long.
+Money Manager 備份檔（.mmbak）	Money Manager backup (.mmbak)
+服務已開啟但尚未連線（關閉再開啟一次無障礙服務）	Service enabled but not connected (turn the accessibility service off and on again)
+筆，但找不到要記入的電子支付帳戶（請在下方指定）	found, but there's no e-wallet account to record into (choose one below)
+庫存明細（每批買進，與券商「台股庫存明細」相同）	Lots (each purchase, same as the broker's holdings detail)
+\n這個 App 尚未勾選監聽，勾選後才會自動建立	\nThis app isn't monitored yet; check it to create automatically
+這個 App 尚未勾選監聽，勾選後才會自動建立	This app isn't being monitored yet; check it to record automatically
+這個 App 尚未勾選監聽，勾選後才會自動記帳	This app isn't being monitored yet; check it to record automatically
+關閉時會先放到「待確認」，適合金額會變動的帳單	When off, entries go to "Pending" first — good for bills whose amount varies
+台股零股最低手續費（永豐等電子下單為 1 元）	TW odd-lot minimum fee (NT$1 for online orders at SinoPac etc.)
+自 Money Manager 匯入，頻率代碼	Imported from Money Manager, frequency code
+服務運作中，但還沒有勾選要讀取的錢包 App	Service running, but no wallet app is checked
+估算；稅率一般股 0.3%、ETF 0.1%	estimate; tax 0.3% stocks, 0.1% ETFs
+\n（此銀行資料不足，先用常見值，請對照帳單）	\n(Limited data for this bank; using a common value, please check your bill)
+目前手機上的所有資料與設定會被備份內容取代。	All data and settings on this phone will be replaced by the backup.
+從備份還原（.lgbak 或舊版 JSON）	Restore from backup (.lgbak or old JSON)
+這不是 Money Manager 的備份檔	This isn't a Money Manager backup
+尚未建立（帳戶 → 新增 → 群組選證券）	None yet (Accounts → Add → group: Brokerage)
+GitHub Token（私人儲存庫需要）	GitHub token (needed for private repository)
+（此銀行資料不足，先用常見值，請對照帳單）	(Limited data for this bank; using a common value, please check your bill)
+\n選擇扣繳帳戶後，到期會自動記一筆轉帳。	\nChoose a payment account to record the transfer automatically when due.
+請允許「安裝不明應用程式」後再按一次安裝	Allow "Install unknown apps", then tap Install again
+輸入內容時依過去紀錄建議，並帶入分類。	Suggest from past entries while typing, and fill in the category.
+匯入 Money Manager 資料	Import Money Manager data
+選擇扣繳帳戶後，到期會自動記一筆轉帳。	Choose a payment account to record the transfer automatically when due.
+在交易列表中顯示每筆交易的說明文字。	Show each transaction's description in the list.
+在交易頁「＋」旁顯示新增備註的按鈕。	Show the add-note button next to "+" on the Transactions tab.
+台股整股最低手續費（常見 20 元）	TW board-lot minimum fee (usually NT$20)
+記帳鍵盤上可以一鍵切換的第二種幣別。	Second currency on the entry keypad.
+這個子分類的交易會改記到所屬大分類。	Transactions in this subcategory move to its parent category.
+這則通知裡找不到金額，無法自動記帳。	No amount found in this notification.
+用通知列上的真實通知測試（不會記帳）	Test with real notifications in the shade (nothing is recorded)
+Token 無效或已過期，請重新建立	Token invalid or expired; create a new one
+Money Manager 餘額調整	Money Manager balance adjustment
+尚未開啟無障礙服務「帳理錢包讀取」	Accessibility service "Ledgerly wallet reader" is off
+之後的紀錄　（改為過去 30 天）	onward　(change to last 30 days)
+還沒有子分類，按右上角 ＋ 新增。	No subcategories yet; tap + at the top right.
+入帳的現金股利（券商的除息金額）	Cash dividend received (broker's ex-dividend amount)
+台股手續費折數（1 = 不打折）	TW fee discount (1 = none)
+轉入（若有對應轉出會合併為轉帳）	Incoming (merged into a transfer when matched)
+轉出（若有對應轉入會合併為轉帳）	Outgoing (merged into a transfer when matched)
+電支儲值扣款 → 記成轉帳到錢包	E-wallet top-up debit → transfer to wallet
+基準幣別（淨資產、報表以此計算）	Base currency (net worth, reports)
+成交當下的折數；月退券商填 1	Discount at trade time; 1 for monthly-rebate brokers
+選填，每次成交股數用 + 分隔	Optional: shares per fill separated by +
+轉入（有對應轉出時合併為轉帳）	Incoming (merged into a transfer when matched)
+轉出（有對應轉入時合併為轉帳）	Outgoing (merged into a transfer when matched)
+淨資產與報表統一換算成的幣別。	Currency used for net worth and reports.
+新增交易時先跳出哪個輸入面板。	Which panel opens first for a new entry.
+記帳時除了日期也可以設定時間。	Allow setting a time as well as a date.
+每月幾號（超過月底自動取月底）	Day of month (uses month end if past it)
+」的通知，會照下面的設定記帳。	" will be recorded as below.
+備份與還原（含 .mmbak）	Backup & restore (incl. .mmbak)
+在交易頁左右滑動時要做什麼。	What swiping left/right on the Transactions tab does.
+已學習的商家分類（點擊刪除）	Learned merchant categories (tap to delete)
+銀行實際扣款日，空白＝繳款日	Actual debit day; empty = due day
+商家、備註、分類、帳戶或金額	Merchant, note, category, account or amount
+錢包畫面讀取（街口、悠遊付）	Wallet screen reader (JKO, Easy Wallet)
+帳理完整備份（.lgbak）	Ledgerly full backup (.lgbak)
+匯出完整備份（.lgbak）	Export full backup (.lgbak)
+點右上角 ⋮ → 新增帳戶	Tap ⋮ at the top right → Add account
+教過的通知格式（點擊刪除）	Taught notification formats (tap to delete)
+股數（零股、美股可含小數）	Shares (decimals allowed for odd lots / US)
+測試模式（只讀取，不入帳）	Test mode (read only, don't record)
+沒有記下（可能已經記過了）	Not recorded (maybe already recorded)
+LINE 聊天訊息，不處理	LINE chat message, ignored
+要讀取的錢包 App（已選	Wallet apps to read (selected
+提款 → 記成轉帳到現金	Withdrawal → transfer to cash
+無法對應卡號時記入的帳戶	Account used when no card matches
+偵測到可能的交易通知來源	Possible transaction notification sources
+查無報價（仍可手動輸入）	No quote found (you can still enter manually)
+隱藏（不出現在記帳選單）	Hidden (not shown when entering)
+關閉時會先放在「待確認」	When off, entries go to "Pending" first
+辨識得出，但不會自動記帳	Recognized, but won't be recorded automatically
+從通知自動建立交易時提示	Alerts when transactions are created from notifications
+1 張 = 1000 股	1 lot = 1000 shares
+\n持股與損益會同步更新。	\nHoldings and P/L update together.
+已記錄的交易會變成未分類	Recorded transactions become uncategorized
+帳號末四碼，用於辨識通知	Last 4 digits of the account, for notifications
+美股每筆手續費（USD）	US fee per trade (USD)
+自動轉帳與沒有通知的錢包	Automatic transfers & wallets without notifications
+電支儲值扣款（轉帳到錢包	E-wallet top-up (transfer to wallet
+（依你教過的格式辨識）	(recognized by a taught format)
+持股與損益會同步更新。	Holdings and P/L update together.
+，持股與損益同步更新。	; holdings and P/L update together.
+不同，先以一次成交估算	differs; estimating as one fill
+個子分類也會一併刪除。	subcategories will also be deleted.
+匯出資料到 Excel	Export to Excel
+此裝置尚未設定生物辨識	No biometrics set up on this device
+生物辨識（指紋／臉部）	Biometrics (fingerprint / face)
+要監聽的 App（已選	Apps to monitor (selected
+起始畫面（每日／日曆）	Start screen (Daily / Calendar)
+轉帳（現金、銀行 →）	Transfer (cash, bank →)
+：繳款截止日＝結帳日＋	: due = statement +
+已複製為今天的新交易	Copied as a new transaction today
+已儲存，繼續記下一筆	Saved — ready for the next one
+（請選擇轉入的錢包）	(choose the destination wallet)
+通知列常駐的記帳捷徑	Entry shortcut in the notification shade
+App 裡的實際餘額	Actual balance in the app
+密碼錯誤，請再試一次	Wrong passcode, try again
+支出（信用卡、支付）	Expense (card, payment)
+直接入帳（不經確認）	Record directly (no review)
+筆股票紀錄與所有設定	stock records and all settings
+（每 30 秒更新）	(updates every 30 s)
+點這裡記下今天的花費	Tap to record today's spending
+遇週六、日順延至週一	Sat/Sun → next Monday
+餘額相符，不需調整	Balances match; nothing to adjust
+由成交通知自動建立	Created from fill notification
+筆交易，實收手續費	trades, fees charged
+下載失敗 HTTP	Download failed HTTP
+匯率服務回應錯誤：	FX service error: 
+請到「待確認」檢查	Review in "Pending"
+· 依持股比例分配	· split by shares
+刪除這筆股票交易？	Delete this stock trade?
+小工具背景不透明度	Widget background opacity
+尚未開啟通知存取權	Notification access is off
+已將帳上餘額調整為	Balance adjusted to
+找不到可下載的版本	No downloadable version found
+提款（轉帳到現金）	Withdrawal (transfer to cash)
+支出（現金、銀行）	Expense (cash, bank)
+設定 4 位數密碼	Set a 4-digit passcode
+通知列目前沒有通知	No notifications in the shade
+週期交易／自動扣款	Recurring / autopay
+選擇要移入的大分類	Choose the destination category
+遇週五、六延至週日	Fri/Sat → Sunday
+（等待扣款通知）	(waiting for debit notification)
+餘額調整（對帳）	Balance adjustment (reconcile)
+已從錢包畫面讀取	Read from wallet screen:
+依卡號／預設帳戶	By card number / default account
+原始（100%）	Original (100%)
+尚未設定週期交易	No recurring transactions
+已取得通知存取權	Notification access granted
+已實現損益＋股利	Realized P/L + dividends
+已還原完整備份：	Full backup restored: 
+找不到符合的交易	No matching transactions
+沒有待確認的交易	Nothing pending
+無障礙服務未開啟	Accessibility service off
+用於辨識刷卡通知	Used to match card notifications
+自動帶出，可修改	Filled automatically, editable
+貼上一則通知內容	Paste a notification
+這段期間沒有交易	No transactions in this period
+離開 App 後	After leaving the app
+餘額（不含股票）	Balance (excl. stocks)
+＋ 新增證券帳戶	+ Add brokerage
+不是帳理備份檔	Not a Ledgerly backup file
+對帳：記錄餘額	Reconcile: recorded balance
+自動除息：每股	Auto dividend: per share
+（已校正金額）	(amount corrected)
+，請確認後啟用	, please review and enable
+已記下，待確認	Recorded, pending review
+點一下新增支出	Tap to add an expense
+→ 移為子分類	→ Make subcategory
+以點鈔金額對帳	Reconcile with count
+依持股比例分配	Split by shares
+再輸入一次確認	Enter again to confirm
+刪除這筆交易？	Delete this transaction?
+匯入完成：新增	Imported: added
+大（110%）	Large (110%)
+如何新增書籤？	How to add bookmarks?
+已是最新版本（	Up to date (
+帳理目前餘額：	Ledgerly balance: 
+成本（扣股利）	Cost (less dividends)
+扣款／入帳帳戶	Debit / credit account
+未指定交割帳戶	No settlement account
+未設定自動扣繳	No autopay set
+標準（90%）	Standard (90%)
+無法辨識為交易	Not recognized as a transaction
+移至其他大分類	Move to another category
+筆 → 記入「	→ into "
+筆已存在略過）	already existed, skipped)
+與上月支出相比	vs last month's spending
+請選擇錢包帳戶	Choose a wallet account
+較小（80%）	Smaller (80%)
+還沒有讀取紀錄	Nothing read yet
+銀行代碼或名稱	Bank code or name
+錢包讀取已開啟	Wallet reader is on
+隱藏已隱藏帳戶	Hide hidden accounts
+顯示已隱藏帳戶	Show hidden accounts
+（設為大分類）	(make top-level)
+本月還沒有支出	No spending this month
+今天記帳了嗎？	Recorded today's spending?
+LINE 聊天	LINE chat
+讀取目前通知	Read current notifications
+信用卡款扣繳	Card bill autopay
+錢包儲值入帳	Wallet top-up received
+（卡號末四碼	(card ending
+缺少下載位置	Missing download URL
+· 交易時間	· time
+· 預估損益	· est. P/L
+、早於開始日	, before start date
+修改帳戶順序	Reorder accounts
+分次股數合計	Split total
+刪除整檔持股	Delete whole holding
+刪除這筆交易	Delete this transaction
+將記一筆支出	Will record an expense of
+將記一筆收入	Will record income of
+找到的金額：	Amount found: 
+支出分類設定	Expense categories
+收入分類設定	Income categories
+新增股票交易	New stock trade
+新增週期交易	New recurring
+最近處理紀錄	Recent activity
+本期沒有交易	No transactions this period
+本期：結帳日	This cycle: statement
+每日提醒時間	Daily reminder time
+測試錢包讀取	Test wallet reader
+目前為大分類	Currently a top-level category
+空白＝不月退	Empty = no rebate
+結帳日遇週末	Statement on weekend
+編輯股票交易	Edit stock trade
+編輯週期交易	Edit recurring
+設定結束日期	Set end date
+輸入目前密碼	Enter current passcode
+這段期間沒有	No 
+通知存取設定	Notification access settings
+通知自動記帳	Notification recording
+週期交易設定	Recurring transactions
+錢包畫面讀取	Wallet screen reader
+預估賣出費用	Est. selling cost
+預算設定 ›	Budget ›
+LINE錢包	LINE Wallet
+App 更新	App update
+小（85%）	Small (85%)
+搜尋 App	Search apps
+月底填 31	31 = month end
+跟隨系統主題	System
+交易時間：	Time: 
+手續費退佣	Fee rebate
+月退估算：	Rebate estimate: 
+未命名帳戶	Unnamed account
+已自動入帳	Recorded automatically
+已自動記帳	Recorded automatically
+→ 繳款日	→ due
+」標題為「	" titled "
+」的餘額會	" balance will
+」自動扣繳	" pays automatically
+下載並安裝	Download & install
+下載失敗：	Download failed: 
+不自動扣繳	No autopay
+不連動帳戶	Not linked
+交割帳戶：	Settlement: 
+儲值來源：	Top-up source: 
+分類與預算	Categories & budget
+刪除帳戶？	Delete account?
+匯入失敗：	Import failed: 
+匯出失敗：	Export failed: 
+原始內容：	Original: 
+合併為轉帳	Merged into transfer
+安全與提醒	Security & reminders
+小工具主題	Widget theme
+已刪除分類	Deleted category
+已加入書籤	Bookmarked
+手續費折數	Fee discount
+手續費＋稅	Fee + tax
+改用固定日	Use fixed day
+新增子分類	New subcategory
+更新失敗：	Update failed: 
+會自動從「	will automatically transfer from "
+會自動記帳	Will be recorded
+月退後折數	Discount after rebate
+服務運作中	Service running
+期間與顯示	Period & display
+未啟用來源	Source not enabled
+桌面小工具	Home screen widgets
+檢查失敗：	Check failed: 
+每月起始日	Month start day
+每週起始日	Week start day
+無障礙設定	Accessibility settings
+筆、已存在	, existing
+筆股票交易	stock trades
+總資產統計	Net worth stats
+股價已更新	Quotes updated
+股票成交：	Stock fill: 
+股票手續費	Stock fees
+設定與更新	Settings & updates
+請輸入密碼	Enter passcode
+證券帳戶（	Brokerage accounts (
+證券戶現金	Brokerage cash
+資料與更新	Data & updates
+轉帳手續費	Transfer fee
+週期/分期	Recurring
+還原備份？	Restore backup?
+還原失敗：	Restore failed: 
+開啟密碼鎖	Turn on passcode
+關閉密碼鎖	Turn off passcode
+顯示／隱藏	Show / hide
+＋ 記一筆	+ New entry
+· 手續費	· fee
+· 繳款日	· due
+· 商家：	· Merchant: 
+· 末四碼	· ending
+備份與還原	Backup & restore
+手續費依	Fee per
+股票損益	Stock P/L
+預估損益	Est. P/L
+→ 實際	→ actual
+便利商店	Convenience store
+其他收入	Other income
+卡費扣繳	Card bill autopay
+投資收益	Investment income
+現金股利	Cash dividend
+股票股利	Stock dividend
+自動扣繳	Autopay
+自動除息	Auto dividend
+證券交割	Brokerage
+週期交易	Recurring
+銀行帳戶	Bank account
+錢包畫面	Wallet screen
+電信網路	Telecom
+電子支付	E-wallet
+電支儲值	E-wallet top-up
+餘額調整	Balance adjustment
+快速記帳	Quick add
+自動記帳	Auto recording
+· 下次	· next
+· 均價	· avg
+· 屬於	· for
+· 現金	· cash
+· 讀到	· read
+上期結轉	Carried over
+不會記帳	Won't be recorded
+交割帳戶	Settlement account
+介面大小	Interface size
+使用密碼	Use passcode
+信用額度	Credit limit
+修改順序	Reorder
+個分類、	categories, 
+個帳戶、	accounts, 
+備註按鈕	Note button
+儲值來源	Top-up source
+全部確認	Confirm all
+全部紀錄	All records
+分次成交	Split fills
+分類設定	Categories
+切換期間	Change period
+刪除書籤	Delete bookmark
+則備忘、	memos, 
+前往開啟	Open settings
+即時匯率	Live FX
+即時報價	Live quotes
+原幣成本	Cost
+可用額度	Available credit
+尚未更新	Not updated
+尚無持股	No holdings
+已記下：	Recorded: 
+已還原：	Restored: 
+已領股利	Dividends
+帳上餘額	Book balance
+帳戶群組	Account groups
+帳戶設定	Account settings
+帳戶資訊	Account info
+平均成本	Avg cost
+庫存／股	Shares
+待確認（	Pending (
+應繳餘額	Amount due
+成交日期	Trade date
+成交金額	Trade amount
+扣繳帳戶	Payment account
+拖曳排序	Drag to reorder
+持有股數	Shares held
+持股市值	Holdings value
+收支顏色	Income/expense colors
+教它辨識	Teach it
+新增交易	New trade
+新增備註	New note
+新增分類	New category
+新增帳戶	Add account
+新增股票	Add stock
+時間輸入	Time input
+更新中…	Updating…
+更新股價	Refresh quotes
+有新版本	New version
+查詢中…	Looking up…
+檢查中…	Checking…
+檢查更新	Check for updates
+每日提醒	Daily reminder
+沒有交易	No transactions
+沒有資料	No data
+清除篩選	Clear filters
+測試辨識	Test recognition
+滑動切換	Swipe
+無法辨識	Unrecognized
+生活用品	Household
+生物辨識	Biometrics
+發卡銀行	Issuing bank
+目前欠款	Current balance owed
+目前版本	Current version
+目前餘額	Current balance
+確認入帳	Confirm
+筆交易、	transactions, 
+筆紀錄？	records?
+結帳日＋	statement +
+結束日期	End date
+結算期間	Period
+編輯備註	Edit note
+編輯分類	Edit category
+編輯帳戶	Edit account
+編輯這批	Edit lot
+群組名稱	Group name
+股利金額	Dividend amount
+股票成交	Stock fill
+自動入帳	Auto record
+自動完成	Autocomplete
+要求密碼	Require passcode
+解鎖帳理	Unlock Ledgerly
+計入總額	Include in total
+記下這筆	Record this
+記到帳戶	Record to account
+記帳輸入	Entry
+設定 A	Set A
+設定 B	Set B
+證券帳戶	Brokerage accounts
+變更密碼	Change passcode
+起始畫面	Start screen
+跟隨系統	System
+輸入順序	Input order
+轉入帳戶	To account
+轉入金額	Amount received
+轉出帳戶	From account
+通知記帳	Notification recording
+週期扣款	Recurring
+重新讀取	Read again
+重複略過	Duplicate, skipped
+錢包讀取	Wallet reader
+開始日期	Start date
+除息金額	Dividend
+預算設定	Budget
+顯示說明	Show description
+點鈔合計	Count total
+（停用）	(disabled)
+（隱藏）	 (hidden)
+＋ 交易	+ Trade
+＋ 除息	+ Dividend
+」餘額	" balance
+分類：	Category: 
+#轉帳	#transfer
+· 稅	· tax
+信用卡	Credit card
+商家：	Merchant: 
+折計算	discount
+日用品	Daily goods
+結帳日	Statement day
+股 @	sh @
+筆交易	transactions
+記一筆	New entry
+上一期	Previous
+上個月	Last month
+下一期	Next
+下個月	Next month
+主幣別	Base currency
+之後「	From now on "
+交割：	Settlement: 
+交易稅	Tax
+個帳戶	accounts
+分鐘後	min later
+刪除「	Delete "
+副幣別	Second currency
+報酬率	Return
+子分類	Subcategories
+密碼鎖	Passcode
+對帳：	Reconcile: 
+已出清	Closed
+已實現	Realized
+已更新	Updated
+已記帳	Recorded
+已隱藏	Hidden
+帳理_	Ledgerly_
+待確認	Pending
+從分類	Category first
+從金額	Amount first
+成交價	Price
+所屬：	Parent: 
+手續費	Fee
+扣繳日	Autopay day
+持股（	Holdings (
+更新於	Updated
+未出帳	Unbilled
+未分類	Uncategorized
+未指定	Not set
+未設定	Not set
+末四碼	Last 4
+的全部	's all
+看不出	Not recognized
+總預算	Total budget
+繳卡費	Pay card
+繳款日	Due day
+與數量	and quantity
+行文字	lines
+計算機	Calculator
+記入：	Into: 
+辨識出	Found
+預設：	Default: 
+顯示中	Showing
+點鈔：	Cash count: 
+（本期	(this cycle
+，底下	, its
+月支出	 spending
+不調整	No change
+支出	Expense
+收入	Income
+轉帳	Transfer
+交通	Transport
+保險	Insurance
+儲值	Top-up
+其他	Other
+利息	Interest
+副業	Side job
+匯入	Import
+卡費	Card bill
+原幣	Original
+娛樂	Entertainment
+寵物	Pets
+居家	Home
+手動	Manual
+提款	Withdrawal
+教育	Education
+旅遊	Travel
+獎金	Bonus
+現金	Cash
+發票	Invoice
+社交	Social
+稅費	Taxes & fees
+美容	Beauty
+股利	Dividend
+股息	Dividend
+薪資	Salary
+買進	Buy
+賣出	Sell
+購物	Shopping
+轉入	In
+轉出	Out
+退款	Refund
+通知	Notification
+週期	Recurring
+配息	Dividend
+醫療	Medical
+餐飲	Food
+讀到	read
+折數	discount
+…共	…total
+上移	Move up
+下移	Move down
+中獎	Prize
+主題	Theme
+交易	Transactions
+交際	Social
+今日	Today
+代號	Symbol
+住宿	Lodging
+便利	Convenience
+保養	Skincare
+停車	Parking
+健康	Health
+健身	Fitness
+備份	Backup
+備註	Notes
+價金	Amount
+儲存	Save
+內容	Content
+全部	All
+公車	Bus
+分類	Category
+列表	List
+刪除	Delete
+剩餘	Remaining
+加油	Fuel
+匯率	FX
+原始	Original
+取代	Replace
+取消	Cancel
+台股	TW stocks
+合併	Merge
+合計	Total
+名稱	Name
+咖啡	Coffee
+啟用	Enable
+單價	Price
+圖表	Chart
+報價	Quote
+外觀	Appearance
+存入	Deposits
+孩子	Kids
+安裝	Install
+完成	Done
+宵夜	Late snack
+對帳	Reconcile
+對調	Swap
+小孩	Kids
+屬於	Belongs to
+工作	Work
+差額	Difference
+市值	Market value
+市場	Market
+帳戶	Accounts
+幣別	Currency
+平均	Average
+應繳	Due
+房租	Rent
+手搖	Drinks
+手機	Phone
+投資	Investment
+持股	Holdings
+捷運	MRT
+提出	Withdrawals
+換算	Converted
+損益	P/L
+搜尋	Search
+數量	Quantity
+新增	Add
+日曆	Calendar
+日期	Date
+日用	Daily
+早午	Brunch
+更多	More
+更新	Update
+書籤	Bookmarks
+最低	Min
+最高	Max
+服飾	Clothing
+期間	Period
+標準	Standard
+機票	Flights
+機車	Scooter
+每天	Daily
+每年	Yearly
+每日	Daily
+每月	Monthly
+每週	Weekly
+水電	Utilities
+汽車	Car
+深色	Dark
+淺色	Light
+清除	Clear
+現值	Value
+現價	Price
+瓦斯	Gas
+由「	from "
+略過	Skipped
+相符	Matches
+確定	OK
+確認	Confirm
+秒後	s later
+立即	Immediately
+篩選	Filter
+紅包	Red envelopes
+統計	Stats
+網購	Online shopping
+網路	Internet
+編輯	Edit
+總計	Total
+繼續	Continue
+美股	US stocks
+美髮	Hair
+群組	Group
+股票	Stocks
+育兒	Childcare
+複製	Copy
+規費	Fees
+訂閱	Subscriptions
+計程	Taxi
+設定	Settings
+說明	Note
+負債	Liabilities
+資產	Assets
+超商	Convenience store
+超市	Supermarket
+超支	Over
+較小	Smaller
+返回	Back
+退費	Refund
+週一	Mon
+週日	Sun
+遊戲	Games
+運動	Sports
+選單	Menu
+還原	Restore
+那批	lot
+配股	Stock dividend
+金額	Amount
+間隔	Interval
+關閉	Close
+雜貨	Groceries
+零用	Allowance
+電信	Telecom
+電影	Movies
+電話	Phone
+預算	Budget
+頻率	Frequency
+飲料	Drinks
+餘額	Balance
+高鐵	HSR
+點鈔	Cash count
+結餘	Balance
+帳理	Ledgerly
+語言	Language
+週二	Tue
+週三	Wed
+週四	Thu
+週五	Fri
+週六	Sat
+股	sh
+退	Refund
+元	
+吃	Eat
+大	Large
+天	days
+學	School
+家	Home
+小	Small
+年	y
+張	lots
+旅	Travel
+日	
+書	Books
+月	
+檔	stocks
+每	Every
+油	Fuel
+無	None
+禮	Gifts
+租	Rent
+稅	Tax
+筆	
+薪	Salary
+藥	Medicine
+衣	Clothes
+課	Courses
+買	Buy
+費	Fee
+週	
+醫	Medical
+鞋	Shoes
+食	Food
+飯	Meals
+餐	Meals
+App 名稱也會跟著語言切換（帳理／Ledgerly）。	The app name changes with the language (帳理 / Ledgerly).
+自動雲端備份	Automatic cloud backup
+選一個備份檔位置（Google 雲端硬碟、OneDrive、Dropbox 或手機資料夾都可以），帳理會定期把完整備份覆寫到那個檔案，不需要任何帳號設定或金鑰。	Choose a backup file location (Google Drive, OneDrive, Dropbox or a phone folder). Ledgerly regularly overwrites it with a full backup — no account setup or keys needed.
+另外，Android 系統的「Google 備份」也會自動備份帳理的資料（設定 → 系統 → 備份），重新安裝時可自動還原。	 Android's own Google backup also backs up Ledgerly's data (Settings → System → Backup) and restores it on reinstall.
+尚未選擇備份位置	No backup location chosen
+備份位置：	Location: 
+上次備份：	Last backup: 
+尚未備份	Not yet
+上次失敗：	Last error: 
+帳理自動備份.lgbak	Ledgerly auto backup.lgbak
+選擇備份位置	Choose location
+更換位置	Change location
+立即備份	Back up now
+可直接點下方改分類或輸入說明	Tap below to change the category or add a note
+輸入說明	Add note
+這筆是什麼？	What was this?
+今日支出	Today's spending
+最近交易	Recent
+－ 現金支出	− Cash expense
+＋ 收入	+ Income
+⇄ 轉帳	⇄ Transfer
+本月支出	This month
+頻率：	Frequency: 
+每 3 天	Every 3 days
+自動除權	Auto stock dividend

@@ -109,8 +109,8 @@
             android:layout_weight="1"
             android:background="@drawable/widget_btn_bg"
             android:gravity="center"
-            android:text="書籤"
-            android:textColor="#FFF0605A"
+            android:text="⇄ 轉帳"
+            android:textColor="#FF8C8C8C"
             android:textSize="14sp" />
     </LinearLayout>
 </LinearLayout>

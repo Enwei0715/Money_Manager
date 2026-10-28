@@ -200,6 +200,29 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     suspend fun deleteTxn(id: Long) = db.txns().delete(id)
 
+    /** 最近 90 天最常用的分類（通知上的一鍵分類按鈕用）。 */
+    suspend fun frequentCategories(type: TxnType, limit: Int, exclude: Long?): List<CategoryEntity> {
+        val since = System.currentTimeMillis() - 90L * 24 * 3600 * 1000
+        val cats = db.categories().all().filter { it.kind == type && !it.archived }.associateBy { it.id }
+        val counted = db.txns().all().filter { it.type == type && it.date >= since && it.categoryId != null }
+            .groupingBy { it.categoryId!! }.eachCount()
+        return counted.entries.sortedByDescending { it.value }.mapNotNull { cats[it.key] }
+            .filter { it.id != exclude }.let { list -> (list + cats.values.filter { it.parentId == null && it.id != exclude }).distinctBy { it.id } }
+            .take(limit)
+    }
+
+    /** 從通知上改分類／加說明：更新交易並記住商家分類。 */
+    suspend fun quickUpdateTxn(id: Long, categoryId: Long? = null, note: String? = null) {
+        val t = db.txns().get(id) ?: return
+        val u = t.copy(
+            categoryId = categoryId ?: t.categoryId,
+            note = note?.trim()?.takeIf { it.isNotEmpty() }?.let { n -> listOfNotNull(t.note?.takeIf { it.isNotBlank() }, n).joinToString("　") } ?: t.note,
+            status = if (categoryId != null) TxnStatus.CONFIRMED else t.status,
+        )
+        db.txns().upsert(u)
+        if (categoryId != null) learnMerchant(u)
+    }
+
     suspend fun confirmAllPending() {
         db.withTransaction {
             db.txns().all().filter { it.status == TxnStatus.PENDING }.forEach {
@@ -851,8 +874,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     suspend fun deleteTrade(id: Long) {
         val t = db.stocks().getTrade(id)
         // 刪除自動除息：記住，之後不再自動建立
-        t?.externalKey?.takeIf { it.startsWith("DIV:") }?.let { k ->
-            settings.update { it.copy(dismissedDividends = it.dismissedDividends + k.removePrefix("DIV:")) }
+        t?.externalKey?.let { k ->
+            val mark = when {
+                k.startsWith("DIV:") -> k.removePrefix("DIV:")
+                k.startsWith("SDIV:") -> k
+                else -> null
+            }
+            if (mark != null) settings.update { it.copy(dismissedDividends = it.dismissedDividends + mark) }
         }
         db.stocks().deleteTrade(id)
     }
@@ -876,33 +904,45 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             events.filter { it.exEpochDay > firstDay && it.exEpochDay <= today.toEpochDay() }.forEach { ev ->
                 val manual = all.any { it.side == StockSide.CASH_DIVIDEND && it.externalKey == null && kotlin.math.abs(it.date - ev.exEpochDay) <= 20 }
                 val prefix = "$sym:${LocalDate.ofEpochDay(ev.exEpochDay)}:"
-                val autoExisting = all.filter { it.externalKey?.startsWith("DIV:$prefix") == true }
+                val autoExisting = all.filter { k -> k.externalKey?.let { it.startsWith("DIV:$prefix") || it.startsWith("SDIV:$prefix") } == true }
                 if (manual) {
                     autoExisting.forEach { db.stocks().deleteTrade(it.id); changed++ }
                     return@forEach
                 }
-                val alloc = com.enwei.moneymanager.core.DividendCalc.allocate(records, ev)
                 val keep = HashSet<String>()
-                alloc.forEach { (lotId, amt) ->
-                    val suffix = "$prefix$lotId"
-                    keep += "DIV:$suffix"
-                    if (all.any { it.externalKey == "DIVM:$suffix" } || suffix in settings.value.dismissedDividends) return@forEach
-                    val lot = byId[lotId] ?: return@forEach
-                    val old = autoExisting.find { it.externalKey == "DIV:$suffix" }
-                    val note = "自動除息：每股 ${"%.4f".format(ev.perShare).trimEnd('0').trimEnd('.')} 元 × ${lot.shares.toLong()} 股"
-                    if (old == null) {
-                        db.stocks().upsertTrade(
-                            StockTradeEntity(
-                                market = market, symbol = sym, name = lot.name, side = StockSide.CASH_DIVIDEND, shares = 0.0, price = 0.0,
-                                cashAmount = amt, currency = lot.currency, date = ev.exEpochDay,
-                                cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId,
-                                note = note, source = TxnSource.DIVIDEND, externalKey = "DIV:$suffix", lotTradeId = lotId,
-                            ),
-                        )
-                        changed++
-                    } else if (old.cashAmount != amt || old.cashAccountId != lot.cashAccountId || old.brokerAccountId != lot.brokerAccountId) {
-                        db.stocks().upsertTrade(old.copy(cashAmount = amt, cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId, note = note))
-                        changed++
+                // 現金股利（除息）與配股（除權）各自依公式分配到各批
+                listOf(
+                    Triple("DIV", StockSide.CASH_DIVIDEND, com.enwei.moneymanager.core.DividendCalc.allocate(records, ev)),
+                    Triple("SDIV", StockSide.STOCK_DIVIDEND, com.enwei.moneymanager.core.DividendCalc.allocateStock(records, ev)),
+                ).forEach { (kind, side, alloc) ->
+                    alloc.forEach { (lotId, amt) ->
+                        val suffix = "$prefix$lotId"
+                        val key = "$kind:$suffix"
+                        keep += key
+                        if (all.any { it.externalKey == "${kind}M:$suffix" } || "$kind:$suffix" in settings.value.dismissedDividends ||
+                            (kind == "DIV" && suffix in settings.value.dismissedDividends)
+                        ) return@forEach
+                        val lot = byId[lotId] ?: return@forEach
+                        val old = autoExisting.find { it.externalKey == key }
+                        val note = if (side == StockSide.CASH_DIVIDEND)
+                            "自動除息：每股 ${"%.4f".format(ev.perShare).trimEnd('0').trimEnd('.')} 元 × ${lot.shares.toLong()} 股"
+                        else "自動除權：每股配 ${"%.4f".format(ev.stockPerShare).trimEnd('0').trimEnd('.')} 股 × ${lot.shares.toLong()} 股"
+                        val cashAmt = if (side == StockSide.CASH_DIVIDEND) amt else 0.0
+                        val shares = if (side == StockSide.STOCK_DIVIDEND) amt else 0.0
+                        if (old == null) {
+                            db.stocks().upsertTrade(
+                                StockTradeEntity(
+                                    market = market, symbol = sym, name = lot.name, side = side, shares = shares, price = 0.0,
+                                    cashAmount = cashAmt, currency = lot.currency, date = ev.exEpochDay,
+                                    cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId,
+                                    note = note, source = TxnSource.DIVIDEND, externalKey = key, lotTradeId = lotId,
+                                ),
+                            )
+                            changed++
+                        } else if (old.cashAmount != cashAmt || old.shares != shares || old.cashAccountId != lot.cashAccountId || old.brokerAccountId != lot.brokerAccountId) {
+                            db.stocks().upsertTrade(old.copy(cashAmount = cashAmt, shares = shares, cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId, note = note))
+                            changed++
+                        }
                     }
                 }
                 autoExisting.filter { it.externalKey !in keep }.forEach { db.stocks().deleteTrade(it.id); changed++ }
