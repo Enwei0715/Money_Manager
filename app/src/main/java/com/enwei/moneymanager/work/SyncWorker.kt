@@ -75,12 +75,15 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         /**
          * 國定假日：內建 2025～2027 年，之後的年份從政府辦公日曆的公開資料（TaiwanCalendar 專案）下載並保存。
          */
+        /**
+         * 每次同步重新下載今年與明年的政府辦公日曆（政府若調整放假會跟著更新），
+         * 並檢查人事行政總處的颱風停班公告。
+         */
         suspend fun refreshHolidays(repo: Repository) {
+            runCatching { refreshTyphoon(repo) }
             val now = java.time.LocalDate.now().year
-            val known = com.enwei.moneymanager.core.TaiwanHolidays.knownYears()
             val got = HashMap<Int, com.enwei.moneymanager.core.YearCalendar>()
             for (y in now..now + 1) {
-                if (y in known) continue
                 val root = runCatching {
                     com.enwei.moneymanager.net.Http.getJson("https://raw.githubusercontent.com/ruyut/TaiwanCalendar/master/data/$y.json")
                 }.getOrNull() as? kotlinx.serialization.json.JsonArray ?: continue
@@ -96,12 +99,26 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                     if (isHoliday && !weekend) hol[md] = (o["description"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
                     if (!isHoliday && weekend) work += md
                 }
-                if (hol.size >= 5) got[y] = com.enwei.moneymanager.core.YearCalendar(hol, work)
+                // 資料不完整（例如明年尚未公布）就不採用
+                if (root.size >= 300 && hol.size >= 5) got[y] = com.enwei.moneymanager.core.YearCalendar(hol, work)
             }
             if (got.isEmpty()) return
             com.enwei.moneymanager.core.TaiwanHolidays.update(got)
             val all = com.enwei.moneymanager.data.HolidayCache.decode(repo.settings.value.holidayCache) + got
             repo.settings.update { it.copy(holidayCache = com.enwei.moneymanager.data.HolidayCache.encode(all)) }
+        }
+
+        /** 臺北市因颱風等天然災害全天停止上班時，金融機構也停止營業（信用卡繳款截止日、自動扣繳順延）。 */
+        suspend fun refreshTyphoon(repo: Repository) {
+            val html = com.enwei.moneymanager.net.Http.getText("https://www.dgpa.gov.tw/typh/daily/nds.html")
+            val today = java.time.LocalDate.now()
+            val notice = com.enwei.moneymanager.core.TyphoonNotice.parse(html, today)
+            val old = com.enwei.moneymanager.data.TyphoonDays.decode(repo.settings.value.typhoonDays)
+            val merged = old.toMutableMap()
+            notice.forEach { (d, stop) -> if (stop) merged[d] = "颱風假" else merged.remove(d) }
+            merged.keys.removeAll { it.isBefore(today.minusYears(2)) }
+            com.enwei.moneymanager.core.TaiwanHolidays.setExtra(merged)
+            if (merged != old) repo.settings.update { it.copy(typhoonDays = com.enwei.moneymanager.data.TyphoonDays.encode(merged)) }
         }
 
         suspend fun refreshMarket(repo: Repository) {

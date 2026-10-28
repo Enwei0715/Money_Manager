@@ -32,6 +32,14 @@ object Http {
             json.parseToJsonElement(resp.body!!.string())
         }
     }
+
+    suspend fun getText(url: String): String = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}: $url")
+            resp.body!!.string()
+        }
+    }
 }
 
 fun JsonElement?.obj(key: String): JsonElement? = (this as? JsonObject)?.get(key)

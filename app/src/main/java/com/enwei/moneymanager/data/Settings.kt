@@ -144,6 +144,8 @@ data class AppSettings(
     val lastAutoBackupError: String = "",
     /** 下載的國定假日（年|月日:名稱;…|補班月日;…，一年一行） */
     val holidayCache: String = "",
+    /** 颱風假等停止上班日，格式 yyyy-MM-dd:名稱;… */
+    val typhoonDays: String = "",
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee, oddLotMinFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -219,6 +221,7 @@ class SettingsStore(context: Context) {
         lastAutoBackup = prefs.getLong("lastAutoBackup", 0),
         lastAutoBackupError = prefs.getString("lastAutoBackupError", "")!!,
         holidayCache = prefs.getString("holidayCache", "")!!,
+        typhoonDays = prefs.getString("typhoonDays", "")!!,
         cardBank = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardBank", "{}")!!) }.getOrDefault(emptyMap()),
         cardDueOffset = runCatching { json.decodeFromString(longIntSerializer, prefs.getString("cardDueOffset", "{}")!!) }.getOrDefault(emptyMap()),
         cardShift = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardShift", "{}")!!) }.getOrDefault(emptyMap()),
@@ -329,6 +332,7 @@ class SettingsStore(context: Context) {
             .putLong("lastAutoBackup", s.lastAutoBackup)
             .putString("lastAutoBackupError", s.lastAutoBackupError)
             .putString("holidayCache", s.holidayCache)
+            .putString("typhoonDays", s.typhoonDays)
             .putString("cardDueOffset", json.encodeToString(longIntSerializer, s.cardDueOffset))
             .apply()
         state.value = s
@@ -363,6 +367,17 @@ fun AppSettings.cycleFor(card: AccountEntity): com.enwei.moneymanager.core.CardC
 }
 
 /** 國定假日快取的編碼與解碼（core 的 YearCalendar 不依賴序列化套件）。 */
+/** 颱風假紀錄的編碼（yyyy-MM-dd:名稱;…）。 */
+object TyphoonDays {
+    fun decode(text: String): Map<java.time.LocalDate, String> = text.split(';').mapNotNull { e ->
+        val d = runCatching { java.time.LocalDate.parse(e.substringBefore(':')) }.getOrNull() ?: return@mapNotNull null
+        d to e.substringAfter(':', "颱風假")
+    }.toMap()
+
+    fun encode(map: Map<java.time.LocalDate, String>): String = map.entries.sortedBy { it.key }
+        .joinToString(";") { "${it.key}:${it.value.replace(';', ' ').replace(':', ' ')}" }
+}
+
 object HolidayCache {
     fun decode(text: String): Map<Int, com.enwei.moneymanager.core.YearCalendar> = text.lines().mapNotNull { line ->
         val parts = line.split('|')

@@ -251,3 +251,39 @@ class HolidayTest {
         assertEquals(java.time.LocalDate.of(2026, 2, 23), c3.statementIn(java.time.YearMonth.of(2026, 2)))
     }
 }
+
+class TyphoonNoticeTest {
+    private val html = """
+        <div>更新時間：2026/07/09 20:51:23</div>
+        <table>
+        <tr><td headers="city_Name"><FONT>基隆市</FONT></td><td><FONT>明天停止上班、停止上課。</FONT></td></tr>
+        <tr><td headers="city_Name"><FONT>臺北市</FONT></td><td headers="StopWorkSchool_Info">
+          <FONT color=#000080>今天照常上班、照常上課。</FONT><br><FONT color=#FF0000>明天停止上班、停止上課。</FONT></td></tr>
+        <tr><td headers="city_Name"><FONT>新北市</FONT></td><td><FONT>明天下午停止上班、停止上課。</FONT></td></tr>
+        </table>
+    """.trimIndent()
+
+    @Test fun taipeiTomorrowOff() {
+        val r = TyphoonNotice.parse(html, LocalDate.of(2026, 7, 9))
+        assertEquals(false, r[LocalDate.of(2026, 7, 9)])
+        assertEquals(true, r[LocalDate.of(2026, 7, 10)])
+    }
+
+    @Test fun halfDayNotCounted() {
+        val r = TyphoonNotice.parse(html, LocalDate.of(2026, 7, 9), "新北市")
+        assertEquals(false, r[LocalDate.of(2026, 7, 10)])
+    }
+
+    @Test fun noNotice() {
+        assertTrue(TyphoonNotice.parse("<p>無停班停課訊息。</p>", LocalDate.of(2026, 7, 9)).isEmpty())
+    }
+
+    @Test fun typhoonDayShiftsDue() {
+        val d = LocalDate.of(2026, 7, 10)
+        TaiwanHolidays.setExtra(mapOf(d to "颱風假"))
+        try {
+            assertEquals(LocalDate.of(2026, 7, 13), TaiwanHolidays.nextBusinessDay(d))
+            assertEquals("颱風假", TaiwanHolidays.holidayName(d))
+        } finally { TaiwanHolidays.setExtra(emptyMap()) }
+    }
+}
