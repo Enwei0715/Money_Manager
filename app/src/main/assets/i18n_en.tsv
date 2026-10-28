@@ -854,8 +854,6 @@ App 名稱也會跟著語言切換（帳理／Ledgerly）。	The app name change
 內容被 Android 隱藏：Android 15 起，系統判斷含驗證碼（OTP）的通知會對第三方 App 隱藏內容，App 收不到金額。一般的消費通知不含驗證碼，通常不會被隱藏。若一定要讀取，可在電腦用 adb 執行下方指令開放。	Hidden by Android: since Android 15, notifications the system thinks contain a one-time code are hidden from third-party apps, so the amount can't be read. Normal purchase alerts carry no code and are usually not hidden. To allow reading anyway, run the command below from a computer with adb.
 已複製指令	Command copied
 複製指令	Copy command
-有一則通知被系統隱藏	: a notification was hidden by the system
-點此記帳（帳戶已帶入，只要填金額）	Tap to record it (account filled in, just enter the amount)
 無法判斷（沒有商家名稱或沒有相似紀錄），記帳後可在通知上一鍵選分類	can't tell (no merchant name or similar records); pick one from the notification after it's recorded
 依商家名稱推測	guessed from merchant name
 同金額的固定支出	same amount as a regular expense

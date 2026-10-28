@@ -24,23 +24,7 @@ class WalletScreenReader : AccessibilityService() {
     private var pendingJob: Job? = null
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null) return
-        val pkg = event.packageName?.toString() ?: return
-        // 通知事件：Android 15 對通知監聽隱藏的內容，無障礙服務有機會讀得到，當作第二個來源
-        if (event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
-            if (pkg == packageName) return
-            val n = event.parcelableData as? android.app.Notification ?: return
-            if (n.flags and android.app.Notification.FLAG_GROUP_SUMMARY != 0) return
-            val ex = n.extras
-            val title = ex.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString()
-            val text = (ex.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(android.app.Notification.EXTRA_TEXT))?.toString()
-                ?: event.text.joinToString(" ").takeIf { it.isNotBlank() }
-            if (title.isNullOrBlank() && text.isNullOrBlank()) return
-            // 隱藏的內容交給通知監聽處理提醒，這裡只處理讀得到的
-            if (MoneyApp.repo.isRedacted(text)) return
-            TxnNotificationListener.handle(this, pkg, title, text, System.currentTimeMillis())
-            return
-        }
+        val pkg = event?.packageName?.toString() ?: return
         if (pkg !in MoneyApp.repo.settings.value.screenPackages) return
         // 錢包畫面讀取：使用者在測試頁時記錄每一次讀取的結果
         // 畫面捲動、載入時會連續觸發，等畫面穩定 1.2 秒後再讀

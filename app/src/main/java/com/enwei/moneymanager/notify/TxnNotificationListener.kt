@@ -42,7 +42,15 @@ class TxnNotificationListener : NotificationListenerService() {
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
         val text = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString()
         if (title.isNullOrBlank() && text.isNullOrBlank()) return
-        handle(this, sbn.packageName, title, text, sbn.postTime)
+
+        val app = application as MoneyApp
+        app.appScope.launch {
+            val result = runCatching { app.repo.ingestNotification(sbn.packageName, title, text, sbn.postTime) }.getOrNull() ?: return@launch
+            val pending = !app.repo.settings.value.notifAutoConfirm && result.kind == "RECORDED"
+            QuickActions.notifyRecorded(
+                this@TxnNotificationListener, result.txnId.takeIf { result.kind != "STOCK" }, tr(result.message), pending,
+            )
+        }
     }
 
     /** 通知列上目前的一則通知（用於測試辨識）。 */
@@ -50,58 +58,6 @@ class TxnNotificationListener : NotificationListenerService() {
 
     companion object {
         @Volatile private var instance: TxnNotificationListener? = null
-
-        /** 各 App 最近一次成功從通知記帳的時間（通知監聽與無障礙兩個來源共用）。 */
-        private val lastRecorded = java.util.concurrent.ConcurrentHashMap<String, Long>()
-
-        /**
-         * 處理一則通知（通知監聽或無障礙服務收到的）。內容被 Android 15 隱藏時，
-         * 等幾秒看另一個來源有沒有讀到；都沒有就跳提醒，點了直接開新增畫面。
-         */
-        fun handle(context: Context, pkg: String, title: String?, text: String?, postedAt: Long) {
-            val app = MoneyApp.instance
-            val repo = app.repo
-            if (repo.isRedacted(text)) {
-                val s = repo.settings.value
-                if (pkg !in s.notifPackages && !s.notifAccountMap.containsKey(pkg)) return
-                app.appScope.launch {
-                    kotlinx.coroutines.delay(8000)
-                    if ((lastRecorded[pkg] ?: 0L) >= postedAt - 60_000) return@launch
-                    notifyHidden(context, pkg, title)
-                }
-                return
-            }
-            app.appScope.launch {
-                val result = runCatching { repo.ingestNotification(pkg, title, text, postedAt) }.getOrNull() ?: return@launch
-                lastRecorded[pkg] = System.currentTimeMillis()
-                val pending = !repo.settings.value.notifAutoConfirm && result.kind == "RECORDED"
-                QuickActions.notifyRecorded(context, result.txnId.takeIf { result.kind != "STOCK" }, tr(result.message), pending)
-            }
-        }
-
-        private fun notifyHidden(context: Context, pkg: String, title: String?) {
-            val nm = context.getSystemService(NotificationManager::class.java)
-            if (!nm.areNotificationsEnabled()) return
-            val label = runCatching {
-                context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(pkg, 0)).toString()
-            }.getOrNull() ?: title ?: pkg
-            val account = MoneyApp.repo.settings.value.notifAccountMap[pkg] ?: 0L
-            val open = PendingIntent.getActivity(
-                context, pkg.hashCode(),
-                Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_ROUTE, "txn/0?type=EXPENSE&account=$account"),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            nm.notify(
-                9200 + (pkg.hashCode() and 0xff),
-                NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
-                    .setSmallIcon(R.drawable.ic_stat_ledger)
-                    .setContentTitle(tr("$label 有一則通知被系統隱藏"))
-                    .setContentText(tr("點此記帳（帳戶已帶入，只要填金額）"))
-                    .setContentIntent(open)
-                    .setAutoCancel(true)
-                    .build(),
-            )
-        }
 
         /** 目前通知列上的通知（不含本 App 與群組摘要）；服務未連線時回傳 null。 */
         fun activeNotes(): List<ActiveNote>? {
