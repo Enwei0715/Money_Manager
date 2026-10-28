@@ -525,7 +525,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val market = Market.TW
             val (fee, tax) = StockCalc.estimate(market, fill.symbol, fill.side, fill.shares, fill.price, s.feeSettings)
             val brokers = db.accounts().all().filter { it.type == AccountType.BROKERAGE && !it.archived }
-            val broker = s.notifAccountMap[pkg]?.let { id -> brokers.firstOrNull { it.id == id } } ?: brokers.firstOrNull()
+            val broker = s.notifAccountMap[pkg]?.let { id -> brokers.firstOrNull { it.id == id } }
+                ?: bankSrc?.let { b -> brokers.firstOrNull { BankDirectory.matches(b, it.name) } }
+                ?: brokers.firstOrNull()
             val (bFee, bTax) = if (broker?.feeDiscount != null)
                 StockCalc.estimate(market, fill.symbol, fill.side, fill.shares, fill.price, s.feeSettings.copy(discount = broker.feeDiscount)) else fee to tax
             val id = db.stocks().insertTrade(

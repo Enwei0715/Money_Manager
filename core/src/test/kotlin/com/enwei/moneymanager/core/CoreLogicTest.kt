@@ -376,3 +376,29 @@ class BankDirectoryTest {
         assertEquals(out.amountMinor, inn.amountMinor)
     }
 }
+
+class DawhoFillTest {
+    private val text = "您委託買入的台股已於2026/10/28 13:01:17成交嘍！\n劉*諄（9A9L-0609**2）您好\n\n您委託買入的【6515 穎崴】已成交：\n• 成交價：4900.00\n• 成交數：1股\n• 成交日：2026/10/28 13:01:17\n• 來　源：大戶投(g)\n詳細資料前往帳務看更多 👉"
+
+    @Test fun parsesFill() {
+        val f = NotificationParser.parseStockFill("成交通知", text)
+        assertEquals("6515", f?.symbol)
+        assertEquals("穎崴", f?.name)
+        assertEquals(StockSide.BUY, f?.side)
+        assertEquals(1.0, f?.shares)
+        assertEquals(4900.0, f?.price)
+    }
+}
+
+class DawhoFillPastedTest {
+    @Test fun pastedWithLineBreaks() {
+        val t = "您委託買入的台股已於\n2026/10/28 13:01:17成交嘍!\n劉*諄(9A9L-0609**2)\n您好\n您委託買入的【6515穎崴】\n已成\n交:\n成交價:4900.00\n成交數:1股\n成交日:2026/10/28 13:01:17\n來源:大戶投(g)"
+        val f = NotificationParser.parseStockFill(null, t)
+        assertEquals("6515", f?.symbol)
+        assertEquals(1.0, f?.shares)
+        // 沒有括號時也不會把年份當代號
+        val g = NotificationParser.parseStockFill(null, "2026/10/28 13:01 買進 2330 台積電 2張 成交價 1000")
+        assertEquals("2330", g?.symbol)
+        assertEquals(2000.0, g?.shares)
+    }
+}

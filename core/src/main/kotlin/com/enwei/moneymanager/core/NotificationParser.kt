@@ -228,6 +228,7 @@ object NotificationParser {
 
     private val sideRegex = Regex("(買進|賣出|現股買進|現股賣出|買入|賣|買)")
     private val symbolRegex = Regex("(?<![0-9])([0-9]{4,6}[A-Z]?)(?![0-9])\\s*([\\u4e00-\\u9fa5A-Za-z0-9\\-]{0,12})")
+    private val bracketRegex = Regex("[【\\[［]\\s*([0-9]{4,6}[A-Z]?)\\s*([\\u4e00-\\u9fa5A-Za-z\\-]{0,12})\\s*[】\\]］]")
     private val sharesRegex = Regex("([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(張|股)")
     private val priceRegex = Regex("(?:成交價|成交均價|均價|價格|單價|@)\\s*[:：]?\\s*(?:NT\\$|\\$)?\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)")
 
@@ -245,11 +246,18 @@ object NotificationParser {
 
         val price = priceRegex.find(full)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() ?: return null
 
-        // 從文字中找股票代號，排除數量與價格本身
+        // 股票代號：優先取括號內的「【6515 穎崴】」；否則找獨立的 4～6 碼數字，
+        // 排除日期時間（2026/10/28、13:01）、帳號（9A9L-0609**2）與數量、價格本身
+        bracketRegex.find(full)?.let { m ->
+            val name = m.groupValues[2].trim().takeIf { it.any { ch -> ch in '一'..'龥' } }
+            return ParsedStockFill(side, m.groupValues[1], name, shares, price)
+        }
         val textNoQty = full.replace(sharesMatch.value, " ")
         val symMatch = symbolRegex.findAll(textNoQty).firstOrNull { m ->
             val v = m.groupValues[1]
-            v.toDoubleOrNull() != price && !(m.range.first > 0 && textNoQty[m.range.first - 1] == '/')
+            val before = textNoQty.getOrNull(m.range.first - 1)
+            val after = textNoQty.getOrNull(m.range.first + v.length)
+            v.toDoubleOrNull() != price && before !in listOf('/', '-', ':', '*', '.') && after !in listOf('/', '-', ':', '*', '.')
         } ?: return null
         val name = symMatch.groupValues[2].takeIf { it.isNotBlank() && it.any { ch -> ch in '一'..'龥' } }
 
