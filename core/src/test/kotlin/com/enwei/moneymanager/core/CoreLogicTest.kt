@@ -303,3 +303,50 @@ class HolidayLabelTest {
         assertEquals(null, TaiwanHolidays.label(LocalDate.of(2026, 10, 27)))
     }
 }
+
+class CategorySuggesterTest {
+    private val cats = listOf(
+        CategorySuggester.Cat(1, "食物", null),
+        CategorySuggester.Cat(11, "Breakfast", 1), CategorySuggester.Cat(12, "Lunch", 1), CategorySuggester.Cat(13, "Dinner", 1),
+        CategorySuggester.Cat(14, "飲料", 1),
+        CategorySuggester.Cat(2, "購物", null), CategorySuggester.Cat(21, "市場", 2), CategorySuggester.Cat(22, "網購", 2),
+        CategorySuggester.Cat(3, "交通", null), CategorySuggester.Cat(31, "捷運", 3),
+        CategorySuggester.Cat(4, "娛樂", null),
+    )
+    private fun at(h: Int) = java.time.LocalDateTime.of(2026, 10, 28, h, 0)
+
+    @Test fun builtInMapsToUserNamesAndMealByTime() {
+        assertEquals(13L, CategorySuggester.suggest("麥當勞 台北站前", at(19), cats)?.categoryId)
+        assertEquals(11L, CategorySuggester.suggest("7-ELEVEN 台北門市", at(8), cats)?.categoryId)
+        assertEquals(14L, CategorySuggester.suggest("星巴克 信義店", at(15), cats)?.categoryId)
+        assertEquals(21L, CategorySuggester.suggest("全聯福利中心", at(10), cats)?.categoryId)
+        assertEquals(22L, CategorySuggester.suggest("蝦皮購物", at(10), cats)?.categoryId)
+        assertEquals(31L, CategorySuggester.suggest("台北捷運", at(10), cats)?.categoryId)
+        assertEquals(4L, CategorySuggester.suggest("NETFLIX.COM", at(10), cats)?.categoryId)
+    }
+
+    @Test fun historyWinsAndAdjustsMeal() {
+        val h = listOf(
+            CategorySuggester.Past("711", 13, at(21).minusDays(3), 6800, 5),
+            CategorySuggester.Past("711", 13, at(20).minusDays(10), 4500, 5),
+        )
+        // 過去在 711 記成晚餐 → 早上同一家記成早餐
+        assertEquals(11L, CategorySuggester.suggest("統一超商7-ELEVEN", at(8), cats, history = h)?.categoryId)
+        val g = listOf(CategorySuggester.Past("好丘", 22, at(12).minusDays(5), 300, 5))
+        assertEquals(22L, CategorySuggester.suggest("好丘", at(12), cats, history = g)?.categoryId)
+    }
+
+    @Test fun ruleBeatsBuiltIn() {
+        assertEquals(4L, CategorySuggester.suggest("全聯福利中心", at(10), cats, rules = mapOf("全聯福利中心" to 4L))?.categoryId)
+    }
+
+    @Test fun noMerchantUsesSameAmount() {
+        val h = listOf(
+            CategorySuggester.Past(null, 4, at(10).minusMonths(1), 39000, 7),
+            CategorySuggester.Past(null, 4, at(10).minusMonths(2), 39000, 7),
+        )
+        assertEquals(4L, CategorySuggester.suggest(null, at(10), cats, history = h, amountMinor = 39000, accountId = 7)?.categoryId)
+        assertEquals(null, CategorySuggester.suggest(null, at(10), cats, history = h, amountMinor = 626400, accountId = 7))
+        assertEquals(null, CategorySuggester.suggest("不知名小店", at(10), cats))
+    }
+}

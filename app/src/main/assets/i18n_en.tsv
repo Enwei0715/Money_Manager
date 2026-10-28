@@ -856,3 +856,6 @@ App 名稱也會跟著語言切換（帳理／Ledgerly）。	The app name change
 複製指令	Copy command
 有一則通知被系統隱藏	: a notification was hidden by the system
 點此記帳（帳戶已帶入，只要填金額）	Tap to record it (account filled in, just enter the amount)
+無法判斷（沒有商家名稱或沒有相似紀錄），記帳後可在通知上一鍵選分類	can't tell (no merchant name or similar records); pick one from the notification after it's recorded
+依商家名稱推測	guessed from merchant name
+同金額的固定支出	same amount as a regular expense

@@ -3,6 +3,7 @@ package com.enwei.moneymanager.data
 import androidx.room.withTransaction
 import com.enwei.moneymanager.core.CardCycle
 import com.enwei.moneymanager.core.CategoryGuesser
+import com.enwei.moneymanager.core.CategorySuggester
 import com.enwei.moneymanager.core.FxConverter
 import com.enwei.moneymanager.core.ParsedKind
 import com.enwei.moneymanager.core.ScreenRecord
@@ -241,12 +242,27 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     suspend fun deleteRule(keyword: String) = db.rules().delete(keyword)
 
-    private suspend fun guessCategory(merchant: String?, type: TxnType): Long? {
+    /** 自動分類（含子分類）：商家規則 → 過去紀錄 → 內建關鍵字 → 同金額固定支出，詳見 [CategorySuggester]。 */
+    suspend fun suggestCategory(merchant: String?, type: TxnType, at: Long, amountMinor: Long = 0, accountId: Long? = null): CategorySuggester.Suggestion? {
+        if (type == TxnType.TRANSFER) return null
         val cats = db.categories().all().filter { it.kind == type && !it.archived }
-        val ruleMap = db.rules().all().mapNotNull { r -> cats.find { it.id == r.categoryId }?.let { r.keyword to it.name } }.toMap()
-        val name = CategoryGuesser.guess(merchant, ruleMap) ?: return null
-        return cats.find { it.name == name }?.id
+            .map { CategorySuggester.Cat(it.id, it.name, it.parentId) }
+        if (cats.isEmpty()) return null
+        val rules = db.rules().all().associate { it.keyword to it.categoryId }
+        val history = db.txns().all().filter { it.type == type && it.categoryId != null && it.status == TxnStatus.CONFIRMED }
+            .map { CategorySuggester.Past(it.merchant ?: it.note, it.categoryId!!, it.date.toLocalDateTime(), it.amount, it.accountId) }
+        return CategorySuggester.suggest(merchant, at.toLocalDateTime(), cats, rules, history, amountMinor, accountId)
     }
+
+    /** 分類的完整名稱（大分類 / 子分類）。 */
+    suspend fun categoryPath(id: Long): String? {
+        val all = db.categories().all()
+        val c = all.find { it.id == id } ?: return null
+        return c.parentId?.let { pid -> all.find { it.id == pid }?.let { "${it.name} / ${c.name}" } } ?: c.name
+    }
+
+    private fun Long.toLocalDateTime(): java.time.LocalDateTime =
+        java.time.Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDateTime()
 
     // ---------- 帳戶 / 分類 ----------
 
@@ -396,12 +412,14 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             else -> if (p.type == ParsedType.INCOME) "收入" else "支出"
         }
         val type = if (p.type == ParsedType.INCOME) TxnType.INCOME else TxnType.EXPENSE
-        val cat = if (p.kind == ParsedKind.NORMAL) guessCategory(p.merchant, type)?.let { id -> db.categories().all().find { it.id == id }?.name } else null
+        val at = p.occurredAt?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis()
+        val cat = if (p.kind == ParsedKind.NORMAL) suggestCategory(p.merchant, type, at, p.amountMinor, account?.id)
+            ?.let { sg -> categoryPath(sg.categoryId)?.let { "$it（${sg.reason}）" } } else null
         val lines = listOfNotNull(
             "$what ${Money.format(p.amountMinor, p.currency)} ${p.currency}",
             "帳戶：${account?.name ?: "（未指定，請設定預設帳戶）"}" + (p.cardLast4?.let { "（卡號末四碼 $it）" } ?: ""),
             p.merchant?.let { "商家：$it" },
-            cat?.let { "分類：$it" },
+            "分類：" + (cat ?: "無法判斷（沒有商家名稱或沒有相似紀錄），記帳後可在通知上一鍵選分類"),
             p.occurredAt?.let { "交易時間：${it.toLocalDate()} ${"%02d:%02d".format(it.hour, it.minute)}" },
             learned?.let { "（依你教過的格式辨識）" },
             if (!enabled) "這個 App 尚未勾選監聽，勾選後才會自動記帳" else null,
@@ -608,7 +626,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             else -> null
         }
         return insert(
-            base.copy(type = type, categoryId = guessCategory(p.merchant, type), merchant = merchant, rawText = tagged),
+            base.copy(type = type, categoryId = suggestCategory(p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId, merchant = merchant, rawText = tagged),
             "RECORDED", "${type.label} $amountText ${p.merchant.orEmpty()}",
         )
     }
@@ -665,7 +683,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val id = db.txns().insert(
                 TxnEntity(
                     type = type, amount = r.amountMinor, currency = wallet.currency, accountId = wallet.id,
-                    categoryId = guessCategory(listOfNotNull(r.merchant, r.typeLabel).joinToString(" "), type),
+                    categoryId = suggestCategory(r.merchant ?: r.typeLabel, type, millis, r.amountMinor, wallet.id)?.categoryId,
                     merchant = r.merchant, note = r.typeLabel, date = millis, source = TxnSource.SCREEN,
                     status = if (s.notifAutoConfirm) TxnStatus.CONFIRMED else TxnStatus.PENDING, externalKey = key,
                 ),
