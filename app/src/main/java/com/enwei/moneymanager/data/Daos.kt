@@ -57,6 +57,18 @@ interface CategoryDao {
 
     @Query("DELETE FROM categories")
     suspend fun clear()
+
+    @Query("DELETE FROM categories WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("UPDATE transactions SET categoryId = :to WHERE categoryId = :from")
+    suspend fun reassignTxns(from: Long, to: Long?)
+
+    @Query("UPDATE recurring SET categoryId = :to WHERE categoryId = :from")
+    suspend fun reassignRecurring(from: Long, to: Long?)
+
+    @Query("DELETE FROM merchant_rules WHERE categoryId = :id")
+    suspend fun deleteRules(id: Long)
 }
 
 @Dao

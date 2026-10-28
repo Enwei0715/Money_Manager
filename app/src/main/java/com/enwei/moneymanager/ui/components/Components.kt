@@ -88,13 +88,6 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun EmojiBadge(emoji: String, tint: Color = MaterialTheme.colorScheme.secondaryContainer) {
-    Surface(shape = CircleShape, color = tint, modifier = Modifier.size(40.dp)) {
-        Box(contentAlignment = Alignment.Center) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
-    }
-}
-
-@Composable
 fun <T> DropdownField(
     label: String,
     options: List<T>,

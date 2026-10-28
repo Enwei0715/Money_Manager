@@ -88,6 +88,17 @@ class SummaryWidget : AppWidgetProvider() {
                 setOnClickPendingIntent(R.id.widget_cash, open(context, 11, "txn/0?type=EXPENSE&account=${cash?.id ?: 0}"))
                 setOnClickPendingIntent(R.id.widget_income_btn, open(context, 12, "txn/0?type=INCOME"))
                 setOnClickPendingIntent(R.id.widget_pending, open(context, 13, "bookmarks"))
+                // 小工具設定：深淺色與背景不透明度
+                val dark = when (s.widgetTheme) {
+                    1 -> false
+                    2 -> true
+                    else -> (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                        android.content.res.Configuration.UI_MODE_NIGHT_YES
+                }
+                setInt(R.id.widget_bg, "setColorFilter", if (dark) 0xFF26272B.toInt() else 0xFFFFFFFF.toInt())
+                setInt(R.id.widget_bg, "setImageAlpha", s.widgetOpacity.coerceIn(0, 100) * 255 / 100)
+                setTextColor(R.id.widget_legend, if (dark) 0xFFDDDDDD.toInt() else 0xFF444444.toInt())
+                setTextColor(R.id.widget_title, if (dark) 0xFFAAAAAA.toInt() else 0xFF8A8A8A.toInt())
             }
             manager.updateAppWidget(ids, views)
         }
@@ -111,8 +122,8 @@ class SummaryWidget : AppWidgetProvider() {
                     start += sweep
                 }
             }
-            // 中間挖空成甜甜圈
-            paint.color = 0xFFFFFFFF.toInt()
+            // 中間挖空成甜甜圈（透明，適用任何背景）
+            paint.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
             c.drawCircle(size / 2f, size / 2f, size * 0.26f, paint)
             return bmp
         }

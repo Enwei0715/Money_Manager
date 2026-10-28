@@ -327,7 +327,7 @@ fun CategoryStatScreen(nav: NavController, categoryId: Long, kind: TxnType, peri
     val current = mine.inRange(ranges.last())
     val color = if (kind == TxnType.INCOME) IncomeColor else ExpenseColor
 
-    Scaffold(topBar = { BackTopBar("${cat?.icon ?: "❔"} ${cat?.name ?: "未分類"}", { nav.popBackStack() }) }) { pad ->
+    Scaffold(topBar = { BackTopBar(cat?.name ?: "未分類", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             item {
                 Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(16.dp)) {

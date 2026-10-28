@@ -59,7 +59,7 @@ class WalletScreenReader : AccessibilityService() {
         nm.notify(
             9100,
             NotificationCompat.Builder(this, MoneyApp.CHANNEL_RECORDS)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.ic_stat_ledger)
                 .setContentTitle("已從錢包畫面讀取 $count 筆交易")
                 .setContentText(if (MoneyApp.repo.settings.value.notifAutoConfirm) "已自動入帳" else "請到「待確認」檢查")
                 .setAutoCancel(true)

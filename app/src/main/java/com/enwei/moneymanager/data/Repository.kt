@@ -218,17 +218,40 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     suspend fun saveCategory(c: CategoryEntity) = db.categories().upsert(c)
 
+    /** 依序寫回排序。 */
+    suspend fun reorderCategories(list: List<CategoryEntity>) = db.withTransaction {
+        list.forEachIndexed { i, c -> if (c.sortOrder != i) db.categories().upsert(c.copy(sortOrder = i)) }
+    }
+
+    /**
+     * 刪除分類：子分類的交易併入所屬大分類；大分類連同子分類刪除，交易變成未分類。
+     */
+    suspend fun deleteCategory(c: CategoryEntity) {
+        val ids = listOf(c.id) + db.categories().all().filter { it.parentId == c.id }.map { it.id }
+        val target = c.parentId
+        db.withTransaction {
+            ids.forEach { id ->
+                db.categories().reassignTxns(id, target)
+                db.categories().reassignRecurring(id, target)
+                db.categories().deleteRules(id)
+                db.categories().delete(id)
+            }
+        }
+        settings.update { s ->
+            s.copy(
+                budgets = s.budgets - ids.toSet(),
+                bookmarks = s.bookmarks.map { if (it.categoryId in ids) it.copy(categoryId = target) else it },
+            )
+        }
+    }
+
     suspend fun ensureSeedData() {
         if (db.categories().count() > 0) return
-        val expense = listOf(
-            "餐飲" to "🍜", "便利商店" to "🏪", "日用品" to "🧻", "交通" to "🚇", "購物" to "🛍️", "娛樂" to "🎮",
-            "居家" to "🏠", "電信網路" to "📶", "醫療" to "💊", "保險" to "🛡️", "教育" to "📚", "社交" to "🎁",
-            "美容" to "💇", "寵物" to "🐶", "旅遊" to "✈️", "稅費" to "🧾", "其他" to "📦",
-        )
-        val income = listOf("薪資" to "💼", "獎金" to "🏆", "投資收益" to "📈", "利息" to "🏦", "退款" to "↩️", "副業" to "🧑‍💻", "其他收入" to "💰")
+        val expense = listOf("餐飲", "便利商店", "日用品", "交通", "購物", "娛樂", "居家", "電信網路", "醫療", "保險", "教育", "社交", "美容", "寵物", "旅遊", "稅費", "其他")
+        val income = listOf("薪資", "獎金", "投資收益", "利息", "退款", "副業", "其他收入")
         db.categories().insertAll(
-            expense.mapIndexed { i, (n, ic) -> CategoryEntity(name = n, kind = TxnType.EXPENSE, icon = ic, sortOrder = i) } +
-                income.mapIndexed { i, (n, ic) -> CategoryEntity(name = n, kind = TxnType.INCOME, icon = ic, sortOrder = i) },
+            expense.mapIndexed { i, n -> CategoryEntity(name = n, kind = TxnType.EXPENSE, icon = "", sortOrder = i) } +
+                income.mapIndexed { i, n -> CategoryEntity(name = n, kind = TxnType.INCOME, icon = "", sortOrder = i) },
         )
         if (db.accounts().all().isEmpty()) {
             val cash = db.accounts().upsert(AccountEntity(name = "現金", type = AccountType.CASH, sortOrder = 0))

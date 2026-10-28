@@ -23,6 +23,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Payments
+import androidx.compose.material.icons.rounded.Toll
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Backup
@@ -207,7 +209,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     ),
                 ) {
                     Column(Modifier.padding(16.dp)) {
-                        Text(if (enabled) "✅ 已取得通知存取權" else "⚠️ 尚未開啟通知存取權", style = MaterialTheme.typography.titleSmall)
+                        com.enwei.moneymanager.ui.components.StatusLine(enabled, if (enabled) "已取得通知存取權" else "尚未開啟通知存取權")
                         Text(
                             "開啟後，記帳本會讀取你勾選的銀行、信用卡、電子支付或簡訊 App 的通知，自動辨識金額、商家與卡號末四碼。資料只存在手機中。\n若顯示「受限制的設定」無法開啟：設定 → 應用程式 → 記帳本 → 右上角 ⋮ →「允許受限制的設定」。",
                             style = MaterialTheme.typography.bodySmall,
@@ -228,7 +230,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     }
                     DropdownField(
                         "無法對應卡號時記入的帳戶", lk.accounts.filter { !it.archived }, lk.account(settings.defaultAccountId),
-                        { "${it.type.icon} ${it.name}" }, { a -> repo.settings.update { it.copy(defaultAccountId = a.id) } },
+                        { it.name }, { a -> repo.settings.update { it.copy(defaultAccountId = a.id) } },
                     )
                     Text("提示：在帳戶中填寫信用卡「末四碼」，通知就會自動記到對應的卡片。券商的成交回報會自動建立股票交易。", style = MaterialTheme.typography.bodySmall)
                 }
@@ -400,81 +402,6 @@ fun FxScreen(nav: NavController) {
 }
 
 @Composable
-fun CategoriesScreen(nav: NavController) {
-    val scope = rememberCoroutineScope()
-    val cats by repo.categories.collectAsStateWithLifecycle(emptyList())
-    val rules by repo.rules.collectAsStateWithLifecycle(emptyList())
-    var editing by remember { mutableStateOf<CategoryEntity?>(null) }
-    Scaffold(topBar = {
-        BackTopBar("分類管理", { nav.popBackStack() }) {
-            TextButton(onClick = { editing = CategoryEntity(name = "", kind = TxnType.EXPENSE, icon = "📦", sortOrder = cats.size) }) { Text("新增") }
-        }
-    }) { pad ->
-        LazyColumn(Modifier.padding(pad)) {
-            listOf(TxnType.EXPENSE, TxnType.INCOME).forEach { k ->
-                item(key = k.name) { SectionTitle(k.label + "分類") }
-                val parents = cats.filter { it.kind == k && it.parentId == null }.sortedBy { it.sortOrder }
-                parents.forEach { c ->
-                    item(key = c.id) {
-                        ListItem(
-                            headlineContent = { Text("${if (c.icon == "📁") "" else c.icon + " "}${c.name}" + if (c.archived) "（隱藏）" else "") },
-                            trailingContent = {
-                                TextButton(onClick = { editing = CategoryEntity(name = "", kind = c.kind, icon = "•", sortOrder = cats.size, parentId = c.id) }) {
-                                    Text("＋子分類")
-                                }
-                            },
-                            modifier = Modifier.clickable { editing = c },
-                        )
-                    }
-                    items(cats.filter { it.parentId == c.id }.sortedBy { it.sortOrder }, key = { it.id }) { sub ->
-                        ListItem(
-                            headlineContent = { Text("　└ ${sub.name}" + if (sub.archived) "（隱藏）" else "", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                            modifier = Modifier.clickable { editing = sub },
-                        )
-                    }
-                }
-            }
-            if (rules.isNotEmpty()) {
-                item { SectionTitle("已學習的商家分類（點擊刪除）") }
-                items(rules, key = { "r" + it.keyword }) { r ->
-                    val c = cats.find { it.id == r.categoryId }
-                    ListItem(
-                        headlineContent = { Text(r.keyword) },
-                        trailingContent = { Text("${c?.icon.orEmpty()} ${c?.name ?: "?"}") },
-                        modifier = Modifier.clickable { scope.launch { repo.deleteRule(r.keyword) } },
-                    )
-                }
-            }
-        }
-    }
-    editing?.let { c ->
-        var name by remember(c) { mutableStateOf(c.name) }
-        var icon by remember(c) { mutableStateOf(c.icon) }
-        var kind by remember(c) { mutableStateOf(c.kind) }
-        var archived by remember(c) { mutableStateOf(c.archived) }
-        AlertDialog(
-            onDismissRequest = { editing = null },
-            title = { Text(if (c.id == 0L) (if (c.parentId != null) "新增子分類" else "新增分類") else "編輯分類") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, label = { Text("名稱") }, singleLine = true)
-                    OutlinedTextField(icon, { icon = it.take(4) }, label = { Text("圖示（Emoji）") }, singleLine = true)
-                    if (c.id == 0L && c.parentId == null) DropdownField("類型", listOf(TxnType.EXPENSE, TxnType.INCOME), kind, { it.label }, { kind = it })
-                    Row(verticalAlignment = Alignment.CenterVertically) { Text("隱藏", Modifier.weight(1f)); Switch(archived, { archived = it }) }
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = name.isNotBlank(), onClick = {
-                    scope.launch { repo.saveCategory(c.copy(name = name.trim(), icon = icon.ifBlank { "📦" }, kind = kind, archived = archived)) }
-                    editing = null
-                }) { Text("儲存") }
-            },
-            dismissButton = { TextButton(onClick = { editing = null }) { Text("取消") } },
-        )
-    }
-}
-
-@Composable
 fun BackupScreen(nav: NavController) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -615,7 +542,15 @@ fun SettingsScreen(nav: NavController) {
                 else -> "已是最新版本（${BuildConfig.VERSION_NAME}）"
             }
         }.onFailure {
-            updateStatus = "檢查失敗：${it.message}" + if (token.isBlank()) "\n私人儲存庫需要填入 GitHub Token" else ""
+            val msg = it.message.orEmpty()
+            updateStatus = when {
+                token.isBlank() -> "檢查失敗：私人儲存庫需要填入 GitHub Token"
+                "401" in msg -> "Token 無效或已過期，請重新建立"
+                "404" in msg -> "Token 看不到這個儲存庫（GitHub 對無權限的私人儲存庫回傳 404）。\n" +
+                    "請確認 Token 的 Repository access 選了「Only select repositories → ${BuildConfig.UPDATE_REPO.substringAfter('/')}」，" +
+                    "並在 Permissions → Repository permissions 把 Contents 設為 Read-only。"
+                else -> "檢查失敗：$msg"
+            }
         }
     }
 
@@ -634,7 +569,7 @@ fun SettingsScreen(nav: NavController) {
             Text("App 更新", style = MaterialTheme.typography.titleMedium)
             Text("目前版本 ${BuildConfig.VERSION_NAME}（build ${BuildConfig.VERSION_CODE}）", style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(
-                token, { token = it }, label = { Text("GitHub Token（私人儲存庫需要）") }, singleLine = true,
+                token, { v -> token = v; repo.settings.update { it.copy(githubToken = v.trim()) } }, label = { Text("GitHub Token（私人儲存庫需要）") }, singleLine = true,
                 supportingText = { Text("到 GitHub → Settings → Developer settings → Fine-grained tokens 建立，只勾選此儲存庫的 Contents: Read-only") },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -697,7 +632,7 @@ fun WalletReaderScreen(nav: NavController) {
                     ),
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(if (enabled) "✅ 錢包讀取已開啟" else "⚠️ 尚未開啟無障礙服務「記帳本錢包讀取」", style = MaterialTheme.typography.titleSmall)
+                        com.enwei.moneymanager.ui.components.StatusLine(enabled, if (enabled) "錢包讀取已開啟" else "尚未開啟無障礙服務「記帳本錢包讀取」")
                         Text(
                             "街口、悠遊付不會推播每筆消費。開啟後，只要打開下方勾選的 App 並進入「交易紀錄」頁，記帳本就會讀取畫面上的商家、金額、日期並自動匯入（重複的不會再匯入；已由銀行通知記成轉帳的儲值也會自動略過）。只讀取勾選的 App。",
                             style = MaterialTheme.typography.bodySmall,
@@ -802,7 +737,14 @@ fun CashCounterScreen(nav: NavController, accountId: Long) {
             items(denoms, key = { it }) { d ->
                 val n = counts[d] ?: 0
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (d >= 100) "💵 $d 元" else "🪙 $d 元", Modifier.width(110.dp), fontSize = 17.sp)
+                    Row(Modifier.width(110.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (d >= 100) androidx.compose.material.icons.Icons.Rounded.Payments else androidx.compose.material.icons.Icons.Rounded.Toll, null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("$d 元", fontSize = 17.sp)
+                    }
                     IconButton(onClick = { set(d, n - 1) }) { Text("－", fontSize = 22.sp) }
                     androidx.compose.foundation.text.BasicTextField(
                         value = if (n == 0) "" else n.toString(),

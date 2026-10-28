@@ -75,6 +75,28 @@ data class AppSettings(
     val themeMode: Int = 0,
     /** 介面縮放比例（整體文字、間距、圖示等比例） */
     val uiScale: Float = 0.9f,
+    /** 子分類功能 */
+    val subcategoryOn: Boolean = true,
+    /** 交易頁顯示「新增備註」按鈕 */
+    val noteButton: Boolean = true,
+    /** 交易頁左右滑動：0 無、1 切換期間 */
+    val swipe: Int = 0,
+    /** 交易列表顯示說明 */
+    val showDescription: Boolean = false,
+    /** 通知列常駐「快速記帳」 */
+    val quickAdd: Boolean = false,
+    /** 密碼鎖可用指紋／臉部解鎖 */
+    val biometric: Boolean = false,
+    /** 離開 App 多久後要求密碼（秒），0 = 立即 */
+    val lockDelaySec: Int = 0,
+    /** 小工具：0 跟隨系統、1 淺色、2 深色 */
+    val widgetTheme: Int = 0,
+    /** 小工具背景不透明度（%） */
+    val widgetOpacity: Int = 100,
+    /** 帳戶群組順序（AccountType 名稱） */
+    val accountGroupOrder: List<String> = emptyList(),
+    /** 帳戶群組自訂名稱 */
+    val accountGroupNames: Map<String, String> = emptyMap(),
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -90,6 +112,7 @@ class SettingsStore(context: Context) {
     private val memoSerializer = ListSerializer(Memo.serializer())
     private val budgetSerializer = MapSerializer(Long.serializer(), Long.serializer())
     private val pkgMapSerializer = MapSerializer(String.serializer(), Long.serializer())
+    private val strMapSerializer = MapSerializer(String.serializer(), String.serializer())
     private val cashSerializer = MapSerializer(Long.serializer(), MapSerializer(Int.serializer(), Int.serializer()))
     private val state = MutableStateFlow(read())
     val flow: StateFlow<AppSettings> = state.asStateFlow()
@@ -127,8 +150,20 @@ class SettingsStore(context: Context) {
         cashCounts = runCatching { json.decodeFromString(cashSerializer, prefs.getString("cashCounts", "{}")!!) }.getOrDefault(emptyMap()),
         themeMode = prefs.getInt("themeMode", 0),
         uiScale = prefs.getFloat("uiScale", 0.9f),
+        subcategoryOn = prefs.getBoolean("subcategoryOn", true),
+        noteButton = prefs.getBoolean("noteButton", true),
+        swipe = prefs.getInt("swipe", 0),
+        showDescription = prefs.getBoolean("showDescription", false),
+        quickAdd = prefs.getBoolean("quickAdd", false),
+        biometric = prefs.getBoolean("biometric", false),
+        lockDelaySec = prefs.getInt("lockDelaySec", 0),
+        widgetTheme = prefs.getInt("widgetTheme", 0),
+        widgetOpacity = prefs.getInt("widgetOpacity", 100),
+        accountGroupOrder = prefs.getString("accountGroupOrder", "")!!.split(',').filter { it.isNotBlank() },
+        accountGroupNames = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("accountGroupNames", "{}")!!) }.getOrDefault(emptyMap()),
     )
 
+    @Synchronized
     fun update(block: (AppSettings) -> AppSettings) {
         val s = block(state.value)
         prefs.edit()
@@ -163,7 +198,27 @@ class SettingsStore(context: Context) {
             .putString("cashCounts", json.encodeToString(cashSerializer, s.cashCounts))
             .putInt("themeMode", s.themeMode)
             .putFloat("uiScale", s.uiScale)
+            .putBoolean("subcategoryOn", s.subcategoryOn)
+            .putBoolean("noteButton", s.noteButton)
+            .putInt("swipe", s.swipe)
+            .putBoolean("showDescription", s.showDescription)
+            .putBoolean("quickAdd", s.quickAdd)
+            .putBoolean("biometric", s.biometric)
+            .putInt("lockDelaySec", s.lockDelaySec)
+            .putInt("widgetTheme", s.widgetTheme)
+            .putInt("widgetOpacity", s.widgetOpacity)
+            .putString("accountGroupOrder", s.accountGroupOrder.joinToString(","))
+            .putString("accountGroupNames", json.encodeToString(strMapSerializer, s.accountGroupNames))
             .apply()
         state.value = s
     }
+}
+
+/** 帳戶群組（帳戶類型）顯示名稱，可在設定中自訂。 */
+fun AppSettings.groupLabel(t: AccountType): String = accountGroupNames[t.name]?.takeIf { it.isNotBlank() } ?: t.label
+
+/** 依使用者設定的群組順序排列的帳戶類型。 */
+fun AppSettings.groupOrder(): List<AccountType> {
+    val custom = accountGroupOrder.mapNotNull { n -> AccountType.entries.find { it.name == n } }
+    return custom + AccountType.entries.filter { it !in custom }
 }

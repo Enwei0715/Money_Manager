@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -193,7 +195,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         },
         floatingActionButton = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (tab == 0 || tab == 4) {
+                if ((tab == 0 && settings.noteButton) || tab == 4) {
                     Surface(
                         shape = CircleShape, color = MaterialTheme.colorScheme.surface,
                         modifier = Modifier.size(60.dp).border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
@@ -208,7 +210,18 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
             }
         },
     ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize()) {
+        var dragX by remember { mutableStateOf(0f) }
+        val swipeModifier = if (settings.swipe == 1) Modifier.pointerInput(yearly) {
+            detectHorizontalDragGestures(
+                onDragStart = { dragX = 0f },
+                onDragEnd = {
+                    if (dragX > 160f) month = if (yearly) month.minusYears(1) else month.minusMonths(1)
+                    else if (dragX < -160f) month = if (yearly) month.plusYears(1) else month.plusMonths(1)
+                    dragX = 0f
+                },
+            ) { _, d -> dragX += d }
+        } else Modifier
+        Column(Modifier.padding(pad).fillMaxSize().then(swipeModifier)) {
             TabRow(
                 selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface,
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
@@ -333,6 +346,7 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
     val cat = lk.category(t.categoryId)
     val acc = lk.account(t.accountId)
     val gray = MaterialTheme.colorScheme.onSurfaceVariant
+    val showDesc = repo.settings.flow.collectAsStateWithLifecycle().value.showDescription
     val color = when (t.type) { TxnType.INCOME -> IncomeColor; TxnType.EXPENSE -> ExpenseColor; TxnType.TRANSFER -> MaterialTheme.colorScheme.onSurface }
     val title = t.merchant?.takeIf { it.isNotBlank() }
     val accountText = if (t.type == TxnType.TRANSFER) "${acc?.name ?: "?"} → ${lk.account(t.toAccountId)?.name ?: "?"}" else acc?.name.orEmpty()
@@ -354,6 +368,7 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
         Column(Modifier.weight(1f)) {
             if (title != null) Text(title, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(accountText, color = gray, fontSize = if (title != null) 14.sp else 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
@@ -557,7 +572,7 @@ private fun TotalView(list: List<TxnEntity>, all: List<TxnEntity>, lk: Lookups, 
             if (settings.budgets.isNotEmpty()) Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 settings.budgets.entries.sortedBy { it.key }.forEach { (cid, budget) ->
                     val used = if (cid == 0L) expense else byCat[cid] ?: 0
-                    val name = if (cid == 0L) "總預算" else lk.category(cid)?.let { "${it.icon} ${it.name}" } ?: "已刪除分類"
+                    val name = if (cid == 0L) "總預算" else lk.category(cid)?.name ?: "已刪除分類"
                     BudgetBar(name, used, budget)
                 }
             }

@@ -55,7 +55,7 @@ class TxnNotificationListener : NotificationListenerService() {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
             val n = NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.ic_stat_ledger)
                 .setContentTitle(if (pending) "已記下，待確認" else "已自動記帳")
                 .setContentText(message)
                 .setContentIntent(intent)

@@ -53,7 +53,8 @@ import com.enwei.moneymanager.ui.components.AmountText
 import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.DateField
 import com.enwei.moneymanager.ui.components.DropdownField
-import com.enwei.moneymanager.ui.components.EmojiBadge
+import com.enwei.moneymanager.ui.components.SymbolBadge
+import com.enwei.moneymanager.ui.components.Symbols
 import com.enwei.moneymanager.ui.components.EmptyHint
 import com.enwei.moneymanager.ui.components.NumberField
 import kotlinx.coroutines.launch
@@ -87,7 +88,7 @@ fun RecurringScreen(nav: NavController) {
                     else -> ""
                 }
                 ListItem(
-                    leadingContent = { EmojiBadge(if (r.type == TxnType.TRANSFER) "🔁" else cat?.icon ?: "🗓️") },
+                    leadingContent = { SymbolBadge(if (r.type == TxnType.TRANSFER) Symbols.transfer else Symbols.category(cat?.name, r.type)) },
                     headlineContent = { Text(r.name + if (!r.enabled) "（停用）" else "") },
                     supportingContent = {
                         Text("$every$dayText · ${lk.account(r.accountId)?.name ?: "未指定帳戶"} · 下次 ${repo.nextOccurrence(r)}")
@@ -158,13 +159,13 @@ fun RecurringEditScreen(nav: NavController, id: Long) {
                 Spacer(Modifier.width(8.dp))
                 DropdownField("幣別", currencyOptions(lk), currency, { it }, { currency = it }, Modifier.width(120.dp))
             }
-            DropdownField(if (type == TxnType.TRANSFER) "轉出帳戶" else "扣款／入帳帳戶", active, lk.account(accountId), { "${it.type.icon} ${it.name}" }, { accountId = it.id })
+            DropdownField(if (type == TxnType.TRANSFER) "轉出帳戶" else "扣款／入帳帳戶", active, lk.account(accountId), { it.name }, { accountId = it.id })
             if (type == TxnType.TRANSFER) {
-                DropdownField("轉入帳戶", active.filter { it.id != accountId }, lk.account(toAccountId), { "${it.type.icon} ${it.name}" }, { toAccountId = it.id })
+                DropdownField("轉入帳戶", active.filter { it.id != accountId }, lk.account(toAccountId), { it.name }, { toAccountId = it.id })
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     lk.categories.filter { it.kind == type && !it.archived }.forEach { c ->
-                        FilterChip(categoryId == c.id, { categoryId = c.id }, label = { Text("${c.icon} ${c.name}") })
+                        FilterChip(categoryId == c.id, { categoryId = c.id }, label = { Text(c.name) })
                     }
                 }
             }

@@ -31,7 +31,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         nm.notify(
             9001,
             NotificationCompat.Builder(applicationContext, MoneyApp.CHANNEL_RECORDS)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.ic_stat_ledger)
                 .setContentTitle("今天記帳了嗎？")
                 .setContentText("點這裡記下今天的花費")
                 .setContentIntent(intent)

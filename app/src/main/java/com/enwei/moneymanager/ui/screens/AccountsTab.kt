@@ -62,6 +62,8 @@ import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.core.Periods
 import com.enwei.moneymanager.data.AccountEntity
 import com.enwei.moneymanager.data.AccountType
+import com.enwei.moneymanager.data.groupLabel
+import com.enwei.moneymanager.data.groupOrder
 import com.enwei.moneymanager.data.CardStatus
 import com.enwei.moneymanager.data.StockTradeEntity
 import com.enwei.moneymanager.data.TxnEntity
@@ -133,6 +135,8 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
     var menu by remember { mutableStateOf(false) }
     var showHidden by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(all, balances) { cards = repo.cardStatus() }
+    val st by repo.settings.flow.collectAsStateWithLifecycle()
+    val groupRank = st.groupOrder()
 
     val visible = balances.filter { showHidden || !it.account.archived }.sortedWith(compareBy({ it.account.sortOrder }, { it.account.id }))
     val counted = balances.filter { !it.account.archived && it.account.includeInNetWorth }
@@ -188,12 +192,12 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                         "合計" to (Money.full(assets - debts) to MaterialTheme.colorScheme.onSurface)),
                 )
             }
-            visible.groupBy { it.account.type }.toSortedMap().forEach { (type, list) ->
+            visible.groupBy { it.account.type }.toSortedMap(compareBy { groupRank.indexOf(it) }).forEach { (type, list) ->
                 if (type == AccountType.CREDIT_CARD) {
                     item(key = "g${type.name}") {
                         val payable = list.sumOf { cards[it.account.id]?.payable ?: 0 }
                         val outst = list.sumOf { cards[it.account.id]?.outstanding ?: 0 }
-                        GrayHeader(type.label) {
+                        GrayHeader(st.groupLabel(type)) {
                             Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(120.dp)) {
                                 Text("應繳餘額", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(Money.withSymbol(payable, lk.base), color = ExpenseColor)
@@ -222,7 +226,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                         val total = list.filter { !it.account.archived }.sumOf {
                             lk.fx.convert(it.balance, it.account.currency) + if (isBroker) stockOf(it.account.id) else 0
                         }
-                        GrayHeader(type.label) { Text(Money.withSymbol(total, lk.base), color = balanceColor(total, MaterialTheme.colorScheme.onSurface)) }
+                        GrayHeader(st.groupLabel(type)) { Text(Money.withSymbol(total, lk.base), color = balanceColor(total, MaterialTheme.colorScheme.onSurface)) }
                     }
                     items(list, key = { "a${it.account.id}" }) { b ->
                         val a = b.account
@@ -601,7 +605,9 @@ fun TotalStatsScreen(nav: NavController) {
 fun AccountOrderScreen(nav: NavController) {
     val accounts by repo.accounts.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
-    val sorted = accounts.sortedWith(compareBy({ it.type }, { it.sortOrder }, { it.id }))
+    val st by repo.settings.flow.collectAsStateWithLifecycle()
+    val rank = st.groupOrder()
+    val sorted = accounts.sortedWith(compareBy({ rank.indexOf(it.type) }, { it.sortOrder }, { it.id }))
     fun move(a: AccountEntity, dir: Int) {
         val group = sorted.filter { it.type == a.type }
         val idx = group.indexOf(a)
@@ -613,7 +619,7 @@ fun AccountOrderScreen(nav: NavController) {
     Scaffold(topBar = { BackTopBar("修改順序", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad)) {
             sorted.groupBy { it.type }.forEach { (type, list) ->
-                item(key = "h$type") { GrayHeader(type.label) }
+                item(key = "h$type") { GrayHeader(st.groupLabel(type)) }
                 items(list, key = { it.id }) { a ->
                     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(a.name, Modifier.weight(1f))

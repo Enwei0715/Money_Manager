@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/widget_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_bg"
+        android:contentDescription="@null" />
+
+<LinearLayout
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_bg"
     android:orientation="vertical"
     android:padding="12dp">
 
@@ -98,8 +109,9 @@
             android:layout_weight="1"
             android:background="@drawable/widget_btn_bg"
             android:gravity="center"
-            android:text="☆ 書籤"
+            android:text="書籤"
             android:textColor="#FFF0605A"
             android:textSize="14sp" />
     </LinearLayout>
 </LinearLayout>
+</FrameLayout>

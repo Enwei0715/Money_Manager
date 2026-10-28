@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -30,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.Edit
@@ -411,7 +414,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                     if (panel == Panel.TO_ACCOUNT) { toAccountId = a.id; panel = Panel.NONE }
                     else { accountId = a.id; panel = if (type == TxnType.TRANSFER && toAccountId == null) Panel.TO_ACCOUNT else Panel.NONE }
                 },
-                onEditCategories = { nav.navigate("categories") },
+                onEditCategories = { nav.navigate("categories?kind=${if (type == TxnType.INCOME) "INCOME" else "EXPENSE"}") },
                 onEditAccounts = { nav.navigate("accounts") },
                 onClose = { panel = Panel.NONE; calcMode = false },
             )
@@ -534,29 +537,55 @@ private fun BottomPanel(
                 Keypad(expr, calcMode, onExpr, onToggleCalc, onDoneAmount)
             }
             Panel.CATEGORY -> {
-                // 先選大分類；有子分類時再展開子分類
-                var openParent by remember(type) { mutableStateOf<Long?>(null) }
-                val parent = openParent?.let { lk.category(it) }
-                val cells: List<Pair<Long?, String>> = if (parent == null) {
-                    lk.categories.filter { it.kind == type && !it.archived && it.parentId == null }.sortedBy { it.sortOrder }
-                        .map { c -> c.id to (if (c.icon == "📁") c.name else "${c.icon} ${c.name}") + if (lk.children(c.id).isNotEmpty()) " ›" else "" }
+                // 左欄大分類、右欄子分類（子分類關閉時只顯示大分類格狀清單）
+                val subOn = repo.settings.flow.collectAsStateWithLifecycle().value.subcategoryOn
+                val roots = lk.categories.filter { it.kind == type && !it.archived && it.parentId == null }.sortedBy { it.sortOrder }
+                if (!subOn) {
+                    LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(280.dp)) {
+                        items(roots, key = { it.id }) { c ->
+                            val sel = c.id == lk.rootId(selectedCategory)
+                            Box(
+                                Modifier.height(56.dp).background(if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+                                    .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { onCategory(c.id) }.padding(horizontal = 4.dp),
+                                contentAlignment = Alignment.Center,
+                            ) { Text(c.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        }
+                    }
                 } else {
-                    listOf<Pair<Long?, String>>(null to "‹ 返回", parent.id to "全部${parent.name}") + lk.children(parent.id).map { it.id to it.name }
-                }
-                LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(280.dp)) {
-                    items(cells, key = { "${openParent}_${it.first}" }) { (id, label) ->
-                        val sel = id != null && (id == selectedCategory || (parent == null && id == lk.rootId(selectedCategory)))
-                        Box(
-                            Modifier.height(56.dp).background(if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
-                                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable {
-                                    when {
-                                        id == null -> openParent = null
-                                        parent == null && lk.children(id).isNotEmpty() -> openParent = id
-                                        else -> onCategory(id)
-                                    }
-                                }.padding(horizontal = 4.dp),
-                            contentAlignment = Alignment.Center,
-                        ) { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (id == null) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified) }
+                    var openParent by remember(type) { mutableStateOf(lk.rootId(selectedCategory)?.takeIf { lk.children(it).isNotEmpty() }) }
+                    val subs = openParent?.let { lk.children(it) }.orEmpty()
+                    Row(Modifier.fillMaxWidth().height(300.dp)) {
+                        LazyColumn(Modifier.weight(1f).fillMaxHeight()) {
+                            items(roots, key = { it.id }) { c ->
+                                val hasSub = lk.children(c.id).isNotEmpty()
+                                val sel = c.id == openParent || (c.id == selectedCategory)
+                                Row(
+                                    Modifier.fillMaxWidth().height(50.dp)
+                                        .background(if (sel) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
+                                        .clickable { if (hasSub) openParent = c.id else onCategory(c.id) }
+                                        .padding(horizontal = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(c.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        color = if (c.id == lk.rootId(selectedCategory)) MaterialTheme.colorScheme.primary else Color.Unspecified)
+                                    if (hasSub) Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            }
+                        }
+                        Box(Modifier.width(0.5.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
+                        LazyColumn(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceVariant)) {
+                            items(subs, key = { it.id }) { c ->
+                                Row(
+                                    Modifier.fillMaxWidth().height(50.dp).clickable { onCategory(c.id) }.padding(horizontal = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(c.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        color = if (c.id == selectedCategory) MaterialTheme.colorScheme.primary else Color.Unspecified)
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            }
+                        }
                     }
                 }
             }

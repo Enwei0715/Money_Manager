@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -64,12 +63,16 @@ import com.enwei.moneymanager.ui.screens.AccountDetailScreen
 import com.enwei.moneymanager.ui.screens.AccountEditScreen
 import com.enwei.moneymanager.ui.screens.AccountOrderScreen
 import com.enwei.moneymanager.ui.screens.AccountsTab
+import com.enwei.moneymanager.ui.screens.AccountGroupScreen
+import com.enwei.moneymanager.ui.screens.AccountSettingsScreen
+import com.enwei.moneymanager.ui.screens.CategorySettingsScreen
+import com.enwei.moneymanager.ui.screens.SubcategoryScreen
+import com.enwei.moneymanager.ui.screens.PasscodeScreen
 import com.enwei.moneymanager.ui.screens.BackupScreen
 import com.enwei.moneymanager.ui.screens.BookmarksScreen
 import com.enwei.moneymanager.ui.screens.BudgetScreen
 import com.enwei.moneymanager.ui.screens.CashCounterScreen
 import com.enwei.moneymanager.ui.screens.WalletReaderScreen
-import com.enwei.moneymanager.ui.screens.CategoriesScreen
 import com.enwei.moneymanager.ui.screens.CategoryStatScreen
 import com.enwei.moneymanager.ui.screens.ConfigScreen
 import com.enwei.moneymanager.ui.screens.FxScreen
@@ -89,7 +92,7 @@ import com.enwei.moneymanager.ui.screens.TradeEditScreen
 import com.enwei.moneymanager.ui.screens.TransactionsTab
 import com.enwei.moneymanager.ui.screens.TxnEditScreen
 
-class MainActivity : ComponentActivity() {
+class MainActivity : androidx.fragment.app.FragmentActivity() {
     private val pendingRoute = mutableStateOf<String?>(null)
     private val locked = mutableStateOf(MoneyApp.repo.settings.value.passcodeOn)
     private val stoppedAt = mutableLongStateOf(0L)
@@ -112,7 +115,7 @@ class MainActivity : ComponentActivity() {
             }
             MoneyTheme(dark = dark, uiScale = settings.uiScale) {
                 if (locked.value && settings.passcodeOn) {
-                    LockScreen(settings.passcodeHash) { locked.value = false }
+                    LockScreen(settings.passcodeHash, biometric = settings.biometric) { locked.value = false }
                 } else {
                     val nav = rememberNavController()
                     val route by pendingRoute
@@ -126,17 +129,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** 開檔案選擇器、系統設定等由 App 自己開啟的畫面，回來時不重新上鎖。 */
+    private var launchedExternal = false
+
+    @Deprecated("Deprecated in Java")
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+        launchedExternal = true
+        @Suppress("DEPRECATION")
+        super.startActivityForResult(intent, requestCode, options)
+    }
+
     override fun onStop() {
         super.onStop()
-        stoppedAt.longValue = System.currentTimeMillis()
+        if (!isChangingConfigurations) stoppedAt.longValue = System.currentTimeMillis()
     }
 
     override fun onStart() {
         super.onStart()
-        // 離開超過 30 秒再回來需要重新輸入密碼（開檔案選擇器等短暫跳出不會鎖定）
-        if (stoppedAt.longValue > 0 && System.currentTimeMillis() - stoppedAt.longValue > 30_000 &&
-            MoneyApp.repo.settings.value.passcodeOn
-        ) locked.value = true
+        val s = MoneyApp.repo.settings.value
+        val away = System.currentTimeMillis() - stoppedAt.longValue
+        if (stoppedAt.longValue > 0 && s.passcodeOn && !launchedExternal && away >= s.lockDelaySec * 1000L) locked.value = true
+        launchedExternal = false
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -279,7 +292,16 @@ private fun AppScaffold(nav: NavHostController) {
             composable("pending") { PendingScreen(nav) }
             composable("notif") { NotificationSettingsScreen(nav) }
             composable("fx") { FxScreen(nav) }
-            composable("categories") { CategoriesScreen(nav) }
+            composable(
+                "categories?kind={kind}",
+                arguments = listOf(navArgument("kind") { type = NavType.StringType; defaultValue = "EXPENSE" }),
+            ) { e -> CategorySettingsScreen(nav, TxnType.valueOf(e.arguments!!.getString("kind")!!)) }
+            composable("subcats/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->
+                SubcategoryScreen(nav, e.arguments!!.getLong("id"))
+            }
+            composable("passcode") { PasscodeScreen(nav) }
+            composable("accountgroups") { AccountGroupScreen(nav) }
+            composable("accountsettings") { AccountSettingsScreen(nav) }
             composable("backup") { BackupScreen(nav) }
             composable("settings") { SettingsScreen(nav) }
         }

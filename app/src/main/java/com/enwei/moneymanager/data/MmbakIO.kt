@@ -174,7 +174,7 @@ object MmbakIO {
                 suspend fun findOrCreate(c: MmCat, parentId: Long?): Long =
                     existingCats.firstOrNull { it.name == c.name && it.kind == c.kind && it.parentId == parentId }?.id
                         ?: db.categories().upsert(
-                            CategoryEntity(name = c.name, kind = c.kind, icon = if (parentId == null) "📁" else "•", sortOrder = c.order,
+                            CategoryEntity(name = c.name, kind = c.kind, icon = "", sortOrder = c.order,
                                 archived = c.deleted, parentId = parentId),
                         ).also { catCount++ }
                 cats.filter { it.parent == null }.forEach { catMap[it.uid] = findOrCreate(it, null) }

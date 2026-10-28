@@ -8,13 +8,13 @@ import com.enwei.moneymanager.core.Market
 import com.enwei.moneymanager.core.StockSide
 import kotlinx.serialization.Serializable
 
-enum class AccountType(val label: String, val icon: String) {
-    CASH("現金", "💵"),
-    BANK("銀行帳戶", "🏦"),
-    CREDIT_CARD("信用卡", "💳"),
-    EWALLET("電子支付", "📱"),
-    BROKERAGE("證券交割", "📈"),
-    OTHER("其他", "👛"),
+enum class AccountType(val label: String) {
+    CASH("現金"),
+    BANK("銀行帳戶"),
+    CREDIT_CARD("信用卡"),
+    EWALLET("電子支付"),
+    BROKERAGE("證券交割"),
+    OTHER("其他"),
 }
 
 enum class TxnType(val label: String) { EXPENSE("支出"), INCOME("收入"), TRANSFER("轉帳") }
