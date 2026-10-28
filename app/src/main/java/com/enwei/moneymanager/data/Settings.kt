@@ -31,6 +31,10 @@ data class Bookmark(
 @Serializable
 data class Memo(val id: Long, val date: Long, val text: String)
 
+/** 使用者教過的通知格式：某 App、標題相同的通知一律視為指定收支，記到指定帳戶。 */
+@Serializable
+data class LearnedSource(val pkg: String, val title: String, val income: Boolean, val accountId: Long?)
+
 data class AppSettings(
     val baseCurrency: String = "TWD",
     val subCurrency: String = "USD",
@@ -98,6 +102,7 @@ data class AppSettings(
     val accountGroupOrder: List<String> = emptyList(),
     /** 帳戶群組自訂名稱 */
     val accountGroupNames: Map<String, String> = emptyMap(),
+    val learnedSources: List<LearnedSource> = emptyList(),
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee, oddLotMinFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -113,6 +118,7 @@ class SettingsStore(context: Context) {
     private val memoSerializer = ListSerializer(Memo.serializer())
     private val budgetSerializer = MapSerializer(Long.serializer(), Long.serializer())
     private val pkgMapSerializer = MapSerializer(String.serializer(), Long.serializer())
+    private val learnedSerializer = ListSerializer(LearnedSource.serializer())
     private val strMapSerializer = MapSerializer(String.serializer(), String.serializer())
     private val cashSerializer = MapSerializer(Long.serializer(), MapSerializer(Int.serializer(), Int.serializer()))
     private val state = MutableStateFlow(read())
@@ -162,6 +168,7 @@ class SettingsStore(context: Context) {
         widgetTheme = prefs.getInt("widgetTheme", 0),
         widgetOpacity = prefs.getInt("widgetOpacity", 100),
         accountGroupOrder = prefs.getString("accountGroupOrder", "")!!.split(',').filter { it.isNotBlank() },
+        learnedSources = runCatching { json.decodeFromString(learnedSerializer, prefs.getString("learnedSources", "[]")!!) }.getOrDefault(emptyList()),
         accountGroupNames = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("accountGroupNames", "{}")!!) }.getOrDefault(emptyMap()),
     )
 
@@ -212,6 +219,7 @@ class SettingsStore(context: Context) {
             .putInt("widgetOpacity", s.widgetOpacity)
             .putString("accountGroupOrder", s.accountGroupOrder.joinToString(","))
             .putString("accountGroupNames", json.encodeToString(strMapSerializer, s.accountGroupNames))
+            .putString("learnedSources", json.encodeToString(learnedSerializer, s.learnedSources))
             .apply()
         state.value = s
     }
@@ -225,3 +233,10 @@ fun AppSettings.groupOrder(): List<AccountType> {
     val custom = accountGroupOrder.mapNotNull { n -> AccountType.entries.find { it.name == n } }
     return custom + AccountType.entries.filter { it !in custom }
 }
+
+/** 這則通知符合哪個教過的格式（同一 App、標題相同；沒有標題時比對內文開頭）。 */
+fun AppSettings.learnedFor(pkg: String, title: String?, text: String?): LearnedSource? =
+    learnedSources.lastOrNull { it.pkg == pkg && it.title == learnKey(title, text) }
+
+fun learnKey(title: String?, text: String?): String =
+    title?.trim()?.takeIf { it.isNotEmpty() } ?: text.orEmpty().trim().take(8)

@@ -41,6 +41,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -194,6 +195,21 @@ fun NotificationSettingsScreen(nav: NavController) {
     var testText by remember { mutableStateOf("") }
     val labelOf = remember(apps) { apps.associate { it.pkg to it.label } }
     val candidates = log.filter { it.result == "CANDIDATE" && it.packageName !in settings.notifPackages }.map { it.packageName }.distinct()
+    val testScope = rememberCoroutineScope()
+    var notes by remember { mutableStateOf<List<TxnNotificationListener.ActiveNote>?>(null) }
+    var previews by remember { mutableStateOf<List<Pair<Boolean, String>>>(emptyList()) }
+    var testMsg by remember { mutableStateOf<String?>(null) }
+    var teach by remember { mutableStateOf<TxnNotificationListener.ActiveNote?>(null) }
+    fun loadNotes() = testScope.launch {
+        val n = TxnNotificationListener.activeNotes()
+        testMsg = if (n == null) "還讀不到通知列：請確認已開啟通知存取權（開啟後可能要稍等幾秒）" else if (n.isEmpty()) "通知列目前沒有通知" else null
+        val list = n.orEmpty()
+        val pv = list.map { repo.previewNotification(it.pkg, it.title, it.text) }
+        // 看得出是交易的排前面
+        val order = list.indices.sortedBy { i -> if (pv[i].second.startsWith("看不出") || pv[i].second.startsWith("LINE 聊天")) 1 else 0 }
+        notes = order.map { list[it] }
+        previews = order.map { pv[it] }
+    }
 
     fun toggle(pkg: String, on: Boolean) = repo.settings.update {
         it.copy(notifPackages = if (on) it.notifPackages + pkg else it.notifPackages - pkg)
@@ -259,6 +275,58 @@ fun NotificationSettingsScreen(nav: NavController) {
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
+                }
+            }
+            item { SectionTitle("用通知列上的真實通知測試（不會記帳）") }
+            item {
+                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "不用刷卡也能確認：讀取通知列上現有的通知，顯示每一則「會被怎麼記」。漏記的可以按「記下這筆」補記；" +
+                            "看不懂的格式可以按「教它辨識」，之後同樣標題的通知就會照你教的記帳。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Button(onClick = { loadNotes() }) { Text(if (notes == null) "讀取目前通知" else "重新讀取") }
+                    testMsg?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+            notes?.let { list ->
+                items(list.size, key = { "note$it" }) { i ->
+                    val nn = list[i]
+                    val (ok, desc) = previews.getOrNull(i) ?: (false to "")
+                    val parsedOk = !desc.startsWith("看不出") && !desc.startsWith("LINE 聊天")
+                    Card(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (ok) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${labelOf[nn.pkg] ?: nn.pkg} · ${timeFmt.format(Date(nn.postedAt))}", style = MaterialTheme.typography.labelSmall)
+                            Text(listOfNotNull(nn.title, nn.text).joinToString("\n"), maxLines = 4, style = MaterialTheme.typography.bodySmall)
+                            com.enwei.moneymanager.ui.components.StatusLine(ok, if (ok) "會自動記帳" else if (parsedOk) "辨識得出，但不會自動記帳" else "不會記帳")
+                            Text(desc, style = MaterialTheme.typography.bodySmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (parsedOk) OutlinedButton(onClick = {
+                                    testScope.launch {
+                                        val r = repo.ingestNotification(nn.pkg, nn.title, nn.text, nn.postedAt, force = true)
+                                        testMsg = r?.let { "已記下：${it.message}" } ?: "沒有記下（可能已經記過了）"
+                                    }
+                                }) { Text("記下這筆") }
+                                if (!desc.startsWith("LINE 聊天")) TextButton(onClick = { teach = nn }) { Text("教它辨識") }
+                            }
+                        }
+                    }
+                }
+            }
+            if (settings.learnedSources.isNotEmpty()) {
+                item { SectionTitle("教過的通知格式（點擊刪除）") }
+                items(settings.learnedSources.size, key = { "learn$it" }) { i ->
+                    val l = settings.learnedSources[i]
+                    ListItem(
+                        headlineContent = { Text("${labelOf[l.pkg] ?: l.pkg}：「${l.title}」") },
+                        supportingContent = { Text("${if (l.income) "收入" else "支出"} → ${l.accountId?.let { lk.account(it)?.name } ?: "依卡號／預設帳戶"}") },
+                        modifier = Modifier.clickable { repo.settings.update { it.copy(learnedSources = it.learnedSources - l) } },
+                    )
                 }
             }
             item { SectionTitle("測試辨識") }
@@ -332,11 +400,51 @@ fun NotificationSettingsScreen(nav: NavController) {
                 ListItem(
                     overlineContent = { Text("${labelOf[e.packageName] ?: e.packageName} · ${timeFmt.format(Date(e.postedAt))} · $label") },
                     headlineContent = { Text(listOfNotNull(e.title, e.text).joinToString(" "), maxLines = 3, style = MaterialTheme.typography.bodySmall) },
-                    modifier = Modifier.clickable(enabled = e.txnId != null && e.result == "RECORDED") { nav.navigate("txn/${e.txnId}") },
+                    modifier = Modifier.clickable(enabled = (e.txnId != null && e.result == "RECORDED") || e.result == "UNPARSED" || e.result == "CANDIDATE") {
+                        if (e.result == "RECORDED") nav.navigate("txn/${e.txnId}")
+                        else teach = TxnNotificationListener.ActiveNote(e.packageName, e.title, e.text, e.postedAt)
+                    },
                 )
             }
             item { Spacer(Modifier.height(32.dp)) }
         }
+    }
+    teach?.let { nn ->
+        var income by remember(nn) { mutableStateOf(false) }
+        var accId by remember(nn) { mutableStateOf(settings.notifAccountMap[nn.pkg]) }
+        val amount = NotificationParser.findAmount(listOfNotNull(nn.title, nn.text).joinToString(" "))
+        AlertDialog(
+            onDismissRequest = { teach = null },
+            title = { Text("教它辨識") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("之後「${labelOf[nn.pkg] ?: nn.pkg}」標題為「${com.enwei.moneymanager.data.learnKey(nn.title, nn.text)}」的通知，會照下面的設定記帳。",
+                        style = MaterialTheme.typography.bodySmall)
+                    if (amount == null) Text("這則通知裡找不到金額，無法自動記帳。", color = MaterialTheme.colorScheme.error)
+                    else Text("找到的金額：${Money.format(amount.first, amount.second)} ${amount.second}")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(!income, { income = false }, label = { Text("支出") })
+                        FilterChip(income, { income = true }, label = { Text("收入") })
+                    }
+                    DropdownField(
+                        "記到帳戶", lk.accounts.filter { !it.archived }, lk.account(accId), { it.name }, { accId = it.id },
+                        noneLabel = "依卡號／預設帳戶", onNone = { accId = null },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = amount != null, onClick = {
+                    val key = com.enwei.moneymanager.data.learnKey(nn.title, nn.text)
+                    repo.settings.update { st ->
+                        st.copy(learnedSources = st.learnedSources.filterNot { it.pkg == nn.pkg && it.title == key } +
+                            com.enwei.moneymanager.data.LearnedSource(nn.pkg, key, income, accId))
+                    }
+                    teach = null
+                    if (notes != null) loadNotes()
+                }) { Text("儲存") }
+            },
+            dismissButton = { TextButton(onClick = { teach = null }) { Text("取消") } },
+        )
     }
 }
 

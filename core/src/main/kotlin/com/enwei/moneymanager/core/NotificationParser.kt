@@ -148,6 +148,23 @@ object NotificationParser {
         )
     }
 
+    /**
+     * 使用者「教過」的通知來源：不靠關鍵字，只要找得到金額就依指定的收支類型建立交易。
+     */
+    fun parseLearned(title: String?, text: String?, type: ParsedType, now: LocalDateTime = LocalDateTime.now()): ParsedTransaction? {
+        val full = listOfNotNull(title, text).joinToString(" ").replace('\n', ' ')
+        if (full.isBlank() || shouldIgnore(full)) return null
+        val (amount, currency) = findAmount(full) ?: return null
+        if (amount <= 0) return null
+        return ParsedTransaction(
+            type = type, amountMinor = amount, currency = currency,
+            merchant = englishMerchant.find(listOfNotNull(title, text).joinToString("\n"))?.groupValues?.get(1)?.trim()?.trimEnd('.')
+                ?: findMerchant(full),
+            cardLast4 = cardLast4Regex.find(full)?.groupValues?.get(1)?.takeLast(4),
+            kind = ParsedKind.NORMAL, occurredAt = findDateTime(full, now),
+        )
+    }
+
     private val fullDateTime = Regex("(\\d{4})[/-](\\d{1,2})[/-](\\d{1,2})\\s*(\\d{1,2}):(\\d{2})(?::(\\d{2}))?")
     private val rocCompact = Regex("(?<!\\d)(1\\d{2})(\\d{2})(\\d{2})[_\\s](\\d{1,2}):(\\d{2})")
     private val shortDateTime = Regex("(?<![\\d/])(\\d{1,2})/(\\d{1,2})\\s*(\\d{1,2}):(\\d{2})")
@@ -171,7 +188,7 @@ object NotificationParser {
         null
     }.getOrNull()
 
-    internal fun findAmount(text: String): Pair<Long, String>? {
+    fun findAmount(text: String): Pair<Long, String>? {
         data class Candidate(val index: Int, val minor: Long, val currency: String)
 
         val candidates = mutableListOf<Candidate>()

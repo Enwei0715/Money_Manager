@@ -280,21 +280,70 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     // ---------- 通知自動記帳 ----------
 
-    suspend fun ingestNotification(pkg: String, title: String?, text: String?, postedAt: Long): IngestResult? {
+    /** [force]：使用者在「測試辨識」手動按「記下這筆」，略過來源是否啟用的檢查。 */
+    /**
+     * 試算一則通知會被怎麼處理（不寫入任何資料），用來在不實際消費的情況下確認辨識是否正確。
+     * 回傳 (是否會記帳, 說明)。
+     */
+    suspend fun previewNotification(pkg: String, title: String?, text: String?): Pair<Boolean, String> {
+        val s = settings.value
+        if (pkg == LINE_PACKAGE && !isLineWallet(title, text)) return false to "LINE 聊天訊息，不處理"
+        val learned = s.learnedFor(pkg, title, text)
+        val enabled = pkg == LINE_PACKAGE || learned != null || pkg in s.notifPackages
+        NotificationParser.parseStockFill(title, text)?.let { f ->
+            val msg = "股票成交：${if (f.side == StockSide.SELL) "賣出" else "買進"} ${f.symbol} ${f.shares.toLong()} 股 @ ${f.price}"
+            return enabled to (msg + if (enabled) "" else "\n這個 App 尚未勾選監聽，勾選後才會自動建立")
+        }
+        val p = learned?.let { NotificationParser.parseLearned(title, text, if (it.income) ParsedType.INCOME else ParsedType.EXPENSE) }
+            ?: NotificationParser.parse(title, text)
+            ?: return false to "看不出是交易（找不到金額，或沒有「消費／付款／入帳」等字樣）。若這是交易通知，按「教它辨識」。"
+        val accounts = db.accounts().all().filter { !it.archived }
+        val account = learned?.accountId?.let { id -> accounts.firstOrNull { it.id == id } }
+            ?: p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
+            ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
+            ?: (if (pkg == LINE_PACKAGE) accounts.firstOrNull { it.type != AccountType.CREDIT_CARD && it.name.contains("line", ignoreCase = true) } else null)
+            ?: accounts.firstOrNull { it.id == s.defaultAccountId }
+        val what = when (p.kind) {
+            ParsedKind.WITHDRAWAL -> "提款 → 記成轉帳到現金"
+            ParsedKind.TOPUP_OUT -> "電支儲值扣款 → 記成轉帳到錢包"
+            ParsedKind.TOPUP_IN -> "錢包儲值入帳"
+            ParsedKind.TRANSFER_OUT -> "轉出（有對應轉入時合併為轉帳）"
+            ParsedKind.TRANSFER_IN -> "轉入（有對應轉出時合併為轉帳）"
+            ParsedKind.CARD_PAYMENT -> "信用卡款扣繳"
+            else -> if (p.type == ParsedType.INCOME) "收入" else "支出"
+        }
+        val type = if (p.type == ParsedType.INCOME) TxnType.INCOME else TxnType.EXPENSE
+        val cat = if (p.kind == ParsedKind.NORMAL) guessCategory(p.merchant, type)?.let { id -> db.categories().all().find { it.id == id }?.name } else null
+        val lines = listOfNotNull(
+            "$what ${Money.format(p.amountMinor, p.currency)} ${p.currency}",
+            "帳戶：${account?.name ?: "（未指定，請設定預設帳戶）"}" + (p.cardLast4?.let { "（卡號末四碼 $it）" } ?: ""),
+            p.merchant?.let { "商家：$it" },
+            cat?.let { "分類：$it" },
+            p.occurredAt?.let { "交易時間：${it.toLocalDate()} ${"%02d:%02d".format(it.hour, it.minute)}" },
+            learned?.let { "（依你教過的格式辨識）" },
+            if (!enabled) "這個 App 尚未勾選監聽，勾選後才會自動記帳" else null,
+        )
+        return (enabled && account != null) to lines.joinToString("\n")
+    }
+
+    suspend fun ingestNotification(pkg: String, title: String?, text: String?, postedAt: Long, force: Boolean = false): IngestResult? {
         // LINE：只處理「LINE錢包」付款通知（LINE Bank Money／LINE Pay），聊天訊息一律略過；不需另外勾選 LINE
         val isLine = pkg == LINE_PACKAGE
         if (isLine && !isLineWallet(title, text)) return null
         val s = settings.value
         val log = db.notificationLog()
         // 同一則通知可能因更新而重複送達
-        if (log.countSame(pkg, title, text, postedAt - 10 * 60_000) > 0) return null
+        if (!force && log.countSame(pkg, title, text, postedAt - 10 * 60_000) > 0) return null
         log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
-        val enabled = isLine || pkg in s.notifPackages
+        val learned = s.learnedFor(pkg, title, text)
+        val enabled = force || isLine || learned != null || pkg in s.notifPackages
         fun logAs(result: String, txnId: Long? = null) =
             NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = result, txnId = txnId)
 
         val fill = NotificationParser.parseStockFill(title, text)
-        val parsed = if (fill == null) NotificationParser.parse(title, text) else null
+        val parsed = if (fill != null) null else learned?.let {
+            NotificationParser.parseLearned(title, text, if (it.income) ParsedType.INCOME else ParsedType.EXPENSE)
+        } ?: NotificationParser.parse(title, text)
         if (fill == null && parsed == null) {
             if (enabled) log.insert(logAs("UNPARSED"))
             return null
@@ -341,7 +390,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             log.insert(logAs("DUPLICATE")); return null
         }
         val accounts = db.accounts().all().filter { !it.archived }
-        val account = p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
+        val account = learned?.accountId?.let { id -> accounts.firstOrNull { it.id == id } }
+            ?: p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
             ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
             ?: (if (isLine) accounts.firstOrNull { it.type != AccountType.CREDIT_CARD && it.name.contains("line", ignoreCase = true) } else null)
             ?: accounts.firstOrNull { it.id == s.defaultAccountId }
