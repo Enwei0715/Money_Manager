@@ -411,7 +411,10 @@ fun TradeEditScreen(
     var fee by remember { mutableStateOf("") }
     var tax by remember { mutableStateOf("") }
     var cash by remember { mutableStateOf("") }
+    /** 使用者手動改過手續費／交易稅；之後改了數量、價格、代號等會重新估算 */
     var feeEdited by remember { mutableStateOf(false) }
+    /** 編輯既有交易時載入的輸入；輸入沒變就保留原本的手續費（可能是券商帳單的實際金額） */
+    var loadedInputs by remember { mutableStateOf<List<Any?>?>(null) }
     var date by remember { mutableStateOf(LocalDate.now()) }
     var brokerId by remember { mutableStateOf<Long?>(initBroker) }
     var cashAccountId by remember { mutableStateOf<Long?>(null) }
@@ -438,7 +441,8 @@ fun TradeEditScreen(
         price = formatPlain(t.price); fee = formatPlain(t.fee); tax = formatPlain(t.tax)
         cash = formatPlain(t.cashAmount); date = LocalDate.ofEpochDay(t.date); note = t.note.orEmpty()
         brokerId = t.brokerAccountId; cashAccountId = t.cashAccountId; lotId = t.lotTradeId
-        feeEdited = true; cashEdited = true
+        feeEdited = false; cashEdited = true
+        loadedInputs = listOf(t.market, t.symbol, t.side, t.shares, formatPlain(t.price), "", t.brokerAccountId)
     }
     // 交割帳戶預設為證券戶連結的銀行
     LaunchedEffect(brokerId) { if (!cashEdited) cashAccountId = broker?.linkedAccountId ?: broker?.id }
@@ -461,6 +465,7 @@ fun TradeEditScreen(
     val fillParts = fills.split('+', '＋', ',', ' ').mapNotNull { it.trim().toDoubleOrNull() }.filter { it > 0 }
     LaunchedEffect(market, symbol, side, shares, price, feeSettings, fills) {
         if (feeEdited) return@LaunchedEffect
+        if (original != null && loadedInputs == listOf(market, symbol, side, shares, price, fills, brokerId)) return@LaunchedEffect
         val p = price.replace(",", "").toDoubleOrNull() ?: return@LaunchedEffect
         if (shares > 0 && (side == StockSide.BUY || side == StockSide.SELL)) {
             val parts = fillParts.takeIf { it.size > 1 && kotlin.math.abs(it.sum() - shares) < 1e-6 } ?: listOf(shares)
@@ -487,7 +492,7 @@ fun TradeEditScreen(
                         Modifier.weight(1f).height(38.dp)
                             .background(if (sel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
                             .border(if (sel) 1.5.dp else 1.dp, if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
-                            .clickable { side = sd },
+                            .clickable { if (side != sd) { side = sd; feeEdited = false } },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -499,12 +504,16 @@ fun TradeEditScreen(
                 }
             }
             DropdownLine("證券帳戶", broker?.name ?: if (brokers.isEmpty()) "尚未建立（帳戶 → 新增 → 群組選證券）" else "未指定",
-                listOf<Pair<Long?, String>>(null to "未指定") + brokers.map { it.id to it.name }) { brokerId = it }
+                listOf<Pair<Long?, String>>(null to "未指定") + brokers.map { it.id to it.name }) { brokerId = it; feeEdited = false }
             DropdownLine("市場", if (market == Market.TW) "台股" else "美股", listOf(Market.TW to "台股", Market.US to "美股")) {
-                market = it; if (it == Market.US) byLot = false
+                market = it; if (it == Market.US) byLot = false; feeEdited = false
             }
             FormLine("代號") {
-                FormInput(symbol, { symbol = it.uppercase().trim() }, if (market == Market.TW) "" else "")
+                FormInput(symbol, {
+                    val v = it.uppercase().trim()
+                    // 換了代號：名稱重新查詢、手續費重新估算
+                    if (v != symbol) { symbol = v; name = ""; feeEdited = false }
+                }, "")
             }
             lookup?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp)) }
             FormLine("名稱") { FormInput(name, { name = it }, "自動帶出，可修改") }
@@ -525,15 +534,15 @@ fun TradeEditScreen(
                         listOf(true to "張", false to "股").forEach { (lot, label) ->
                             Box(
                                 Modifier.padding(start = 4.dp).border(1.dp, if (byLot == lot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
-                                    .clickable { byLot = lot }.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    .clickable { if (byLot != lot) { byLot = lot; feeEdited = false } }.padding(horizontal = 12.dp, vertical = 6.dp),
                             ) { Text(label, color = if (byLot == lot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                     }
-                }) { FormInput(qty, { qty = it }, if (market == Market.TW && byLot) "1 張 = 1000 股" else "股數（零股、美股可含小數）", number = true) }
+                }) { FormInput(qty, { qty = it; feeEdited = false }, if (market == Market.TW && byLot) "1 張 = 1000 股" else "股數（零股、美股可含小數）", number = true) }
                 if (market == Market.TW && byLot && shares > 0) Text("= ${formatNum(shares, 0)} 股", fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp))
                 if (side != StockSide.STOCK_DIVIDEND) {
-                    FormLine("成交價") { FormInput(price, { price = it }, "", number = true) }
+                    FormLine("成交價") { FormInput(price, { price = it; feeEdited = false }, "", number = true) }
                     if (market == Market.TW) {
                         FormLine("分次成交") { FormInput(fills, { fills = it; feeEdited = false }, "選填，每次成交股數用 + 分隔") }
                         if (fillParts.size > 1 && kotlin.math.abs(fillParts.sum() - shares) >= 1e-6) Text(
@@ -581,8 +590,8 @@ fun TradeEditScreen(
                     // 用 App 層級的 scope，離開畫面後仍會完成儲存與報價更新
                     MoneyApp.instance.appScope.launch {
                         repo.saveTrade(t)
+                        runCatching { SyncWorker.refreshDividends(repo, setOfNotNull(t.symbol.uppercase(), original?.symbol?.uppercase())) }
                         runCatching { SyncWorker.refreshQuotes(repo) }
-                        runCatching { SyncWorker.refreshDividends(repo) }
                     }
                     nav.popBackStack()
                 },

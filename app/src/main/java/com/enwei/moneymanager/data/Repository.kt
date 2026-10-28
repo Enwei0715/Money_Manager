@@ -866,8 +866,40 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     // ---------- 股票 ----------
 
     suspend fun saveTrade(t: StockTradeEntity): Long {
+        val old = if (t.id == 0L) null else db.stocks().getTrade(t.id)
         val r = db.stocks().upsertTrade(t)
+        // 名稱改了：同一檔的其他紀錄（含自動股利）一起更新
+        if (!t.name.isNullOrBlank()) db.stocks().allTrades()
+            .filter { it.id != t.id && it.market == t.market && it.symbol.equals(t.symbol, true) && it.name != t.name }
+            .forEach { db.stocks().upsertTrade(it.copy(name = t.name)) }
+        // 買進的日期、股數或代號變了：立即用已下載的除權息資料重算這檔（與原本那檔）的自動股利
+        pruneAutoDividends()
+        listOfNotNull(t.market to t.symbol.uppercase(), old?.let { it.market to it.symbol.uppercase() }).distinct().forEach { (m, sym) ->
+            dividendCache[m to sym]?.let { applyDividends(m, sym, it) }
+        }
         return if (t.id == 0L) r else t.id
+    }
+
+    /** 最近下載的除權息資料（代號 → 事件），儲存交易時可離線立即重算。 */
+    val dividendCache = java.util.concurrent.ConcurrentHashMap<Pair<Market, String>, List<com.enwei.moneymanager.core.DividendEvent>>()
+
+    /** 移除已不成立的自動股利：對應的買進被刪除、改了代號，或買進日改到除權息日當天或之後。 */
+    suspend fun pruneAutoDividends(): Int {
+        var n = 0
+        // 配股本身也是一批持股，刪掉後依附它的股利也要跟著刪，所以重複到沒有變動為止
+        while (true) {
+            val all = db.stocks().allTrades()
+            val byId = all.associateBy { it.id }
+            val stale = all.filter { d ->
+                d.externalKey?.let { k -> k.startsWith("DIV:") || k.startsWith("SDIV:") } == true && run {
+                    val lot = d.lotTradeId?.let { byId[it] }
+                    lot == null || lot.market != d.market || !lot.symbol.equals(d.symbol, true) || lot.date >= d.date
+                }
+            }
+            if (stale.isEmpty()) return n
+            stale.forEach { db.stocks().deleteTrade(it.id) }
+            n += stale.size
+        }
     }
 
     suspend fun getTrade(id: Long) = db.stocks().getTrade(id)
@@ -883,6 +915,11 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             if (mark != null) settings.update { it.copy(dismissedDividends = it.dismissedDividends + mark) }
         }
         db.stocks().deleteTrade(id)
+        // 刪掉買進／賣出會改變之後的持股：移除失效的自動股利並重算這檔
+        if (t != null && t.source != TxnSource.DIVIDEND) {
+            pruneAutoDividends()
+            dividendCache[t.market to t.symbol.uppercase()]?.let { applyDividends(t.market, t.symbol.uppercase(), it) }
+        }
     }
 
     /**
@@ -939,8 +976,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                                 ),
                             )
                             changed++
-                        } else if (old.cashAmount != cashAmt || old.shares != shares || old.cashAccountId != lot.cashAccountId || old.brokerAccountId != lot.brokerAccountId) {
-                            db.stocks().upsertTrade(old.copy(cashAmount = cashAmt, shares = shares, cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId, note = note))
+                        } else if (old.cashAmount != cashAmt || old.shares != shares || old.cashAccountId != lot.cashAccountId ||
+                            old.brokerAccountId != lot.brokerAccountId || old.note != note || old.name != lot.name
+                        ) {
+                            db.stocks().upsertTrade(old.copy(cashAmount = cashAmt, shares = shares, cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId, note = note, name = lot.name))
                             changed++
                         }
                     }

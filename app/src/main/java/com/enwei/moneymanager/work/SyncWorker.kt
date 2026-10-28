@@ -63,18 +63,18 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         }
 
         /** 自動除息：抓持有過的台股除息資料並分配到各批庫存。 */
-        suspend fun refreshDividends(repo: Repository) {
+        /** 下載除權息資料並重算自動股利；[only] 指定時只處理這些代號（儲存交易後用）。 */
+        suspend fun refreshDividends(repo: Repository, only: Set<String>? = null) {
+            repo.pruneAutoDividends()
             repo.allTrades().filter { it.market == com.enwei.moneymanager.core.Market.TW && it.side == com.enwei.moneymanager.core.StockSide.BUY }
-                .map { it.symbol.uppercase() }.distinct().forEach { sym ->
+                .map { it.symbol.uppercase() }.distinct().filter { only == null || it in only }.forEach { sym ->
                     val events = runCatching { com.enwei.moneymanager.net.QuoteService.fetchDividends(com.enwei.moneymanager.core.Market.TW, sym) }.getOrNull()
                         ?: return@forEach
+                    repo.dividendCache[com.enwei.moneymanager.core.Market.TW to sym] = events
                     if (events.isNotEmpty()) runCatching { repo.applyDividends(com.enwei.moneymanager.core.Market.TW, sym, events) }
                 }
         }
 
-        /**
-         * 國定假日：內建 2025～2027 年，之後的年份從政府辦公日曆的公開資料（TaiwanCalendar 專案）下載並保存。
-         */
         /**
          * 每次同步重新下載今年與明年的政府辦公日曆（政府若調整放假會跟著更新），
          * 並檢查人事行政總處的颱風停班公告。
