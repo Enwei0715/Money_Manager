@@ -472,11 +472,27 @@ private fun CalendarView(
                     ) {
                         val label = if (date.dayOfMonth == 1) "${date.monthValue}.1" else "${date.dayOfMonth}"
                         val isToday = date == today
-                        Text(
-                            label, fontSize = 13.sp,
-                            color = if (isToday) Color.White else weekdayColor(date.dayOfWeek, MaterialTheme.colorScheme.onSurface).copy(alpha = alpha),
-                            modifier = Modifier.fillMaxWidth().background(if (isToday) NavyHighlight else Color.Transparent).padding(horizontal = 4.dp, vertical = 2.dp),
-                        )
+                        // 國定假日（含補假）以紅字標示並顯示名稱；週末補班日以一般顏色顯示
+                        val holiday = com.enwei.moneymanager.core.TaiwanHolidays.holidayName(date)
+                        val offDay = !com.enwei.moneymanager.core.TaiwanHolidays.isBusinessDay(date)
+                        Row(
+                            Modifier.fillMaxWidth().background(if (isToday) NavyHighlight else Color.Transparent).padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                label, fontSize = 13.sp,
+                                color = when {
+                                    isToday -> Color.White
+                                    holiday != null -> SundayColor.copy(alpha = alpha)
+                                    !offDay -> MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
+                                    else -> weekdayColor(date.dayOfWeek, MaterialTheme.colorScheme.onSurface).copy(alpha = alpha)
+                                },
+                            )
+                            if (holiday != null) Text(
+                                " $holiday", fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                color = if (isToday) Color.White else SundayColor.copy(alpha = alpha),
+                            )
+                        }
                         Spacer(Modifier.weight(1f))
                         val lines = listOf(
                             (if (t.income > 0) Money.full(t.income) else "") to IncomeColor,

@@ -40,7 +40,8 @@ class CoreLogicTest {
         val c = CardCycle(statementDay = 5, dueDay = 20)
         val due = LocalDate.of(2026, 10, 20)
         assertEquals(due, c.autopayDateFor(due, null))
-        assertEquals(LocalDate.of(2026, 10, 18), c.autopayDateFor(due, 18))
+        // 10/18 是週日 → 銀行於 10/19（週一）扣款
+        assertEquals(LocalDate.of(2026, 10, 19), c.autopayDateFor(due, 18))
         val c2 = CardCycle(statementDay = 15, dueDay = 3)
         assertEquals(LocalDate.of(2026, 10, 28), c2.autopayDateFor(LocalDate.of(2026, 11, 3), 28))
     }
@@ -222,5 +223,31 @@ class DueRuleTest {
         assertEquals(java.time.LocalDate.of(2026, 10, 5), c.dueFor(c.statementIn(java.time.YearMonth.of(2026, 9))))
         assertEquals(c.statementIn(java.time.YearMonth.of(2026, 9)), c.statementDateFor(java.time.LocalDate.of(2026, 10, 5)))
         assertEquals(java.time.LocalDate.of(2026, 10, 5), c.nextDueDate(java.time.LocalDate.of(2026, 9, 20)))
+    }
+}
+
+class HolidayTest {
+    @Test fun calendar() {
+        fun d(y: Int, m: Int, day: Int) = java.time.LocalDate.of(y, m, day)
+        assertEquals(false, TaiwanHolidays.isBusinessDay(d(2026, 2, 17)))   // 春節
+        assertEquals(false, TaiwanHolidays.isBusinessDay(d(2026, 2, 20)))   // 補假
+        assertEquals(true, TaiwanHolidays.isBusinessDay(d(2025, 2, 8)))     // 週六補行上班
+        assertEquals(false, TaiwanHolidays.isBusinessDay(d(2025, 5, 1)))    // 勞動節金融機構休假
+        assertEquals(d(2026, 2, 23), TaiwanHolidays.nextBusinessDay(d(2026, 2, 16)))
+        assertEquals("中秋節", TaiwanHolidays.holidayName(d(2026, 9, 25)))
+        // 沒有資料的年份只排除週末
+        assertEquals(true, TaiwanHolidays.isBusinessDay(d(2030, 1, 1)))
+    }
+
+    @Test fun dueRollsPastHolidays() {
+        // 結帳日 2 日＋15 天 = 2026/2/17（春節）→ 2/23（2/20 補假、2/21–22 週末）
+        val c = CardCycle(2, 1, dueOffsetDays = 15)
+        assertEquals(java.time.LocalDate.of(2026, 2, 23), c.dueFor(c.statementIn(java.time.YearMonth.of(2026, 2))))
+        // 國慶連假：結帳日 24 日＋16 天 = 2026/10/10（週六）→ 10/12（10/9 補假在前，不影響）
+        val c2 = CardCycle(24, 1, dueOffsetDays = 16)
+        assertEquals(java.time.LocalDate.of(2026, 10, 12), c2.dueFor(c2.statementIn(java.time.YearMonth.of(2026, 9))))
+        // 結帳日遇假日順延到下一營業日
+        val c3 = CardCycle(17, 1, StatementShift.NEXT_BUSINESS_DAY, 15)
+        assertEquals(java.time.LocalDate.of(2026, 2, 23), c3.statementIn(java.time.YearMonth.of(2026, 2)))
     }
 }

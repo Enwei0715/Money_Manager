@@ -127,6 +127,8 @@ data class AppSettings(
     val autoBackupDays: Int = 1,
     val lastAutoBackup: Long = 0,
     val lastAutoBackupError: String = "",
+    /** 下載的國定假日（年|月日:名稱;…|補班月日;…，一年一行） */
+    val holidayCache: String = "",
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee, oddLotMinFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -201,6 +203,7 @@ class SettingsStore(context: Context) {
         autoBackupDays = prefs.getInt("autoBackupDays", 1),
         lastAutoBackup = prefs.getLong("lastAutoBackup", 0),
         lastAutoBackupError = prefs.getString("lastAutoBackupError", "")!!,
+        holidayCache = prefs.getString("holidayCache", "")!!,
         cardBank = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardBank", "{}")!!) }.getOrDefault(emptyMap()),
         cardDueOffset = runCatching { json.decodeFromString(longIntSerializer, prefs.getString("cardDueOffset", "{}")!!) }.getOrDefault(emptyMap()),
         cardShift = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardShift", "{}")!!) }.getOrDefault(emptyMap()),
@@ -310,6 +313,7 @@ class SettingsStore(context: Context) {
             .putInt("autoBackupDays", s.autoBackupDays)
             .putLong("lastAutoBackup", s.lastAutoBackup)
             .putString("lastAutoBackupError", s.lastAutoBackupError)
+            .putString("holidayCache", s.holidayCache)
             .putString("cardDueOffset", json.encodeToString(longIntSerializer, s.cardDueOffset))
             .apply()
         state.value = s
@@ -341,4 +345,19 @@ fun AppSettings.cycleFor(card: AccountEntity): com.enwei.moneymanager.core.CardC
     val off = cardDueOffset[card.id]
     val dd = card.dueDay ?: if (off != null) 1 else return null
     return com.enwei.moneymanager.core.CardCycle(sd, dd, shiftFor(card.id), off)
+}
+
+/** 國定假日快取的編碼與解碼（core 的 YearCalendar 不依賴序列化套件）。 */
+object HolidayCache {
+    fun decode(text: String): Map<Int, com.enwei.moneymanager.core.YearCalendar> = text.lines().mapNotNull { line ->
+        val parts = line.split('|')
+        val year = parts.getOrNull(0)?.toIntOrNull() ?: return@mapNotNull null
+        val hol = parts.getOrNull(1).orEmpty().split(';').filter { ':' in it }.associate { it.substringBefore(':') to it.substringAfter(':') }
+        val work = parts.getOrNull(2).orEmpty().split(';').filter { it.length == 4 }.toSet()
+        year to com.enwei.moneymanager.core.YearCalendar(hol, work)
+    }.toMap()
+
+    fun encode(map: Map<Int, com.enwei.moneymanager.core.YearCalendar>): String = map.entries.sortedBy { it.key }.joinToString("\n") { (y, c) ->
+        "$y|" + c.holidays.entries.joinToString(";") { "${it.key}:${it.value.replace(';', ' ').replace('|', ' ')}" } + "|" + c.workdays.joinToString(";")
+    }
 }

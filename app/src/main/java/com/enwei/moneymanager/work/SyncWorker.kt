@@ -72,10 +72,43 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 }
         }
 
+        /**
+         * 國定假日：內建 2025～2027 年，之後的年份從政府辦公日曆的公開資料（TaiwanCalendar 專案）下載並保存。
+         */
+        suspend fun refreshHolidays(repo: Repository) {
+            val now = java.time.LocalDate.now().year
+            val known = com.enwei.moneymanager.core.TaiwanHolidays.knownYears()
+            val got = HashMap<Int, com.enwei.moneymanager.core.YearCalendar>()
+            for (y in now..now + 1) {
+                if (y in known) continue
+                val root = runCatching {
+                    com.enwei.moneymanager.net.Http.getJson("https://raw.githubusercontent.com/ruyut/TaiwanCalendar/master/data/$y.json")
+                }.getOrNull() as? kotlinx.serialization.json.JsonArray ?: continue
+                val hol = HashMap<String, String>(); val work = HashSet<String>()
+                root.forEach { e ->
+                    val o = e as? kotlinx.serialization.json.JsonObject ?: return@forEach
+                    val date = (o["date"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return@forEach
+                    if (date.length != 8) return@forEach
+                    val isHoliday = (o["isHoliday"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true"
+                    val week = (o["week"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                    val weekend = week == "六" || week == "日"
+                    val md = date.substring(4)
+                    if (isHoliday && !weekend) hol[md] = (o["description"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+                    if (!isHoliday && weekend) work += md
+                }
+                if (hol.size >= 5) got[y] = com.enwei.moneymanager.core.YearCalendar(hol, work)
+            }
+            if (got.isEmpty()) return
+            com.enwei.moneymanager.core.TaiwanHolidays.update(got)
+            val all = com.enwei.moneymanager.data.HolidayCache.decode(repo.settings.value.holidayCache) + got
+            repo.settings.update { it.copy(holidayCache = com.enwei.moneymanager.data.HolidayCache.encode(all)) }
+        }
+
         suspend fun refreshMarket(repo: Repository) {
             val fx = runCatching { refreshFx(repo) }
             val q = runCatching { refreshQuotes(repo) }
             runCatching { refreshDividends(repo) }
+            runCatching { refreshHolidays(repo) }
             fx.getOrThrow(); q.getOrThrow()
         }
     }

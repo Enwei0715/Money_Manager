@@ -92,7 +92,8 @@ object Recurrence {
  * NONE：不調整；SAT_SUN_TO_MON：遇週六、日順延到週一；FRI_SAT_TO_SUN：遇週五、六延到週日。
  */
 enum class StatementShift(val label: String) {
-    NONE("不調整"), SAT_SUN_TO_MON("遇週六、日順延至週一"), FRI_SAT_TO_SUN("遇週五、六延至週日");
+    NONE("不調整"), SAT_SUN_TO_MON("遇週六、日順延至週一"), FRI_SAT_TO_SUN("遇週五、六延至週日"),
+    NEXT_BUSINESS_DAY("遇假日（含國定假日）順延至下一營業日");
 
     fun apply(d: LocalDate): LocalDate = when (this) {
         NONE -> d
@@ -102,6 +103,7 @@ enum class StatementShift(val label: String) {
         FRI_SAT_TO_SUN -> when (d.dayOfWeek) {
             java.time.DayOfWeek.FRIDAY -> d.plusDays(2); java.time.DayOfWeek.SATURDAY -> d.plusDays(1); else -> d
         }
+        NEXT_BUSINESS_DAY -> TaiwanHolidays.nextBusinessDay(d)
     }
 }
 
@@ -135,7 +137,7 @@ data class CardCycle(
 
     /**
      * 某次結帳的繳款截止日：名目結帳日（不受假日影響）＋天數，或每月固定繳款日；
-     * 落在週六、日時順延到下週一。自動扣繳日跟隨這一天。
+     * 落在週末或國定假日（含補假、春節）時順延到下一個營業日。自動扣繳日跟隨這一天。
      */
     fun dueFor(statement: LocalDate): LocalDate {
         val raw = dueOffsetDays?.let { nominalFor(statement).plusDays(it.toLong()) } ?: run {
@@ -143,7 +145,7 @@ data class CardCycle(
             val same = Recurrence.dayInMonth(ym, dueDay)
             if (same.isAfter(statement)) same else Recurrence.dayInMonth(ym.plusMonths(1), dueDay)
         }
-        return StatementShift.SAT_SUN_TO_MON.apply(raw)
+        return TaiwanHolidays.nextBusinessDay(raw)
     }
 
     /** 對應某繳款日的結帳日。 */
@@ -174,7 +176,9 @@ data class CardCycle(
     fun autopayDateFor(dueDate: LocalDate, autopayDay: Int?): LocalDate {
         if (autopayDay == null) return dueDate
         val candidate = Recurrence.dayInMonth(YearMonth.from(dueDate), autopayDay)
-        return if (candidate.isAfter(dueDate.plusDays(10))) Recurrence.dayInMonth(YearMonth.from(dueDate).minusMonths(1), autopayDay) else candidate
+        val day = if (candidate.isAfter(dueDate.plusDays(10))) Recurrence.dayInMonth(YearMonth.from(dueDate).minusMonths(1), autopayDay) else candidate
+        // 指定扣繳日遇假日：銀行於下一營業日扣款
+        return TaiwanHolidays.nextBusinessDay(day)
     }
 
     fun nextStatementDate(after: LocalDate): LocalDate {

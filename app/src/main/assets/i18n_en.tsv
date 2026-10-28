@@ -815,3 +815,7 @@ App 名稱也會跟著語言切換（帳理／Ledgerly）。	The app name change
 每 3 天	Every 3 days
 自動除權	Auto stock dividend
 股票手續費與月退	Stock fees & rebates
+\n繳款截止日遇週末或國定假日（含補假、春節）自動順延至下一營業日，自動扣繳同一天。	\nIf the due date falls on a weekend or national holiday (incl. make-up days and Lunar New Year), it moves to the next business day; autopay follows.
+遇假日（含國定假日）順延至下一營業日	Holiday (incl. national) → next business day
+遇週六、日順延至週一	Sat/Sun → Monday
+遇週五、六延至週日	Fri/Sat → Sunday

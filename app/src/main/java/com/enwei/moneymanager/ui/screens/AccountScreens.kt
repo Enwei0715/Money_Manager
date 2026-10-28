@@ -210,6 +210,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                     val apDay = autopayDay.toIntOrNull()?.takeIf { it in 1..31 }
                     Text(
                         "本期：結帳日 ${cycle.statementDateFor(due)} → 繳款日 $due" +
+                            "\n繳款截止日遇週末或國定假日（含補假、春節）自動順延至下一營業日，自動扣繳同一天。" +
                             if (autopayFrom != null) "\n${cycle.autopayDateFor(due, apDay)} 會自動從「${lk.account(autopayFrom)?.name}」轉帳「結帳日欠款 − 已繳金額」到這張卡；銀行若傳來扣繳通知，會以實際金額校正。" else "\n選擇扣繳帳戶後，到期會自動記一筆轉帳。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),

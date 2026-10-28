@@ -24,6 +24,7 @@ class MoneyApp : Application() {
         instance = this
         repo = Repository(AppDatabase.build(this), SettingsStore(this))
         com.enwei.moneymanager.ui.I18n.init(this, repo.settings.value.language)
+        com.enwei.moneymanager.core.TaiwanHolidays.update(com.enwei.moneymanager.data.HolidayCache.decode(repo.settings.value.holidayCache))
         com.enwei.moneymanager.ui.applyAppLocale(this, repo.settings.value.language)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL_RECORDS, "自動記帳", NotificationManager.IMPORTANCE_LOW).apply {
