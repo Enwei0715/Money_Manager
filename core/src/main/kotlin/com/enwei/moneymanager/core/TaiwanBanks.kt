@@ -20,6 +20,8 @@ data class CardBank(
     val note: String? = null,
     /** 結帳日遇週末的調整（已知的銀行才填） */
     val statementShift: StatementShift = StatementShift.NONE,
+    /** 自動扣繳在截止日之後第幾個營業日 */
+    val autopayLagBusinessDays: Int = 0,
 )
 
 object TaiwanBanks {
@@ -48,7 +50,10 @@ object TaiwanBanks {
         CardBank("803", "聯邦銀行", 15),
         CardBank("805", "遠東商銀", 15, verified = false),
         CardBank("806", "元大銀行", 15, verified = false),
-        CardBank("807", "永豐銀行", 18, note = "依實際帳單：10/23 結帳 → 11/10 自動扣款（截止日當天扣款）"),
+        CardBank(
+            "807", "永豐銀行", 15, autopayLagBusinessDays = 1,
+            note = "截止日＝結帳日＋15 天（遇假日順延）；自動扣繳於截止日的下一個營業日（實際帳單：10/23 結帳 → 截止 11/09 → 11/10 扣款）",
+        ),
         CardBank("808", "玉山銀行", 15),
         CardBank("809", "凱基銀行", 17),
         CardBank("810", "星展（台灣）", 18, note = "原花旗卡友同此規則；部分資料為 18～21 天"),

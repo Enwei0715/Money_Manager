@@ -413,7 +413,8 @@ fun AppSettings.cycleFor(card: AccountEntity): com.enwei.moneymanager.core.CardC
     val sd = card.statementDay ?: return null
     val off = cardDueOffset[card.id]
     val dd = card.dueDay ?: if (off != null) 1 else return null
-    return com.enwei.moneymanager.core.CardCycle(sd, dd, shiftFor(card.id), off)
+    val lag = cardBank[card.id]?.let { code -> com.enwei.moneymanager.core.TaiwanBanks.all.firstOrNull { it.code == code } }?.autopayLagBusinessDays ?: 0
+    return com.enwei.moneymanager.core.CardCycle(sd, dd, shiftFor(card.id), off, lag)
 }
 
 /** 國定假日快取的編碼與解碼（core 的 YearCalendar 不依賴序列化套件）。 */

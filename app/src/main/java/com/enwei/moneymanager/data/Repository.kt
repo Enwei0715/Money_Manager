@@ -604,7 +604,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val market = Market.TW
             val (fee, tax) = StockCalc.estimate(market, fill.symbol, fill.side, fill.shares, fill.price, s.feeSettings)
             val brokers = db.accounts().all().filter { it.type == AccountType.BROKERAGE && !it.archived }
-            val broker = s.notifAccountMap[pkg]?.let { id -> brokers.firstOrNull { it.id == id } }
+            // 同一家券商有多個帳號時，依通知裡的帳號前綴（例如「9A9L-0609**2」）對到帳戶說明裡填的帳號
+            val fillText = listOfNotNull(title, text).joinToString(" ")
+            val broker = brokers.firstOrNull { b -> b.description?.substringBefore('-')?.trim()?.takeIf { it.length >= 3 }?.let { fillText.contains(it) } == true }
+                ?: s.notifAccountMap[pkg]?.let { id -> brokers.firstOrNull { it.id == id } }
                 ?: bankSrc?.let { b -> brokers.firstOrNull { BankDirectory.matches(b, it.name) } }
                 ?: brokers.firstOrNull()
             val (bFee, bTax) = if (broker?.feeDiscount != null)

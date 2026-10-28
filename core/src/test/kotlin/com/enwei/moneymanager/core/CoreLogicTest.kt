@@ -437,3 +437,12 @@ class BalanceExtractorTest {
         assertTrue(BalanceExtractor.candidates(listOf("登入成功", "2026/10/29 02:30")).isEmpty())
     }
 }
+
+class SinopacAutopayTest {
+    @Test fun dueRolledThenNextBusinessDay() {
+        val c = CardCycle(23, 1, StatementShift.NONE, 15, autopayLagBusinessDays = 1)
+        val due = c.dueFor(LocalDate.of(2026, 10, 23))
+        assertEquals(LocalDate.of(2026, 11, 9), due)
+        assertEquals(LocalDate.of(2026, 11, 10), c.autopayDateFor(due, null))
+    }
+}

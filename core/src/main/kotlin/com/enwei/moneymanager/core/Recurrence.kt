@@ -113,6 +113,8 @@ data class CardCycle(
     val shift: StatementShift = StatementShift.NONE,
     /** 繳款截止日＝實際結帳日＋幾天（依銀行規則）；null 時用固定的每月繳款日 [dueDay] */
     val dueOffsetDays: Int? = null,
+    /** 自動扣繳在截止日之後第幾個營業日（例如永豐：截止日的下一個營業日扣款） */
+    val autopayLagBusinessDays: Int = 0,
 ) {
     /** 某個月的實際結帳日（已套用週末調整）；statementDay 為 -1 表示月底。 */
     fun statementIn(ym: YearMonth): LocalDate =
@@ -174,7 +176,11 @@ data class CardCycle(
      * 若指定日落在繳款日之後超過 10 天，視為前一個月（例如繳款日 3 號、扣繳日 28 號）。
      */
     fun autopayDateFor(dueDate: LocalDate, autopayDay: Int?): LocalDate {
-        if (autopayDay == null) return dueDate
+        if (autopayDay == null) {
+            var d = dueDate
+            repeat(autopayLagBusinessDays) { d = TaiwanHolidays.nextBusinessDay(d.plusDays(1)) }
+            return d
+        }
         val candidate = Recurrence.dayInMonth(YearMonth.from(dueDate), autopayDay)
         val day = if (candidate.isAfter(dueDate.plusDays(10))) Recurrence.dayInMonth(YearMonth.from(dueDate).minusMonths(1), autopayDay) else candidate
         // 指定扣繳日遇假日：銀行於下一營業日扣款
