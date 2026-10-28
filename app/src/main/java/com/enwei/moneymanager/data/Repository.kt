@@ -1095,7 +1095,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             if (dryRun) { created++; return@forEach }
             var cat = suggestCategory(r.merchant ?: r.typeLabel, type, millis, r.amountMinor, wallet.id)?.categoryId
             // 規則判斷不出分類時請 AI 幫忙（每次讀取最多 5 筆，避免一次用掉太多額度）
-            if (cat == null && r.merchant != null && aiCalls < 5) { aiCalls++; cat = aiNameAndCategory(r.merchant, type, millis)?.second }
+            val rm = r.merchant
+            if (cat == null && rm != null && aiCalls < 5) { aiCalls++; cat = aiNameAndCategory(rm, type, millis)?.second }
             val id = db.txns().insert(
                 TxnEntity(
                     type = type, amount = r.amountMinor, currency = wallet.currency, accountId = wallet.id,
