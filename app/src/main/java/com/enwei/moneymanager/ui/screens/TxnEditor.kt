@@ -317,7 +317,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                     FormRow("分類", color, panel == Panel.CATEGORY, onClick = { focusManager.clearFocus(); panel = Panel.CATEGORY }) {
                         PlaceholderText(lk.catLabel(categoryId), "")
                     }
-                    FormRow("帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
+                    FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
                         PlaceholderText(lk.account(accountId)?.name, "")
                     }
                 }
@@ -370,9 +370,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                         onClick = { save(again = false) }, enabled = canSave, modifier = Modifier.fillMaxWidth().padding(16.dp).height(48.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(6.dp),
                     ) { Text(if (original?.status == TxnStatus.PENDING) "確認入帳" else "儲存") }
+                    val smallPad = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) {
-                            Text("刪除", color = MaterialTheme.colorScheme.onSurface)
+                        OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp), contentPadding = smallPad) {
+                            Text("刪除", color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
                         }
                         OutlinedButton(onClick = {
                             val t = build() ?: return@OutlinedButton
@@ -381,9 +382,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                                 repo.saveTxn(t.copy(id = 0, date = now, externalKey = null, rawText = null, source = TxnSource.MANUAL))
                                 snack.showSnackbar(com.enwei.moneymanager.ui.tr("已複製為今天的新交易"))
                             }
-                        }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) { Text("複製", color = MaterialTheme.colorScheme.onSurface) }
-                        OutlinedButton(onClick = { addBookmark() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) {
-                            Text("書籤", color = MaterialTheme.colorScheme.onSurface)
+                        }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp), contentPadding = smallPad) {
+                            Text("複製", color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
+                        }
+                        OutlinedButton(onClick = { addBookmark() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp), contentPadding = smallPad) {
+                            Text(if (com.enwei.moneymanager.ui.I18n.english) "Bookmark" else "書籤", color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
                         }
                     }
                     Spacer(Modifier.height(16.dp))
@@ -463,7 +466,12 @@ private fun FormRow(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 20.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, Modifier.width(76.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+        // 英文標籤（Category、Account）較長，欄寬加大並保持一行
+        val english = com.enwei.moneymanager.ui.I18n.english
+        // 英文用短標籤，避免和右側內容擠在一起
+        val shown = if (english) when (label) { "轉出" -> "From"; "轉入" -> "To"; "轉入金額" -> "Received"; else -> label } else label
+        Text(shown, Modifier.width(if (english) 96.dp else 76.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge, maxLines = 1, softWrap = false)
         Column(Modifier.weight(1f)) {
             Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { content() }

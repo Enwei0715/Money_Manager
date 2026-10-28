@@ -141,15 +141,16 @@ fun MoreScreen(nav: NavController) {
         ) {
             items(entries.size) { i ->
                 val (route, label, icon) = entries[i]
+                // 圖示固定在同一高度：英文標籤較長換成兩行時，圖示不會被往上推而對不齊
                 Column(
-                    Modifier.height(112.dp).clickable { nav.navigate(route) },
-                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                    Modifier.height(124.dp).clickable { nav.navigate(route) }.padding(top = 24.dp, start = 4.dp, end = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Top,
                 ) {
                     androidx.compose.material3.BadgedBox(badge = {
                         if (route == "pending" && pending.isNotEmpty()) Badge { Text("${pending.size}") }
                     }) { Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(34.dp)) }
                     Spacer(Modifier.height(10.dp))
-                    Text(label, fontSize = 15.sp)
+                    Text(label, fontSize = 15.sp, lineHeight = 18.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
         }
