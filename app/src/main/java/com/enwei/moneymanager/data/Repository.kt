@@ -542,16 +542,23 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     suspend fun previewNotification(pkg: String, title: String?, text: String?, postedAt: Long? = null): Pair<Boolean, String> {
         val s = settings.value
         if (pkg == LINE_PACKAGE && !isLineWallet(title, text)) return false to "LINE 聊天訊息，不處理"
-        if (pkg == GMAIL_PACKAGE) return false to previewEmail(title, text)
+        val fillMail = pkg == GMAIL_PACKAGE && isBrokerFillMail(title, text)
+        if (pkg == GMAIL_PACKAGE && !fillMail) return false to previewEmail(title, text)
         if (isRedacted(text)) return false to "內容被 Android 隱藏：Android 15 起，系統判斷含驗證碼（OTP）的通知會對第三方 App 隱藏內容，" +
             "App 收不到金額。一般的消費通知不含驗證碼，通常不會被隱藏。若一定要讀取，可在電腦用 adb 執行下方指令開放。"
         val learned = s.learnedFor(pkg, title, text)
         val bankSrc = sourceBank(pkg, title)
-        val enabled = pkg == LINE_PACKAGE || learned != null || pkg in s.notifPackages ||
+        val enabled = fillMail || pkg == LINE_PACKAGE || learned != null || pkg in s.notifPackages ||
             (bankSrc != null && db.accounts().all().any { !it.archived && BankDirectory.matches(bankSrc, it.name) })
         NotificationParser.parseStockFill(title, text)?.let { f ->
-            val msg = "股票成交：${if (f.side == StockSide.SELL) "賣出" else "買進"} ${f.symbol} ${f.shares.toLong()} 股 @ ${f.price}"
-            return enabled to (msg + if (enabled) "" else "\n這個 App 尚未勾選監聽，勾選後才會自動建立")
+            val broker = fillBroker(pkg, title, text, bankSrc)
+            val lines = listOfNotNull(
+                "股票成交：${if (f.side == StockSide.SELL) "賣出" else "買進"} ${f.symbol} ${f.name.orEmpty()} ${f.shares.toLong()} 股 @ ${f.price}",
+                f.at?.let { "成交時間：${it.toLocalDate()} ${"%02d:%02d".format(it.hour, it.minute)}" },
+                "會新增到「${broker?.name ?: "（沒有證券帳戶，請先新增）"}」的持股" + (broker?.let { b -> lookupName(b.linkedAccountId).takeIf { it != "?" }?.let { "，交割帳戶：$it" } } ?: ""),
+                if (enabled) null else "這個 App 尚未勾選監聽，勾選後才會自動建立",
+            )
+            return (enabled && broker != null) to lines.joinToString("\n")
         }
         var aiParsed = false
         val p = learned?.parse(title, text)
@@ -728,6 +735,29 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return "${src.key}的轉帳 Email：轉入${dest.key}。若剛剛有${src.key}的轉出紀錄，會改成轉帳到你的${dest.key}帳戶（不另外記帳）"
     }
 
+    /**
+     * 成交通知要記到哪個證券帳戶：通知裡的帳號前綴（例如「9A9L-0609**2」）對到帳戶說明裡填的帳號 →
+     * 這個 App 指定的帳戶 → 同一家券商名稱 → 第一個證券帳戶。
+     */
+    private suspend fun fillBroker(pkg: String, title: String?, text: String?, bankSrc: BankDirectory.Bank?): AccountEntity? {
+        val brokers = db.accounts().all().filter { it.type == AccountType.BROKERAGE && !it.archived }
+        val fillText = listOfNotNull(title, text).joinToString(" ")
+        return brokers.firstOrNull { b -> b.description?.substringBefore('-')?.trim()?.takeIf { it.length >= 3 }?.let { fillText.contains(it) } == true }
+            ?: settings.value.notifAccountMap[pkg]?.let { id -> brokers.firstOrNull { it.id == id } }
+            ?: bankSrc?.let { b -> brokers.firstOrNull { BankDirectory.matches(b, it.name) } }
+            ?: brokers.firstOrNull()
+    }
+
+    /** Email 形式的成交通知：內文的帳號前綴對得到你的證券帳戶才處理（其他 Email 不記帳）。 */
+    private suspend fun isBrokerFillMail(title: String?, text: String?): Boolean {
+        if (NotificationParser.parseStockFill(title, text) == null) return false
+        val all = listOfNotNull(title, text).joinToString(" ")
+        return db.accounts().all().any { b ->
+            b.type == AccountType.BROKERAGE && !b.archived &&
+                b.description?.substringBefore('-')?.trim()?.takeIf { it.length >= 3 }?.let { all.contains(it) } == true
+        }
+    }
+
     suspend fun ingestNotification(pkg: String, title: String?, text: String?, postedAt: Long, force: Boolean = false): IngestResult? {
         // LINE：只處理「LINE錢包」付款通知（LINE Bank Money／LINE Pay），聊天訊息一律略過；不需另外勾選 LINE
         val isLine = pkg == LINE_PACKAGE
@@ -738,12 +768,14 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         if (!force && log.countSame(pkg, title, text, postedAt - 10 * 60_000) > 0) return null
         log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
         // 銀行寄的 Email：只用來補充轉帳的轉入銀行，不另外記帳（其他 Email 一律不處理）
-        if (pkg == GMAIL_PACKAGE) return enrichFromEmail(title, text, postedAt)
+        // 券商寄來的成交 Email 例外：當成成交通知建立持股
+        val fillMail = pkg == GMAIL_PACKAGE && isBrokerFillMail(title, text)
+        if (pkg == GMAIL_PACKAGE && !fillMail) return enrichFromEmail(title, text, postedAt)
         val learned = s.learnedFor(pkg, title, text)
         val bankSrc = sourceBank(pkg, title)
         val allAccounts = db.accounts().all().filter { !it.archived }
         // 來源 App 是你有帳戶的銀行（例如「大戶 DAWHO」對應帳戶「大戶投」）：不用另外勾選
-        val enabled = force || isLine || learned != null || pkg in s.notifPackages ||
+        val enabled = force || fillMail || isLine || learned != null || pkg in s.notifPackages ||
             (bankSrc != null && allAccounts.any { BankDirectory.matches(bankSrc, it.name) })
         fun logAs(result: String, txnId: Long? = null) =
             NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = result, txnId = txnId)
@@ -769,28 +801,25 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         if (fill != null) {
             val market = Market.TW
             val (fee, tax) = StockCalc.estimate(market, fill.symbol, fill.side, fill.shares, fill.price, s.feeSettings)
-            val brokers = db.accounts().all().filter { it.type == AccountType.BROKERAGE && !it.archived }
-            // 同一家券商有多個帳號時，依通知裡的帳號前綴（例如「9A9L-0609**2」）對到帳戶說明裡填的帳號
-            val fillText = listOfNotNull(title, text).joinToString(" ")
-            val broker = brokers.firstOrNull { b -> b.description?.substringBefore('-')?.trim()?.takeIf { it.length >= 3 }?.let { fillText.contains(it) } == true }
-                ?: s.notifAccountMap[pkg]?.let { id -> brokers.firstOrNull { it.id == id } }
-                ?: bankSrc?.let { b -> brokers.firstOrNull { BankDirectory.matches(b, it.name) } }
-                ?: brokers.firstOrNull()
+            val broker = fillBroker(pkg, title, text, bankSrc)
             val (bFee, bTax) = if (broker?.feeDiscount != null)
                 StockCalc.estimate(market, fill.symbol, fill.side, fill.shares, fill.price, s.feeSettings.copy(discount = broker.feeDiscount)) else fee to tax
+            // 有成交時間時以成交時間去重：App 推播和成交 Email 都來時只記一次
+            val stamp = fill.at?.let { "T$it" } ?: "${postedAt / 60_000}"
+            val tradeDay = fill.at?.toLocalDate()?.takeIf { kotlin.math.abs(it.toEpochDay() - postedAt.toLocalDate().toEpochDay()) <= 7 } ?: postedAt.toLocalDate()
             val id = db.stocks().insertTrade(
                 StockTradeEntity(
                     market = market, symbol = fill.symbol, name = fill.name, side = fill.side, shares = fill.shares,
-                    price = fill.price, fee = bFee, tax = bTax, date = postedAt.toLocalDate().toEpochDay(),
+                    price = fill.price, fee = bFee, tax = bTax, date = tradeDay.toEpochDay(),
                     cashAccountId = broker?.linkedAccountId ?: broker?.id, brokerAccountId = broker?.id,
                     source = TxnSource.NOTIFICATION, note = "由成交通知自動建立",
-                    externalKey = "N:${fill.symbol}:${fill.side}:${fill.shares}:${fill.price}:${postedAt / 60_000}",
+                    externalKey = "N:${fill.symbol}:${fill.side}:${fill.shares}:${fill.price}:$stamp",
                 ),
             )
             if (id <= 0) { log.insert(logAs("DUPLICATE")); return null }
             log.insert(logAs("STOCK"))
             val sideLabel = if (fill.side == StockSide.SELL) "賣出" else "買進"
-            return IngestResult("STOCK", id, "$sideLabel ${fill.symbol} ${fill.shares.toLong()} 股 @ ${fill.price}")
+            return IngestResult("STOCK", id, "$sideLabel ${fill.symbol} ${fill.name.orEmpty()} ${fill.shares.toLong()} 股 @ ${fill.price} → ${broker?.name ?: "未指定證券帳戶"}")
         }
 
         val p = parsed!!

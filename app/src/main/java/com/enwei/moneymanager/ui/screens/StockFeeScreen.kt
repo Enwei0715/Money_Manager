@@ -81,16 +81,11 @@ fun StockFeeScreen(nav: NavController) {
                 NumberField(oddMin, { oddMin = it; saveFees() }, "零股最低手續費", Modifier.weight(1f), suffix = "元")
             }
             NumberField(usFee, { usFee = it; saveFees() }, "美股每筆手續費", suffix = "USD")
-            Text(
-                "台股手續費 = 成交金額 × 0.1425% × 折數（無條件捨去），不足最低手續費以最低計；" +
-                    "交易稅只在賣出時收：一般股票 0.3%、ETF 0.1%、當沖 0.15%。",
-                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
 
             HorizontalDivider()
             Text("各證券帳戶", fontSize = 16.sp)
             if (brokers.isEmpty()) Text(
-                "還沒有證券帳戶。到「帳戶」新增群組為「證券」的帳戶後，就能分別設定手續費方式與月退。",
+                "還沒有證券帳戶。",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             brokers.forEach { b -> BrokerFeeCard(b, lk, settings.brokerRebates[b.id]) }
@@ -144,13 +139,8 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
                             since = YearMonth.from(LocalDate.ofEpochDay(first)).atDay(1).toEpochDay()
                         }) { Text("從第一筆開始") }
                     }
-                    Text(
-                        "成交時券商先收全額手續費（交易的手續費請照帳單填），次月退款日自動在交割帳戶記一筆「手續費退佣」收入。" +
-                            "銀行傳來退佣入帳通知時，會改成實際入帳的金額；先收到通知的月份就不再估算。",
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
-                else -> Text("使用上方的預設折數。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else -> Unit
             }
             val d = disc.toDoubleOrNull()?.takeIf { it in 0.01..1.0 }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -238,8 +228,4 @@ private fun FeeCalculator(brokers: List<AccountEntity>, rebates: Map<Long, Rebat
             Text(v, fontSize = 14.sp)
         }
     }
-    Text(
-        "買進總付 = 成交金額 + 手續費；賣出實收 = 成交金額 − 手續費 − 交易稅。",
-        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
 }

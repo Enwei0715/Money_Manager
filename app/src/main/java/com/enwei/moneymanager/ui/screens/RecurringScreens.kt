@@ -75,7 +75,7 @@ fun RecurringScreen(nav: NavController) {
         LazyColumn(Modifier.padding(pad)) {
             item {
                 Text(
-                    "訂閱、房租、保費、薪水、定期定額等固定收支。到期時自動產生交易（離線也會補上）。\n信用卡「帳單」自動扣繳請到 帳戶 → 信用卡 設定結帳日、繳款日與扣款帳戶。",
+                    "訂閱、房租、薪水等固定收支，到期自動記帳。",
                     style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp),
                 )
             }

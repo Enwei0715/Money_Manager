@@ -86,8 +86,6 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
     var currencyMenu by remember { mutableStateOf(false) }
     var autopayMenu by remember { mutableStateOf(false) }
     var linkedId by remember { mutableStateOf<Long?>(null) }
-    var feeDiscount by remember { mutableStateOf("") }
-    var rebate by remember { mutableStateOf("") }
     var shift by remember { mutableStateOf(com.enwei.moneymanager.core.StatementShift.NONE) }
     var bankQuery by remember { mutableStateOf("") }
     var dueOffset by remember { mutableStateOf<Int?>(null) }
@@ -103,8 +101,6 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
         val cur = repo.balances.first().find { it.account.id == id }?.balance ?: a.initialBalance
         initial = Money.fromMinor(if (a.type == AccountType.CREDIT_CARD) -cur else cur).stripTrailingZeros().toPlainString()
         linkedId = a.linkedAccountId
-        feeDiscount = a.feeDiscount?.toString().orEmpty()
-        rebate = repo.settings.value.brokerRebates[a.id]?.discount?.toString().orEmpty()
         shift = repo.settings.value.shiftFor(a.id)
         bankQuery = repo.settings.value.cardBank[a.id].orEmpty()
         dueOffset = repo.settings.value.cardDueOffset[a.id]
@@ -209,9 +205,8 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                     val due = cycle.nextDueDate(LocalDate.now().minusDays(1))
                     val apDay = autopayDay.toIntOrNull()?.takeIf { it in 1..31 }
                     Text(
-                        "本期：結帳日 ${cycle.statementDateFor(due)} → 繳款日 $due" +
-                            "\n繳款截止日遇週末或國定假日（含補假、春節）自動順延至下一營業日，自動扣繳同一天。" +
-                            if (autopayFrom != null) "\n${cycle.autopayDateFor(due, apDay)} 會自動從「${lk.account(autopayFrom)?.name}」轉帳「結帳日欠款 − 已繳金額」到這張卡；銀行若傳來扣繳通知，會以實際金額校正。" else "\n選擇扣繳帳戶後，到期會自動記一筆轉帳。",
+                        "本期：結帳日 ${cycle.statementDateFor(due)} → 繳款日 $due（遇假日順延）" +
+                            if (autopayFrom != null) "\n${cycle.autopayDateFor(due, apDay)} 從「${lk.account(autopayFrom)?.name}」自動扣繳" else "",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
@@ -219,23 +214,24 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
             } else if (type == AccountType.BROKERAGE) {
                 DropdownLine("交割帳戶", lk.account(linkedId)?.name ?: "未設定",
                     listOf<Pair<Long?, String>>(null to "未設定") + lk.accounts.filter { it.type == AccountType.BANK && !it.archived }.map { it.id to it.name }) { linkedId = it }
-                FormLine("手續費折數") { FormInput(feeDiscount, { feeDiscount = it }, "成交當下的折數；月退券商填 1", number = true) }
-                FormLine("月退後折數") { FormInput(rebate, { rebate = it }, "空白＝不月退", number = true) }
-                Text(
-                    "月退：成交時先收全額手續費，次月 15 日退回差額。填了之後，每月 15 日會自動在交割帳戶記一筆「手續費退佣」收入（從現在這個月的交易開始計算）。",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                )
-                Text(
-                    "股票買賣的金額會進出「交割帳戶」；這個證券帳戶的價值 = 持股市值 ＋ 證券戶現金（台股通常為 0，複委託可填外幣餘額）。持股在「帳戶 → 股票」或本帳戶明細新增。",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                )
+                // 手續費折數與月退集中在「股票手續費與月退」頁設定
+                val rule = repo.settings.flow.collectAsStateWithLifecycle().value.brokerRebates[id]
+                val disc = lk.account(id)?.feeDiscount
+                FormLine("手續費", onClick = { nav.navigate("stockfees") }) {
+                    Text(
+                        when {
+                            rule != null -> "月退 ${rule.discount} 折 ›"
+                            disc != null -> "${disc} 折 ›"
+                            else -> "使用預設 ›"
+                        },
+                        fontSize = 17.sp,
+                    )
+                }
             } else if (type == AccountType.EWALLET || type == AccountType.TRANSIT_CARD) {
                 DropdownLine("儲值來源", lk.account(linkedId)?.name ?: "未設定",
                     listOf<Pair<Long?, String>>(null to "未設定") + lk.accounts.filter { it.type != type && !it.archived }.map { it.id to it.name }) { linkedId = it }
                 Text(
-                    "設定自動儲值的扣款銀行後，該銀行的「電支交易」通知會自動記成轉帳到這個錢包。錢包本身若不推播消費，請在帳戶明細用「對帳」補記。",
+                    "自動儲值的扣款帳戶；該帳戶的儲值扣款通知會記成轉帳到這個錢包。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
@@ -265,7 +261,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                         name = name.trim(), type = type, currency = currency,
                         initialBalance = newInitial,
                         linkedAccountId = if (type == AccountType.BROKERAGE || type == AccountType.EWALLET || type == AccountType.TRANSIT_CARD) linkedId else null,
-                        feeDiscount = if (type == AccountType.BROKERAGE) feeDiscount.toDoubleOrNull()?.takeIf { it in 0.01..1.0 } else null,
+                        feeDiscount = if (type == AccountType.BROKERAGE) lk.account(o?.id)?.feeDiscount else null,
                         creditLimit = Money.parseMinor(limit) ?: 0,
                         cardLast4 = last4.ifBlank { null },
                         statementDay = if (isCard) sDay else null, dueDay = if (isCard) dDay else null,
@@ -275,7 +271,6 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                     )
                     scope.launch {
                         val savedId = repo.saveAccount(a)
-                        val r = rebate.toDoubleOrNull()?.takeIf { it > 0 && it < 1 && type == AccountType.BROKERAGE }
                         repo.settings.update { st ->
                             st.copy(
                                 cardShift = if (type == AccountType.CREDIT_CARD && shift != com.enwei.moneymanager.core.StatementShift.NONE)
@@ -285,16 +280,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                                 else st.cardDueOffset - savedId,
                             )
                         }
-                        repo.settings.update { st ->
-                            val old = st.brokerRebates[savedId]
-                            st.copy(
-                                brokerRebates = if (r == null) st.brokerRebates - savedId
-                                else st.brokerRebates + (savedId to com.enwei.moneymanager.data.RebateRule(
-                                    r, old?.sinceEpochDay ?: java.time.YearMonth.now().atDay(1).toEpochDay(), old?.payDay ?: 15,
-                                )),
-                            )
-                        }
-                        repo.runFeeRebates()
+                        if (type != AccountType.BROKERAGE) repo.settings.update { st -> st.copy(brokerRebates = st.brokerRebates - savedId) }
                         nav.popBackStack()
                     }
                 },

@@ -386,7 +386,7 @@ fun BookmarksScreen(nav: NavController) {
                     Text("如何新增書籤？", fontSize = 18.sp)
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "在「交易」頁點選一筆交易，下方有「刪除」「複製」「書籤」按鈕，按「書籤」即可加入。也可以在記帳頁輸入金額後按右上角的星號。",
+                        "打開一筆交易後按「書籤」，或在記帳頁按右上角的星號。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp,
                     )
                 }

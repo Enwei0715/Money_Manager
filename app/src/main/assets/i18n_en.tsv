@@ -932,3 +932,24 @@ AI：不是同一筆	AI: different transactions
 股數	Shares
 一般股票	Stock
 買進總付 = 成交金額 + 手續費；賣出實收 = 成交金額 − 手續費 − 交易稅。	Buy total = amount + fee; sell proceeds = amount − fee − tax.
+讀取勾選的銀行、信用卡、支付 App 通知並自動記帳，資料只存在手機中。\n無法開啟時：設定 → 應用程式 → 帳理 → ⋮ →「允許受限制的設定」。	Reads notifications from the bank, card and payment apps you check and records them. Data stays on your phone.\nIf it won't turn on: Settings → Apps → Ledgerly → ⋮ → \"Allow restricted settings\".
+信用卡填寫「末四碼」，通知會自動記到對應的卡片。	Fill in a card's last 4 digits so its notifications go to that card.
+顯示通知列上每一則通知會怎麼記；漏記的可以補記，看不懂的可以教它辨識。	Shows how each notification in the shade would be recorded; record missed ones or teach unknown formats.
+選一個備份檔位置（雲端硬碟或手機資料夾），帳理會定期把完整備份覆寫到那個檔案。	Pick a backup file (cloud drive or phone folder); Ledgerly regularly overwrites it with a full backup.
+匯入 Money Manager 匯出的 .mmbak 檔，或把帳理的資料匯出成 .mmbak。	Import a .mmbak file exported from Money Manager, or export Ledgerly data as .mmbak.
+包含所有帳戶、交易、股票、週期、分類與設定，換手機時還原即可。	Includes all accounts, transactions, stocks, recurring items, categories and settings. Restore it on a new phone.
+私人儲存庫才需要（權限 Contents: Read-only）	Only for private repositories (Contents: Read-only)
+給不推播每筆消費的錢包（街口、悠遊付）：打開勾選 App 的「交易紀錄」頁就會自動匯入；通知或手動記過的同一筆會合併，不會重複。	For wallets that don't notify each payment (JKO, Easy Wallet): open a checked app's "Transactions" page to import. Payments already recorded from notifications or by hand are merged, not duplicated.
+無法開啟時：設定 → 應用程式 → 帳理 → ⋮ →「允許受限制的設定」。	If it won't turn on: Settings → Apps → Ledgerly → ⋮ → "Allow restricted settings".
+張數會記住，下次可直接增減；「以點鈔金額對帳」會把差額記成一筆支出。	Counts are remembered. "Reconcile with count" records the difference as an expense.
+自動儲值的扣款帳戶；該帳戶的儲值扣款通知會記成轉帳到這個錢包。	The account that tops up this wallet; its top-up notifications become transfers to this wallet.
+庫存明細	Lots
+訂閱、房租、薪水等固定收支，到期自動記帳。	Subscriptions, rent, salary and other fixed items are recorded automatically when due.
+打開一筆交易後按「書籤」，或在記帳頁按右上角的星號。	Open a transaction and tap "Bookmark", or tap the star on the entry screen.
+錢包沒有消費通知時，用「對帳」輸入實際餘額，差額會記成一筆支出。	If this wallet doesn't notify payments, use "Reconcile" to enter its real balance; the difference is recorded as an expense.
+折線：現金＋持股市值　長條：存入／提出	Line: cash + holdings   Bars: deposits / withdrawals
+自動建立的交易會先放在這裡，確認後才入帳。	Automatically created transactions wait here until you confirm them.
+金額相同、時間相近的兩筆，合併時保留較完整的名稱與分類。	Two records with the same amount close in time; merging keeps the fuller name and category.
+還沒有證券帳戶。	No brokerage accounts yet.
+只會送出已啟用 App 的通知文字、商家名稱、分類名稱，以及對帳時選的截圖到 Groq 處理；金鑰只存在這支手機。超過免費額度時改用一般規則，不影響記帳。	Only notification text from enabled apps, merchant and category names, and screenshots you pick for reconciling are sent to Groq. The key stays on this phone. Over the free quota, regular rules are used instead.
+判讀通知、整理商家名稱與分類	Reads notifications, tidies merchant names and categories

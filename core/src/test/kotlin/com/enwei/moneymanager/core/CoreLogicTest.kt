@@ -470,3 +470,26 @@ class RealBillDatesTest {
         assertEquals(LocalDate.of(2026, 11, 2), autopay(cathay, 2026, 10))
     }
 }
+
+class DawhoFillMailTest {
+    private val body = "您委託買入的台股已於\n2026/10/28 13:01:17成交嘍!\n劉*瑋(9A9L-0609**2)\n您好\n您委託買入的【6515穎崴】\n已成交:\n" +
+        "成交價:4900.00\n成交數:1股\n成交日:2026/10/28 13:01:17\n來源:大戶投(g)\n詳細資料前往帳務看更多"
+
+    @Test fun parsesDawhoFill() {
+        val f = NotificationParser.parseStockFill("成交通知", body)!!
+        assertEquals(StockSide.BUY, f.side)
+        assertEquals("6515", f.symbol)
+        assertEquals("穎崴", f.name)
+        assertEquals(1.0, f.shares, 0.0)
+        assertEquals(4900.0, f.price, 0.0)
+        assertEquals(java.time.LocalDateTime.of(2026, 10, 28, 13, 1, 17), f.at)
+    }
+
+    @Test fun unitMisreadStillReadsShares() {
+        // 單位字被辨識成「般」、日期年份打錯：仍讀到 1 股，時間取第一個合理的日期
+        val f = NotificationParser.parseStockFill("成交通知", body.replace("1股", "1般").replace("成交日:2026", "成交日:2006"))!!
+        assertEquals(1.0, f.shares, 0.0)
+        assertEquals(2026, f.at!!.year)
+    }
+}
+

@@ -288,15 +288,11 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
                             LabelValue("已領股利", formatNum(h.openDividends, 0))
                             LabelValue("預估賣出費用", formatNum(h.estSellCost, 0))
                         }
-                        Text(
-                            "預估損益＝各批（市值－賣出手續費與交易稅－原幣成本）加總；原幣成本＝價金＋買進手續費－該批除息金額（同券商「除息試算」）。賣出以先進先出計算。",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
             }
             if (h != null && h.lots.isNotEmpty()) {
-                item { SectionTitle("庫存明細（每批買進，與券商「台股庫存明細」相同）") }
+                item { SectionTitle("庫存明細") }
                 items(h.lots.sortedBy { it.epochDay }, key = { "lot${it.tradeId}" }) { lot ->
                     val buy = list.find { it.id == lot.tradeId }
                     val pnl = h.lotPnl[lot.tradeId]
@@ -554,8 +550,7 @@ fun TradeEditScreen(
                     FormLine("交易稅") { FormInput(tax, { tax = it; feeEdited = true }, "", number = true) }
                     Text(
                         "成交金額 ${formatNum(amount)}　${if (side == StockSide.BUY) "應付" else "應收"} ${formatNum(settle)}\n" +
-                            "手續費依${if (broker?.feeDiscount != null) "「${broker.name}」" else "全域"}折數 ${feeSettings.discount} 估算；稅率一般股 0.3%、ETF 0.1%\n" +
-                            "請以券商帳單上的手續費為準：分次成交時每次各自捨去，可能比估算少 1～2 元",
+                            "手續費依 ${feeSettings.discount} 折估算，請以券商帳單為準",
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }

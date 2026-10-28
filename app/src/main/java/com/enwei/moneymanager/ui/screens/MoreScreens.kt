@@ -226,7 +226,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     Column(Modifier.padding(16.dp)) {
                         com.enwei.moneymanager.ui.components.StatusLine(enabled, if (enabled) "已取得通知存取權" else "尚未開啟通知存取權")
                         Text(
-                            "開啟後，帳理會讀取你勾選的銀行、信用卡、電子支付或簡訊 App 的通知，自動辨識金額、商家與卡號末四碼。資料只存在手機中。\n若顯示「受限制的設定」無法開啟：設定 → 應用程式 → 帳理 → 右上角 ⋮ →「允許受限制的設定」。",
+                            "讀取勾選的銀行、信用卡、支付 App 通知並自動記帳，資料只存在手機中。\n無法開啟時：設定 → 應用程式 → 帳理 → ⋮ →「允許受限制的設定」。",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Spacer(Modifier.height(8.dp))
@@ -247,7 +247,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         "無法對應卡號時記入的帳戶", lk.accounts.filter { !it.archived }, lk.account(settings.defaultAccountId),
                         { it.name }, { a -> repo.settings.update { it.copy(defaultAccountId = a.id) } },
                     )
-                    Text("提示：在帳戶中填寫信用卡「末四碼」，通知就會自動記到對應的卡片。券商的成交回報會自動建立股票交易。", style = MaterialTheme.typography.bodySmall)
+                    Text("信用卡填寫「末四碼」，通知會自動記到對應的卡片。", style = MaterialTheme.typography.bodySmall)
                 }
             }
             if (candidates.isNotEmpty()) {
@@ -260,28 +260,11 @@ fun NotificationSettingsScreen(nav: NavController) {
                     )
                 }
             }
-            item {
-                Card(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("自動轉帳與沒有通知的錢包", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "• 跨行提款／ATM 領出 → 記成「銀行 → 現金」轉帳\n" +
-                                "• 銀行「電支交易」扣款（例如街口自動儲值）→ 記成「銀行 → 錢包」轉帳；錢包名稱需含「街口」「悠遊付」等字樣，或只有一個電子支付帳戶\n" +
-                                "• 兩個自己的帳戶一邊轉出、一邊轉入，金額相同且 10 分鐘內 → 合併成一筆轉帳\n" +
-                                "• 街口、悠遊付等不推播消費的錢包：用「更多 → 錢包讀取」，打開錢包的交易紀錄頁就會自動匯入；或在帳戶明細「對帳」\n" +
-                                "• 信用卡自動扣繳通知：校正排程扣繳的金額，不會重複記帳\n" +
-                                "• 通知內有交易時間時，以「金額＋時間」去重，重複跳出的通知不會重複記帳",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-            }
             item { SectionTitle("用通知列上的真實通知測試（不會記帳）") }
             item {
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        "不用刷卡也能確認：讀取通知列上現有的通知，顯示每一則「會被怎麼記」。漏記的可以按「記下這筆」補記；" +
-                            "看不懂的格式可以按「教它辨識」，之後同樣標題的通知就會照你教的記帳。",
+                        "顯示通知列上每一則通知會怎麼記；漏記的可以補記，看不懂的可以教它辨識。",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Button(onClick = { loadNotes() }) { Text(if (notes == null) "讀取目前通知" else "重新讀取") }
@@ -608,8 +591,7 @@ fun BackupScreen(nav: NavController) {
         Column(Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("自動雲端備份", style = MaterialTheme.typography.titleMedium)
             Text(
-                "選一個備份檔位置（Google 雲端硬碟、OneDrive、Dropbox 或手機資料夾都可以），帳理會定期把完整備份覆寫到那個檔案，不需要任何帳號設定或金鑰。" +
-                    "另外，Android 系統的「Google 備份」也會自動備份帳理的資料（設定 → 系統 → 備份），重新安裝時可自動還原。",
+                "選一個備份檔位置（雲端硬碟或手機資料夾），帳理會定期把完整備份覆寫到那個檔案。",
                 style = MaterialTheme.typography.bodyMedium,
             )
             val target = bs.autoBackupUri.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
@@ -641,7 +623,7 @@ fun BackupScreen(nav: NavController) {
             HorizontalDivider()
             Text("Money Manager 備份檔（.mmbak）", style = MaterialTheme.typography.titleMedium)
             Text(
-                "在 Money Manager 的「更多 → 備份 → 匯出」取得 .mmbak 檔，在這裡匯入即可搬移所有帳戶、分類（含子分類）、交易、轉帳、餘額調整與備忘。也可以把帳理的資料匯出成 .mmbak。",
+                "匯入 Money Manager 匯出的 .mmbak 檔，或把帳理的資料匯出成 .mmbak。",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Button(enabled = !busy, onClick = { mmImporter.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("從 .mmbak 匯入") }
@@ -651,8 +633,7 @@ fun BackupScreen(nav: NavController) {
             HorizontalDivider()
             Text("帳理完整備份（.lgbak）", style = MaterialTheme.typography.titleMedium)
             Text(
-                "帳理專屬的備份檔，包含所有帳戶、交易、股票、週期、分類、商家規則、通知紀錄與全部設定。所有資料都只存在這支手機，建議定期匯出到雲端硬碟；換手機時在新手機還原即可。" +
-                    "（GitHub Token 不會放進備份；股價與匯率會自動重新抓取）",
+                "包含所有帳戶、交易、股票、週期、分類與設定，換手機時還原即可。",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Button(onClick = { exporter.launch("帳理備份-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.lgbak") }, modifier = Modifier.fillMaxWidth()) {
@@ -758,7 +739,7 @@ fun SettingsScreen(nav: NavController) {
             Text("目前版本 ${BuildConfig.VERSION_NAME}（build ${BuildConfig.VERSION_CODE}）", style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(
                 token, { v -> token = v; repo.settings.update { it.copy(githubToken = v.trim()) } }, label = { Text("GitHub Token（私人儲存庫需要）") }, singleLine = true,
-                supportingText = { Text("到 GitHub → Settings → Developer settings → Fine-grained tokens 建立，只勾選此儲存庫的 Contents: Read-only") },
+                supportingText = { Text("私人儲存庫才需要（權限 Contents: Read-only）") },
                 modifier = Modifier.fillMaxWidth(),
             )
             Row {
@@ -778,11 +759,6 @@ fun SettingsScreen(nav: NavController) {
             progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
             updateStatus?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             release?.notes?.takeIf { it.isNotBlank() && Updater.isNewer(release!!) }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            Text(
-                "安裝時若出現「應用程式與現有套件衝突」，表示目前手機上的版本簽章不同（1.0.15 以前的版本）。" +
-                    "請先到 更多 → 備份 匯出備份，解除安裝後再安裝新版並還原；之後的版本都能直接覆蓋更新。",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
@@ -822,13 +798,11 @@ fun WalletReaderScreen(nav: NavController) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         com.enwei.moneymanager.ui.components.StatusLine(enabled, if (enabled) "錢包讀取已開啟" else "尚未開啟無障礙服務「帳理錢包讀取」")
                         Text(
-                            "街口、悠遊付不會推播每筆消費。開啟後，只要打開下方勾選的 App 並進入「交易紀錄」頁，帳理就會讀取畫面上的商家、金額、日期並自動匯入。" +
-                                "已經由通知（例如綁定的信用卡刷卡通知）或手動記過的同一筆不會重複記，只會補上畫面上較完整的商家名稱與分類；已由銀行通知記成轉帳的儲值也會自動略過。" +
-                                "仍有疑似重複的，會列在「待確認 → 可能重複的交易」由 AI 協助整理。只讀取勾選的 App。",
+                            "給不推播每筆消費的錢包（街口、悠遊付）：打開勾選 App 的「交易紀錄」頁就會自動匯入；通知或手動記過的同一筆會合併，不會重複。",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            "若系統顯示「受限制的設定」而無法開啟：設定 → 應用程式 → 帳理 → 右上角 ⋮ →「允許受限制的設定」，再回來開啟。通知存取權也是同樣步驟。",
+                            "無法開啟時：設定 → 應用程式 → 帳理 → ⋮ →「允許受限制的設定」。",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Button(onClick = { com.enwei.moneymanager.notify.WalletScreenReader.openSettings(ctx) }) {
@@ -1046,7 +1020,7 @@ fun CashCounterScreen(nav: NavController, accountId: Long) {
                 }
                 done?.let { Text(it, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 20.dp)) }
                 Text(
-                    "張數會記住，下次打開可直接增減。花掉或收到現金時記得也在這裡調整，或直接按「以點鈔金額對帳」把差額記成一筆支出（分類：其他）。",
+                    "張數會記住，下次可直接增減；「以點鈔金額對帳」會把差額記成一筆支出。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(20.dp),
                 )

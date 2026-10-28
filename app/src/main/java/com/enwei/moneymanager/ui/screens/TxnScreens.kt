@@ -185,7 +185,7 @@ fun PendingScreen(nav: NavController) {
         LazyColumn(Modifier.padding(pad)) {
             item {
                 Text(
-                    "從通知、週期規則自動建立的交易會先放在這裡。點選可修改分類或帳戶後確認；確認後會記住商家對應的分類。",
+                    "自動建立的交易會先放在這裡，確認後才入帳。",
                     style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp),
                 )
             }
@@ -234,7 +234,7 @@ private fun AiSuggestionSection(lk: Lookups) {
             if (open.size > 1) TextButton(onClick = { scope.launch { open.forEach { repo.acceptAiSuggestion(it) } } }) { Text("全部接受") }
         }
         if (aiOn && unknown > 0) {
-            Text("有 $unknown 筆「不明」或未分類的收支，可以請 AI 依時間、金額、帳戶與你的習慣推測分類，確認後才會套用。",
+            Text("有 $unknown 筆「不明」或未分類的收支，可以請 AI 推測分類，確認後才套用。",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(enabled = !running, onClick = {
                 running = true
@@ -297,7 +297,7 @@ private fun DuplicateSection(lk: Lookups) {
             }) { Text("合併 AI 判定的 ${sure.size} 組") }
         }
         Text(
-            "金額相同、時間相近，而且至少一筆是通知或錢包畫面自動記的。合併時保留帳戶較準確的那筆，名稱與分類取較完整的。",
+            "金額相同、時間相近的兩筆，合併時保留較完整的名稱與分類。",
             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (aiOn) OutlinedButton(enabled = !running, onClick = {

@@ -49,7 +49,7 @@ fun AiSettingsScreen(nav: NavController) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("啟用 AI 智慧辨識", fontSize = 17.sp)
-                    Text("規則判斷不出來時才使用", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("判讀通知、整理商家名稱與分類", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Switch(s.aiEnabled, { v -> repo.settings.update { it.copy(aiEnabled = v) } }, enabled = s.groqKey.isNotBlank())
             }
@@ -74,14 +74,8 @@ fun AiSettingsScreen(nav: NavController) {
             )
             val today = java.time.LocalDate.now().toEpochDay()
             Text(
-                "今天已用：${if (s.aiUsageDay == today) s.aiUsageRequests else 0} 次請求、${"%,d".format(if (s.aiUsageDay == today) s.aiUsageTokens else 0L)} tokens" +
-                    "（免費方案每個模型約每天 1,000 次、20 萬 tokens，實際以 Groq 主控台為準）",
+                "今天已用：${if (s.aiUsageDay == today) s.aiUsageRequests else 0} 次請求、${"%,d".format(if (s.aiUsageDay == today) s.aiUsageTokens else 0L)} tokens",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                "一般模型負責判讀通知、命名與分類，建議用 ${GroqAi.DEFAULT_MODEL}；進階模型推理較深、只用在較難的「不明」推估，建議用 ${GroqAi.HARD_MODEL}，" +
-                    "不能用或超過額度時自動改用一般模型；看圖模型在「對帳 → 選截圖／拍照」時直接看圖找餘額。llama-3.1-8b-instant 已於 2026/8/16 停止提供給免費方案，會自動改用建議模型。",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(enabled = key.isNotBlank() && !testing, onClick = {
                 testing = true; result = null
@@ -95,22 +89,8 @@ fun AiSettingsScreen(nav: NavController) {
                 Text("上次錯誤：$it", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
             }
             Spacer(Modifier.padding(4.dp))
-            Text("會用在哪裡", fontSize = 16.sp)
             Text(
-                "• 判讀通知：已啟用的銀行／支付 App 通知，規則看不懂時由 AI 判斷是不是交易、金額、收支或轉帳。AI 判讀的一律放到「待確認」。\n" +
-                    "• 商家命名：通知裡的商家是代碼時（例如「GOOGLE*WALLET TEMP」），換成好讀的名稱，原文仍保留在交易裡。\n" +
-                    "• 挑分類：你的紀錄和關鍵字都對不到時，從你的分類清單（含子分類）挑一個。你改過之後會記住，下次不再問 AI。",
-                fontSize = 14.sp,
-            )
-            Text("會送出什麼", fontSize = 16.sp)
-            Text(
-                "只送出上述通知的文字或商家名稱、你的分類名稱，以及整理「不明」時那幾筆的日期、金額與帳戶名稱；" +
-                    "用「對帳 → 選截圖／拍照」時，會把那張圖送去辨識餘額（請只選銀行／錢包的餘額畫面）。不會送出其他 App 的通知。" +
-                    "資料會傳到 Groq 的伺服器處理。金鑰只存在這支手機，不會放進備份檔。",
-                fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                "Groq 免費方案有每分鐘與每日的次數上限；超過時這段時間改用一般規則，不影響記帳。",
+                "只會送出已啟用 App 的通知文字、商家名稱、分類名稱，以及對帳時選的截圖到 Groq 處理；金鑰只存在這支手機。超過免費額度時改用一般規則，不影響記帳。",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

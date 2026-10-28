@@ -453,7 +453,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
             }
             if (acc?.type == AccountType.EWALLET) item {
                 Text(
-                    "這個錢包若不會推播消費通知，按上方「對帳」輸入 App 裡的實際餘額，差額會自動記成一筆支出。",
+                    "錢包沒有消費通知時，用「對帳」輸入實際餘額，差額會記成一筆支出。",
                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 20.dp, vertical = 10.dp),
                 )
@@ -503,7 +503,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         HorizontalDivider(Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         DualBarChart(deps, wds, labels, IncomeColor, ExpenseColor)
                         if (isBroker) Text(
-                            "折線：帳戶現金＋持股市值（各月以月底收盤價計算，本月用即時價）\n長條：帳戶現金的存入／提出（買進股票算提出、賣出與股利算存入）",
+                            "折線：現金＋持股市值　長條：存入／提出",
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                         )

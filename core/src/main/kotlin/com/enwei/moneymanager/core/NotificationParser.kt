@@ -26,6 +26,8 @@ data class ParsedStockFill(
     val name: String?,
     val shares: Double,
     val price: Double,
+    /** 通知裡寫的成交時間（沒有時為 null，改用通知時間） */
+    val at: java.time.LocalDateTime? = null,
 )
 
 /**
@@ -251,6 +253,9 @@ object NotificationParser {
     private val symbolRegex = Regex("(?<![0-9])([0-9]{4,6}[A-Z]?)(?![0-9])\\s*([\\u4e00-\\u9fa5A-Za-z0-9\\-]{0,12})")
     private val bracketRegex = Regex("[【\\[［]\\s*([0-9]{4,6}[A-Z]?)\\s*([\\u4e00-\\u9fa5A-Za-z\\-]{0,12})\\s*[】\\]］]")
     private val sharesRegex = Regex("([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(張|股)")
+    /** 「成交數:1股」的單位字被系統字型或截圖辨識成別的字時，仍可依欄位名稱讀出股數 */
+    private val sharesLabelRegex = Regex("(?:成交數量|成交股數|成交數|成交量)\\s*[:：]?\\s*([0-9][0-9,]*)\\s*(張)?")
+    private val fillTimeRegex = Regex("(20[0-9]{2})[/-]([0-9]{1,2})[/-]([0-9]{1,2})\\s*([0-9]{1,2}):([0-9]{2})(?::([0-9]{2}))?")
     private val priceRegex = Regex("(?:成交價|成交均價|均價|價格|單價|@)\\s*[:：]?\\s*(?:NT\\$|\\$)?\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)")
 
     /** 券商「成交回報」通知 → 股票交易。 */
@@ -261,9 +266,16 @@ object NotificationParser {
         val sideToken = sideRegex.find(full)?.value ?: return null
         val side = if (sideToken.contains("賣")) StockSide.SELL else StockSide.BUY
 
-        val sharesMatch = sharesRegex.find(full) ?: return null
+        val sharesMatch = sharesLabelRegex.find(full) ?: sharesRegex.find(full) ?: return null
         val qty = sharesMatch.groupValues[1].replace(",", "").toDoubleOrNull() ?: return null
         val shares = if (sharesMatch.groupValues[2] == "張") qty * 1000 else qty
+        // 成交時間：取第一個完整的日期時間（例如「已於 2026/10/28 13:01:17 成交」）
+        val at = fillTimeRegex.findAll(full).firstNotNullOfOrNull { m ->
+            val g = m.groupValues
+            runCatching {
+                java.time.LocalDateTime.of(g[1].toInt(), g[2].toInt(), g[3].toInt(), g[4].toInt(), g[5].toInt(), g[6].ifEmpty { "0" }.toInt())
+            }.getOrNull()
+        }
 
         val price = priceRegex.find(full)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() ?: return null
 
@@ -271,7 +283,7 @@ object NotificationParser {
         // 排除日期時間（2026/10/28、13:01）、帳號（9A9L-0609**2）與數量、價格本身
         bracketRegex.find(full)?.let { m ->
             val name = m.groupValues[2].trim().takeIf { it.any { ch -> ch in '一'..'龥' } }
-            return ParsedStockFill(side, m.groupValues[1], name, shares, price)
+            return ParsedStockFill(side, m.groupValues[1], name, shares, price, at)
         }
         val textNoQty = full.replace(sharesMatch.value, " ")
         val symMatch = symbolRegex.findAll(textNoQty).firstOrNull { m ->
@@ -282,6 +294,6 @@ object NotificationParser {
         } ?: return null
         val name = symMatch.groupValues[2].takeIf { it.isNotBlank() && it.any { ch -> ch in '一'..'龥' } }
 
-        return ParsedStockFill(side, symMatch.groupValues[1], name, shares, price)
+        return ParsedStockFill(side, symMatch.groupValues[1], name, shares, price, at)
     }
 }
