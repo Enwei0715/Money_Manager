@@ -281,12 +281,15 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     // ---------- 通知自動記帳 ----------
 
     suspend fun ingestNotification(pkg: String, title: String?, text: String?, postedAt: Long): IngestResult? {
+        // LINE：只處理「LINE錢包」付款通知（LINE Bank Money／LINE Pay），聊天訊息一律略過；不需另外勾選 LINE
+        val isLine = pkg == LINE_PACKAGE
+        if (isLine && !isLineWallet(title, text)) return null
         val s = settings.value
         val log = db.notificationLog()
         // 同一則通知可能因更新而重複送達
         if (log.countSame(pkg, title, text, postedAt - 10 * 60_000) > 0) return null
         log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
-        val enabled = pkg in s.notifPackages
+        val enabled = isLine || pkg in s.notifPackages
         fun logAs(result: String, txnId: Long? = null) =
             NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = result, txnId = txnId)
 
@@ -340,6 +343,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val accounts = db.accounts().all().filter { !it.archived }
         val account = p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
             ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
+            ?: (if (isLine) accounts.firstOrNull { it.type != AccountType.CREDIT_CARD && it.name.contains("line", ignoreCase = true) } else null)
             ?: accounts.firstOrNull { it.id == s.defaultAccountId }
         val status = if (s.notifAutoConfirm) TxnStatus.CONFIRMED else TxnStatus.PENDING
         val raw = listOfNotNull(title, text).joinToString("\n")
@@ -758,3 +762,13 @@ fun netWorth(balances: List<AccountBalance>, holdings: List<HoldingView>, fx: Fx
         holdings.sumOf { fx.convert(Money.toMinor(it.marketValue), it.currency) }
 
 private fun sumLong(a: Long, b: Long): Long = a + b
+
+const val LINE_PACKAGE = "jp.naver.line.android"
+
+/** LINE 的錢包付款通知（標題「LINE錢包」或內文以 LINE Pay 開頭），排除一般聊天訊息。 */
+fun isLineWallet(title: String?, text: String?): Boolean {
+    val t = title.orEmpty()
+    val body = text.orEmpty().trimStart()
+    return listOf("LINE錢包", "LINE Wallet", "LINE Pay", "LINE Bank", "LINE BANK").any { t.contains(it, ignoreCase = true) } ||
+        body.startsWith("LINE Pay", ignoreCase = true)
+}

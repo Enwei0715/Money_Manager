@@ -48,6 +48,12 @@ object NotificationParser {
         "出帳", "扣帳",
     )
 
+    // 英文介面的通知（例如 LINE 錢包：「LINE Pay Purchase NT$ 25 Payment complete. Merchant: …」），不分大小寫
+    private val englishIgnore = listOf("failed", "declined", "cancelled", "canceled", "verification code", "one-time password")
+    private val englishIncome = listOf("refund", "received", "cashback credited", "deposit")
+    private val englishExpense = listOf("purchase", "payment complete", "payment completed", "paid", "spent", "charged", "payment of")
+    private val englishMerchant = Regex("(?i)(?:merchant|store|shop)(?:\\s*name)?\\s*[:：]\\s*([^\\n,，。]{2,40})")
+
     private val withdrawalKeywords = listOf("提款", "領出", "提領", "ATM", "領現")
     private val topupKeywords = listOf("儲值", "加值", "電支交易", "電子支付交易")
     private val debitKeywords = listOf("扣款", "出帳", "扣帳", "支出", "電支交易", "電子支付交易", "轉出", "付款")
@@ -97,18 +103,19 @@ object NotificationParser {
     )
     private val dateLike = Regex("^[0-9/:\\-.\\s年月日時分上下午AMPamp]+$")
 
-    fun shouldIgnore(text: String): Boolean = ignoreKeywords.any { text.contains(it, ignoreCase = true) }
+    fun shouldIgnore(text: String): Boolean =
+        ignoreKeywords.any { text.contains(it, ignoreCase = true) } || englishIgnore.any { text.contains(it, ignoreCase = true) }
 
     fun parse(title: String?, text: String?, now: LocalDateTime = LocalDateTime.now()): ParsedTransaction? {
         val full = listOfNotNull(title, text).joinToString(" ").replace('\n', ' ')
         if (full.isBlank() || shouldIgnore(full)) return null
 
-        val hasIncome = incomeKeywords.any { full.contains(it) }
-        val hasExpense = expenseKeywords.any { full.contains(it) }
+        val hasIncome = incomeKeywords.any { full.contains(it) } || englishIncome.any { full.contains(it, ignoreCase = true) }
+        val hasExpense = expenseKeywords.any { full.contains(it) } || englishExpense.any { full.contains(it, ignoreCase = true) }
         val has = { list: List<String> -> list.any { full.contains(it, ignoreCase = true) } }
         val (type, kind) = when {
             // 退款、退貨即使含「消費」字樣仍屬收入
-            full.contains("退款") || full.contains("退貨") -> ParsedType.INCOME to ParsedKind.NORMAL
+            full.contains("退款") || full.contains("退貨") || full.contains("refund", ignoreCase = true) -> ParsedType.INCOME to ParsedKind.NORMAL
             // 信用卡款自動扣繳／繳款（銀行帳戶扣款，不是刷卡消費）
             (full.contains("卡款") || full.contains("卡費") || full.contains("信用卡")) &&
                 (full.contains("扣繳") || full.contains("繳款") || full.contains("繳費")) && !full.contains("刷卡") ->
@@ -130,7 +137,10 @@ object NotificationParser {
             type = type,
             amountMinor = amount,
             currency = currency,
-            merchant = if (kind == ParsedKind.NORMAL) findMerchant(full) else null,
+            merchant = if (kind == ParsedKind.NORMAL) {
+                englishMerchant.find(listOfNotNull(title, text).joinToString("\n"))?.groupValues?.get(1)?.trim()?.trimEnd('.')
+                    ?: findMerchant(full)
+            } else null,
             cardLast4 = cardLast4Regex.find(full)?.groupValues?.get(1)?.takeLast(4),
             kind = kind,
             occurredAt = findDateTime(full, now),

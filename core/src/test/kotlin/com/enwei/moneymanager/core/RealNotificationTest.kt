@@ -85,3 +85,27 @@ class CardPaymentTest {
         assertEquals(614600L, r.amountMinor)
     }
 }
+
+class LineWalletTest {
+    @Test fun englishPurchase() {
+        val r = NotificationParser.parse("LINE錢包", "LINE Pay Purchase NT$ 25\nPayment complete.\nMerchant: 7-ELEVEN 台科門市")!!
+        assertEquals(ParsedType.EXPENSE, r.type)
+        assertEquals(ParsedKind.NORMAL, r.kind)
+        assertEquals(2500L, r.amountMinor)
+        assertEquals("TWD", r.currency)
+        assertEquals("7-ELEVEN 台科門市", r.merchant)
+    }
+
+    @Test fun truncatedMerchant() {
+        val r = NotificationParser.parse("LINE錢包", "LINE Pay Purchase NT$ 25\nPayment complete.\nMerchan")!!
+        assertEquals(2500L, r.amountMinor)
+    }
+
+    @Test fun englishRefund() {
+        assertEquals(ParsedType.INCOME, NotificationParser.parse("LINE錢包", "LINE Pay Refund NT$ 120\nRefund complete.")!!.type)
+    }
+
+    @Test fun failed() {
+        assertNull(NotificationParser.parse("LINE錢包", "LINE Pay Purchase NT$ 25\nPayment failed."))
+    }
+}
