@@ -105,9 +105,23 @@ enum class StatementShift(val label: String) {
     }
 }
 
-data class CardCycle(val statementDay: Int, val dueDay: Int, val shift: StatementShift = StatementShift.NONE) {
-    /** 某個月的實際結帳日（已套用週末調整）。 */
-    fun statementIn(ym: YearMonth): LocalDate = shift.apply(Recurrence.dayInMonth(ym, statementDay))
+data class CardCycle(
+    val statementDay: Int,
+    val dueDay: Int,
+    val shift: StatementShift = StatementShift.NONE,
+    /** 繳款截止日＝實際結帳日＋幾天（依銀行規則）；null 時用固定的每月繳款日 [dueDay] */
+    val dueOffsetDays: Int? = null,
+) {
+    /** 某個月的實際結帳日（已套用週末調整）；statementDay 為 -1 表示月底。 */
+    fun statementIn(ym: YearMonth): LocalDate =
+        shift.apply(if (statementDay < 0) ym.atEndOfMonth() else Recurrence.dayInMonth(ym, statementDay))
+
+    /** 某次結帳的繳款截止日。 */
+    fun dueFor(statement: LocalDate): LocalDate = dueOffsetDays?.let { statement.plusDays(it.toLong()) } ?: run {
+        val ym = YearMonth.from(statement)
+        val same = Recurrence.dayInMonth(ym, dueDay)
+        if (same.isAfter(statement)) same else Recurrence.dayInMonth(ym.plusMonths(1), dueDay)
+    }
 
     /** 今天（含）以前最近一次的結帳日。 */
     fun lastStatementOnOrBefore(today: LocalDate): LocalDate {
@@ -118,6 +132,11 @@ data class CardCycle(val statementDay: Int, val dueDay: Int, val shift: Statemen
 
     /** 對應某繳款日的結帳日（繳款日在結帳日之後；若繳款日數字較小則屬於上個月的帳單）。 */
     fun statementDateFor(dueDate: LocalDate): LocalDate {
+        if (dueOffsetDays != null) {
+            val ym = YearMonth.from(dueDate)
+            return (-3..1).map { statementIn(ym.plusMonths(it.toLong())) }.filter { !dueFor(it).isAfter(dueDate) }.maxOrNull()
+                ?: statementIn(ym.minusMonths(1))
+        }
         val dueYm = YearMonth.from(dueDate)
         val sameMonth = Recurrence.dayInMonth(dueYm, statementDay)
         return if (dueDay > statementDay && sameMonth.isBefore(dueDate)) statementIn(dueYm)
@@ -130,8 +149,12 @@ data class CardCycle(val statementDay: Int, val dueDay: Int, val shift: Statemen
         return prev to statementDate
     }
 
-    fun nextDueDate(after: LocalDate): LocalDate =
-        Recurrence.next(Frequency.MONTHLY, 1, after.withDayOfMonth(1), after, dueDay)
+    /** [after] 之後（不含）的下一個繳款截止日。 */
+    fun nextDueDate(after: LocalDate): LocalDate {
+        if (dueOffsetDays == null) return Recurrence.next(Frequency.MONTHLY, 1, after.withDayOfMonth(1), after, dueDay)
+        val ym = YearMonth.from(after)
+        return (-2..2).map { dueFor(statementIn(ym.plusMonths(it.toLong()))) }.filter { it.isAfter(after) }.min()
+    }
 
     /**
      * 實際自動扣繳日：同一期帳單、指定日（[autopayDay]，空白則等於繳款日）。

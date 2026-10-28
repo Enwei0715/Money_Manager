@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -87,6 +89,8 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
     var feeDiscount by remember { mutableStateOf("") }
     var rebate by remember { mutableStateOf("") }
     var shift by remember { mutableStateOf(com.enwei.moneymanager.core.StatementShift.NONE) }
+    var bankQuery by remember { mutableStateOf("") }
+    var dueOffset by remember { mutableStateOf<Int?>(null) }
     val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
     // 「金額」欄位以目前餘額表示；儲存時換算回期初餘額
     val currentBalance = balances.find { it.account.id == id }?.balance
@@ -102,6 +106,8 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
         feeDiscount = a.feeDiscount?.toString().orEmpty()
         rebate = repo.settings.value.brokerRebates[a.id]?.discount?.toString().orEmpty()
         shift = repo.settings.value.shiftFor(a.id)
+        bankQuery = repo.settings.value.cardBank[a.id].orEmpty()
+        dueOffset = repo.settings.value.cardDueOffset[a.id]
         description = a.description.orEmpty()
         limit = if (a.creditLimit > 0) Money.fromMinor(a.creditLimit).stripTrailingZeros().toPlainString() else ""
         last4 = a.cardLast4.orEmpty(); statementDay = a.statementDay?.toString().orEmpty(); dueDay = a.dueDay?.toString().orEmpty(); autopayDay = a.autopayDay?.toString().orEmpty()
@@ -109,7 +115,9 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
     }
     val isCard = type == AccountType.CREDIT_CARD
     val sDay = statementDay.toIntOrNull()?.takeIf { it in 1..31 }
-    val dDay = dueDay.toIntOrNull()?.takeIf { it in 1..31 }
+    val bank = com.enwei.moneymanager.core.TaiwanBanks.find(bankQuery)
+    // 依銀行規則時，繳款日由結帳日＋天數推算（存一個近似的日數供舊邏輯顯示）
+    val dDay = if (dueOffset != null && sDay != null) ((sDay - 1 + dueOffset!!) % 30) + 1 else dueDay.toIntOrNull()?.takeIf { it in 1..31 }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -150,8 +158,38 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
             if (isCard) {
                 FormLine("末四碼") { FormInput(last4, { s -> last4 = s.filter(Char::isDigit).take(4) }, "用於辨識刷卡通知", number = true) }
                 FormLine("信用額度") { FormInput(limit, { limit = it }, "", number = true) }
-                FormLine("結帳日") { FormInput(statementDay, { statementDay = it.filter(Char::isDigit).take(2) }, "例：5", number = true) }
-                FormLine("繳款日") { FormInput(dueDay, { dueDay = it.filter(Char::isDigit).take(2) }, "例：20", number = true) }
+                FormLine("發卡銀行") {
+                    FormInput(bankQuery, { q ->
+                        bankQuery = q
+                        // 輸入代碼或名稱即自動帶入該銀行的繳款規則
+                        com.enwei.moneymanager.core.TaiwanBanks.find(q)?.let { b ->
+                            dueOffset = b.dueOffsetDays
+                            b.fixedStatementDay?.let { d -> statementDay = if (d < 0) "31" else d.toString() }
+                            if (name.isBlank()) name = b.name.substringBefore("（") + "信用卡"
+                        }
+                    }, "銀行代碼或名稱，例：013、國泰")
+                }
+                if (bank != null) Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp)) {
+                    Text(
+                        "${bank.code} ${bank.name}：繳款截止日＝結帳日＋${bank.dueOffsetDays} 天" +
+                            (bank.note?.let { "\n$it" } ?: "") + if (!bank.verified) "\n（此銀行資料不足，先用常見值，請對照帳單）" else "",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (bank.statementDays.isNotEmpty()) Row(
+                        Modifier.horizontalScroll(rememberScrollState()).padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        bank.statementDays.forEach { d ->
+                            androidx.compose.material3.FilterChip(sDay == d, { statementDay = d.toString() }, label = { Text("$d 日") })
+                        }
+                    }
+                }
+                FormLine("結帳日") { FormInput(statementDay, { statementDay = it.filter(Char::isDigit).take(2) }, "例：5（月底填 31）", number = true) }
+                if (dueOffset != null) FormLine("繳款日", trailing = {
+                    androidx.compose.material3.TextButton(onClick = { dueOffset = null }) { Text("改用固定日") }
+                }) {
+                    Text("結帳日＋$dueOffset 天" + (sDay?.let { s0 -> CardCycle(s0, 1, shift, dueOffset).let { c -> "（本期 ${c.nextDueDate(LocalDate.now().minusDays(1))}）" } } ?: ""), fontSize = 17.sp)
+                } else FormLine("繳款日") { FormInput(dueDay, { dueDay = it.filter(Char::isDigit).take(2) }, "例：20", number = true) }
                 FormLine("扣繳日") { FormInput(autopayDay, { autopayDay = it.filter(Char::isDigit).take(2) }, "銀行實際扣款日，空白＝繳款日", number = true) }
                 FormLine("扣繳帳戶", onClick = { autopayMenu = true }) {
                     Box {
@@ -166,7 +204,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 }
                 DropdownLine("結帳日遇週末", shift.label, com.enwei.moneymanager.core.StatementShift.entries.map { it to it.label }) { shift = it }
                 if (sDay != null && dDay != null) {
-                    val cycle = CardCycle(sDay, dDay, shift)
+                    val cycle = CardCycle(sDay, dDay, shift, dueOffset)
                     val due = cycle.nextDueDate(LocalDate.now().minusDays(1))
                     val apDay = autopayDay.toIntOrNull()?.takeIf { it in 1..31 }
                     Text(
@@ -240,6 +278,9 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                             st.copy(
                                 cardShift = if (type == AccountType.CREDIT_CARD && shift != com.enwei.moneymanager.core.StatementShift.NONE)
                                     st.cardShift + (savedId to shift.name) else st.cardShift - savedId,
+                                cardBank = if (type == AccountType.CREDIT_CARD && bank != null) st.cardBank + (savedId to bank.code) else st.cardBank - savedId,
+                                cardDueOffset = if (type == AccountType.CREDIT_CARD && dueOffset != null) st.cardDueOffset + (savedId to dueOffset!!)
+                                else st.cardDueOffset - savedId,
                             )
                         }
                         repo.settings.update { st ->

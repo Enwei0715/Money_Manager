@@ -115,6 +115,10 @@ data class AppSettings(
     val seedCleaned: Boolean = false,
     /** 信用卡 id → 結帳日遇週末的調整（StatementShift 名稱） */
     val cardShift: Map<Long, String> = emptyMap(),
+    /** 信用卡 id → 發卡銀行代碼 */
+    val cardBank: Map<Long, String> = emptyMap(),
+    /** 信用卡 id → 繳款截止日＝結帳日＋幾天（依銀行規則） */
+    val cardDueOffset: Map<Long, Int> = emptyMap(),
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee, oddLotMinFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -131,6 +135,7 @@ class SettingsStore(context: Context) {
     private val budgetSerializer = MapSerializer(Long.serializer(), Long.serializer())
     private val pkgMapSerializer = MapSerializer(String.serializer(), Long.serializer())
     private val rebateSerializer = MapSerializer(Long.serializer(), RebateRule.serializer())
+    private val longIntSerializer = MapSerializer(Long.serializer(), Int.serializer())
     private val longStrSerializer = MapSerializer(Long.serializer(), String.serializer())
     private val learnedSerializer = ListSerializer(LearnedSource.serializer())
     private val strMapSerializer = MapSerializer(String.serializer(), String.serializer())
@@ -183,6 +188,8 @@ class SettingsStore(context: Context) {
         widgetOpacity = prefs.getInt("widgetOpacity", 100),
         accountGroupOrder = prefs.getString("accountGroupOrder", "")!!.split(',').filter { it.isNotBlank() },
         seedCleaned = prefs.getBoolean("seedCleaned", false),
+        cardBank = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardBank", "{}")!!) }.getOrDefault(emptyMap()),
+        cardDueOffset = runCatching { json.decodeFromString(longIntSerializer, prefs.getString("cardDueOffset", "{}")!!) }.getOrDefault(emptyMap()),
         cardShift = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardShift", "{}")!!) }.getOrDefault(emptyMap()),
         dismissedDividends = prefs.getStringSet("dismissedDividends", emptySet())!!.toSet(),
         brokerRebates = runCatching { json.decodeFromString(rebateSerializer, prefs.getString("brokerRebates", "{}")!!) }.getOrDefault(emptyMap()),
@@ -242,6 +249,8 @@ class SettingsStore(context: Context) {
             .putStringSet("dismissedDividends", s.dismissedDividends)
             .putBoolean("seedCleaned", s.seedCleaned)
             .putString("cardShift", json.encodeToString(longStrSerializer, s.cardShift))
+            .putString("cardBank", json.encodeToString(longStrSerializer, s.cardBank))
+            .putString("cardDueOffset", json.encodeToString(longIntSerializer, s.cardDueOffset))
             .apply()
         state.value = s
     }
@@ -265,3 +274,11 @@ fun learnKey(title: String?, text: String?): String =
 
 fun AppSettings.shiftFor(cardId: Long): com.enwei.moneymanager.core.StatementShift =
     cardShift[cardId]?.let { n -> com.enwei.moneymanager.core.StatementShift.entries.find { it.name == n } } ?: com.enwei.moneymanager.core.StatementShift.NONE
+
+/** 這張信用卡的帳單週期（含週末調整與銀行的繳款天數）。 */
+fun AppSettings.cycleFor(card: AccountEntity): com.enwei.moneymanager.core.CardCycle? {
+    val sd = card.statementDay ?: return null
+    val off = cardDueOffset[card.id]
+    val dd = card.dueDay ?: if (off != null) 1 else return null
+    return com.enwei.moneymanager.core.CardCycle(sd, dd, shiftFor(card.id), off)
+}

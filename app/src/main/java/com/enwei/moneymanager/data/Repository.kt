@@ -83,6 +83,8 @@ data class Backup(
     val learnedSources: List<LearnedSource> = emptyList(),
     val cashCounts: Map<Long, Map<Int, Int>> = emptyMap(),
     val cardShift: Map<Long, String> = emptyMap(),
+    val cardBank: Map<Long, String> = emptyMap(),
+    val cardDueOffset: Map<Long, Int> = emptyMap(),
 )
 
 data class CardStatus(val payable: Long, val outstanding: Long, val dueDate: LocalDate?, val autopayDate: LocalDate? = null)
@@ -247,6 +249,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 notifAccountMap = s.notifAccountMap.filterValues { it != a.id },
                 cashCounts = s.cashCounts - a.id,
                 cardShift = s.cardShift - a.id,
+                cardBank = s.cardBank - a.id,
+                cardDueOffset = s.cardDueOffset - a.id,
                 brokerRebates = s.brokerRebates - a.id,
                 learnedSources = s.learnedSources.map { if (it.accountId == a.id) it.copy(accountId = null) else it },
             )
@@ -744,7 +748,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         accounts.filter {
             it.type == AccountType.CREDIT_CARD && it.autopayFromId != null && it.statementDay != null && it.dueDay != null && !it.archived
         }.forEach { card ->
-            val cycle = CardCycle(card.statementDay!!, card.dueDay!!, settings.value.shiftFor(card.id))
+            val cycle = settings.value.cycleFor(card)!!
             // 第一次設定時只從今天開始，不回溯
             var cursor = card.autopayLastRun?.let(LocalDate::ofEpochDay) ?: today.minusDays(1)
             while (true) {
@@ -804,7 +808,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return db.accounts().all().filter { it.type == AccountType.CREDIT_CARD }.associate { card ->
             val owed = maxOf(0, -balanceAsOf(card, txns, Long.MAX_VALUE, fx))
             if (card.statementDay == null || card.dueDay == null) return@associate card.id to CardStatus(owed, 0, null)
-            val cycle = CardCycle(card.statementDay, card.dueDay, settings.value.shiftFor(card.id))
+            val cycle = settings.value.cycleFor(card)!!
             val lastStatement = cycle.lastStatementOnOrBefore(today)
             val cutoff = lastStatement.plusDays(1).toMillis(LocalTime.MIDNIGHT)
             val billed = maxOf(0, -balanceAsOf(card, txns, cutoff, fx))
@@ -821,7 +825,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
         return db.accounts().all().filter { it.type == AccountType.CREDIT_CARD && it.statementDay != null && it.dueDay != null && !it.archived }
             .map { card ->
-                val cycle = CardCycle(card.statementDay!!, card.dueDay!!, settings.value.shiftFor(card.id))
+                val cycle = settings.value.cycleFor(card)!!
                 val due = cycle.nextDueDate(today.minusDays(1))
                 val statement = cycle.statementDateFor(due)
                 val cutoff = if (statement.isAfter(today)) Long.MAX_VALUE else statement.plusDays(1).toMillis(LocalTime.MIDNIGHT)
@@ -932,6 +936,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             learnedSources = settings.value.learnedSources,
             cashCounts = settings.value.cashCounts,
             cardShift = settings.value.cardShift,
+            cardBank = settings.value.cardBank,
+            cardDueOffset = settings.value.cardDueOffset,
         ),
     )
 
@@ -952,7 +958,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 bookmarks = b.bookmarks, memos = b.memos, budgets = b.budgets,
                 notifPackages = it.notifPackages + b.notifPackages, notifAccountMap = it.notifAccountMap + b.notifAccountMap,
                 brokerRebates = b.brokerRebates, learnedSources = it.learnedSources + b.learnedSources, cashCounts = b.cashCounts,
-                cardShift = b.cardShift,
+                cardShift = b.cardShift, cardBank = b.cardBank, cardDueOffset = b.cardDueOffset,
             )
         }
         return b

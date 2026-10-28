@@ -172,3 +172,24 @@ class StatementShiftTest {
         assertEquals(java.time.LocalDate.of(2026, 10, 17), CardCycle(17, 2).statementIn(java.time.YearMonth.of(2026, 10)))
     }
 }
+
+class TaiwanBanksTest {
+    @Test fun lookupAndOffset() {
+        assertEquals("國泰世華", TaiwanBanks.find("013")!!.name)
+        assertEquals("國泰世華", TaiwanBanks.find("13")!!.name)
+        assertEquals("永豐銀行", TaiwanBanks.find("永豐信用卡")!!.name)
+        assertEquals("連線銀行（LINE Bank）", TaiwanBanks.find("824")!!.name)
+        // 永豐：結帳日 16 日 → 繳款截止日次月 1 日（結帳日＋15 天）
+        val c = CardCycle(16, 1, dueOffsetDays = 15)
+        val s = c.statementIn(java.time.YearMonth.of(2026, 10))
+        assertEquals(java.time.LocalDate.of(2026, 10, 31), c.dueFor(s))
+        assertEquals(java.time.LocalDate.of(2026, 10, 31), c.nextDueDate(java.time.LocalDate.of(2026, 10, 20)))
+        assertEquals(s, c.statementDateFor(java.time.LocalDate.of(2026, 10, 31)))
+        // 彰化：月底結帳＋18 天
+        val ch = CardCycle(-1, 1, dueOffsetDays = 18)
+        assertEquals(java.time.LocalDate.of(2026, 2, 28), ch.statementIn(java.time.YearMonth.of(2026, 2)))
+        assertEquals(java.time.LocalDate.of(2026, 3, 18), ch.dueFor(ch.statementIn(java.time.YearMonth.of(2026, 2))))
+        // 舊模式（固定繳款日）不變
+        assertEquals(java.time.LocalDate.of(2026, 11, 2), CardCycle(17, 2).nextDueDate(java.time.LocalDate.of(2026, 10, 20)))
+    }
+}
