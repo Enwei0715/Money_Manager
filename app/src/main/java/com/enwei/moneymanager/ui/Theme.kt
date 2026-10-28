@@ -5,11 +5,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
-// 記帳慣例：收入藍、支出紅
-val IncomeColor = Color(0xFF3C82E6)
-val ExpenseColor = Color(0xFFF0605A)
+private val Blue = Color(0xFF3C82E6)
+private val Coral = Color(0xFFF0605A)
+
+/** 收支顏色設定（設定 A：收入藍支出紅；設定 B 相反），改變時所有畫面自動重繪。 */
+object ColorPrefs {
+    var setB by mutableStateOf(false)
+}
+
+val IncomeColor: Color get() = if (ColorPrefs.setB) Coral else Blue
+val ExpenseColor: Color get() = if (ColorPrefs.setB) Blue else Coral
+val BarBackground = Color(0xFFF5F5F7)
 val TransferColor = Color(0xFF8C8C8C)
 val SaturdayColor = Color(0xFF3C82E6)
 val SundayColor = Color(0xFFF0605A)

@@ -31,6 +31,7 @@ class MoneyApp : Application() {
             repo.runRecurring()
         }
         SyncWorker.schedule(this)
+        com.enwei.moneymanager.work.ReminderWorker.schedule(this)
     }
 
     companion object {

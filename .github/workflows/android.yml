@@ -67,12 +67,13 @@ jobs:
           name: MoneyManager-1.0.${{ github.run_number }}
           path: dist/*.apk
 
-      # main 分支每次更新都會發布 Release，App 內「檢查更新」即可下載安裝
+      # 每次推送都發布 Release：手機可直接到 Releases 頁下載 APK，App 內「檢查更新」也會抓到
       - name: Publish release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "v1.0.${{ github.run_number }}" dist/*.apk \
             --title "記帳本 1.0.${{ github.run_number }}" \
+            --target "${{ github.sha }}" \
             --notes "$(git log -1 --pretty=%B)"

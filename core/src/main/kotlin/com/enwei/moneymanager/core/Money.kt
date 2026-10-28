@@ -32,6 +32,18 @@ object Money {
         return "$sign$symbol$body"
     }
 
+    /** 一律顯示兩位小數，例如 "1,000.00"、"-2,574.00"。 */
+    fun full(minor: Long): String {
+        val sign = if (minor < 0) "-" else ""
+        return sign + twoDecimals.format(Math.abs(minor) / 100.0)
+    }
+
+    /** 帶幣別符號，例如 "$ 1,000.00"。 */
+    fun withSymbol(minor: Long, currency: String = "TWD"): String {
+        val sign = if (minor < 0) "-" else ""
+        return "${symbolOf(currency).trim()} $sign${twoDecimals.format(Math.abs(minor) / 100.0)}"
+    }
+
     fun symbolOf(currency: String): String = when (currency.uppercase()) {
         "TWD" -> "$"
         "USD" -> "US$"

@@ -65,6 +65,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SettingsBackupRestore
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.outlined.EventRepeat
+import androidx.compose.material.icons.outlined.CurrencyExchange
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -98,38 +109,46 @@ private val timeFmt = SimpleDateFormat("M/d HH:mm", Locale.TAIWAN)
 fun MoreScreen(nav: NavController) {
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
     val entries = listOf(
-        Triple("recurring", "週期／自動扣款", Icons.Filled.EventRepeat),
-        Triple("pending", "待確認", Icons.Filled.Inbox),
-        Triple("notif", "通知自動記帳", Icons.Filled.NotificationsActive),
-        Triple("invoice", "電子發票載具", Icons.AutoMirrored.Filled.ReceiptLong),
-        Triple("fx", "即時匯率", Icons.Filled.CurrencyExchange),
-        Triple("categories", "分類管理", Icons.Filled.Category),
-        Triple("account/0", "新增帳戶", Icons.Filled.AccountBalance),
-        Triple("backup", "備份與還原", Icons.Filled.Backup),
-        Triple("settings", "設定與更新", Icons.Filled.Settings),
+        Triple("config", "設定", Icons.Outlined.Settings),
+        Triple("backup", "備份", Icons.Outlined.SettingsBackupRestore),
+        Triple("notif", "通知記帳", Icons.Outlined.NotificationsActive),
+        Triple("invoice", "電子發票", Icons.AutoMirrored.Outlined.ReceiptLong),
+        Triple("invest", "投資", Icons.AutoMirrored.Outlined.ShowChart),
+        Triple("recurring", "週期扣款", Icons.Outlined.EventRepeat),
+        Triple("fx", "匯率", Icons.Outlined.CurrencyExchange),
+        Triple("pending", "待確認", Icons.Outlined.Inbox),
+        Triple("settings", "App 更新", Icons.Outlined.SystemUpdate),
     )
-    Scaffold(topBar = { androidx.compose.material3.CenterAlignedTopAppBar(title = { Text("更多") }) }) { pad ->
-        Column(Modifier.padding(pad).fillMaxWidth()) {
-            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface),
-            ) {
-                items(entries.size) { i ->
-                    val (route, label, icon) = entries[i]
-                    Column(
-                        Modifier.height(96.dp).border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { nav.navigate(route) },
-                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
-                    ) {
-                        androidx.compose.material3.BadgedBox(badge = {
-                            if (route == "pending" && pending.isNotEmpty()) Badge { Text("${pending.size}") }
-                        }) { Icon(icon, null, tint = MaterialTheme.colorScheme.primary) }
-                        Spacer(Modifier.height(8.dp))
-                        Text(label, style = MaterialTheme.typography.labelMedium)
-                    }
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
+        topBar = {
+            androidx.compose.material3.TopAppBar(
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                title = { Text("設定") },
+                actions = {
+                    Text(BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 20.sp,
+                        modifier = Modifier.padding(end = 16.dp))
+                },
+            )
+        },
+    ) { pad ->
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+            androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+            Modifier.padding(pad).fillMaxWidth().padding(top = 24.dp),
+        ) {
+            items(entries.size) { i ->
+                val (route, label, icon) = entries[i]
+                Column(
+                    Modifier.height(130.dp).clickable { nav.navigate(route) },
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                ) {
+                    androidx.compose.material3.BadgedBox(badge = {
+                        if (route == "pending" && pending.isNotEmpty()) Badge { Text("${pending.size}") }
+                    }) { Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), modifier = Modifier.size(44.dp)) }
+                    Spacer(Modifier.height(14.dp))
+                    Text(label, fontSize = 17.sp)
                 }
             }
-            Text("版本 ${BuildConfig.VERSION_NAME}", Modifier.padding(16.dp), style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

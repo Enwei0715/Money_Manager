@@ -20,7 +20,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDateRangePickerState
+import com.enwei.moneymanager.core.Periods
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -75,26 +84,33 @@ val chartPalette = listOf(
     Color(0xFF3C82E6), Color(0xFF7E57C2), Color(0xFFEC6FA0), Color(0xFF8D6E63), Color(0xFF90A4AE),
 )
 
-enum class Period(val label: String) { WEEK("週"), MONTH("月"), YEAR("年") }
+enum class Period(val label: String) { WEEK("每週"), MONTH("每月"), YEAR("每年"), CUSTOM("期間") }
 
 data class PeriodRange(val start: LocalDate, val end: LocalDate, val title: String)
 
-fun rangeOf(period: Period, anchor: LocalDate): PeriodRange = when (period) {
-    Period.WEEK -> {
-        val s = anchor.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-        val e = s.plusDays(6)
-        PeriodRange(s, e, "${s.monthValue}/${s.dayOfMonth} ~ ${e.monthValue}/${e.dayOfMonth}")
+fun rangeOf(period: Period, anchor: LocalDate, custom: Pair<LocalDate, LocalDate>? = null): PeriodRange {
+    val s = repo.settings.value
+    return when (period) {
+        Period.WEEK -> {
+            val (a, b) = Periods.week(anchor, DayOfWeek.of(s.weekStartDay))
+            PeriodRange(a, b, "${a.monthValue}/${a.dayOfMonth} ~ ${b.monthValue}/${b.dayOfMonth}")
+        }
+        Period.MONTH -> {
+            val m = Periods.monthOf(anchor, s.monthStartDay)
+            val (a, b) = Periods.month(m, s.monthStartDay)
+            PeriodRange(a, b, "${m.year}年${m.monthValue}月")
+        }
+        Period.YEAR -> PeriodRange(LocalDate.of(anchor.year, 1, 1), LocalDate.of(anchor.year, 12, 31), "${anchor.year}年")
+        Period.CUSTOM -> {
+            val (a, b) = custom ?: (anchor.withDayOfMonth(1) to anchor)
+            PeriodRange(a, b, "${a.year % 100}/${a.monthValue}/${a.dayOfMonth} ~ ${b.year % 100}/${b.monthValue}/${b.dayOfMonth}")
+        }
     }
-    Period.MONTH -> {
-        val m = YearMonth.from(anchor)
-        PeriodRange(m.atDay(1), m.atEndOfMonth(), "${m.year} 年 ${m.monthValue} 月")
-    }
-    Period.YEAR -> PeriodRange(LocalDate.of(anchor.year, 1, 1), LocalDate.of(anchor.year, 12, 31), "${anchor.year} 年")
 }
 
 fun shift(period: Period, anchor: LocalDate, n: Long): LocalDate = when (period) {
     Period.WEEK -> anchor.plusWeeks(n)
-    Period.MONTH -> anchor.plusMonths(n)
+    Period.MONTH, Period.CUSTOM -> anchor.plusMonths(n)
     Period.YEAR -> anchor.plusYears(n)
 }
 
@@ -107,8 +123,14 @@ fun StatsTab(nav: NavController) {
     var anchor by rememberSaveable { mutableStateOf(LocalDate.now()) }
     var kind by rememberSaveable { mutableStateOf(TxnType.EXPENSE) }
     var menu by remember { mutableStateOf(false) }
+    var customStart by rememberSaveable { mutableStateOf(LocalDate.now().withDayOfMonth(1)) }
+    var customEnd by rememberSaveable { mutableStateOf(LocalDate.now()) }
+    var pickRange by remember { mutableStateOf(false) }
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
-    val range = rangeOf(period, anchor)
+    val range = remember(period, anchor, customStart, customEnd, settings.monthStartDay, settings.weekStartDay) {
+        rangeOf(period, anchor, customStart to customEnd)
+    }
     val inRange = remember(all, range) { all.filter { it.status == TxnStatus.CONFIRMED }.inRange(range) }
     val totals = totalsOf(inRange, lk.fx)
     val byCat = inRange.filter { it.type == kind }.groupBy { it.categoryId }
@@ -116,20 +138,28 @@ fun StatsTab(nav: NavController) {
         .sortedByDescending { it.second }
     val sum = byCat.sumOf { it.second }
 
-    Scaffold(topBar = {
-        CenterAlignedTopAppBar(
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
+        TopAppBar(
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { anchor = shift(period, anchor, -1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
-                    Text(range.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.clickable { anchor = LocalDate.now() })
-                    IconButton(onClick = { anchor = shift(period, anchor, 1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(x = (-12).dp)) {
+                    if (period != Period.CUSTOM) IconButton(onClick = { anchor = shift(period, anchor, -1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
+                    Text(range.title, fontSize = if (period == Period.CUSTOM) 16.sp else 20.sp,
+                        modifier = Modifier.clickable { if (period == Period.CUSTOM) pickRange = true else anchor = LocalDate.now() })
+                    if (period != Period.CUSTOM) IconButton(onClick = { anchor = shift(period, anchor, 1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                 }
             },
             actions = {
-                Box {
-                    TextButton(onClick = { menu = true }) { Text(period.label); Icon(Icons.Filled.ArrowDropDown, null) }
+                Box(Modifier.padding(end = 8.dp)) {
+                    Row(
+                        Modifier.border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(8.dp)).clickable { menu = true }
+                            .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) { Text(period.label, fontSize = 16.sp); Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp)) }
                     DropdownMenu(menu, { menu = false }) {
-                        Period.entries.forEach { p -> DropdownMenuItem(text = { Text(p.label) }, onClick = { period = p; menu = false }) }
+                        Period.entries.forEach { p ->
+                            DropdownMenuItem(text = { Text(p.label) }, onClick = { period = p; menu = false; if (p == Period.CUSTOM) pickRange = true })
+                        }
                     }
                 }
             },
@@ -140,33 +170,42 @@ fun StatsTab(nav: NavController) {
             val idx = tabs.indexOfFirst { it.first == kind }
             TabRow(
                 selectedTabIndex = idx, containerColor = MaterialTheme.colorScheme.surface,
-                indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[idx]), color = typeColor(kind)) },
+                indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[idx]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
             ) {
                 tabs.forEach { (t, v) ->
-                    Tab(selected = kind == t, onClick = { kind = t }, text = { Text("${t.label}  ${Money.format(v)}") },
-                        selectedContentColor = typeColor(t), unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Tab(selected = kind == t, onClick = { kind = t }, text = { Text("${t.label}  ${Money.withSymbol(v, lk.base)}", fontSize = 15.sp, maxLines = 1) },
+                        selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-                item { PieChart(byCat.map { (cid, v) -> (lk.category(cid)?.name ?: "未分類") to v }) }
+            LazyColumn(Modifier.fillMaxSize()) {
+                item {
+                    Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+                        PieChart(byCat.map { (cid, v) -> (lk.category(cid)?.name ?: "未分類") to v })
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(Modifier.height(10.dp))
+                }
                 if (byCat.isEmpty()) item { EmptyHint("這段期間沒有${kind.label}") }
                 items(byCat.withIndex().toList(), key = { "c${it.value.first}" }) { (i, pair) ->
                     val (cid, v) = pair
                     val cat = lk.category(cid)
                     val pct = if (sum > 0) v * 100.0 / sum else 0.0
-                    Column {
+                    Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                         Row(
-                            Modifier.fillMaxWidth().clickable { nav.navigate("catstat/${cid ?: 0}/${kind.name}/${period.name}/${anchor.toEpochDay()}") }
+                            Modifier.fillMaxWidth().clickable {
+                                val p = if (period == Period.CUSTOM) Period.MONTH else period
+                                nav.navigate("catstat/${cid ?: 0}/${kind.name}/${p.name}/${anchor.toEpochDay()}")
+                            }
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Surface(color = chartPalette[i % chartPalette.size], shape = RoundedCornerShape(4.dp), modifier = Modifier.width(52.dp)) {
-                                Text(String.format("%.0f%%", pct), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(vertical = 2.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            Surface(color = chartPalette[i % chartPalette.size], shape = RoundedCornerShape(6.dp), modifier = Modifier.width(56.dp)) {
+                                Text(String.format("%.0f%%", pct), color = Color.White, fontSize = 13.sp,
+                                    modifier = Modifier.padding(vertical = 5.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                             }
-                            Spacer(Modifier.width(12.dp))
-                            Text("${cat?.icon ?: "❔"} ${cat?.name ?: "未分類"}", Modifier.weight(1f))
-                            Text(Money.format(v, lk.base), fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.width(14.dp))
+                            Text(cat?.name ?: "未分類", Modifier.weight(1f), fontSize = 17.sp)
+                            Text(Money.withSymbol(v, lk.base), fontSize = 17.sp)
                         }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
@@ -174,6 +213,27 @@ fun StatsTab(nav: NavController) {
                 item { Spacer(Modifier.height(24.dp)) }
             }
         }
+    }
+    if (pickRange) {
+        val state = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = customStart.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+            initialSelectedEndDateMillis = customEnd.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { pickRange = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val s0 = state.selectedStartDateMillis
+                    val e0 = state.selectedEndDateMillis ?: s0
+                    if (s0 != null && e0 != null) {
+                        customStart = java.time.Instant.ofEpochMilli(s0).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                        customEnd = java.time.Instant.ofEpochMilli(e0).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                    }
+                    pickRange = false
+                }) { Text("確定") }
+            },
+            dismissButton = { TextButton(onClick = { pickRange = false }) { Text("取消") } },
+        ) { DateRangePicker(state, Modifier.height(480.dp)) }
     }
 }
 
@@ -183,8 +243,9 @@ fun PieChart(slices: List<Pair<String, Long>>) {
     val measurer = rememberTextMeasurer()
     val labelColor = MaterialTheme.colorScheme.onSurface
     val empty = MaterialTheme.colorScheme.surfaceVariant
-    Canvas(Modifier.fillMaxWidth().height(250.dp).padding(vertical = 12.dp)) {
-        val r = minOf(size.width, size.height) / 2 * 0.62f
+    val separator = MaterialTheme.colorScheme.surface
+    Canvas(Modifier.fillMaxWidth().height(330.dp).padding(vertical = 16.dp)) {
+        val r = minOf(size.width, size.height) / 2 * 0.66f
         val c = Offset(size.width / 2, size.height / 2)
         val topLeft = Offset(c.x - r, c.y - r)
         if (total <= 0L) {
@@ -192,19 +253,36 @@ fun PieChart(slices: List<Pair<String, Long>>) {
             return@Canvas
         }
         var start = -90f
+        val sweeps = slices.map { it.second.toFloat() / total * 360f }
+        slices.forEachIndexed { i, _ ->
+            drawArc(chartPalette[i % chartPalette.size], start, sweeps[i], true, topLeft, Size(2 * r, 2 * r))
+            start += sweeps[i]
+        }
+        // 白色分隔線
+        start = -90f
+        if (slices.size > 1) sweeps.forEach { sw ->
+            val rad = Math.toRadians(start.toDouble())
+            drawLine(separator, c, Offset(c.x + (r * cos(rad)).toFloat(), c.y + (r * sin(rad)).toFloat()), strokeWidth = 3f)
+            start += sw
+        }
+        // 標籤與引線
+        start = -90f
         slices.forEachIndexed { i, (name, v) ->
-            val sweep = v.toFloat() / total * 360f
-            drawArc(chartPalette[i % chartPalette.size], start, sweep, true, topLeft, Size(2 * r, 2 * r))
             val pct = v * 100f / total
-            if (pct >= 4f) {
-                val mid = Math.toRadians((start + sweep / 2).toDouble())
-                val lx = c.x + (r * 1.22f * cos(mid)).toFloat()
-                val ly = c.y + (r * 1.22f * sin(mid)).toFloat()
-                val layout = measurer.measure("$name ${"%.0f".format(pct)}%", TextStyle(fontSize = 11.sp, color = labelColor))
-                val x = if (cos(mid) >= 0) lx else lx - layout.size.width
-                drawText(layout, topLeft = Offset(x.coerceIn(0f, size.width - layout.size.width), ly - layout.size.height / 2))
+            val mid = Math.toRadians((start + sweeps[i] / 2).toDouble())
+            if (pct >= 2f) {
+                val color = chartPalette[i % chartPalette.size]
+                val p1 = Offset(c.x + (r * cos(mid)).toFloat(), c.y + (r * sin(mid)).toFloat())
+                val p2 = Offset(c.x + (r * 1.18f * cos(mid)).toFloat(), c.y + (r * 1.18f * sin(mid)).toFloat())
+                val right = cos(mid) >= 0
+                val p3 = Offset(p2.x + if (right) 24f else -24f, p2.y)
+                drawLine(color, p1, p2, strokeWidth = 2.5f)
+                drawLine(color, p2, p3, strokeWidth = 2.5f)
+                val layout = measurer.measure("$name\n${"%.1f".format(pct)} %", TextStyle(fontSize = 13.sp, color = labelColor))
+                val x = if (right) p3.x + 6f else p3.x - 6f - layout.size.width
+                drawText(layout, topLeft = Offset(x.coerceIn(0f, size.width - layout.size.width), (p3.y - layout.size.height / 2).coerceIn(0f, size.height - layout.size.height)))
             }
-            start += sweep
+            start += sweeps[i]
         }
     }
 }
@@ -242,7 +320,7 @@ fun CategoryStatScreen(nav: NavController, categoryId: Long, kind: TxnType, peri
                                 }
                                 Text(
                                     when (period) {
-                                        Period.MONTH -> "${ranges[i].start.monthValue}月"
+                                        Period.MONTH, Period.CUSTOM -> "${ranges[i].start.monthValue}月"
                                         Period.YEAR -> "${ranges[i].start.year}"
                                         Period.WEEK -> "${ranges[i].start.monthValue}/${ranges[i].start.dayOfMonth}"
                                     },

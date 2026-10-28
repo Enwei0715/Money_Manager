@@ -31,6 +31,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextButton
+import com.enwei.moneymanager.ui.components.FormInput
+import com.enwei.moneymanager.ui.components.FormLine
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.core.Money
@@ -44,28 +57,117 @@ fun currencyOptions(lk: Lookups): List<String> =
     (listOf(lk.base) + lk.accounts.map { it.currency } + com.enwei.moneymanager.net.FxService.common).distinct()
 
 @Composable
-fun SearchScreen(nav: NavController) {
+fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
     val lk = rememberLookups()
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     var q by rememberSaveable { mutableStateOf("") }
-    val result = remember(q, all, lk) {
-        if (q.isBlank()) emptyList() else all.filter { t ->
-            listOfNotNull(t.merchant, t.note, lk.category(t.categoryId)?.name, lk.account(t.accountId)?.name, lk.account(t.toAccountId)?.name)
-                .any { it.contains(q, true) } || Money.format(t.amount).replace(",", "").contains(q.replace(",", ""))
+    var showFilter by rememberSaveable { mutableStateOf(startWithFilter) }
+    var from by rememberSaveable { mutableStateOf<java.time.LocalDate?>(null) }
+    var to by rememberSaveable { mutableStateOf<java.time.LocalDate?>(null) }
+    var accountId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var min by rememberSaveable { mutableStateOf("") }
+    var max by rememberSaveable { mutableStateOf("") }
+    var pickRange by remember { mutableStateOf(false) }
+    var accMenu by remember { mutableStateOf(false) }
+    var catMenu by remember { mutableStateOf(false) }
+    val minMinor = Money.parseMinor(min)
+    val maxMinor = Money.parseMinor(max)
+    val active = q.isNotBlank() || from != null || accountId != null || categoryId != null || minMinor != null || maxMinor != null
+    val result = remember(q, all, lk, from, to, accountId, categoryId, minMinor, maxMinor) {
+        if (!active) emptyList() else all.filter { t ->
+            val d = t.date.toLocalDate()
+            (q.isBlank() || listOfNotNull(t.merchant, t.note, lk.category(t.categoryId)?.name, lk.account(t.accountId)?.name, lk.account(t.toAccountId)?.name)
+                .any { it.contains(q, true) } || Money.full(t.amount).replace(",", "").contains(q.replace(",", ""))) &&
+                (from == null || !d.isBefore(from)) && (to == null || !d.isAfter(to)) &&
+                (accountId == null || t.accountId == accountId || t.toAccountId == accountId) &&
+                (categoryId == null || t.categoryId == categoryId) &&
+                (minMinor == null || t.amount >= minMinor) && (maxMinor == null || t.amount <= maxMinor)
         }
     }
-    Scaffold(topBar = { BackTopBar("搜尋", { nav.popBackStack() }) }) { pad ->
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            BackTopBar("搜尋", { nav.popBackStack() }) {
+                IconButton(onClick = { showFilter = !showFilter }) { Icon(Icons.Outlined.Tune, "篩選") }
+            }
+        },
+    ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
-            OutlinedTextField(q, { q = it }, placeholder = { Text("商家、備註、分類、帳戶或金額") }, singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
-            if (q.isNotBlank()) SummaryBar(totalsOf(result, lk.fx), lk.base)
-            LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                if (q.isNotBlank() && result.isEmpty()) item { EmptyHint("找不到符合的交易") }
-                result.groupBy { it.date.toLocalDate() }.forEach { (day, txns) ->
+            Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+                androidx.compose.foundation.text.BasicTextField(
+                    q, { q = it }, singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    decorationBox = { inner ->
+                        Row(
+                            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background, RoundedCornerShape(14.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp)).padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Outlined.Search, null)
+                            Spacer(Modifier.width(10.dp))
+                            Box { if (q.isEmpty()) Text("商家、備註、分類、帳戶或金額", color = MaterialTheme.colorScheme.onSurfaceVariant); inner() }
+                        }
+                    },
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                if (showFilter) {
+                    FormLine("期間", onClick = { pickRange = true }) {
+                        Text(if (from == null) "" else "$from ~ ${to ?: from}", fontSize = 16.sp)
+                    }
+                    FormLine("帳戶", onClick = { accMenu = true }) {
+                        Box {
+                            Text(lk.account(accountId)?.name.orEmpty(), fontSize = 16.sp)
+                            DropdownMenu(accMenu, { accMenu = false }) {
+                                DropdownMenuItem(text = { Text("全部") }, onClick = { accountId = null; accMenu = false })
+                                lk.accounts.forEach { a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { accountId = a.id; accMenu = false }) }
+                            }
+                        }
+                    }
+                    FormLine("分類", onClick = { catMenu = true }) {
+                        Box {
+                            Text(lk.category(categoryId)?.name.orEmpty(), fontSize = 16.sp)
+                            DropdownMenu(catMenu, { catMenu = false }) {
+                                DropdownMenuItem(text = { Text("全部") }, onClick = { categoryId = null; catMenu = false })
+                                lk.categories.forEach { c -> DropdownMenuItem(text = { Text("${c.kind.label}・${c.name}") }, onClick = { categoryId = c.id; catMenu = false }) }
+                            }
+                        }
+                    }
+                    FormLine("金額") {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) { FormInput(min, { min = it }, "最低", number = true) }
+                            Text("  ~  ", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Box(Modifier.weight(1f)) { FormInput(max, { max = it }, "最高", number = true) }
+                        }
+                    }
+                    if (active) TextButton(onClick = { from = null; to = null; accountId = null; categoryId = null; min = ""; max = "" },
+                        modifier = Modifier.padding(start = 8.dp)) { Text("清除篩選") }
+                }
+            }
+            if (active) SummaryBar(totalsOf(result, lk.fx), lk.base)
+            LazyColumn(Modifier.fillMaxSize()) {
+                if (active && result.isEmpty()) item { NoData("找不到符合的交易") }
+                result.groupBy { it.date.toLocalDate() }.toSortedMap(Comparator.reverseOrder()).forEach { (day, txns) ->
                     item(key = "s$day") { DayBlock(day, txns, lk, nav) }
                 }
             }
         }
+    }
+    if (pickRange) {
+        val state = androidx.compose.material3.rememberDateRangePickerState()
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { pickRange = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    fun conv(ms: Long?) = ms?.let { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneOffset.UTC).toLocalDate() }
+                    from = conv(state.selectedStartDateMillis); to = conv(state.selectedEndDateMillis) ?: from
+                    pickRange = false
+                }) { Text("確定") }
+            },
+            dismissButton = { TextButton(onClick = { pickRange = false }) { Text("取消") } },
+        ) { androidx.compose.material3.DateRangePicker(state, Modifier.height(480.dp)) }
     }
 }
 

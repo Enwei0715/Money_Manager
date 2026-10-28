@@ -11,13 +11,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -27,10 +28,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.outlined.Calculate
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,7 +54,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,7 +72,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -76,14 +82,15 @@ import com.enwei.moneymanager.core.Calculator
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.core.Recurrence
 import com.enwei.moneymanager.data.AccountEntity
+import com.enwei.moneymanager.data.Bookmark
 import com.enwei.moneymanager.data.TxnEntity
+import com.enwei.moneymanager.data.TxnSource
 import com.enwei.moneymanager.data.TxnStatus
 import com.enwei.moneymanager.data.TxnType
 import com.enwei.moneymanager.data.toLocalDate
-import com.enwei.moneymanager.data.toMillis
 import com.enwei.moneymanager.ui.ExpenseColor
 import com.enwei.moneymanager.ui.IncomeColor
-import com.enwei.moneymanager.ui.TransferColor
+import com.enwei.moneymanager.ui.components.BackTopBar
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -91,15 +98,23 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 
-private enum class Panel { NONE, AMOUNT, CATEGORY, ACCOUNT, TO_ACCOUNT }
+private enum class Panel { NONE, AMOUNT, FEE, CATEGORY, ACCOUNT, TO_ACCOUNT }
 
-fun typeColor(t: TxnType) = when (t) { TxnType.INCOME -> IncomeColor; TxnType.EXPENSE -> ExpenseColor; TxnType.TRANSFER -> TransferColor }
+private val PanelHeader = Color(0xFF111111)
+private val CurrencyBar = Color(0xFF3F4570)
+private val CurrencyBarSelected = Color(0xFF262B4D)
+
+fun typeColor(t: TxnType): Color = when (t) {
+    TxnType.INCOME -> IncomeColor
+    TxnType.EXPENSE -> ExpenseColor
+    TxnType.TRANSFER -> Color(0xFF222222)
+}
 
 private fun minorToExpr(minor: Long) = Money.fromMinor(minor).stripTrailingZeros().toPlainString()
 
-/** 記一筆：表單＋底部計算機／分類格／帳戶格。 */
+/** 記一筆：上方表單、下方依欄位切換計算機鍵盤／分類格／帳戶格。 */
 @Composable
-fun TxnEditScreen(nav: NavController, id: Long, initialType: String?) {
+fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId: Long = 0, initialEpochDay: Long? = null) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
@@ -110,6 +125,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?) {
 
     var type by rememberSaveable { mutableStateOf(initialType?.let { TxnType.valueOf(it) } ?: TxnType.EXPENSE) }
     var expr by rememberSaveable { mutableStateOf("") }
+    var feeExpr by rememberSaveable { mutableStateOf("") }
+    var showFee by rememberSaveable { mutableStateOf(false) }
     var currency by rememberSaveable { mutableStateOf(settings.baseCurrency) }
     var accountId by rememberSaveable { mutableStateOf(settings.defaultAccountId) }
     var toAccountId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -117,19 +134,30 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?) {
     var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var merchant by rememberSaveable { mutableStateOf("") }
     var note by rememberSaveable { mutableStateOf("") }
-    var date by rememberSaveable { mutableStateOf(LocalDate.now()) }
-    var panel by rememberSaveable { mutableStateOf(if (id == 0L) Panel.AMOUNT else Panel.NONE) }
+    var date by rememberSaveable { mutableStateOf(initialEpochDay?.let(LocalDate::ofEpochDay) ?: LocalDate.now()) }
+    var time by rememberSaveable { mutableStateOf(LocalTime.now().withSecond(0).withNano(0)) }
+    var panel by rememberSaveable {
+        mutableStateOf(if (id != 0L) Panel.NONE else if (repo.settings.value.inputFromCategory) Panel.CATEGORY else Panel.AMOUNT)
+    }
     var showDate by remember { mutableStateOf(false) }
+    var showTime by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var merchantFocused by remember { mutableStateOf(false) }
+    var calcMode by remember { mutableStateOf(false) }
 
-    LaunchedEffect(id) {
-        if (id == 0L || original != null) return@LaunchedEffect
-        repo.getTxn(id)?.let { t ->
+    LaunchedEffect(id, bookmarkId) {
+        if (original != null) return@LaunchedEffect
+        if (id != 0L) repo.getTxn(id)?.let { t ->
             original = t
             type = t.type; expr = minorToExpr(t.amount); currency = t.currency
             accountId = t.accountId; toAccountId = t.toAccountId; toExpr = t.toAmount?.let(::minorToExpr).orEmpty()
-            categoryId = t.categoryId; merchant = t.merchant.orEmpty(); note = t.note.orEmpty(); date = t.date.toLocalDate()
+            categoryId = t.categoryId; merchant = t.merchant.orEmpty(); note = t.note.orEmpty()
+            date = t.date.toLocalDate(); time = Instant.ofEpochMilli(t.date).atZone(ZoneId.systemDefault()).toLocalTime().withSecond(0).withNano(0)
+        } else if (bookmarkId != 0L) settings.bookmarks.find { it.id == bookmarkId }?.let { b ->
+            type = b.type; expr = if (b.amount > 0) minorToExpr(b.amount) else ""; currency = b.currency
+            accountId = b.accountId ?: accountId; toAccountId = b.toAccountId; categoryId = b.categoryId
+            merchant = b.merchant.orEmpty(); note = b.note.orEmpty()
+            panel = if (b.amount > 0) Panel.NONE else Panel.AMOUNT
         }
     }
     LaunchedEffect(accountId, lk.accounts) {
@@ -139,6 +167,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?) {
 
     val color = typeColor(type)
     val amountMinor = Calculator.evaluate(expr)?.abs()?.let(Money::toMinor)?.takeIf { it > 0 }
+    val feeMinor = if (showFee) Calculator.evaluate(feeExpr)?.abs()?.let(Money::toMinor)?.takeIf { it > 0 } else null
     val toAcc = lk.account(toAccountId)
     val crossCurrency = type == TxnType.TRANSFER && toAcc != null && toAcc.currency != currency
     val canSave = amountMinor != null && accountId != null && (type != TxnType.TRANSFER || toAccountId != null)
@@ -146,14 +175,13 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?) {
     fun build(): TxnEntity? {
         val minor = amountMinor ?: return null
         val base = original ?: TxnEntity(type = type, amount = 0, date = 0)
-        val keepTime = original?.date?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalTime() }
         return base.copy(
             type = type, amount = minor, currency = currency, accountId = accountId,
             toAccountId = if (type == TxnType.TRANSFER) toAccountId else null,
             toAmount = if (crossCurrency) Calculator.evaluate(toExpr)?.abs()?.let(Money::toMinor) else null,
             categoryId = if (type == TxnType.TRANSFER) null else categoryId,
             merchant = merchant.trim().ifBlank { null }, note = note.trim().ifBlank { null },
-            date = date.toMillis(keepTime ?: if (date == LocalDate.now()) LocalTime.now() else LocalTime.NOON),
+            date = date.atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
             status = TxnStatus.CONFIRMED,
         )
     }
@@ -162,15 +190,35 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?) {
         val t = build() ?: return
         scope.launch {
             repo.saveTxn(t)
+            // 轉帳手續費另記一筆支出
+            if (type == TxnType.TRANSFER && feeMinor != null) repo.saveTxn(
+                TxnEntity(
+                    type = TxnType.EXPENSE, amount = feeMinor, currency = currency, accountId = accountId,
+                    merchant = "轉帳手續費", date = t.date, source = TxnSource.MANUAL,
+                ),
+            )
             if (again) {
-                expr = ""; merchant = ""; note = ""; toExpr = ""; panel = Panel.AMOUNT
+                expr = ""; merchant = ""; note = ""; toExpr = ""; feeExpr = ""; showFee = false
+                time = LocalTime.now().withSecond(0).withNano(0)
+                panel = if (settings.inputFromCategory && type != TxnType.TRANSFER) Panel.CATEGORY else Panel.AMOUNT
                 snack.showSnackbar("已儲存，繼續記下一筆")
             } else nav.popBackStack()
         }
     }
 
-    fun afterAmount() {
+    fun addBookmark() {
+        val b = Bookmark(
+            id = System.currentTimeMillis(), type = type, amount = amountMinor ?: 0, currency = currency, accountId = accountId,
+            toAccountId = toAccountId, categoryId = categoryId, merchant = merchant.ifBlank { null }, note = note.ifBlank { null },
+        )
+        repo.settings.update { it.copy(bookmarks = it.bookmarks + b) }
+        scope.launch { snack.showSnackbar("已加入書籤") }
+    }
+
+    fun nextAfterAmount() {
+        calcMode = false
         panel = when {
+            type == TxnType.TRANSFER && accountId == null -> Panel.ACCOUNT
             type == TxnType.TRANSFER && toAccountId == null -> Panel.TO_ACCOUNT
             type != TxnType.TRANSFER && categoryId == null -> Panel.CATEGORY
             accountId == null -> Panel.ACCOUNT
@@ -179,18 +227,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            com.enwei.moneymanager.ui.components.BackTopBar(type.label, { nav.popBackStack() }) {
-                if (original != null) {
-                    IconButton(onClick = {
-                        // 複製成今天的新交易
-                        val t = build() ?: return@IconButton
-                        scope.launch {
-                            repo.saveTxn(t.copy(id = 0, date = LocalDate.now().toMillis(LocalTime.now()), externalKey = null, rawText = null))
-                            snack.showSnackbar("已複製為今天的新交易")
-                        }
-                    }) { Icon(Icons.Filled.ContentCopy, "複製") }
-                    IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, "刪除") }
+            BackTopBar(type.label, { nav.popBackStack() }) {
+                IconButton(onClick = { if (original != null || amountMinor != null) addBookmark() else nav.navigate("bookmarks") }) {
+                    Icon(Icons.Outlined.StarBorder, "書籤")
                 }
             }
         },
@@ -198,68 +239,93 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?) {
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).imePadding()) {
-                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TxnType.entries.forEach { t ->
                         val sel = t == type
                         val c = typeColor(t)
                         Box(
-                            Modifier.weight(1f).height(36.dp)
-                                .border(BorderStroke(1.dp, if (sel) c else MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(6.dp))
-                                .background(if (sel) c.copy(alpha = 0.08f) else Color.Transparent, RoundedCornerShape(6.dp))
-                                .clickable {
-                                    if (type != t) { type = t; categoryId = null }
-                                },
+                            Modifier.weight(1f).height(40.dp)
+                                .background(if (sel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                                .border(BorderStroke(if (sel) 1.5.dp else 1.dp, if (sel) c else MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(6.dp))
+                                .clickable { if (type != t) { type = t; categoryId = null } },
                             contentAlignment = Alignment.Center,
-                        ) { Text(t.label, color = if (sel) c else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (sel) FontWeight.Bold else null) }
+                        ) { Text(t.label, color = if (sel) c else MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
-                FormRow("日期", color, active = false, onClick = { panel = Panel.NONE; showDate = true }) {
-                    Text("${date.year}/${date.monthValue}/${date.dayOfMonth}（${Recurrence.weekdayName(date.dayOfWeek)}）")
+                FormRow("日期", color, active = false, onClick = { panel = Panel.NONE; showDate = true }, trailing = {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable { nav.navigate("recurring/0") },
+                    ) {
+                        Icon(Icons.Outlined.Repeat, "週期", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                        Text("週期/分期", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }) {
+                    Row {
+                        Text("${date.year % 100}/${date.monthValue}/${date.dayOfMonth} (${Recurrence.weekdayName(date.dayOfWeek)})")
+                        if (settings.showTime) Text("   %02d:%02d".format(time.hour, time.minute), modifier = Modifier.clickable { showTime = true })
+                    }
                 }
-                FormRow("金額", color, active = panel == Panel.AMOUNT, onClick = { focusManager.clearFocus(); panel = Panel.AMOUNT }) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(expr.ifEmpty { "0" }, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = color)
-                            if (Calculator.hasOperator(expr)) Calculator.evaluate(expr)?.let {
-                                Text("= ${Calculator.format(it)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                FormRow("金額", color, active = panel == Panel.AMOUNT, onClick = { focusManager.clearFocus(); panel = Panel.AMOUNT }, trailing = {
+                    if (type == TxnType.TRANSFER) OutlinedButton(
+                        onClick = { showFee = !showFee; if (showFee) panel = Panel.FEE },
+                        shape = RoundedCornerShape(6.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
+                        modifier = Modifier.height(36.dp),
+                    ) { Text("手續費", color = MaterialTheme.colorScheme.onSurface) }
+                }) {
+                    Column {
+                        Text(
+                            (if (currency != lk.base) Money.symbolOf(currency) else "") + expr,
+                            fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (Calculator.hasOperator(expr)) Calculator.evaluate(expr)?.let {
+                            Text("= ${Calculator.format(it)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        CurrencyChip(currency, currencyOptions(lk)) { currency = it }
+                        if (currency != lk.base && amountMinor != null && lk.fx.hasRate(currency)) {
+                            Text("≈ ${Money.withSymbol(lk.fx.convert(amountMinor, currency), lk.base)}",
+                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
-                if (currency != lk.base && amountMinor != null && lk.fx.hasRate(currency)) {
-                    Text("≈ ${Money.format(lk.fx.convert(amountMinor, currency), lk.base)}（依目前匯率）",
-                        style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 96.dp))
+                if (type == TxnType.TRANSFER && showFee) {
+                    FormRow("手續費", color, panel == Panel.FEE, onClick = { focusManager.clearFocus(); panel = Panel.FEE }) {
+                        Text(feeExpr, fontSize = 16.sp)
+                    }
                 }
                 if (type == TxnType.TRANSFER) {
                     FormRow("轉出", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
-                        PlaceholderText(lk.account(accountId)?.name, "選擇帳戶")
+                        PlaceholderText(lk.account(accountId)?.name, "")
                     }
-                    FormRow("轉入", color, panel == Panel.TO_ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.TO_ACCOUNT }) {
-                        PlaceholderText(toAcc?.name, "選擇帳戶")
+                    FormRow("轉入", color, panel == Panel.TO_ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.TO_ACCOUNT }, trailing = {
+                        IconButton(onClick = { val a = accountId; accountId = toAccountId; toAccountId = a }) {
+                            Icon(Icons.Filled.SwapVert, "對調", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }) {
+                        PlaceholderText(toAcc?.name, "")
                     }
                     if (crossCurrency) FormRow("轉入金額", color, false, onClick = {}) {
                         UnderlineField(toExpr, { toExpr = it.filter { c -> c.isDigit() || c == '.' } }, "${toAcc!!.currency} 金額")
                     }
                 } else {
                     FormRow("分類", color, panel == Panel.CATEGORY, onClick = { focusManager.clearFocus(); panel = Panel.CATEGORY }) {
-                        PlaceholderText(lk.category(categoryId)?.let { "${it.icon} ${it.name}" }, "選擇分類")
+                        PlaceholderText(lk.category(categoryId)?.name, "")
                     }
                     FormRow("帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
-                        PlaceholderText(lk.account(accountId)?.name, "選擇帳戶")
+                        PlaceholderText(lk.account(accountId)?.name, "")
                     }
                 }
                 FormRow("內容", color, merchantFocused, onClick = {}) {
-                    UnderlineField(merchant, { merchant = it }, if (type == TxnType.TRANSFER) "說明" else "商家／品項",
+                    UnderlineField(merchant, { merchant = it }, "",
                         Modifier.onFocusChanged { merchantFocused = it.isFocused; if (it.isFocused) panel = Panel.NONE })
                 }
-                // 依過去紀錄建議內容，點選時一併帶入分類
-                if (merchantFocused && merchant.isNotBlank()) {
-                    val suggestions = remember(merchant, history) {
-                        history.asSequence().filter { it.type == type && it.merchant != null && it.merchant.contains(merchant, true) && it.merchant != merchant }
-                            .distinctBy { it.merchant }.take(6).toList()
+                // 自動完成：依過去紀錄建議，點選時一併帶入分類與帳戶
+                if (settings.autocomplete && merchantFocused && merchant.isNotBlank()) {
+                    val suggestions = remember(merchant, history, type) {
+                        history.asSequence()
+                            .filter { it.type == type && it.merchant != null && it.merchant.contains(merchant, true) && it.merchant != merchant }
+                            .distinctBy { it.merchant }.take(8).toList()
                     }
-                    if (suggestions.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(start = 96.dp, end = 16.dp)) {
+                    if (suggestions.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(start = 96.dp, end = 16.dp, top = 6.dp)) {
                         suggestions.forEach { s ->
                             Surface(
                                 shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant,
@@ -273,39 +339,79 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?) {
                     }
                 }
                 FormRow("說明", color, false, onClick = {}) {
-                    UnderlineField(note, { note = it }, "備註", Modifier.onFocusChanged { if (it.isFocused) panel = Panel.NONE }, singleLine = false)
+                    UnderlineField(note, { note = it }, "", Modifier.onFocusChanged { if (it.isFocused) panel = Panel.NONE }, singleLine = false)
                 }
                 original?.rawText?.let {
                     Text("原始內容：$it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
-                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(thickness = 8.dp, color = MaterialTheme.colorScheme.background)
+                if (original == null) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = { save(again = false) }, enabled = canSave, modifier = Modifier.weight(2f).height(48.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(6.dp),
+                        ) { Text("儲存") }
+                        OutlinedButton(
+                            onClick = { save(again = true) }, enabled = canSave, modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(6.dp),
+                        ) { Text("繼續", color = MaterialTheme.colorScheme.onSurface) }
+                    }
+                } else {
                     Button(
-                        onClick = { save(again = false) }, enabled = canSave, modifier = Modifier.weight(2f).height(48.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = color), shape = RoundedCornerShape(6.dp),
+                        onClick = { save(again = false) }, enabled = canSave, modifier = Modifier.fillMaxWidth().padding(16.dp).height(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(6.dp),
                     ) { Text(if (original?.status == TxnStatus.PENDING) "確認入帳" else "儲存") }
-                    if (original == null) OutlinedButton(
-                        onClick = { save(again = true) }, enabled = canSave, modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(6.dp),
-                    ) { Text("繼續") }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) {
+                            Text("刪除", color = MaterialTheme.colorScheme.onSurface)
+                        }
+                        OutlinedButton(onClick = {
+                            val t = build() ?: return@OutlinedButton
+                            scope.launch {
+                                val now = LocalDate.now().atTime(LocalTime.now()).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                repo.saveTxn(t.copy(id = 0, date = now, externalKey = null, rawText = null, source = TxnSource.MANUAL))
+                                snack.showSnackbar("已複製為今天的新交易")
+                            }
+                        }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) { Text("複製", color = MaterialTheme.colorScheme.onSurface) }
+                        OutlinedButton(onClick = { addBookmark() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) {
+                            Text("書籤", color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
             if (panel != Panel.NONE) BottomPanel(
-                panel = panel, color = color, lk = lk, type = type, expr = expr,
+                panel = panel, lk = lk, type = type, expr = if (panel == Panel.FEE) feeExpr else expr,
+                currency = currency, currencies = listOf(settings.baseCurrency, settings.subCurrency).distinct(),
+                allCurrencies = currencyOptions(lk), calcMode = calcMode,
                 selectedCategory = categoryId, selectedAccount = if (panel == Panel.TO_ACCOUNT) toAccountId else accountId,
                 excludeAccount = if (panel == Panel.TO_ACCOUNT) accountId else null,
-                onExpr = { expr = it },
+                onExpr = { if (panel == Panel.FEE) feeExpr = it else expr = it },
+                onCurrency = { currency = it },
+                onToggleCalc = { calcMode = !calcMode },
                 onDoneAmount = {
-                    if (Calculator.hasOperator(expr)) Calculator.evaluate(expr)?.let { expr = Calculator.format(it) } else afterAmount()
+                    val current = if (panel == Panel.FEE) feeExpr else expr
+                    if (Calculator.hasOperator(current)) Calculator.evaluate(current)?.let {
+                        if (panel == Panel.FEE) feeExpr = Calculator.format(it) else expr = Calculator.format(it)
+                    } else if (panel == Panel.FEE) panel = Panel.NONE else nextAfterAmount()
                 },
-                onCategory = { categoryId = it; panel = if (accountId == null) Panel.ACCOUNT else Panel.NONE },
+                onCategory = {
+                    categoryId = it
+                    panel = when {
+                        amountMinor == null -> Panel.AMOUNT
+                        accountId == null -> Panel.ACCOUNT
+                        else -> Panel.NONE
+                    }
+                },
                 onAccount = { a ->
                     if (panel == Panel.TO_ACCOUNT) { toAccountId = a.id; panel = Panel.NONE }
                     else { accountId = a.id; panel = if (type == TxnType.TRANSFER && toAccountId == null) Panel.TO_ACCOUNT else Panel.NONE }
                 },
                 onEditCategories = { nav.navigate("categories") },
                 onEditAccounts = { nav.navigate("accounts") },
-                onClose = { panel = Panel.NONE },
+                onClose = { panel = Panel.NONE; calcMode = false },
             )
         }
     }
@@ -318,10 +424,20 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?) {
                 TextButton(onClick = {
                     state.selectedDateMillis?.let { date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
                     showDate = false
+                    if (settings.showTime) showTime = true
                 }) { Text("確定") }
             },
             dismissButton = { TextButton(onClick = { showDate = false }) { Text("取消") } },
         ) { DatePicker(state) }
+    }
+    if (showTime) {
+        val state = rememberTimePickerState(time.hour, time.minute, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { showTime = false },
+            text = { TimePicker(state) },
+            confirmButton = { TextButton(onClick = { time = LocalTime.of(state.hour, state.minute); showTime = false }) { Text("確定") } },
+            dismissButton = { TextButton(onClick = { showTime = false }) { Text("取消") } },
+        )
     }
     if (confirmDelete) AlertDialog(
         onDismissRequest = { confirmDelete = false },
@@ -332,21 +448,29 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?) {
 }
 
 @Composable
-private fun FormRow(label: String, color: Color, active: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, Modifier.width(80.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-            Box(Modifier.weight(1f)) { content() }
+private fun FormRow(
+    label: String, color: Color, active: Boolean, onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null, content: @Composable () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 20.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, Modifier.width(76.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+        Column(Modifier.weight(1f)) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { content() }
+                trailing?.invoke()
+            }
+            HorizontalDivider(thickness = if (active) 2.dp else 1.dp, color = if (active) color else MaterialTheme.colorScheme.outlineVariant)
         }
-        HorizontalDivider(thickness = if (active) 2.dp else 1.dp, color = if (active) color else MaterialTheme.colorScheme.outlineVariant,
-            modifier = Modifier.padding(start = 80.dp))
     }
 }
 
 @Composable
 private fun PlaceholderText(value: String?, placeholder: String) {
     Text(value ?: placeholder, color = if (value == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-        maxLines = 1, overflow = TextOverflow.Ellipsis)
+        maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
 }
 
 @Composable
@@ -366,69 +490,70 @@ private fun UnderlineField(value: String, onChange: (String) -> Unit, placeholde
 }
 
 @Composable
-private fun CurrencyChip(currency: String, options: List<String>, onSelect: (String) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.clickable { open = true }) {
-            Text(currency, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
-        }
-        DropdownMenu(open, { open = false }) {
-            options.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { onSelect(c); open = false }) }
-        }
-    }
-}
-
-@Composable
 private fun BottomPanel(
-    panel: Panel, color: Color, lk: Lookups, type: TxnType, expr: String,
-    selectedCategory: Long?, selectedAccount: Long?, excludeAccount: Long?,
-    onExpr: (String) -> Unit, onDoneAmount: () -> Unit, onCategory: (Long) -> Unit, onAccount: (AccountEntity) -> Unit,
+    panel: Panel, lk: Lookups, type: TxnType, expr: String, currency: String, currencies: List<String>, allCurrencies: List<String>,
+    calcMode: Boolean, selectedCategory: Long?, selectedAccount: Long?, excludeAccount: Long?,
+    onExpr: (String) -> Unit, onCurrency: (String) -> Unit, onToggleCalc: () -> Unit, onDoneAmount: () -> Unit,
+    onCategory: (Long) -> Unit, onAccount: (AccountEntity) -> Unit,
     onEditCategories: () -> Unit, onEditAccounts: () -> Unit, onClose: () -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.navigationBarsPadding()) {
-            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)).padding(start = 16.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    when (panel) { Panel.AMOUNT -> "金額"; Panel.CATEGORY -> "分類"; Panel.TO_ACCOUNT -> "轉入帳戶"; else -> "帳戶" },
-                    color = MaterialTheme.colorScheme.surface, modifier = Modifier.weight(1f),
-                )
-                if (panel == Panel.CATEGORY) TextButton(onClick = onEditCategories) { Text("編輯", color = MaterialTheme.colorScheme.surface) }
-                if (panel == Panel.ACCOUNT || panel == Panel.TO_ACCOUNT) TextButton(onClick = onEditAccounts) { Text("編輯", color = MaterialTheme.colorScheme.surface) }
-                IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "關閉", tint = MaterialTheme.colorScheme.surface) }
-            }
+    var currencyMenu by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).navigationBarsPadding()) {
+        Row(Modifier.fillMaxWidth().background(PanelHeader).height(52.dp).padding(start = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                when (panel) {
+                    Panel.AMOUNT -> "金額"; Panel.FEE -> "手續費"; Panel.CATEGORY -> "分類"; Panel.TO_ACCOUNT -> "轉入帳戶"; else -> "帳戶"
+                },
+                color = Color.White, fontSize = 17.sp, modifier = Modifier.weight(1f),
+            )
             when (panel) {
-                Panel.AMOUNT -> Keypad(expr, color, onExpr, onDoneAmount)
-                Panel.CATEGORY -> {
-                    val cats = lk.categories.filter { it.kind == type && !it.archived }
-                    LazyVerticalGrid(GridCells.Fixed(4), Modifier.height(260.dp)) {
-                        items(cats, key = { it.id }) { c ->
-                            val sel = c.id == selectedCategory
-                            Column(
-                                Modifier.aspectRatio(1.15f).background(if (sel) color.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface)
-                                    .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { onCategory(c.id) },
-                                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
-                            ) {
-                                Text(c.icon, fontSize = 22.sp)
-                                Text(c.name, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                            }
-                        }
+                Panel.AMOUNT, Panel.FEE -> Box {
+                    IconButton(onClick = { currencyMenu = true }) { Icon(Icons.Outlined.Language, "幣別", tint = Color.White) }
+                    DropdownMenu(currencyMenu, { currencyMenu = false }) {
+                        allCurrencies.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { onCurrency(c); currencyMenu = false }) }
                     }
                 }
-                else -> {
-                    val accs = lk.accounts.filter { !it.archived && it.id != excludeAccount }
-                    LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(240.dp)) {
-                        items(accs, key = { it.id }) { a ->
-                            val sel = a.id == selectedAccount
-                            Column(
-                                Modifier.height(64.dp).background(if (sel) color.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface)
-                                    .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { onAccount(a) }.padding(4.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
-                            ) {
-                                Text(a.type.icon)
-                                Text(a.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
+                Panel.CATEGORY -> IconButton(onClick = onEditCategories) { Icon(Icons.Outlined.Edit, "編輯分類", tint = Color.White) }
+                else -> IconButton(onClick = onEditAccounts) { Icon(Icons.Outlined.Edit, "編輯帳戶", tint = Color.White) }
+            }
+            IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "關閉", tint = Color.White) }
+        }
+        when (panel) {
+            Panel.AMOUNT, Panel.FEE -> {
+                Row(Modifier.fillMaxWidth().background(CurrencyBar).height(48.dp)) {
+                    (currencies + listOfNotNull(currency.takeIf { it !in currencies })).forEach { c ->
+                        Box(
+                            Modifier.width(64.dp).fillMaxHeight().background(if (c == currency) CurrencyBarSelected else Color.Transparent)
+                                .clickable { onCurrency(c) },
+                            contentAlignment = Alignment.Center,
+                        ) { Text(Money.symbolOf(c).trim().ifEmpty { c }, color = Color.White) }
+                    }
+                }
+                Keypad(expr, calcMode, onExpr, onToggleCalc, onDoneAmount)
+            }
+            Panel.CATEGORY -> {
+                val cats = lk.categories.filter { it.kind == type && !it.archived }
+                LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(280.dp)) {
+                    items(cats, key = { it.id }) { c ->
+                        val sel = c.id == selectedCategory
+                        Box(
+                            Modifier.height(56.dp).background(if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+                                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { onCategory(c.id) },
+                            contentAlignment = Alignment.Center,
+                        ) { Text("${c.icon} ${c.name}", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    }
+                }
+            }
+            else -> {
+                val accs = lk.accounts.filter { !it.archived && it.id != excludeAccount }
+                LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(280.dp)) {
+                    items(accs, key = { it.id }) { a ->
+                        val sel = a.id == selectedAccount
+                        Box(
+                            Modifier.height(56.dp).background(if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+                                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { onAccount(a) }.padding(4.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { Text(a.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     }
                 }
             }
@@ -437,49 +562,52 @@ private fun BottomPanel(
 }
 
 @Composable
-private fun Keypad(expr: String, color: Color, onExpr: (String) -> Unit, onDone: () -> Unit) {
-    val rows = listOf(
-        listOf("7", "8", "9", "÷"),
-        listOf("4", "5", "6", "×"),
-        listOf("1", "2", "3", "−"),
-        listOf(".", "0", "⌫", "+"),
-    )
+private fun Keypad(expr: String, calcMode: Boolean, onExpr: (String) -> Unit, onToggleCalc: () -> Unit, onDone: () -> Unit) {
+    val keyHeight = 62.dp
+    @Composable
+    fun Key(modifier: Modifier, bg: Color = MaterialTheme.colorScheme.surface, onClick: () -> Unit, content: @Composable () -> Unit) {
+        Box(
+            modifier.height(keyHeight).background(bg).border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) { content() }
+    }
+    @Composable
+    fun Digit(modifier: Modifier, label: String, value: String = label) = Key(modifier, onClick = {
+        var e = expr
+        value.forEach { e = Calculator.append(e, it) }
+        onExpr(e)
+    }) { Text(label, fontSize = 24.sp, textAlign = TextAlign.Center) }
+
     Column {
-        rows.forEach { row ->
-            Row(Modifier.fillMaxWidth()) {
-                row.forEach { k ->
-                    val isOp = k in listOf("÷", "×", "−", "+")
-                    Box(
-                        Modifier.weight(1f).height(52.dp)
-                            .background(if (isOp) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
-                            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
-                            .clickable {
-                                onExpr(
-                                    when (k) {
-                                        "⌫" -> expr.dropLast(1)
-                                        "−" -> Calculator.append(expr, '-')
-                                        else -> Calculator.append(expr, k[0])
-                                    },
-                                )
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (k == "⌫") Icon(Icons.AutoMirrored.Filled.Backspace, "刪除")
-                        else Text(k, fontSize = 20.sp, color = if (isOp) color else MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
-                    }
+        if (calcMode) Row(Modifier.fillMaxWidth()) {
+            listOf("+" to '+', "−" to '-', "×" to '×', "÷" to '÷').forEach { (l, k) ->
+                Key(Modifier.weight(1f), MaterialTheme.colorScheme.surfaceVariant, onClick = { onExpr(Calculator.append(expr, k)) }) {
+                    Text(l, fontSize = 22.sp)
                 }
+            }
+            Key(Modifier.weight(1f), MaterialTheme.colorScheme.surfaceVariant, onClick = {
+                Calculator.evaluate(expr)?.let { onExpr(Calculator.format(it)) }
+            }) { Text("=", fontSize = 22.sp) }
+        }
+        Row(Modifier.fillMaxWidth()) {
+            Digit(Modifier.weight(1f), "1"); Digit(Modifier.weight(1f), "2"); Digit(Modifier.weight(1f), "3")
+            Key(Modifier.weight(1f), onClick = { onExpr(expr.dropLast(1)) }) { Icon(Icons.AutoMirrored.Outlined.Backspace, "刪除") }
+        }
+        Row(Modifier.fillMaxWidth()) {
+            Digit(Modifier.weight(1f), "4"); Digit(Modifier.weight(1f), "5"); Digit(Modifier.weight(1f), "6")
+            Key(Modifier.weight(1f), onClick = { onExpr(Calculator.append(expr, '-')) }) { Text("-", fontSize = 24.sp) }
+        }
+        Row(Modifier.fillMaxWidth()) {
+            Digit(Modifier.weight(1f), "7"); Digit(Modifier.weight(1f), "8"); Digit(Modifier.weight(1f), "9")
+            Key(Modifier.weight(1f), if (calcMode) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface, onClick = onToggleCalc) {
+                Icon(Icons.Outlined.Calculate, "計算機")
             }
         }
         Row(Modifier.fillMaxWidth()) {
-            Box(
-                Modifier.weight(1f).height(48.dp).background(MaterialTheme.colorScheme.surface)
-                    .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { onExpr("") },
-                contentAlignment = Alignment.Center,
-            ) { Text("清除", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            Box(
-                Modifier.weight(3f).height(48.dp).background(color).clickable(onClick = onDone),
-                contentAlignment = Alignment.Center,
-            ) { Text(if (Calculator.hasOperator(expr)) "=" else "完成", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+            Digit(Modifier.weight(1f), "00"); Digit(Modifier.weight(1f), "0"); Digit(Modifier.weight(1f), ".")
+            Key(Modifier.weight(1f), MaterialTheme.colorScheme.primary, onClick = onDone) {
+                Text(if (Calculator.hasOperator(expr)) "=" else "完成", color = Color.White, fontSize = 20.sp)
+            }
         }
     }
 }

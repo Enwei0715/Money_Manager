@@ -47,6 +47,7 @@ data class AccountEntity(
     val includeInNetWorth: Boolean = true,
     val archived: Boolean = false,
     val sortOrder: Int = 0,
+    val description: String? = null,
 )
 
 @Serializable

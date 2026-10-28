@@ -61,6 +61,8 @@ data class Backup(
     val rules: List<MerchantRuleEntity>,
 )
 
+data class CardStatus(val payable: Long, val outstanding: Long, val dueDate: LocalDate?)
+
 data class IngestResult(val kind: String, val txnId: Long? = null, val message: String)
 
 class Repository(private val db: AppDatabase, val settings: SettingsStore) {
@@ -365,6 +367,24 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
             }
         }
         return b
+    }
+
+    /** 信用卡：應繳金額（已出帳未繳）、未出帳金額、下次繳款日。 */
+    suspend fun cardStatus(today: LocalDate = LocalDate.now()): Map<Long, CardStatus> {
+        val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
+        return db.accounts().all().filter { it.type == AccountType.CREDIT_CARD }.associate { card ->
+            val owed = maxOf(0, -balanceAsOf(card, txns, Long.MAX_VALUE))
+            if (card.statementDay == null || card.dueDay == null) return@associate card.id to CardStatus(owed, 0, null)
+            val cycle = CardCycle(card.statementDay, card.dueDay)
+            val thisMonth = Recurrence.dayInMonth(java.time.YearMonth.from(today), card.statementDay)
+            val lastStatement = if (thisMonth.isAfter(today)) Recurrence.dayInMonth(java.time.YearMonth.from(today).minusMonths(1), card.statementDay) else thisMonth
+            val cutoff = lastStatement.plusDays(1).toMillis(LocalTime.MIDNIGHT)
+            val billed = maxOf(0, -balanceAsOf(card, txns, cutoff))
+            val paid = txns.filter { it.type == TxnType.TRANSFER && it.toAccountId == card.id && it.date >= cutoff }.sumOf { it.toAmount ?: it.amount }
+            val payable = maxOf(0, billed - paid)
+            val due = cycle.nextDueDate(lastStatement)
+            card.id to CardStatus(payable, maxOf(0, owed - payable), due)
+        }
     }
 
     /** 首頁「即將到來」：信用卡繳款日與預估金額。 */
