@@ -115,6 +115,32 @@ object GroqAi {
         return Math.round(v * 100).takeIf { it in seen || -it in seen }
     }
 
+    /** 一筆要請 AI 分類的交易：[desc] 為交易內容（日期時間、金額、帳戶、說明），[hints] 為類似情境過去常用的分類。 */
+    data class Unsorted(val id: Long, val desc: String, val hints: String)
+
+    /**
+     * 幫一批「不明」交易挑分類（一次最多約 10 筆，節省請求次數）。
+     * 回傳 交易 id → (分類 id, 理由)；判斷不出來的不回傳。只接受清單內的分類 id。
+     */
+    suspend fun suggestCategories(items: List<Unsorted>, categories: List<Pair<Long, String>>): Map<Long, Pair<Long, String>> {
+        if (!enabled || items.isEmpty()) return emptyMap()
+        val system = "你是台灣記帳 App 的助理，幫使用者把分類為「不明」的交易歸到最可能的分類。" +
+            "依交易的時間、金額、帳戶、說明，以及「這個人在類似情境的習慣」推測；沒有把握就填 null，不要硬猜。" +
+            "理由用繁體中文 15 字以內。只回 JSON：{\"results\": [{\"id\": number, \"category_id\": number|null, \"reason\": string}]}"
+        val user = "分類清單（id: 名稱）：\n" + categories.joinToString("\n") { "${it.first}: ${it.second}" } +
+            "\n\n交易：\n" + items.joinToString("\n") { "[${it.id}] ${it.desc}｜類似情境常用：${it.hints.ifBlank { "無" }}" }
+        val r = chatJson(system, user, 60 + 50 * items.size) ?: return emptyMap()
+        val arr = r["results"] as? kotlinx.serialization.json.JsonArray ?: return emptyMap()
+        val valid = categories.map { it.first }.toSet()
+        return arr.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val id = o.str("id")?.toDoubleOrNull()?.toLong() ?: return@mapNotNull null
+            val cat = o.str("category_id")?.toDoubleOrNull()?.toLong()?.takeIf { it in valid } ?: return@mapNotNull null
+            if (items.none { it.id == id }) return@mapNotNull null
+            id to (cat to (o.str("reason")?.take(40) ?: ""))
+        }.toMap()
+    }
+
     /** 規則看不懂的銀行／支付通知：請 AI 判讀是否為交易與內容。 */
     suspend fun parseNotification(title: String?, text: String?, now: LocalDateTime = LocalDateTime.now()): ParsedTransaction? {
         if (!enabled) return null

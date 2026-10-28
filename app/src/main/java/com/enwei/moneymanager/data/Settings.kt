@@ -28,6 +28,10 @@ data class Bookmark(
     val note: String?,
 )
 
+/** AI 對一筆交易建議的分類，使用者確認後才套用；[rejected] 為略過（不再重複詢問）。 */
+@Serializable
+data class AiSuggestion(val txnId: Long, val categoryId: Long, val reason: String = "", val rejected: Boolean = false)
+
 /** 交易頁「備註」分頁的備忘。 */
 @Serializable
 data class Memo(
@@ -179,6 +183,8 @@ data class AppSettings(
     /** AI 智慧辨識：規則判斷不出來時用 AI 判讀通知、命名商家、挑分類 */
     val aiEnabled: Boolean = false,
     val aiModel: String = "llama-3.1-8b-instant",
+    /** AI 建議的分類（待使用者確認） */
+    val aiSuggestions: List<AiSuggestion> = emptyList(),
     /** 上次提醒「扣款帳戶餘額不足」的內容，避免同一件事重複通知 */
     val fundingWarnKey: String = "",
 ) {
@@ -200,6 +206,7 @@ class SettingsStore(context: Context) {
     private val longIntSerializer = MapSerializer(Long.serializer(), Int.serializer())
     private val longStrSerializer = MapSerializer(Long.serializer(), String.serializer())
     private val learnedSerializer = ListSerializer(LearnedSource.serializer())
+    private val aiSuggestionSerializer = ListSerializer(AiSuggestion.serializer())
     private val strMapSerializer = MapSerializer(String.serializer(), String.serializer())
     private val cashSerializer = MapSerializer(Long.serializer(), MapSerializer(Int.serializer(), Int.serializer()))
     private val state = MutableStateFlow(read())
@@ -261,6 +268,7 @@ class SettingsStore(context: Context) {
         aiEnabled = prefs.getBoolean("aiEnabled", false),
         aiModel = prefs.getString("aiModel", "llama-3.1-8b-instant")!!,
         fundingWarnKey = prefs.getString("fundingWarnKey", "")!!,
+        aiSuggestions = runCatching { json.decodeFromString(aiSuggestionSerializer, prefs.getString("aiSuggestions", "[]")!!) }.getOrDefault(emptyList()),
         cardBank = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardBank", "{}")!!) }.getOrDefault(emptyMap()),
         cardDueOffset = runCatching { json.decodeFromString(longIntSerializer, prefs.getString("cardDueOffset", "{}")!!) }.getOrDefault(emptyMap()),
         cardShift = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardShift", "{}")!!) }.getOrDefault(emptyMap()),
@@ -383,6 +391,7 @@ class SettingsStore(context: Context) {
             .putBoolean("aiEnabled", s.aiEnabled)
             .putString("aiModel", s.aiModel)
             .putString("fundingWarnKey", s.fundingWarnKey)
+            .putString("aiSuggestions", json.encodeToString(aiSuggestionSerializer, s.aiSuggestions))
             .putString("cardDueOffset", json.encodeToString(longIntSerializer, s.cardDueOffset))
             .apply()
         state.value = s

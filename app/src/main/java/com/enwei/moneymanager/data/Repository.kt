@@ -258,6 +258,84 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return CategorySuggester.suggest(merchant, at.toLocalDateTime(), cats, rules, history, amountMinor, accountId)
     }
 
+    // ---------- AI 整理「不明」 ----------
+
+    /** 沒有分類或分類為「不明」的已確認收支。 */
+    private fun isUnknown(t: TxnEntity, cats: Map<Long, CategoryEntity>): Boolean =
+        t.type != TxnType.TRANSFER && t.status == TxnStatus.CONFIRMED && (t.categoryId == null || cats[t.categoryId]?.name == "不明")
+
+    /** 還沒請 AI 看過的「不明」交易數。 */
+    suspend fun unknownCount(): Int {
+        val cats = db.categories().all().associateBy { it.id }
+        val asked = settings.value.aiSuggestions.map { it.txnId }.toSet()
+        return db.txns().all().count { isUnknown(it, cats) && it.id !in asked }
+    }
+
+    /**
+     * 請 AI 幫「不明」交易挑分類，結果放進待確認的「AI 建議分類」（不會直接修改交易）。
+     * 每次送約 8 筆，附上這個人在類似情境（同帳戶、金額相近、時段相近）過去常用的分類當參考。
+     */
+    suspend fun aiSortUnknown(onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }): Int {
+        if (!com.enwei.moneymanager.net.GroqAi.enabled) return 0
+        val catsAll = db.categories().all()
+        val cats = catsAll.associateBy { it.id }
+        fun path(id: Long) = cats[id]?.let { c -> c.parentId?.let { cats[it]?.name + " / " } .orEmpty() + c.name } ?: "?"
+        val accounts = db.accounts().all().associateBy { it.id }
+        val all = db.txns().all()
+        val asked = settings.value.aiSuggestions.map { it.txnId }.toSet()
+        val targets = all.filter { isUnknown(it, cats) && it.id !in asked }
+        val known = all.filter { it.status == TxnStatus.CONFIRMED && it.type != TxnType.TRANSFER && it.categoryId != null && !isUnknown(it, cats) }
+        val zone = ZoneId.systemDefault()
+        fun at(t: TxnEntity) = java.time.Instant.ofEpochMilli(t.date).atZone(zone).toLocalDateTime()
+        var created = 0
+        var done = 0
+        onProgress(0, targets.size)
+        for (type in listOf(TxnType.EXPENSE, TxnType.INCOME)) {
+            val choices = catsAll.filter { it.kind == type && !it.archived && it.name != "不明" && it.name != "對帳調整" && catsAll.none { c -> c.parentId == it.id } }
+                .map { it.id to path(it.id) }
+            if (choices.isEmpty()) continue
+            for (chunk in targets.filter { it.type == type }.chunked(8)) {
+                val items = chunk.map { t ->
+                    val time = at(t)
+                    val similar = known.filter { k ->
+                        k.type == type && k.accountId == t.accountId && k.amount in (t.amount * 7 / 10)..(t.amount * 13 / 10)
+                    }
+                    val near = similar.filter { kotlin.math.abs(at(it).hour - time.hour) <= 2 }.ifEmpty { similar }
+                    val hints = near.groupingBy { path(it.categoryId!!) }.eachCount().entries.sortedByDescending { it.value }.take(3)
+                        .joinToString("、") { "${it.key}×${it.value}" }
+                    val desc = "${time.toLocalDate()} 週${Recurrence.weekdayName(time.dayOfWeek)} ${"%02d:%02d".format(time.hour, time.minute)}｜" +
+                        "${type.label} ${Money.format(t.amount, t.currency)}｜帳戶：${accounts[t.accountId]?.name ?: "未指定"}" +
+                        listOfNotNull(t.merchant?.takeIf { it.isNotBlank() }, t.note?.takeIf { it.isNotBlank() }).joinToString("，").let { if (it.isEmpty()) "" else "｜說明：$it" }
+                    com.enwei.moneymanager.net.GroqAi.Unsorted(t.id, desc, hints)
+                }
+                val res = com.enwei.moneymanager.net.GroqAi.suggestCategories(items, choices)
+                val add = res.map { (id, v) -> AiSuggestion(id, v.first, v.second) }
+                // 判斷不出來的也記下（標為略過），避免下次重複詢問
+                val skipped = chunk.filter { it.id !in res }.map { AiSuggestion(it.id, -1, "AI 判斷不出來", rejected = true) }
+                if (res.isNotEmpty() || com.enwei.moneymanager.net.GroqAi.lastError == null) {
+                    settings.update { st -> st.copy(aiSuggestions = st.aiSuggestions + add + skipped) }
+                }
+                created += add.size
+                done += chunk.size
+                onProgress(done, targets.size)
+                // Groq 免費方案每分鐘約 30 次請求
+                kotlinx.coroutines.delay(2500)
+            }
+        }
+        return created
+    }
+
+    /** 接受 AI 建議：套用分類。 */
+    suspend fun acceptAiSuggestion(sg: AiSuggestion) {
+        db.txns().get(sg.txnId)?.let { t -> if (db.categories().all().any { it.id == sg.categoryId }) db.txns().upsert(t.copy(categoryId = sg.categoryId)) }
+        settings.update { st -> st.copy(aiSuggestions = st.aiSuggestions.map { if (it.txnId == sg.txnId) it.copy(rejected = true, reason = "已套用") else it }) }
+    }
+
+    /** 略過 AI 建議：維持原分類，不再詢問。 */
+    fun rejectAiSuggestion(sg: AiSuggestion) {
+        settings.update { st -> st.copy(aiSuggestions = st.aiSuggestions.map { if (it.txnId == sg.txnId) it.copy(rejected = true) else it }) }
+    }
+
     /** 分類的完整名稱（大分類 / 子分類）。 */
     suspend fun categoryPath(id: Long): String? {
         val all = db.categories().all()

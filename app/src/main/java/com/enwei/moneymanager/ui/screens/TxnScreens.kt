@@ -24,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import com.enwei.moneymanager.ui.components.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -188,6 +189,8 @@ fun PendingScreen(nav: NavController) {
                     style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp),
                 )
             }
+            // AI 建議分類：只在使用者接受後才修改交易
+            item { AiSuggestionSection(lk) }
             if (pending.isEmpty()) item { EmptyHint("沒有待確認的交易") }
             items(pending, key = { it.id }) { t ->
                 Column {
@@ -204,6 +207,62 @@ fun PendingScreen(nav: NavController) {
                     HorizontalDivider(Modifier.padding(top = 8.dp))
                 }
             }
+        }
+    }
+}
+
+
+/** 待確認頁的「AI 建議分類」：AI 整理「不明」花費，逐筆接受或略過。 */
+@Composable
+private fun AiSuggestionSection(lk: Lookups) {
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
+    val scope = rememberCoroutineScope()
+    var unknown by remember { mutableStateOf(0) }
+    var running by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(all, settings.aiSuggestions) { unknown = repo.unknownCount() }
+    val open = settings.aiSuggestions.filter { !it.rejected }
+    val byId = all.associateBy { it.id }
+    val aiOn = settings.aiEnabled && settings.groqKey.isNotBlank()
+    if (!aiOn && open.isEmpty()) return
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("AI 建議分類" + if (open.isNotEmpty()) "（${open.size}）" else "", fontSize = 17.sp, modifier = Modifier.weight(1f))
+            if (open.size > 1) TextButton(onClick = { scope.launch { open.forEach { repo.acceptAiSuggestion(it) } } }) { Text("全部接受") }
+        }
+        if (aiOn && unknown > 0) {
+            Text("有 $unknown 筆「不明」或未分類的收支，可以請 AI 依時間、金額、帳戶與你的習慣推測分類，確認後才會套用。",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(enabled = !running, onClick = {
+                running = true
+                scope.launch {
+                    val n = repo.aiSortUnknown { d, total -> progress = "整理中… $d / $total" }
+                    progress = if (n == 0 && com.enwei.moneymanager.net.GroqAi.lastError != null) "AI 連線失敗：${com.enwei.moneymanager.net.GroqAi.lastError}"
+                    else "AI 提出 $n 筆建議，判斷不出來的維持「不明」"
+                    running = false
+                }
+            }) { Text(if (running) "整理中…" else "用 AI 整理不明花費") }
+        }
+        progress?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
+    }
+    open.forEach { sg ->
+        val t = byId[sg.txnId] ?: return@forEach
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+            Text(
+                "${t.date.toLocalDate()} · ${lk.account(t.accountId)?.name ?: "未指定"} · ${com.enwei.moneymanager.core.Money.withSymbol(t.amount, t.currency)}" +
+                    (t.merchant?.let { " · $it" } ?: ""),
+                fontSize = 14.sp,
+            )
+            Text(
+                "→ ${lk.catLabel(sg.categoryId) ?: "?"}" + if (sg.reason.isNotBlank()) "（${sg.reason}）" else "",
+                fontSize = 14.sp, color = MaterialTheme.colorScheme.primary,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { repo.rejectAiSuggestion(sg) }) { Text("略過") }
+                Button(onClick = { scope.launch { repo.acceptAiSuggestion(sg) } }) { Text("接受") }
+            }
+            HorizontalDivider()
         }
     }
 }
