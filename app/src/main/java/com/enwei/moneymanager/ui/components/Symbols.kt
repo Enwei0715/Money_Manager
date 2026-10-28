@@ -106,7 +106,9 @@ object Symbols {
         AccountType.BANK -> Icons.Rounded.AccountBalance
         AccountType.CREDIT_CARD -> Icons.Rounded.CreditCard
         AccountType.EWALLET -> Icons.Rounded.PhoneAndroid
+        AccountType.TRANSIT_CARD -> Icons.Rounded.Contactless
         AccountType.BROKERAGE -> Icons.AutoMirrored.Rounded.ShowChart
+        AccountType.LOAN -> Icons.Rounded.RequestQuote
         AccountType.OTHER -> Icons.Rounded.AccountBalanceWallet
     }
 

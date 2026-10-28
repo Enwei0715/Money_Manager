@@ -231,9 +231,9 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
-            } else if (type == AccountType.EWALLET) {
+            } else if (type == AccountType.EWALLET || type == AccountType.TRANSIT_CARD) {
                 DropdownLine("儲值來源", lk.account(linkedId)?.name ?: "未設定",
-                    listOf<Pair<Long?, String>>(null to "未設定") + lk.accounts.filter { it.type != AccountType.EWALLET && !it.archived }.map { it.id to it.name }) { linkedId = it }
+                    listOf<Pair<Long?, String>>(null to "未設定") + lk.accounts.filter { it.type != type && !it.archived }.map { it.id to it.name }) { linkedId = it }
                 Text(
                     "設定自動儲值的扣款銀行後，該銀行的「電支交易」通知會自動記成轉帳到這個錢包。錢包本身若不推播消費，請在帳戶明細用「對帳」補記。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -264,7 +264,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                     val a = (o ?: AccountEntity(name = name, type = type, sortOrder = lk.accounts.size)).copy(
                         name = name.trim(), type = type, currency = currency,
                         initialBalance = newInitial,
-                        linkedAccountId = if (type == AccountType.BROKERAGE || type == AccountType.EWALLET) linkedId else null,
+                        linkedAccountId = if (type == AccountType.BROKERAGE || type == AccountType.EWALLET || type == AccountType.TRANSIT_CARD) linkedId else null,
                         feeDiscount = if (type == AccountType.BROKERAGE) feeDiscount.toDoubleOrNull()?.takeIf { it in 0.01..1.0 } else null,
                         creditLimit = Money.parseMinor(limit) ?: 0,
                         cardLast4 = last4.ifBlank { null },

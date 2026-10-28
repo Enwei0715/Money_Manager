@@ -48,7 +48,7 @@ object TaiwanBanks {
         CardBank("803", "聯邦銀行", 15),
         CardBank("805", "遠東商銀", 15, verified = false),
         CardBank("806", "元大銀行", 15, verified = false),
-        CardBank("807", "永豐銀行", 15),
+        CardBank("807", "永豐銀行", 18, note = "依實際帳單：10/23 結帳 → 11/10 自動扣款（截止日當天扣款）"),
         CardBank("808", "玉山銀行", 15),
         CardBank("809", "凱基銀行", 17),
         CardBank("810", "星展（台灣）", 18, note = "原花旗卡友同此規則；部分資料為 18～21 天"),

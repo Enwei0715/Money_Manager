@@ -54,6 +54,9 @@ object MmbakIO {
             6 -> AccountType.EWALLET
             8 -> AccountType.BROKERAGE
             else -> if (looksWallet) AccountType.EWALLET else AccountType.OTHER
+        }.let { t ->
+            // 悠遊卡、一卡通、學生證等實體卡歸到電子票證
+            if ((t == AccountType.EWALLET || t == AccountType.OTHER) && listOf("悠遊卡", "一卡通", "學生證", "icash", "愛金卡").any { name.contains(it, ignoreCase = true) }) AccountType.TRANSIT_CARD else t
         }
     }
 
@@ -61,8 +64,9 @@ object MmbakIO {
         AccountType.CASH -> 11
         AccountType.BANK -> 1
         AccountType.CREDIT_CARD -> 2
-        AccountType.EWALLET -> 6
+        AccountType.EWALLET, AccountType.TRANSIT_CARD -> 6
         AccountType.BROKERAGE -> 8
+        AccountType.LOAN -> 7
         AccountType.OTHER -> 7
     }
 

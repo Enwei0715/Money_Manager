@@ -251,7 +251,8 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                                 val n = byBroker[a.id].orEmpty().count { it.shares > 0 }
                                 listOfNotNull("持股 $n 檔", lk.account(a.linkedAccountId)?.let { "交割：${it.name}" }).joinToString(" · ")
                             }
-                            AccountType.EWALLET -> lk.account(a.linkedAccountId)?.let { "儲值來源：${it.name}" }
+                            AccountType.EWALLET, AccountType.TRANSIT_CARD -> lk.account(a.linkedAccountId)?.let { "儲值來源：${it.name}" }
+                            AccountType.LOAN -> if (b.balance > 0) "別人欠你" else if (b.balance < 0) "你欠別人" else null
                             else -> null
                         }
                         // 證券帳戶：小字標示持股損益（同券商預估損益算法）

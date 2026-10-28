@@ -13,7 +13,11 @@ enum class AccountType(val label: String) {
     BANK("銀行帳戶"),
     CREDIT_CARD("信用卡"),
     EWALLET("電子支付"),
+    /** 悠遊卡、一卡通、學生證等實體儲值卡 */
+    TRANSIT_CARD("電子票證"),
     BROKERAGE("證券交割"),
+    /** 借貸：正數＝別人欠你（應收），負數＝你欠別人（應付） */
+    LOAN("借貸"),
     OTHER("其他"),
 }
 

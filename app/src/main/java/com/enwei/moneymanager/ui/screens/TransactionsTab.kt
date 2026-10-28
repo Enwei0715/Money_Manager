@@ -633,7 +633,7 @@ private fun TotalView(list: List<TxnEntity>, all: List<TxnEntity>, lk: Lookups, 
     val expense = totalsOf(confirmed, lk.fx).expense
     val lastRange = Periods.month(month.minusMonths(1), settings.monthStartDay)
     val lastExpense = totalsOf(all.filter { inRange(it.date.toLocalDate(), lastRange) }, lk.fx).expense
-    fun isCardLike(id: Long?) = lk.account(id)?.type.let { it == AccountType.CREDIT_CARD || it == AccountType.EWALLET }
+    fun isCardLike(id: Long?) = lk.account(id)?.type.let { it == AccountType.CREDIT_CARD || it == AccountType.EWALLET || it == AccountType.TRANSIT_CARD }
     val cashExpense = confirmed.filter { it.type == TxnType.EXPENSE && !isCardLike(it.accountId) }.sumOf { lk.fx.convert(it.amount, it.currency) }
     val cardExpense = confirmed.filter { it.type == TxnType.EXPENSE && isCardLike(it.accountId) }.sumOf { lk.fx.convert(it.amount, it.currency) }
     val cardPayable = cards.values.sumOf { it.payable + it.outstanding }
