@@ -107,10 +107,12 @@ private val PanelHeader = Color(0xFF111111)
 private val CurrencyBar = Color(0xFF3F4570)
 private val CurrencyBarSelected = Color(0xFF262B4D)
 
+/** 收入藍、支出紅；轉帳用主題文字色（深色模式為白色，淺色模式為黑色）。 */
+@Composable
 fun typeColor(t: TxnType): Color = when (t) {
     TxnType.INCOME -> IncomeColor
     TxnType.EXPENSE -> ExpenseColor
-    TxnType.TRANSFER -> Color(0xFF222222)
+    TxnType.TRANSFER -> MaterialTheme.colorScheme.onSurface
 }
 
 private fun minorToExpr(minor: Long) = Money.fromMinor(minor).stripTrailingZeros().toPlainString()

@@ -89,6 +89,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "v1.0.${{ github.run_number }}" dist/*.apk \
-            --title "記帳本 1.0.${{ github.run_number }}" \
+            --title "帳理 1.0.${{ github.run_number }}" \
             --target "${{ github.sha }}" \
             --notes "$(git log -1 --pretty=%B)"

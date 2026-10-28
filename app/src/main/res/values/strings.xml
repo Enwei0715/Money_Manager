@@ -1,7 +1,7 @@
 <resources>
-    <string name="app_name">記帳本</string>
-    <string name="listener_label">記帳本自動記帳</string>
+    <string name="app_name">帳理</string>
+    <string name="listener_label">帳理自動記帳</string>
     <string name="widget_description">本月支出、分類圓餅圖與快速記現金</string>
-    <string name="wallet_reader_label">記帳本錢包讀取</string>
-    <string name="wallet_reader_description">只在你打開於記帳本中勾選的錢包 App（例如街口、悠遊付）時，讀取交易紀錄畫面上的商家、金額與日期並匯入記帳本。不讀取其他 App，資料只存在手機中。</string>
+    <string name="wallet_reader_label">帳理錢包讀取</string>
+    <string name="wallet_reader_description">只在你打開於帳理中勾選的錢包 App（例如街口、悠遊付）時，讀取交易紀錄畫面上的商家、金額與日期並匯入帳理。不讀取其他 App，資料只存在手機中。</string>
 </resources>

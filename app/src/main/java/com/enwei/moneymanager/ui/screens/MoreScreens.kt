@@ -227,7 +227,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     Column(Modifier.padding(16.dp)) {
                         com.enwei.moneymanager.ui.components.StatusLine(enabled, if (enabled) "已取得通知存取權" else "尚未開啟通知存取權")
                         Text(
-                            "開啟後，記帳本會讀取你勾選的銀行、信用卡、電子支付或簡訊 App 的通知，自動辨識金額、商家與卡號末四碼。資料只存在手機中。\n若顯示「受限制的設定」無法開啟：設定 → 應用程式 → 記帳本 → 右上角 ⋮ →「允許受限制的設定」。",
+                            "開啟後，帳理會讀取你勾選的銀行、信用卡、電子支付或簡訊 App 的通知，自動辨識金額、商家與卡號末四碼。資料只存在手機中。\n若顯示「受限制的設定」無法開啟：設定 → 應用程式 → 帳理 → 右上角 ⋮ →「允許受限制的設定」。",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Spacer(Modifier.height(8.dp))
@@ -562,17 +562,17 @@ fun BackupScreen(nav: NavController) {
         Column(Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Money Manager 備份檔（.mmbak）", style = MaterialTheme.typography.titleMedium)
             Text(
-                "在 Money Manager 的「更多 → 備份 → 匯出」取得 .mmbak 檔，在這裡匯入即可搬移所有帳戶、分類（含子分類）、交易、轉帳、餘額調整與備忘。也可以把記帳本的資料匯出成 .mmbak。",
+                "在 Money Manager 的「更多 → 備份 → 匯出」取得 .mmbak 檔，在這裡匯入即可搬移所有帳戶、分類（含子分類）、交易、轉帳、餘額調整與備忘。也可以把帳理的資料匯出成 .mmbak。",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Button(enabled = !busy, onClick = { mmImporter.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("從 .mmbak 匯入") }
-            OutlinedButton(enabled = !busy, onClick = { mmExporter.launch("記帳本-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.mmbak") },
+            OutlinedButton(enabled = !busy, onClick = { mmExporter.launch("帳理-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.mmbak") },
                 modifier = Modifier.fillMaxWidth()) { Text("匯出為 .mmbak") }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             HorizontalDivider()
-            Text("記帳本備份（JSON）", style = MaterialTheme.typography.titleMedium)
+            Text("帳理備份（JSON）", style = MaterialTheme.typography.titleMedium)
             Text("所有資料都只存在這支手機。建議定期匯出備份到 Google 雲端硬碟或電腦；換手機時在新手機匯入即可。", style = MaterialTheme.typography.bodyMedium)
-            Button(onClick = { exporter.launch("記帳本備份-${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.json") }, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { exporter.launch("帳理備份-${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.json") }, modifier = Modifier.fillMaxWidth()) {
                 Text("匯出備份（JSON）")
             }
             OutlinedButton(onClick = { importer.launch(arrayOf("application/json", "application/octet-stream", "text/*")) }, modifier = Modifier.fillMaxWidth()) {
@@ -585,7 +585,7 @@ fun BackupScreen(nav: NavController) {
         AlertDialog(
             onDismissRequest = { mmUri = null },
             title = { Text("匯入 Money Manager 資料") },
-            text = { Text("「合併」會保留記帳本現有資料，已匯入過的交易不會重複；「取代」會先清空記帳本的帳戶、分類、交易與週期設定（股票紀錄保留）。") },
+            text = { Text("「合併」會保留帳理現有資料，已匯入過的交易不會重複；「取代」會先清空帳理的帳戶、分類、交易與週期設定（股票紀錄保留）。") },
             confirmButton = { TextButton(onClick = { mmUri = null; runMmImport(uri, replace = false) }) { Text("合併") } },
             dismissButton = {
                 Row {
@@ -748,13 +748,13 @@ fun WalletReaderScreen(nav: NavController) {
                     ),
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        com.enwei.moneymanager.ui.components.StatusLine(enabled, if (enabled) "錢包讀取已開啟" else "尚未開啟無障礙服務「記帳本錢包讀取」")
+                        com.enwei.moneymanager.ui.components.StatusLine(enabled, if (enabled) "錢包讀取已開啟" else "尚未開啟無障礙服務「帳理錢包讀取」")
                         Text(
-                            "街口、悠遊付不會推播每筆消費。開啟後，只要打開下方勾選的 App 並進入「交易紀錄」頁，記帳本就會讀取畫面上的商家、金額、日期並自動匯入（重複的不會再匯入；已由銀行通知記成轉帳的儲值也會自動略過）。只讀取勾選的 App。",
+                            "街口、悠遊付不會推播每筆消費。開啟後，只要打開下方勾選的 App 並進入「交易紀錄」頁，帳理就會讀取畫面上的商家、金額、日期並自動匯入（重複的不會再匯入；已由銀行通知記成轉帳的儲值也會自動略過）。只讀取勾選的 App。",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            "若系統顯示「受限制的設定」而無法開啟：設定 → 應用程式 → 記帳本 → 右上角 ⋮ →「允許受限制的設定」，再回來開啟。通知存取權也是同樣步驟。",
+                            "若系統顯示「受限制的設定」而無法開啟：設定 → 應用程式 → 帳理 → 右上角 ⋮ →「允許受限制的設定」，再回來開啟。通知存取權也是同樣步驟。",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Button(onClick = { com.enwei.moneymanager.notify.WalletScreenReader.openSettings(ctx) }) {

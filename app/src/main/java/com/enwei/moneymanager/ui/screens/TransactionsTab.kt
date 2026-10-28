@@ -597,7 +597,7 @@ private fun TotalView(list: List<TxnEntity>, all: List<TxnEntity>, lk: Lookups, 
             }
             Row(
                 Modifier.fillMaxWidth().padding(16.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                    .clickable { exporter.launch("記帳本_${month.year}${"%02d".format(month.monthValue)}.csv") }.padding(18.dp),
+                    .clickable { exporter.launch("帳理_${month.year}${"%02d".format(month.monthValue)}.csv") }.padding(18.dp),
                 horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Outlined.TableChart, null, tint = Color(0xFF21A366))

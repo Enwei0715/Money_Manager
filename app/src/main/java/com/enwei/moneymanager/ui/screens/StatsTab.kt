@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -79,10 +80,14 @@ import java.time.temporal.TemporalAdjusters
 import kotlin.math.cos
 import kotlin.math.sin
 
+/** 由暖到冷的漸層色：比例大的分類用珊瑚紅，依序到橘、黃、綠、青、藍、紫。 */
 val chartPalette = listOf(
-    Color(0xFFF0605A), Color(0xFFF59E42), Color(0xFFF5C842), Color(0xFF8BC34A), Color(0xFF26A69A),
-    Color(0xFF3C82E6), Color(0xFF7E57C2), Color(0xFFEC6FA0), Color(0xFF8D6E63), Color(0xFF90A4AE),
+    Color(0xFFF7685F), Color(0xFFFF9447), Color(0xFFFFC145), Color(0xFFFFE330), Color(0xFFC6E64B),
+    Color(0xFF6CD26C), Color(0xFF4FE0CF), Color(0xFF4DB6F2), Color(0xFF7D8DF5), Color(0xFFB27CF0), Color(0xFFF07CC6),
 )
+
+/** 色塊上的文字顏色：淺色底用深色字。 */
+fun onChartColor(c: Color): Color = if (c.luminance() > 0.55f) Color(0xFF3A3A3A) else Color.White
 
 enum class Period(val label: String) { WEEK("每週"), MONTH("每月"), YEAR("每年"), CUSTOM("期間") }
 
@@ -200,7 +205,7 @@ fun StatsTab(nav: NavController) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Surface(color = chartPalette[i % chartPalette.size], shape = RoundedCornerShape(6.dp), modifier = Modifier.width(56.dp)) {
-                                Text(String.format("%.0f%%", pct), color = Color.White, fontSize = 13.sp,
+                                Text(String.format("%.0f%%", pct), color = onChartColor(chartPalette[i % chartPalette.size]), fontSize = 13.sp,
                                     modifier = Modifier.padding(vertical = 5.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                             }
                             Spacer(Modifier.width(14.dp))
@@ -244,69 +249,76 @@ fun PieChart(slices: List<Pair<String, Long>>) {
     val labelColor = MaterialTheme.colorScheme.onSurface
     val empty = MaterialTheme.colorScheme.surfaceVariant
     val separator = MaterialTheme.colorScheme.surface
-    Canvas(Modifier.fillMaxWidth().height(340.dp).padding(vertical = 16.dp)) {
-        val r = minOf(size.width, size.height) / 2 * 0.66f
+    Canvas(Modifier.fillMaxWidth().height(320.dp).padding(vertical = 12.dp)) {
+        val r = minOf(size.width * 0.27f, size.height * 0.42f)
         val c = Offset(size.width / 2, size.height / 2)
         val topLeft = Offset(c.x - r, c.y - r)
         if (total <= 0L) {
             drawArc(empty, 0f, 360f, true, topLeft, Size(2 * r, 2 * r))
             return@Canvas
         }
-        var start = -90f
         val sweeps = slices.map { it.second.toFloat() / total * 360f }
-        slices.forEachIndexed { i, _ ->
+        var start = -90f
+        slices.indices.forEach { i ->
             drawArc(chartPalette[i % chartPalette.size], start, sweeps[i], true, topLeft, Size(2 * r, 2 * r))
             start += sweeps[i]
         }
-        // 白色分隔線
+        // 細分隔線
         start = -90f
         if (slices.size > 1) sweeps.forEach { sw ->
             val rad = Math.toRadians(start.toDouble())
-            drawLine(separator, c, Offset(c.x + (r * cos(rad)).toFloat(), c.y + (r * sin(rad)).toFloat()), strokeWidth = 3f)
+            drawLine(separator, c, Offset(c.x + (r * cos(rad)).toFloat(), c.y + (r * sin(rad)).toFloat()), strokeWidth = 2f)
             start += sw
         }
-        // 標籤與引線：同一側的標籤依高度排序後上下推開，避免小比例的標籤重疊
-        data class Label(val color: Color, val p1: Offset, val p2: Offset, val right: Boolean, val layout: androidx.compose.ui.text.TextLayoutResult, var y: Float)
+
+        // 標籤：兩行（名稱／百分比），沿著圓餅外圍的橢圓排列；同側依高度排序後上下推開，用平滑曲線連到扇形。
+        class Label(val color: Color, val angle: Double, val layout: androidx.compose.ui.text.TextLayoutResult, val right: Boolean, var y: Float)
         val labels = mutableListOf<Label>()
         start = -90f
-        val twoLine = slices.count { it.second * 100f / total >= 0.5f } <= 10
         slices.forEachIndexed { i, (name, v) ->
             val pct = v * 100f / total
             val mid = Math.toRadians((start + sweeps[i] / 2).toDouble())
-            if (pct >= 0.5f) {
-                val p1 = Offset(c.x + (r * cos(mid)).toFloat(), c.y + (r * sin(mid)).toFloat())
-                val p2 = Offset(c.x + (r * 1.12f * cos(mid)).toFloat(), c.y + (r * 1.12f * sin(mid)).toFloat())
-                val text = if (twoLine) "$name\n${"%.1f".format(pct)} %" else "$name ${"%.1f".format(pct)}%"
-                val layout = measurer.measure(text, TextStyle(fontSize = 12.sp, color = labelColor, lineHeight = 14.sp))
-                labels += Label(chartPalette[i % chartPalette.size], p1, p2, cos(mid) >= 0, layout, p2.y)
+            if (pct >= 1f && labels.size < 12) {
+                val layout = measurer.measure(
+                    "$name\n${"%.1f".format(pct)} %",
+                    TextStyle(fontSize = 13.sp, color = labelColor, lineHeight = 16.sp),
+                )
+                val ly = (c.y + r * 1.22f * sin(mid)).toFloat()
+                labels += Label(chartPalette[i % chartPalette.size], mid, layout, cos(mid) >= 0, ly)
             }
             start += sweeps[i]
         }
+        val ring = r * 1.28f
         listOf(true, false).forEach { side ->
-            val list = labels.filter { it.right == side }.sortedBy { it.p2.y }
-            // 由上往下：與上一個標籤至少隔一個標籤高度
+            val list = labels.filter { it.right == side }.sortedBy { it.y }
             var prevBottom = Float.NEGATIVE_INFINITY
             list.forEach { l ->
                 val h = l.layout.size.height.toFloat()
-                l.y = maxOf(l.p2.y, prevBottom + h / 2 + 2f)
+                l.y = maxOf(l.y, prevBottom + h / 2 + 4f)
                 prevBottom = l.y + h / 2
             }
-            // 超出底部時由下往上推回
             var nextTop = size.height
             list.asReversed().forEach { l ->
                 val h = l.layout.size.height.toFloat()
-                l.y = minOf(l.y, nextTop - h / 2 - 2f).coerceAtLeast(h / 2)
+                l.y = minOf(l.y, nextTop - h / 2 - 4f).coerceAtLeast(h / 2)
                 nextTop = l.y - h / 2
             }
         }
         labels.forEach { l ->
-            val elbow = Offset(l.p2.x + if (l.right) 14f else -14f, l.y)
-            val end = Offset(if (l.right) maxOf(elbow.x, c.x + r * 1.18f) else minOf(elbow.x, c.x - r * 1.18f), l.y)
-            drawLine(l.color, l.p1, l.p2, strokeWidth = 2.5f)
-            drawLine(l.color, l.p2, elbow, strokeWidth = 2.5f)
-            drawLine(l.color, elbow, end, strokeWidth = 2.5f)
+            val dir = if (l.right) 1f else -1f
+            val dy = l.y - c.y
+            // 標籤水平位置：貼著外圍橢圓；在圓餅正上／下方時往外側留一點距離
+            val dx = kotlin.math.sqrt(maxOf(0f, ring * ring - dy * dy)).coerceAtLeast(r * 0.35f)
+            val anchor = Offset(c.x + dir * dx, l.y)
+            val p1 = Offset(c.x + (r * 1.01f * cos(l.angle)).toFloat(), c.y + (r * 1.01f * sin(l.angle)).toFloat())
+            val out = Offset(c.x + (r * 1.12f * cos(l.angle)).toFloat(), c.y + (r * 1.12f * sin(l.angle)).toFloat())
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(p1.x, p1.y)
+                cubicTo(out.x, out.y, anchor.x - dir * 18f, anchor.y, anchor.x, anchor.y)
+            }
+            drawPath(path, l.color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
             val w = l.layout.size.width.toFloat()
-            val x = if (l.right) end.x + 6f else end.x - 6f - w
+            val x = if (l.right) anchor.x + 8f else anchor.x - 8f - w
             drawText(l.layout, topLeft = Offset(x.coerceIn(0f, size.width - w), l.y - l.layout.size.height / 2))
         }
     }

@@ -429,7 +429,7 @@ fun promptBiometric(ctx: android.content.Context, onSuccess: () -> Unit) {
     )
     prompt.authenticate(
         androidx.biometric.BiometricPrompt.PromptInfo.Builder()
-            .setTitle("解鎖記帳本")
+            .setTitle("解鎖帳理")
             .setNegativeButtonText("使用密碼")
             .setAllowedAuthenticators(BIO_AUTH)
             .build(),

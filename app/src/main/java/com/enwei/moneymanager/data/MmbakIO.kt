@@ -40,7 +40,7 @@ object MmbakIO {
     private fun SQLiteDatabase.hasTable(name: String) =
         rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", arrayOf(name)).use { it.moveToFirst() }
 
-    /** 帳戶群組類型 → 記帳本帳戶類型 */
+    /** 帳戶群組類型 → 帳理帳戶類型 */
     private fun accountType(groupType: Int?, name: String): AccountType {
         val looksWallet = NotificationParser.walletAliases.values.flatten().any { name.contains(it, ignoreCase = true) }
         return when (groupType) {
@@ -66,7 +66,7 @@ object MmbakIO {
         currencyUid?.substringAfter('_', "")?.takeIf { it.length == 3 }?.uppercase() ?: fallback
 
     /**
-     * 匯入。replace = true 會先清空記帳本現有的帳戶、分類、交易；
+     * 匯入。replace = true 會先清空帳理現有的帳戶、分類、交易；
      * 否則合併：同名同類型的帳戶與分類會沿用，已匯入過的交易（以原始 uid 判斷）不會重複。
      */
     suspend fun import(context: Context, repo: Repository, file: File, replace: Boolean): MmImportSummary = withContext(Dispatchers.IO) {

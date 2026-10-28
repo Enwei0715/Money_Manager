@@ -495,7 +495,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
             title = { Text("對帳：${acc.name}") },
             text = {
                 Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
-                    Text("記帳本目前餘額：${Money.withSymbol(current, acc.currency)}")
+                    Text("帳理目前餘額：${Money.withSymbol(current, acc.currency)}")
                     androidx.compose.material3.OutlinedTextField(
                         actualText, { actualText = it.filter { c -> c.isDigit() || c == '.' || c == '-' } },
                         label = { Text("App 裡的實際餘額") }, singleLine = true,

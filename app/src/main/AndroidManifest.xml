@@ -60,7 +60,7 @@
         <receiver
             android:name=".widget.SummaryWidget"
             android:exported="false"
-            android:label="記帳本統計">
+            android:label="帳理統計">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
