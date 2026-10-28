@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -198,8 +199,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     suspend fun allTxns() = db.txns().all()
 
     suspend fun saveTxn(t: TxnEntity): Long {
+        val before = if (t.id != 0L) db.txns().get(t.id) else null
         val r = db.txns().upsert(t)
         if (t.status == TxnStatus.CONFIRMED) learnMerchant(t)
+        if (before?.status == TxnStatus.PENDING && t.status == TxnStatus.CONFIRMED) learnFromConfirmed(t)
         return if (t.id == 0L) r else t.id
     }
 
@@ -235,6 +238,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 learnMerchant(it)
             }
         }
+        db.txns().all().filter { it.source == TxnSource.NOTIFICATION && it.rawText?.contains(AI_TAG) == true && it.status == TxnStatus.CONFIRMED }
+            .forEach { learnFromConfirmed(it) }
     }
 
     private suspend fun learnMerchant(t: TxnEntity) {
@@ -381,7 +386,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     fun dismissDuplicate(p: DupPair) = settings.update { it.copy(dupDismissed = it.dupDismissed + p.key) }
 
     /** 請 AI 判斷每組是否為同一筆，並給出較精確的交易名稱與分類。 */
-    suspend fun aiJudgeDuplicates(pairs: List<DupPair>): Map<String, com.enwei.moneymanager.net.GroqAi.DupVerdict> {
+    suspend fun aiJudgeDuplicates(pairs: List<DupPair>): Map<String, DupJudgement> {
         if (!com.enwei.moneymanager.net.GroqAi.enabled || pairs.isEmpty()) return emptyMap()
         val all = db.categories().all()
         val accounts = db.accounts().all().associateBy { it.id }
@@ -389,15 +394,78 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         fun desc(t: TxnEntity) = "${t.date.toLocalDateTime().toString().replace('T', ' ').take(16)}｜${accounts[t.accountId]?.name ?: "未指定"}｜" +
             "${t.source.label}｜${t.merchant ?: "（無名稱）"}${t.note?.let { "，$it" } ?: ""}" +
             (t.categoryId?.let { "｜分類 ${path(it)}" } ?: "") + (t.rawText?.take(120)?.let { "｜原文：${it.replace('\n', ' ')}" } ?: "")
-        val out = HashMap<String, com.enwei.moneymanager.net.GroqAi.DupVerdict>()
-        for (chunk in pairs.chunked(6)) {
+        val out = HashMap<String, DupJudgement>()
+        for (chunk in pairs.groupBy { it.keep.type }.values.flatMap { it.chunked(6) }) {
             val type = chunk.first().keep.type
             val cats = all.filter { it.kind == type && !it.archived && all.none { c -> c.parentId == it.id } && it.name != "不明" }.map { it.id to path(it.id) }
             val items = chunk.map { p -> p.key to "金額 ${Money.format(p.keep.amount, p.keep.currency)}\n  A：${desc(p.keep)}\n  B：${desc(p.drop)}" }
             out += com.enwei.moneymanager.net.GroqAi.judgeDuplicates(items, cats)
             kotlinx.coroutines.delay(2500)
         }
+        // 記住判斷結果：下次打開不用再問 AI
+        if (out.isNotEmpty()) settings.update { st -> st.copy(dupVerdicts = (st.dupVerdicts + out).entries.toList().takeLast(300).associate { it.key to it.value }) }
         return out
+    }
+
+    private var tidyJob: kotlinx.coroutines.Job? = null
+
+    /** 新的自動記帳進來後，等一陣子（通知、錢包畫面可能陸續到）再請 AI 整理一次。 */
+    fun scheduleAutoTidy(scope: kotlinx.coroutines.CoroutineScope) {
+        if (!settings.value.aiAutoTidy || !com.enwei.moneymanager.net.GroqAi.enabled) return
+        tidyJob?.cancel()
+        tidyJob = scope.launch { kotlinx.coroutines.delay(3 * 60_000L); runCatching { aiAutoTidy() } }
+    }
+
+    /**
+     * AI 自動整理（背景執行）：近 14 天新出現的可能重複，請 AI 判斷；
+     * 兩筆都是自動記帳（通知、錢包畫面）且 AI 判定為同一筆時直接合併，其餘留在「待確認」由使用者決定。
+     */
+    suspend fun aiAutoTidy(): Int {
+        val s = settings.value
+        if (!s.aiAutoTidy || !com.enwei.moneymanager.net.GroqAi.enabled) return 0
+        val fresh = findDuplicates(14).filter { it.key !in s.dupVerdicts }.take(12)
+        if (fresh.isEmpty()) return 0
+        val verdicts = aiJudgeDuplicates(fresh)
+        val auto = setOf(TxnSource.NOTIFICATION, TxnSource.SCREEN)
+        val done = ArrayList<String>()
+        fresh.forEach { p ->
+            val v = verdicts[p.key] ?: return@forEach
+            if (!v.same || p.keep.source !in auto || p.drop.source !in auto) return@forEach
+            mergeDuplicate(p, v.name, v.categoryId)
+            done += "${p.keep.date.toLocalDate()} ${Money.format(p.keep.amount, p.keep.currency)} ${v.name ?: p.keep.merchant ?: ""}：" +
+                "合併${p.keep.source.label}與${p.drop.source.label}的同一筆" + (v.reason.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: "")
+        }
+        if (done.isNotEmpty()) settings.update { it.copy(aiTidyLog = (done + it.aiTidyLog).take(30)) }
+        return done.size
+    }
+
+    /**
+     * 確認一筆 AI 判讀的通知交易後，自動學會這種通知的格式（同「教它辨識」），之後由規則直接辨識、不再呼叫 AI。
+     * 只在規則讀得出同樣的金額時才學，確保學到的格式真的能用。
+     */
+    private suspend fun learnFromConfirmed(t: TxnEntity) {
+        val s = settings.value
+        if (!s.aiAutoTidy || t.source != TxnSource.NOTIFICATION || t.rawText?.contains(AI_TAG) != true) return
+        val entry = db.notificationLog().all().lastOrNull { it.txnId == t.id } ?: return
+        val raw = listOfNotNull(entry.title, entry.text).joinToString(" ")
+        if (NotificationParser.findAmount(NotificationParser.clean(raw))?.first != t.amount) return
+        val key = learnKey(entry.title, entry.text)
+        if (s.learnedSources.any { it.pkg == entry.packageName && it.title == key }) return
+        val src = sourceBank(entry.packageName, entry.title)
+        val learned = when (t.type) {
+            TxnType.EXPENSE -> LearnedSource(entry.packageName, key, income = false, accountId = t.accountId)
+            TxnType.INCOME -> LearnedSource(entry.packageName, key, income = true, accountId = t.accountId)
+            TxnType.TRANSFER -> {
+                // 通知來自轉入端的銀行時是「轉入」，否則當成「轉出」
+                val inbound = src != null && t.toAccountId?.let { id -> db.accounts().get(id)?.let { BankDirectory.matches(src, it.name) } } == true
+                if (inbound) LearnedSource(entry.packageName, key, income = true, accountId = t.toAccountId, kind = "TRANSFER_IN", toAccountId = t.accountId)
+                else LearnedSource(entry.packageName, key, income = false, accountId = t.accountId, kind = "TRANSFER_OUT", toAccountId = t.toAccountId)
+            }
+        }
+        val msg = "學會「$key」的通知格式（${learned.label}）"
+        settings.update { it.copy(learnedSources = it.learnedSources + learned, aiTidyLog = (listOf(msg) + it.aiTidyLog).take(30)) }
+        // 學會之後把 AI 標記拿掉，這筆就和規則辨識的一樣
+        db.txns().get(t.id)?.let { cur -> db.txns().upsert(cur.copy(rawText = cur.rawText?.replace("\n$AI_TAG", "")?.replace(AI_TAG, ""))) }
     }
 
     /** 接受 AI 建議：套用分類。 */
@@ -605,7 +673,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             "$what ${Money.format(p.amountMinor, p.currency)} ${p.currency}",
             "帳戶：${account?.name ?: "（未指定，請設定預設帳戶）"}" + (p.cardLast4?.let { "（卡號末四碼 $it）" } ?: ""),
             p.merchant?.let { "商家：$it" + (aiName?.let { n -> " → AI 命名「$n」" } ?: "") },
-            if (aiParsed) "（規則看不懂，由 AI 判讀；記帳時會放到「待確認」）" else null,
+            if (aiParsed) "（規則看不懂，由 AI 判讀；記帳時放到「待確認」，確認後會自動學會這種格式）" else null,
             "分類：" + (cat ?: "無法判斷（沒有商家名稱或沒有相似紀錄），記帳後可在通知上一鍵選分類"),
             p.occurredAt?.let { "交易時間：${it.toLocalDate()} ${"%02d:%02d".format(it.hour, it.minute)}" },
             learned?.let { l -> "（依你教過的格式辨識：${l.label}" + (l.toAccountId?.let { id -> accounts.firstOrNull { it.id == id }?.let { a -> if (l.parsedKind == ParsedKind.TRANSFER_IN) "，從「${a.name}」" else "，到「${a.name}」" } } ?: "") + "）" },

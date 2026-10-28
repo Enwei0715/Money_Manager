@@ -23,6 +23,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val repo = MoneyApp.repo
         repo.runRecurring()
         repo.runFeeRebates()
+        // AI 自動整理重複的交易（沒開 AI 時不做事）
+        runCatching { repo.aiAutoTidy() }
         runCatching { warnFunding(applicationContext, repo) }
         val ok = runCatching { refreshMarket(repo) }.isSuccess
         return if (ok || runAttemptCount > 2) Result.success() else Result.retry()

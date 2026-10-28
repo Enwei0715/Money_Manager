@@ -53,6 +53,16 @@ fun AiSettingsScreen(nav: NavController) {
                 }
                 Switch(s.aiEnabled, { v -> repo.settings.update { it.copy(aiEnabled = v) } }, enabled = s.groqKey.isNotBlank())
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("AI 自動整理", fontSize = 17.sp)
+                    Text(
+                        "自動合併通知與錢包畫面重複記的同一筆；確認 AI 判讀的通知後自動學會格式",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(s.aiAutoTidy, { v -> repo.settings.update { it.copy(aiAutoTidy = v) } }, enabled = s.aiEnabled)
+            }
             OutlinedTextField(
                 key, { key = it; repo.settings.update { st -> st.copy(groqKey = it.trim()) } },
                 label = { Text("Groq API 金鑰") }, singleLine = true, visualTransformation = PasswordVisualTransformation(),

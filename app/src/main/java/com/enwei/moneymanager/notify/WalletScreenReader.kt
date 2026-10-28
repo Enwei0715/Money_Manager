@@ -33,15 +33,26 @@ class WalletScreenReader : AccessibilityService() {
             delay(1200)
             val texts = runCatching { collectTexts(pkg) }.getOrNull() ?: return@launch
             if (texts.isEmpty()) return@launch
-            val records = ScreenRecordParser.parse(texts)
+            var records = ScreenRecordParser.parse(texts)
+            var byAi = false
+            // 版面規則看不懂：同一個畫面只請 AI 整理一次（畫面沒變就不重送）
+            if (records.isEmpty() && com.enwei.moneymanager.net.GroqAi.enabled) {
+                val sig = texts.hashCode()
+                if (aiSeen[pkg] != sig) {
+                    aiSeen[pkg] = sig
+                    records = com.enwei.moneymanager.net.GroqAi.parseScreen(texts, java.time.LocalDate.now())
+                    byAi = records.isNotEmpty()
+                }
+            }
             if (records.isEmpty()) {
                 record(ScanEntry(System.currentTimeMillis(), pkg, texts.size, emptyList(), null, "讀到 ${texts.size} 行文字，但沒有符合交易紀錄的格式（請打開「交易紀錄／明細」頁）"))
                 return@launch
             }
             val test = testMode.value
             val r = runCatching { MoneyApp.repo.ingestScreenRecords(pkg, records, dryRun = test) }.getOrNull()
-            record(ScanEntry(System.currentTimeMillis(), pkg, texts.size, records, r, null))
+            record(ScanEntry(System.currentTimeMillis(), pkg, texts.size, records, r, null, byAi))
             if (!test && r != null && r.created > 0) notifyImported(r.created)
+            if (!test && r != null && (r.created > 0 || r.merged > 0)) MoneyApp.repo.scheduleAutoTidy(MoneyApp.instance.appScope)
         }
     }
 
@@ -91,6 +102,8 @@ class WalletScreenReader : AccessibilityService() {
         val time: Long, val pkg: String, val lines: Int,
         val records: List<com.enwei.moneymanager.core.ScreenRecord>,
         val result: com.enwei.moneymanager.data.Repository.ScreenIngestResult?, val problem: String?,
+        /** 版面規則看不懂，由 AI 從畫面文字整理出來的 */
+        val byAi: Boolean = false,
     )
 
     companion object {
@@ -100,6 +113,9 @@ class WalletScreenReader : AccessibilityService() {
         val scans = kotlinx.coroutines.flow.MutableStateFlow<List<ScanEntry>>(emptyList())
         @Volatile var connected = false
             private set
+
+        /** 每個 App 上次請 AI 整理的畫面（文字的 hash），畫面沒變不重送 */
+        private val aiSeen = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
         private fun record(e: ScanEntry) { scans.value = (listOf(e) + scans.value).take(10) }
 

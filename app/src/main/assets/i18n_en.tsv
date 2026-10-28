@@ -953,3 +953,8 @@ AI：不是同一筆	AI: different transactions
 還沒有證券帳戶。	No brokerage accounts yet.
 只會送出已啟用 App 的通知文字、商家名稱、分類名稱，以及對帳時選的截圖到 Groq 處理；金鑰只存在這支手機。超過免費額度時改用一般規則，不影響記帳。	Only notification text from enabled apps, merchant and category names, and screenshots you pick for reconciling are sent to Groq. The key stays on this phone. Over the free quota, regular rules are used instead.
 判讀通知、整理商家名稱與分類	Reads notifications, tidies merchant names and categories
+AI 自動整理	AI auto-tidy
+自動合併通知與錢包畫面重複記的同一筆；確認 AI 判讀的通知後自動學會格式	Merges the same payment recorded from both a notification and the wallet screen; learns a notification format after you confirm an AI-read one
+AI 判斷中…	AI is checking…
+AI 建議：	AI suggests: 
+版面規則看不懂，由 AI 從畫面整理出	Layout not recognized; AI extracted

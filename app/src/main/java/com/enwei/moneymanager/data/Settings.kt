@@ -32,6 +32,10 @@ data class Bookmark(
 @Serializable
 data class AiSuggestion(val txnId: Long, val categoryId: Long, val reason: String = "", val rejected: Boolean = false)
 
+/** AI 對一組可能重複交易的判斷（[same] 為同一筆；同一筆時附上較精確的名稱與分類）。 */
+@Serializable
+data class DupJudgement(val same: Boolean, val name: String? = null, val categoryId: Long? = null, val reason: String = "")
+
 /** 交易頁「備註」分頁的備忘。 */
 @Serializable
 data class Memo(
@@ -193,6 +197,12 @@ data class AppSettings(
     val aiUsageTokens: Long = 0,
     /** 使用者標記「不是重複」的交易組合（"小id-大id"） */
     val dupDismissed: Set<String> = emptySet(),
+    /** AI 判斷過的重複組合（"小id-大id" → 判斷），不再重複詢問 */
+    val dupVerdicts: Map<String, DupJudgement> = emptyMap(),
+    /** AI 自動整理：背景判斷重複並合併兩筆都是自動記帳的同一筆、確認 AI 判讀的通知後自動學會格式 */
+    val aiAutoTidy: Boolean = true,
+    /** AI 自動整理做過的事（新到舊，最多 30 筆） */
+    val aiTidyLog: List<String> = emptyList(),
     /** AI 建議的分類（待使用者確認） */
     val aiSuggestions: List<AiSuggestion> = emptyList(),
     /** 上次提醒「扣款帳戶餘額不足」的內容，避免同一件事重複通知 */
@@ -217,6 +227,7 @@ class SettingsStore(context: Context) {
     private val longStrSerializer = MapSerializer(Long.serializer(), String.serializer())
     private val learnedSerializer = ListSerializer(LearnedSource.serializer())
     private val aiSuggestionSerializer = ListSerializer(AiSuggestion.serializer())
+    private val dupVerdictSerializer = MapSerializer(String.serializer(), DupJudgement.serializer())
     private val strMapSerializer = MapSerializer(String.serializer(), String.serializer())
     private val cashSerializer = MapSerializer(Long.serializer(), MapSerializer(Int.serializer(), Int.serializer()))
     private val state = MutableStateFlow(read())
@@ -281,6 +292,9 @@ class SettingsStore(context: Context) {
         fundingWarnKey = prefs.getString("fundingWarnKey", "")!!,
         aiModelHard = prefs.getString("aiModelHard", "openai/gpt-oss-120b")!!,
         dupDismissed = prefs.getStringSet("dupDismissed", emptySet())!!.toSet(),
+        dupVerdicts = runCatching { json.decodeFromString(dupVerdictSerializer, prefs.getString("dupVerdicts", "{}")!!) }.getOrDefault(emptyMap()),
+        aiAutoTidy = prefs.getBoolean("aiAutoTidy", true),
+        aiTidyLog = runCatching { json.decodeFromString(ListSerializer(String.serializer()), prefs.getString("aiTidyLog", "[]")!!) }.getOrDefault(emptyList()),
         aiModelVision = prefs.getString("aiModelVision", "qwen/qwen3.8-27b")!!,
         aiUsageDay = prefs.getLong("aiUsageDay", 0),
         aiUsageRequests = prefs.getInt("aiUsageRequests", 0),
@@ -410,6 +424,9 @@ class SettingsStore(context: Context) {
             .putString("fundingWarnKey", s.fundingWarnKey)
             .putString("aiModelHard", s.aiModelHard)
             .putStringSet("dupDismissed", s.dupDismissed)
+            .putString("dupVerdicts", json.encodeToString(dupVerdictSerializer, s.dupVerdicts))
+            .putBoolean("aiAutoTidy", s.aiAutoTidy)
+            .putString("aiTidyLog", json.encodeToString(ListSerializer(String.serializer()), s.aiTidyLog))
             .putString("aiModelVision", s.aiModelVision)
             .putLong("aiUsageDay", s.aiUsageDay)
             .putInt("aiUsageRequests", s.aiUsageRequests)

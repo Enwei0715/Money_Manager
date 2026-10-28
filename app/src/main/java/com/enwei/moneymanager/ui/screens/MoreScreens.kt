@@ -413,6 +413,22 @@ fun NotificationSettingsScreen(nav: NavController) {
         var accId by remember(nn) { mutableStateOf(settings.notifAccountMap[nn.pkg]) }
         var toId by remember(nn) { mutableStateOf<Long?>(null) }
         val amount = NotificationParser.findAmount(listOfNotNull(nn.title, nn.text).joinToString(" "))
+        // AI 先幫忙判斷收支類型與帳戶，使用者確認或修改後再儲存
+        var aiHint by remember(nn) { mutableStateOf<String?>(null) }
+        LaunchedEffect(nn) {
+            if (!com.enwei.moneymanager.net.GroqAi.enabled) return@LaunchedEffect
+            aiHint = "AI 判斷中…"
+            val accs = lk.accounts.filter { !it.archived }.map { a ->
+                a.id to listOfNotNull(a.name, a.type.label, a.cardLast4?.let { "末四碼 $it" }, a.description).joinToString("｜")
+            }
+            val h = com.enwei.moneymanager.net.GroqAi.suggestTeach(nn.title, nn.text, accs)
+            if (h == null) { aiHint = null; return@LaunchedEffect }
+            mode = h.mode
+            h.accountId?.let { accId = it }
+            if (h.mode >= 2) toId = h.toAccountId?.takeIf { it != accId }
+            aiHint = "AI 建議：${listOf("支出", "收入", "轉出", "轉入")[h.mode]}" +
+                (h.accountId?.let { lk.account(it)?.name }?.let { "，$it" } ?: "") + (h.reason.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: "")
+        }
         AlertDialog(
             onDismissRequest = { teach = null },
             title = { Text("教它辨識") },
@@ -420,6 +436,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("之後「${labelOf[nn.pkg] ?: nn.pkg}」標題為「${com.enwei.moneymanager.data.learnKey(nn.title, nn.text)}」的通知，會照下面的設定記帳。",
                         style = MaterialTheme.typography.bodySmall)
+                    aiHint?.let { Text(it, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall) }
                     if (amount == null) Text("這則通知裡找不到金額，無法自動記帳。", color = MaterialTheme.colorScheme.error)
                     else Text("找到的金額：${Money.format(amount.first, amount.second)} ${amount.second}")
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -842,6 +859,7 @@ fun WalletReaderScreen(nav: NavController) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text("$label · ${timeFmt.format(Date(e.time))} · 讀到 ${e.lines} 行文字", style = MaterialTheme.typography.labelSmall)
                         e.problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                        if (e.byAi) Text("版面規則看不懂，由 AI 從畫面整理出 ${e.records.size} 筆", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
                         e.result?.let { r ->
                             Text(
                                 if (r.wallet == null) "辨識出 ${r.total} 筆，但找不到要記入的電子支付帳戶（請在下方指定）"

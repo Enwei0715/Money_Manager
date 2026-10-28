@@ -212,11 +212,8 @@ object GroqAi {
         return Math.round(v * 100).takeIf { it in seen || -it in seen }
     }
 
-    /** AI 對一組可能重複交易的判斷。 */
-    data class DupVerdict(val same: Boolean, val name: String?, val categoryId: Long?, val reason: String)
-
     /** 判斷每組（A、B）是不是同一筆交易，同一筆時給較精確的名稱與分類。[items] 為 (組別代號, 說明)。 */
-    suspend fun judgeDuplicates(items: List<Pair<String, String>>, categories: List<Pair<Long, String>>): Map<String, DupVerdict> {
+    suspend fun judgeDuplicates(items: List<Pair<String, String>>, categories: List<Pair<Long, String>>): Map<String, com.enwei.moneymanager.data.DupJudgement> {
         if (!enabled || items.isEmpty()) return emptyMap()
         val system = "你是台灣記帳 App 的助理。每組 A、B 是金額相同、時間相近的兩筆紀錄，可能是同一筆消費被通知和錢包畫面（或手動）各記了一次，" +
             "也可能真的是兩筆（例如同一天買兩張一樣的票）。判斷是否同一筆；若是，從兩筆的名稱與原文整理出最精確、好讀的交易名稱（例如店名），並從分類清單挑一個。" +
@@ -230,7 +227,7 @@ object GroqAi {
             val o = e as? JsonObject ?: return@mapNotNull null
             val id = o.str("id") ?: return@mapNotNull null
             if (items.none { it.first == id }) return@mapNotNull null
-            id to DupVerdict(
+            id to com.enwei.moneymanager.data.DupJudgement(
                 same = o.str("same") == "true", name = o.str("name")?.take(30),
                 categoryId = o.str("category_id")?.toDoubleOrNull()?.toLong()?.takeIf { it in valid }, reason = o.str("reason")?.take(40) ?: "",
             )
@@ -288,5 +285,54 @@ object GroqAi {
             type = type, amountMinor = Math.round(amount * 100), currency = r.str("currency")?.uppercase()?.take(3) ?: "TWD",
             merchant = r.str("merchant")?.take(40), cardLast4 = null, kind = kind, occurredAt = at,
         )
+    }
+
+    /** 「教它辨識」的 AI 建議：[mode] 0 支出、1 收入、2 轉出、3 轉入；帳戶從 [accounts]（id 與說明）挑。 */
+    data class TeachHint(val mode: Int, val accountId: Long?, val toAccountId: Long?, val reason: String)
+
+    suspend fun suggestTeach(title: String?, text: String?, accounts: List<Pair<Long, String>>): TeachHint? {
+        if (!enabled) return null
+        val full = listOfNotNull(title, text).joinToString("\n").take(800)
+        val system = "你是台灣記帳 App 的助理。使用者要教 App 辨識這種格式的通知。判斷它是支出(expense)、收入(income)、" +
+            "轉出到自己另一個帳戶或別人(transfer_out)、從別的帳戶轉入(transfer_in)；從帳戶清單挑出這則通知所屬的帳戶（依銀行名稱、卡號末四碼、App 名稱）；" +
+            "轉帳時若看得出另一端是清單裡的哪個帳戶也一併挑出。理由 20 字以內。只回 JSON：" +
+            "{\"type\": \"expense\"|\"income\"|\"transfer_out\"|\"transfer_in\", \"account_id\": number|null, \"other_account_id\": number|null, \"reason\": string}"
+        val user = "帳戶清單（id: 名稱｜類型｜說明）：\n" + accounts.joinToString("\n") { "${it.first}: ${it.second}" } + "\n\n通知：\n$full"
+        val r = chatJson(system, user, 160) ?: return null
+        val ids = accounts.map { it.first }.toSet()
+        val mode = when (r.str("type")) { "income" -> 1; "transfer_out" -> 2; "transfer_in" -> 3; else -> 0 }
+        return TeachHint(
+            mode,
+            r.str("account_id")?.toDoubleOrNull()?.toLong()?.takeIf { it in ids },
+            r.str("other_account_id")?.toDoubleOrNull()?.toLong()?.takeIf { it in ids },
+            r.str("reason")?.take(40) ?: "",
+        )
+    }
+
+    /**
+     * 錢包交易紀錄畫面的版面規則看不懂時，請 AI 從畫面文字整理出交易列表。
+     * 只送出勾選錢包 App 畫面上的文字。
+     */
+    suspend fun parseScreen(lines: List<String>, today: java.time.LocalDate): List<com.enwei.moneymanager.core.ScreenRecord> {
+        if (!enabled) return emptyList()
+        val body = lines.joinToString("\n").take(2500)
+        if (body.count { it.isDigit() } < 4) return emptyList()
+        val system = "你是台灣記帳 App 的助理。以下是電子錢包 App「交易紀錄」畫面依順序讀到的文字。整理出畫面上每一筆已完成的交易；" +
+            "沒有交易紀錄（例如首頁、設定頁、廣告）就回空陣列。儲值、加值算 income 並把 label 設為「儲值」。年份沒寫時依今天推斷（今天是 $today），不可晚於今天。" +
+            "只回 JSON：{\"records\": [{\"date\": \"yyyy-MM-dd\", \"time\": \"HH:mm\"|null, \"merchant\": string|null, \"amount\": number, \"income\": boolean, \"label\": string|null}]}"
+        val r = chatJson(system, body, 900) ?: return emptyList()
+        val arr = r["records"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+        return arr.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val date = o.str("date")?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+                ?.takeIf { !it.isAfter(today) && it.isAfter(today.minusYears(1)) } ?: return@mapNotNull null
+            val time = o.str("time")?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() }
+            val amount = o.str("amount")?.replace(",", "")?.toDoubleOrNull()?.let { kotlin.math.abs(it) }?.takeIf { it > 0 && it < 1e7 } ?: return@mapNotNull null
+            com.enwei.moneymanager.core.ScreenRecord(
+                time = date.atTime(time ?: java.time.LocalTime.MIDNIGHT), dateOnly = time == null,
+                merchant = o.str("merchant")?.take(40), amountMinor = Math.round(amount * 100), isIncome = o.str("income") == "true",
+                typeLabel = o.str("label")?.take(10),
+            )
+        }
     }
 }

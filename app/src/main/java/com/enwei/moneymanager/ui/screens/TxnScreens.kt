@@ -1,6 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -276,12 +277,23 @@ private fun DuplicateSection(lk: Lookups) {
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     var pairs by remember { mutableStateOf<List<com.enwei.moneymanager.data.Repository.DupPair>>(emptyList()) }
-    var verdicts by remember { mutableStateOf<Map<String, com.enwei.moneymanager.net.GroqAi.DupVerdict>>(emptyMap()) }
+    // AI 的判斷會記住（自動整理或按下判斷時存起來）
+    val verdicts = settings.dupVerdicts
     var running by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(all, settings.dupDismissed) { pairs = repo.findDuplicates() }
-    if (pairs.isEmpty()) return
+    var showLog by remember { mutableStateOf(false) }
     val aiOn = settings.aiEnabled && settings.groqKey.isNotBlank()
+    LaunchedEffect(all, settings.dupDismissed) { pairs = repo.findDuplicates() }
+    // 打開待確認頁時，順便請 AI 整理還沒判斷過的重複
+    LaunchedEffect(Unit) { if (aiOn && settings.aiAutoTidy) runCatching { repo.aiAutoTidy() } }
+    if (settings.aiTidyLog.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Text(
+            "AI 自動整理（${settings.aiTidyLog.size}）" + if (showLog) " ▴" else " ▾", fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.clickable { showLog = !showLog },
+        )
+        if (showLog) settings.aiTidyLog.take(10).forEach { Text("• $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+    if (pairs.isEmpty()) return
     fun line(t: com.enwei.moneymanager.data.TxnEntity): String {
         val time = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
         val clock = if (time.toLocalTime() == java.time.LocalTime.MIDNIGHT) "" else " %02d:%02d".format(time.hour, time.minute)
@@ -304,7 +316,6 @@ private fun DuplicateSection(lk: Lookups) {
             running = true; msg = null
             scope.launch {
                 val r = repo.aiJudgeDuplicates(pairs)
-                verdicts = verdicts + r
                 msg = if (r.isEmpty()) "AI 連線失敗：${com.enwei.moneymanager.net.GroqAi.lastError ?: "沒有回應"}"
                 else "AI 判斷 ${r.size} 組：${r.values.count { it.same }} 組是同一筆"
                 running = false

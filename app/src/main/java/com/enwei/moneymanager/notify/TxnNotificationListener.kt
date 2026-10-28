@@ -46,6 +46,7 @@ class TxnNotificationListener : NotificationListenerService() {
         val app = application as MoneyApp
         app.appScope.launch {
             val result = runCatching { app.repo.ingestNotification(sbn.packageName, title, text, sbn.postTime) }.getOrNull() ?: return@launch
+            if (result.kind == "RECORDED") app.repo.scheduleAutoTidy(app.appScope)
             val pending = !app.repo.settings.value.notifAutoConfirm && result.kind == "RECORDED"
             QuickActions.notifyRecorded(
                 this@TxnNotificationListener, result.txnId.takeIf { result.kind != "STOCK" }, tr(result.message), pending,
