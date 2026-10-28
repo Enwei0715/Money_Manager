@@ -37,7 +37,7 @@ import kotlinx.coroutines.launch
 fun AiSettingsScreen(nav: NavController) {
     val s by repo.settings.flow.collectAsStateWithLifecycle()
     var key by remember { mutableStateOf(s.groqKey) }
-    var model by remember { mutableStateOf(s.aiModel) }
+    var model by remember(s.aiModel) { mutableStateOf(s.aiModel) }
     var result by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -61,6 +61,10 @@ fun AiSettingsScreen(nav: NavController) {
             OutlinedTextField(
                 model, { model = it; repo.settings.update { st -> st.copy(aiModel = it.trim()) } },
                 label = { Text("模型") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "建議用 ${GroqAi.DEFAULT_MODEL}（Groq 免費方案可用）。llama-3.1-8b-instant 已於 2026/8/16 停止提供給免費方案，會自動改用建議模型。",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(enabled = key.isNotBlank() && !testing, onClick = {
                 testing = true; result = null

@@ -182,7 +182,7 @@ data class AppSettings(
     val groqKey: String = "",
     /** AI 智慧辨識：規則判斷不出來時用 AI 判讀通知、命名商家、挑分類 */
     val aiEnabled: Boolean = false,
-    val aiModel: String = "llama-3.1-8b-instant",
+    val aiModel: String = "openai/gpt-oss-20b",
     /** AI 建議的分類（待使用者確認） */
     val aiSuggestions: List<AiSuggestion> = emptyList(),
     /** 上次提醒「扣款帳戶餘額不足」的內容，避免同一件事重複通知 */
@@ -266,7 +266,8 @@ class SettingsStore(context: Context) {
         typhoonDays = prefs.getString("typhoonDays", "")!!,
         groqKey = prefs.getString("groqKey", "")!!,
         aiEnabled = prefs.getBoolean("aiEnabled", false),
-        aiModel = prefs.getString("aiModel", "llama-3.1-8b-instant")!!,
+        // llama-3.1-8b-instant 已停止提供給免費方案，舊設定自動換成新的預設模型
+        aiModel = prefs.getString("aiModel", "openai/gpt-oss-20b")!!.let { if (it == "llama-3.1-8b-instant") "openai/gpt-oss-20b" else it },
         fundingWarnKey = prefs.getString("fundingWarnKey", "")!!,
         aiSuggestions = runCatching { json.decodeFromString(aiSuggestionSerializer, prefs.getString("aiSuggestions", "[]")!!) }.getOrDefault(emptyList()),
         cardBank = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardBank", "{}")!!) }.getOrDefault(emptyMap()),

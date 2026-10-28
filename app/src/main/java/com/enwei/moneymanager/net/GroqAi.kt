@@ -37,43 +37,80 @@ object GroqAi {
     val enabled: Boolean
         get() = MoneyApp.repo.settings.value.let { it.aiEnabled && it.groqKey.isNotBlank() }
 
-    /** 呼叫模型並取得 JSON 物件回覆；失敗回傳 null。 */
+    /** 預設模型。llama-3.1-8b-instant 已於 2026/8/16 停止提供給免費與開發者方案。 */
+    const val DEFAULT_MODEL = "openai/gpt-oss-20b"
+    /** 已停止提供的模型，自動改用預設模型 */
+    val RETIRED_MODELS = setOf("llama-3.1-8b-instant", "llama3-8b-8192", "llama-3.3-70b-versatile")
+
+    private enum class Fail { NONE, MODEL_GONE, NO_JSON_MODE }
+
+    /** 呼叫模型並取得 JSON 物件回覆；失敗回傳 null。模型下架時自動改用預設模型、不支援 JSON 模式時改用一般模式重試。 */
     private suspend fun chatJson(system: String, user: String, maxTokens: Int = 200): JsonObject? = withContext(Dispatchers.IO) {
         val s = MoneyApp.repo.settings.value
         if (s.groqKey.isBlank()) return@withContext null
+        var model = s.aiModel.trim().ifBlank { DEFAULT_MODEL }.let { if (it in RETIRED_MODELS) DEFAULT_MODEL else it }
+        var jsonMode = true
+        repeat(3) {
+            val (result, fail) = call(s.groqKey.trim(), model, jsonMode, system, user, maxTokens)
+            when (fail) {
+                Fail.NONE -> return@withContext result
+                Fail.MODEL_GONE -> if (model != DEFAULT_MODEL) {
+                    model = DEFAULT_MODEL
+                    MoneyApp.repo.settings.update { it.copy(aiModel = DEFAULT_MODEL) }
+                } else return@withContext null
+                Fail.NO_JSON_MODE -> if (jsonMode) jsonMode = false else return@withContext null
+            }
+        }
+        null
+    }
+
+    private fun call(key: String, model: String, jsonMode: Boolean, system: String, user: String, maxTokens: Int): Pair<JsonObject?, Fail> {
+        // gpt-oss 等推理模型的思考過程也算在 max_tokens 裡，要多留空間並把推理強度調低
+        val reasoning = model.startsWith("openai/gpt-oss") || model.contains("qwen3") || model.contains("deepseek")
         val body = buildJsonObject {
-            put("model", s.aiModel.ifBlank { "llama-3.1-8b-instant" })
-            put("temperature", 0)
-            put("max_tokens", maxTokens)
-            put("response_format", buildJsonObject { put("type", "json_object") })
+            put("model", model)
+            put("temperature", if (reasoning) 0.2 else 0.0)
+            put("max_tokens", if (reasoning) maxOf(1024, maxTokens * 4) else maxTokens)
+            if (reasoning && model.startsWith("openai/gpt-oss")) put("reasoning_effort", "low")
+            if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
             put("messages", buildJsonArray {
                 add(buildJsonObject { put("role", "system"); put("content", system) })
                 add(buildJsonObject { put("role", "user"); put("content", user) })
             })
         }.toString()
         val req = Request.Builder().url(URL)
-            .header("Authorization", "Bearer ${s.groqKey.trim()}")
+            .header("Authorization", "Bearer $key")
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
-        runCatching {
+        return runCatching {
             Http.client.newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
                     lastError = when (resp.code) {
                         401 -> "API 金鑰無效（401）"
                         429 -> "超過 Groq 的使用額度（429），稍後會自動恢復"
-                        else -> "HTTP ${resp.code}：${text.take(120)}"
+                        404 -> "模型「$model」無法使用（404）"
+                        else -> "HTTP ${resp.code}：${text.take(160)}"
                     }
-                    return@use null
+                    val fail = when {
+                        resp.code == 404 || text.contains("model_not_found") || text.contains("decommissioned") -> Fail.MODEL_GONE
+                        resp.code == 400 && jsonMode && (text.contains("response_format") || text.contains("json")) -> Fail.NO_JSON_MODE
+                        else -> null
+                    }
+                    return@use null to (fail ?: Fail.NONE)
                 }
                 val content = Http.json.parseToJsonElement(text).jsonObject["choices"]
                     ?.let { (it as? kotlinx.serialization.json.JsonArray)?.firstOrNull() }
                     ?.jsonObject?.get("message")?.jsonObject?.get("content")
-                    ?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return@use null
+                    ?.let { (it as? JsonPrimitive)?.contentOrNull }
+                if (content == null) { lastError = "模型沒有回覆內容（可能是回覆長度不足）"; return@use null to Fail.NONE }
+                // 只取第一個 { 到最後一個 } 之間，容許模型在 JSON 前後多說幾句
+                val a = content.indexOf('{'); val b = content.lastIndexOf('}')
+                if (a < 0 || b <= a) { lastError = "模型回覆不是 JSON"; return@use null to Fail.NONE }
                 lastError = null
-                Http.json.parseToJsonElement(content.substring(content.indexOf('{').coerceAtLeast(0))).jsonObject
+                Http.json.parseToJsonElement(content.substring(a, b + 1)).jsonObject to Fail.NONE
             }
-        }.getOrElse { lastError = it.message ?: it.javaClass.simpleName; null }
+        }.getOrElse { lastError = it.message ?: it.javaClass.simpleName; null to Fail.NONE }
     }
 
     private fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() && it != "null" }
