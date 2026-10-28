@@ -859,3 +859,4 @@ App 名稱也會跟著語言切換（帳理／Ledgerly）。	The app name change
 無法判斷（沒有商家名稱或沒有相似紀錄），記帳後可在通知上一鍵選分類	can't tell (no merchant name or similar records); pick one from the notification after it's recorded
 依商家名稱推測	guessed from merchant name
 同金額的固定支出	same amount as a regular expense
+Email：寄件者不是銀行，不處理	Email: sender isn't a bank, ignored

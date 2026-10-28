@@ -350,3 +350,29 @@ class CategorySuggesterTest {
         assertEquals(null, CategorySuggester.suggest("不知名小店", at(10), cats))
     }
 }
+
+class BankDirectoryTest {
+    @Test fun sourcesAndAccounts() {
+        assertEquals("國泰", BankDirectory.of("國泰世華 com.cathaybk.mymobibank.android")?.key)
+        assertEquals("永豐", BankDirectory.of("大戶 DAWHO")?.key)
+        assertEquals("國泰", BankDirectory.of("國泰世華銀行")?.key)
+        assertTrue(BankDirectory.matches(BankDirectory.of("大戶 DAWHO")!!, "大戶投"))
+        assertTrue(BankDirectory.matches(BankDirectory.of("CUBE")!!, "國泰簽帳"))
+        assertEquals(null, BankDirectory.of("Gmail"))
+    }
+
+    @Test fun emailDestination() {
+        val text = "CUBE App轉帳通知\n親愛的客戶 您好：\n您於2026/10/29 00:21:52 之即時非約定轉帳結果如下：\n轉出帳號\n0000030****14773\n轉入銀行\n807永豐銀行\n轉入帳號"
+        assertEquals("永豐", BankDirectory.transferDestination(text)?.key)
+        assertEquals("中信", BankDirectory.transferDestination("轉入行：822 中國信託")?.key)
+        assertEquals(null, BankDirectory.transferDestination("金額TWD\$100元，自他行轉入您的新台幣帳戶。"))
+    }
+
+    @Test fun realTransferNotificationsParse() {
+        val out = NotificationParser.parse("國泰世華銀行", "【帳戶出帳通知】您於2026/10/29 00:27:05電子轉出,金額為NT\$100元")!!
+        assertEquals(ParsedKind.TRANSFER_OUT, out.kind)
+        val inn = NotificationParser.parse("帳戶入帳通知", "金額TWD\$100元，自他行轉入您的新台幣帳戶。 2026/10/29 00:27:05")!!
+        assertEquals(ParsedKind.TRANSFER_IN, inn.kind)
+        assertEquals(out.amountMinor, inn.amountMinor)
+    }
+}

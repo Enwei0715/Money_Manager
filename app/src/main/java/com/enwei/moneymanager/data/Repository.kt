@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.enwei.moneymanager.core.CardCycle
 import com.enwei.moneymanager.core.CategoryGuesser
 import com.enwei.moneymanager.core.CategorySuggester
+import com.enwei.moneymanager.core.BankDirectory
 import com.enwei.moneymanager.core.FxConverter
 import com.enwei.moneymanager.core.ParsedKind
 import com.enwei.moneymanager.core.ScreenRecord
@@ -91,6 +92,7 @@ data class Backup(
 data class CardStatus(val payable: Long, val outstanding: Long, val dueDate: LocalDate?, val autopayDate: LocalDate? = null)
 
 private const val TRANSFER_TAG = "#轉帳"
+private const val GMAIL_PACKAGE = "com.google.android.gm"
 
 data class IngestResult(val kind: String, val txnId: Long? = null, val message: String)
 
@@ -385,10 +387,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     suspend fun previewNotification(pkg: String, title: String?, text: String?): Pair<Boolean, String> {
         val s = settings.value
         if (pkg == LINE_PACKAGE && !isLineWallet(title, text)) return false to "LINE 聊天訊息，不處理"
+        if (pkg == GMAIL_PACKAGE) return false to previewEmail(title, text)
         if (isRedacted(text)) return false to "內容被 Android 隱藏：Android 15 起，系統判斷含驗證碼（OTP）的通知會對第三方 App 隱藏內容，" +
             "App 收不到金額。一般的消費通知不含驗證碼，通常不會被隱藏。若一定要讀取，可在電腦用 adb 執行下方指令開放。"
         val learned = s.learnedFor(pkg, title, text)
-        val enabled = pkg == LINE_PACKAGE || learned != null || pkg in s.notifPackages
+        val bankSrc = sourceBank(pkg, title)
+        val enabled = pkg == LINE_PACKAGE || learned != null || pkg in s.notifPackages ||
+            (bankSrc != null && db.accounts().all().any { !it.archived && BankDirectory.matches(bankSrc, it.name) })
         NotificationParser.parseStockFill(title, text)?.let { f ->
             val msg = "股票成交：${if (f.side == StockSide.SELL) "賣出" else "買進"} ${f.symbol} ${f.shares.toLong()} 股 @ ${f.price}"
             return enabled to (msg + if (enabled) "" else "\n這個 App 尚未勾選監聽，勾選後才會自動建立")
@@ -397,10 +402,12 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             ?: NotificationParser.parse(title, text)
             ?: return false to "看不出是交易（找不到金額，或沒有「消費／付款／入帳」等字樣）。若這是交易通知，按「教它辨識」。"
         val accounts = db.accounts().all().filter { !it.archived }
+        val raw0 = listOfNotNull(title, text).joinToString("\n")
         val account = learned?.accountId?.let { id -> accounts.firstOrNull { it.id == id } }
             ?: p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
             ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
             ?: (if (pkg == LINE_PACKAGE) accounts.firstOrNull { it.type != AccountType.CREDIT_CARD && it.name.contains("line", ignoreCase = true) } else null)
+            ?: bankSrc?.let { bankAccount(it, wantsCard(p, raw0), accounts) }
             ?: accounts.firstOrNull { it.id == s.defaultAccountId }
         val what = when (p.kind) {
             ParsedKind.WITHDRAWAL -> "提款 → 記成轉帳到現金"
@@ -427,6 +434,59 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return (enabled && account != null) to lines.joinToString("\n")
     }
 
+    /** 通知來自哪家銀行：Gmail 看寄件者（標題），其他 App 看 App 名稱與套件名稱。 */
+    private fun sourceBank(pkg: String, title: String?): BankDirectory.Bank? {
+        if (pkg == GMAIL_PACKAGE) return BankDirectory.of(title)
+        val label = runCatching {
+            val pm = com.enwei.moneymanager.MoneyApp.instance.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+        }.getOrNull()
+        return BankDirectory.of(listOfNotNull(label, pkg).joinToString(" "))
+    }
+
+    /** 刷卡消費才記到信用卡；轉帳、出帳、入帳、提款一律是存款（簽帳）帳戶。 */
+    private fun wantsCard(p: com.enwei.moneymanager.core.ParsedTransaction, raw: String): Boolean =
+        p.kind == ParsedKind.NORMAL && (p.cardLast4 != null || listOf("刷卡", "信用卡", "簽帳金融卡消費").any { raw.contains(it) } && !raw.contains("轉出"))
+
+    /** 這家銀行對應的帳戶：信用卡消費找信用卡，其餘找存款帳戶（優先銀行類）。 */
+    private fun bankAccount(bank: BankDirectory.Bank, card: Boolean, accounts: List<AccountEntity>): AccountEntity? {
+        val list = accounts.filter { BankDirectory.matches(bank, it.name) }
+        return if (card) list.firstOrNull { it.type == AccountType.CREDIT_CARD }
+        else list.filter { it.type != AccountType.CREDIT_CARD }.let { l -> l.firstOrNull { it.type == AccountType.BANK } ?: l.firstOrNull() }
+    }
+
+    /**
+     * 銀行的轉帳結果 Email（例如國泰「CUBE App轉帳通知」寫有「轉入銀行 807永豐銀行」）：
+     * 找到剛剛同一家銀行的轉出，改成轉帳到你在轉入銀行的帳戶。
+     */
+    private suspend fun enrichFromEmail(title: String?, text: String?, postedAt: Long): IngestResult? {
+        val src = BankDirectory.of(title) ?: return null
+        val dest = BankDirectory.transferDestination(text) ?: return null
+        val accounts = db.accounts().all().filter { !it.archived }
+        val from = bankAccount(src, false, accounts) ?: return null
+        val to = bankAccount(dest, false, accounts)?.takeIf { it.id != from.id } ?: return null
+        val raw = listOfNotNull(title, text).joinToString("\n")
+        val amount = NotificationParser.findAmount(raw)?.first
+        val window = 20 * 60_000L
+        val candidates = db.txns().all().filter {
+            it.source == TxnSource.NOTIFICATION && it.accountId == from.id && kotlin.math.abs(it.date - postedAt) <= window &&
+                it.type == TxnType.EXPENSE && it.rawText?.startsWith(TRANSFER_TAG) == true && (amount == null || it.amount == amount)
+        }
+        // 沒有金額時只在唯一一筆時套用，避免改錯
+        val t = (if (amount == null) candidates.singleOrNull() else candidates.minByOrNull { kotlin.math.abs(it.date - postedAt) }) ?: return null
+        db.txns().upsert(t.copy(type = TxnType.TRANSFER, toAccountId = to.id, categoryId = null, merchant = "轉帳",
+            rawText = listOfNotNull(t.rawText, raw).joinToString("\n—\n")))
+        db.notificationLog().insert(NotificationLogEntity(packageName = GMAIL_PACKAGE, title = title, text = text, postedAt = postedAt, result = "MERGED", txnId = t.id))
+        return IngestResult("RECORDED", t.id, "轉帳 ${Money.format(t.amount, t.currency)}：${from.name} → ${to.name}（依 Email 的轉入銀行）")
+    }
+
+    private fun previewEmail(title: String?, text: String?): String {
+        val src = BankDirectory.of(title) ?: return "Email：寄件者不是銀行，不處理"
+        val dest = BankDirectory.transferDestination(text)
+            ?: return "${src.key}的 Email：沒有「轉入銀行」資訊，不處理（Email 只用來補充轉帳對象，不另外記帳）"
+        return "${src.key}的轉帳 Email：轉入${dest.key}。若剛剛有${src.key}的轉出紀錄，會改成轉帳到你的${dest.key}帳戶（不另外記帳）"
+    }
+
     suspend fun ingestNotification(pkg: String, title: String?, text: String?, postedAt: Long, force: Boolean = false): IngestResult? {
         // LINE：只處理「LINE錢包」付款通知（LINE Bank Money／LINE Pay），聊天訊息一律略過；不需另外勾選 LINE
         val isLine = pkg == LINE_PACKAGE
@@ -436,8 +496,14 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         // 同一則通知可能因更新而重複送達
         if (!force && log.countSame(pkg, title, text, postedAt - 10 * 60_000) > 0) return null
         log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
+        // 銀行寄的 Email：只用來補充轉帳的轉入銀行，不另外記帳（其他 Email 一律不處理）
+        if (pkg == GMAIL_PACKAGE) return enrichFromEmail(title, text, postedAt)
         val learned = s.learnedFor(pkg, title, text)
-        val enabled = force || isLine || learned != null || pkg in s.notifPackages
+        val bankSrc = sourceBank(pkg, title)
+        val allAccounts = db.accounts().all().filter { !it.archived }
+        // 來源 App 是你有帳戶的銀行（例如「大戶 DAWHO」對應帳戶「大戶投」）：不用另外勾選
+        val enabled = force || isLine || learned != null || pkg in s.notifPackages ||
+            (bankSrc != null && allAccounts.any { BankDirectory.matches(bankSrc, it.name) })
         fun logAs(result: String, txnId: Long? = null) =
             NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = result, txnId = txnId)
 
@@ -495,6 +561,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             ?: p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
             ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
             ?: (if (isLine) accounts.firstOrNull { it.type != AccountType.CREDIT_CARD && it.name.contains("line", ignoreCase = true) } else null)
+            ?: bankSrc?.let { bankAccount(it, wantsCard(p, raw0), accounts) }
             ?: accounts.firstOrNull { it.id == s.defaultAccountId }
         // 銀行的股利入帳通知：已由「自動除息」記到這個帳戶時不再重複記收入
         if (p.type == ParsedType.INCOME && account != null && listOf("股利", "股息", "配息").any { raw0.contains(it) }) {
@@ -581,6 +648,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             ParsedKind.TRANSFER_OUT, ParsedKind.TRANSFER_IN -> {
                 // 自己兩個帳戶之間的轉帳：一邊轉出、一邊轉入，金額相同且時間相近 → 合併成一筆轉帳
                 val isOut = p.kind == ParsedKind.TRANSFER_OUT
+                // 已經記成轉帳（例如 Email 已補上轉入銀行）：這則是同一筆的另一端
+                if (account != null && nearby.any { it.type == TxnType.TRANSFER && (if (isOut) it.accountId else it.toAccountId) == account.id }) {
+                    log.insert(logAs("DUPLICATE")); return null
+                }
                 nearby.firstOrNull {
                     it.type == (if (isOut) TxnType.INCOME else TxnType.EXPENSE) && it.rawText?.startsWith(TRANSFER_TAG) == true &&
                         it.accountId != account?.id
