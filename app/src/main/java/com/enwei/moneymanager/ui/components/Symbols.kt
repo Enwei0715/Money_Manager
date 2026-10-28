@@ -31,6 +31,8 @@ import androidx.compose.material.icons.rounded.LocalHospital
 import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.Pets
 import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.Contactless
+import androidx.compose.material.icons.rounded.RequestQuote
 import androidx.compose.material.icons.rounded.Redeem
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Restaurant
