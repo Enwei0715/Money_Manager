@@ -48,6 +48,10 @@ data class AccountEntity(
     val archived: Boolean = false,
     val sortOrder: Int = 0,
     val description: String? = null,
+    /** 連結帳戶：證券戶 → 交割銀行；電子支付 → 自動儲值來源銀行 */
+    val linkedAccountId: Long? = null,
+    /** 證券戶的手續費折數（空白則用全域設定） */
+    val feeDiscount: Double? = null,
 )
 
 @Serializable
@@ -134,6 +138,8 @@ data class StockTradeEntity(
     val date: Long,
     /** 交割帳戶：買賣金額會反映在此帳戶餘額 */
     val cashAccountId: Long? = null,
+    /** 所屬證券帳戶 */
+    val brokerAccountId: Long? = null,
     val note: String? = null,
     val source: TxnSource = TxnSource.MANUAL,
     val externalKey: String? = null,

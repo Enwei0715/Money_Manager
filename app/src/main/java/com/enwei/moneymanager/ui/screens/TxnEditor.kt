@@ -114,7 +114,9 @@ private fun minorToExpr(minor: Long) = Money.fromMinor(minor).stripTrailingZeros
 
 /** 記一筆：上方表單、下方依欄位切換計算機鍵盤／分類格／帳戶格。 */
 @Composable
-fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId: Long = 0, initialEpochDay: Long? = null, initialAccountId: Long? = null) {
+fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId: Long = 0, initialEpochDay: Long? = null, initialAccountId: Long? = null,
+    initialToAccountId: Long? = null, initialAmount: Long? = null,
+) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
@@ -124,12 +126,12 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
     var original by remember { mutableStateOf<TxnEntity?>(null) }
 
     var type by rememberSaveable { mutableStateOf(initialType?.let { TxnType.valueOf(it) } ?: TxnType.EXPENSE) }
-    var expr by rememberSaveable { mutableStateOf("") }
+    var expr by rememberSaveable { mutableStateOf(initialAmount?.let(::minorToExpr).orEmpty()) }
     var feeExpr by rememberSaveable { mutableStateOf("") }
     var showFee by rememberSaveable { mutableStateOf(false) }
     var currency by rememberSaveable { mutableStateOf(settings.baseCurrency) }
     var accountId by rememberSaveable { mutableStateOf(initialAccountId ?: settings.defaultAccountId) }
-    var toAccountId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var toAccountId by rememberSaveable { mutableStateOf(initialToAccountId) }
     var toExpr by rememberSaveable { mutableStateOf("") }
     var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var merchant by rememberSaveable { mutableStateOf("") }
@@ -137,7 +139,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
     var date by rememberSaveable { mutableStateOf(initialEpochDay?.let(LocalDate::ofEpochDay) ?: LocalDate.now()) }
     var time by rememberSaveable { mutableStateOf(LocalTime.now().withSecond(0).withNano(0)) }
     var panel by rememberSaveable {
-        mutableStateOf(if (id != 0L) Panel.NONE else if (repo.settings.value.inputFromCategory) Panel.CATEGORY else Panel.AMOUNT)
+        mutableStateOf(if (id != 0L || initialAmount != null) Panel.NONE else if (repo.settings.value.inputFromCategory) Panel.CATEGORY else Panel.AMOUNT)
     }
     var showDate by remember { mutableStateOf(false) }
     var showTime by remember { mutableStateOf(false) }

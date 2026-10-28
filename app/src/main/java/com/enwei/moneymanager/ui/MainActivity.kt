@@ -208,17 +208,20 @@ private fun AppScaffold(nav: NavHostController) {
                 )
             }
             composable(
-                "txn/{id}?type={type}&bookmark={bookmark}&date={date}&account={account}",
+                "txn/{id}?type={type}&bookmark={bookmark}&date={date}&account={account}&to={to}&amount={amount}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.LongType },
                     navArgument("type") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("bookmark") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("date") { type = NavType.LongType; defaultValue = Long.MIN_VALUE },
                     navArgument("account") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("to") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("amount") { type = NavType.LongType; defaultValue = 0L },
                 ),
             ) { e ->
                 val a = e.arguments!!
-                TxnEditScreen(nav, a.getLong("id"), a.getString("type"), a.getLong("bookmark"), a.getLong("date").takeIf { it != Long.MIN_VALUE }, a.getLong("account").takeIf { it > 0 })
+                TxnEditScreen(nav, a.getLong("id"), a.getString("type"), a.getLong("bookmark"), a.getLong("date").takeIf { it != Long.MIN_VALUE }, a.getLong("account").takeIf { it > 0 },
+                    a.getLong("to").takeIf { it > 0 }, a.getLong("amount").takeIf { it > 0 })
             }
             composable("account/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->
                 AccountEditScreen(nav, e.arguments!!.getLong("id"))
@@ -228,13 +231,17 @@ private fun AppScaffold(nav: NavHostController) {
                 RecurringEditScreen(nav, e.arguments!!.getLong("id"))
             }
             composable(
-                "trade/{id}?market={market}&symbol={symbol}",
+                "trade/{id}?market={market}&symbol={symbol}&broker={broker}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.LongType },
                     navArgument("market") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("symbol") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("broker") { type = NavType.LongType; defaultValue = 0L },
                 ),
-            ) { e -> TradeEditScreen(nav, e.arguments!!.getLong("id"), e.arguments?.getString("market"), e.arguments?.getString("symbol")) }
+            ) { e ->
+                TradeEditScreen(nav, e.arguments!!.getLong("id"), e.arguments?.getString("market"), e.arguments?.getString("symbol"),
+                    e.arguments!!.getLong("broker").takeIf { it > 0 })
+            }
             composable("holding/{market}/{symbol}") { e ->
                 HoldingScreen(nav, e.arguments!!.getString("market")!!, e.arguments!!.getString("symbol")!!)
             }

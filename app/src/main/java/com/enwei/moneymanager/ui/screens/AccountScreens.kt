@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.enwei.moneymanager.core.CardCycle
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.data.AccountEntity
@@ -80,13 +81,21 @@ fun AccountEditScreen(nav: NavController, id: Long) {
     var typeMenu by remember { mutableStateOf(false) }
     var currencyMenu by remember { mutableStateOf(false) }
     var autopayMenu by remember { mutableStateOf(false) }
+    var linkedId by remember { mutableStateOf<Long?>(null) }
+    var feeDiscount by remember { mutableStateOf("") }
+    val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
+    // 「金額」欄位以目前餘額表示；儲存時換算回期初餘額
+    val currentBalance = balances.find { it.account.id == id }?.balance
 
     LaunchedEffect(id) {
         if (id == 0L) return@LaunchedEffect
         val a = repo.accounts.first().find { it.id == id } ?: return@LaunchedEffect
         original = a
         name = a.name; type = a.type; currency = a.currency
-        initial = Money.fromMinor(kotlin.math.abs(a.initialBalance)).stripTrailingZeros().toPlainString()
+        val cur = repo.balances.first().find { it.account.id == id }?.balance ?: a.initialBalance
+        initial = Money.fromMinor(if (a.type == AccountType.CREDIT_CARD) -cur else cur).stripTrailingZeros().toPlainString()
+        linkedId = a.linkedAccountId
+        feeDiscount = a.feeDiscount?.toString().orEmpty()
         description = a.description.orEmpty()
         limit = if (a.creditLimit > 0) Money.fromMinor(a.creditLimit).stripTrailingZeros().toPlainString() else ""
         last4 = a.cardLast4.orEmpty(); statementDay = a.statementDay?.toString().orEmpty(); dueDay = a.dueDay?.toString().orEmpty()
@@ -115,7 +124,7 @@ fun AccountEditScreen(nav: NavController, id: Long) {
                 }
             }
             FormLine("名稱") { FormInput(name, { name = it }) }
-            FormLine(if (isCard) "目前欠款" else "金額", trailing = {
+            FormLine(if (isCard) "目前欠款" else if (type == AccountType.BROKERAGE) "證券戶現金" else "目前餘額", trailing = {
                 Box {
                     Box(
                         Modifier.size(44.dp).border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp)).clickable { currencyMenu = true },
@@ -128,7 +137,7 @@ fun AccountEditScreen(nav: NavController, id: Long) {
             }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("${Money.symbolOf(currency).trim()} ", fontSize = 17.sp)
-                    FormInput(initial, { s -> initial = s.filter { it.isDigit() || it == '.' || (!isCard && it == '-') } }, "0.00", number = true)
+                    FormInput(initial, { s -> initial = s.filter { it.isDigit() || it == '.' || it == '-' } }, "0.00", number = true)
                 }
             }
             FormLine("說明") { FormInput(description, { description = it }) }
@@ -158,8 +167,25 @@ fun AccountEditScreen(nav: NavController, id: Long) {
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
-            } else {
-                FormLine("末四碼") { FormInput(last4, { s -> last4 = s.filter(Char::isDigit).take(4) }, "選填，用於辨識通知", number = true) }
+            } else if (type == AccountType.BROKERAGE) {
+                DropdownLine("交割帳戶", lk.account(linkedId)?.name ?: "未設定",
+                    listOf<Pair<Long?, String>>(null to "未設定") + lk.accounts.filter { it.type == AccountType.BANK && !it.archived }.map { it.id to it.name }) { linkedId = it }
+                FormLine("手續費折數") { FormInput(feeDiscount, { feeDiscount = it }, "例：0.6（六折），空白用全域設定", number = true) }
+                Text(
+                    "股票買賣的金額會進出「交割帳戶」；這個證券帳戶的價值 = 持股市值 ＋ 證券戶現金（台股通常為 0，複委託可填外幣餘額）。持股在「帳戶 → 股票」或本帳戶明細新增。",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+            } else if (type == AccountType.EWALLET) {
+                DropdownLine("儲值來源", lk.account(linkedId)?.name ?: "未設定",
+                    listOf<Pair<Long?, String>>(null to "未設定") + lk.accounts.filter { it.type != AccountType.EWALLET && !it.archived }.map { it.id to it.name }) { linkedId = it }
+                Text(
+                    "設定自動儲值的扣款銀行後，該銀行的「電支交易」通知會自動記成轉帳到這個錢包。錢包本身若不推播消費，請在帳戶明細用「對帳」補記。",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+            } else if (type == AccountType.BANK) {
+                FormLine("末四碼") { FormInput(last4, { s -> last4 = s.filter(Char::isDigit).take(4) }, "帳號末四碼，用於辨識通知", number = true) }
             }
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(thickness = 10.dp, color = MaterialTheme.colorScheme.background)
@@ -176,10 +202,15 @@ fun AccountEditScreen(nav: NavController, id: Long) {
             HorizontalDivider(thickness = 10.dp, color = MaterialTheme.colorScheme.background)
             Button(
                 onClick = {
-                    val init = Money.parseMinor(initial) ?: 0
-                    val a = (original ?: AccountEntity(name = name, type = type, sortOrder = lk.accounts.size)).copy(
+                    val entered = (Money.parseMinor(initial) ?: 0).let { if (isCard) -it else it }
+                    val o = original
+                    // 新帳戶：輸入值就是期初餘額；既有帳戶：調整期初餘額讓目前餘額等於輸入值
+                    val newInitial = if (o == null || currentBalance == null) entered else o.initialBalance + (entered - currentBalance)
+                    val a = (o ?: AccountEntity(name = name, type = type, sortOrder = lk.accounts.size)).copy(
                         name = name.trim(), type = type, currency = currency,
-                        initialBalance = if (isCard) -kotlin.math.abs(init) else init,
+                        initialBalance = newInitial,
+                        linkedAccountId = if (type == AccountType.BROKERAGE || type == AccountType.EWALLET) linkedId else null,
+                        feeDiscount = if (type == AccountType.BROKERAGE) feeDiscount.toDoubleOrNull()?.takeIf { it in 0.01..1.0 } else null,
                         creditLimit = Money.parseMinor(limit) ?: 0,
                         cardLast4 = last4.ifBlank { null },
                         statementDay = if (isCard) sDay else null, dueDay = if (isCard) dDay else null,
@@ -194,7 +225,7 @@ fun AccountEditScreen(nav: NavController, id: Long) {
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             ) { Text("儲存", fontSize = 17.sp) }
             if (original != null && name.isNotBlank()) Text(
-                "注意：「金額」是期初餘額，目前餘額 = 期初餘額 ＋ 之後所有交易。",
+                "修改「目前餘額」會自動調整期初餘額，不會新增或改動任何交易。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp).background(MaterialTheme.colorScheme.surface),
             )

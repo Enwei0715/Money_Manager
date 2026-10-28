@@ -121,7 +121,9 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
     val lk = rememberLookups()
     val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
     val holdings by repo.holdings.collectAsStateWithLifecycle(emptyList())
+    val byBroker by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
+    fun stockOf(brokerId: Long?) = byBroker[brokerId].orEmpty().sumOf { lk.fx.convert(Money.toMinor(it.marketValue), it.currency) }
     var cards by remember { mutableStateOf<Map<Long, CardStatus>>(emptyMap()) }
     var menu by remember { mutableStateOf(false) }
     var showHidden by rememberSaveable { mutableStateOf(false) }
@@ -210,22 +212,39 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                         }
                     }
                 } else {
+                    val isBroker = type == AccountType.BROKERAGE
                     item(key = "g${type.name}") {
-                        val total = list.filter { !it.account.archived }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
+                        val total = list.filter { !it.account.archived }.sumOf {
+                            lk.fx.convert(it.balance, it.account.currency) + if (isBroker) stockOf(it.account.id) else 0
+                        }
                         GrayHeader(type.label) { Text(Money.withSymbol(total, lk.base), color = balanceColor(total, MaterialTheme.colorScheme.onSurface)) }
                     }
                     items(list, key = { "a${it.account.id}" }) { b ->
-                        AccountLine(b.account.name + if (b.account.archived) "（隱藏）" else "", { nav.navigate("acct/${b.account.id}") }) {
-                            Text(Money.withSymbol(b.balance, b.account.currency), color = balanceColor(b.balance, MaterialTheme.colorScheme.onSurface))
+                        val a = b.account
+                        val sub = when (a.type) {
+                            AccountType.BROKERAGE -> {
+                                val n = byBroker[a.id].orEmpty().count { it.shares > 0 }
+                                listOfNotNull("持股 $n 檔", lk.account(a.linkedAccountId)?.let { "交割：${it.name}" }).joinToString(" · ")
+                            }
+                            AccountType.EWALLET -> lk.account(a.linkedAccountId)?.let { "儲值來源：${it.name}" }
+                            else -> null
+                        }
+                        AccountLine(a.name + if (a.archived) "（隱藏）" else "", { nav.navigate("acct/${a.id}") }, sub) {
+                            if (isBroker) {
+                                val v = lk.fx.convert(b.balance, a.currency) + stockOf(a.id)
+                                Text(Money.withSymbol(v, lk.base), color = balanceColor(v, MaterialTheme.colorScheme.onSurface))
+                            } else Text(Money.withSymbol(b.balance, a.currency), color = balanceColor(b.balance, MaterialTheme.colorScheme.onSurface))
                         }
                     }
                 }
             }
-            if (holdings.any { it.shares > 0 }) {
-                item(key = "ginv") { GrayHeader("股票") { Text(Money.withSymbol(stockValue, lk.base), color = IncomeColor) } }
+            // 沒有指定證券帳戶的持股
+            val orphan = byBroker[null].orEmpty().filter { it.shares > 0 }
+            if (orphan.isNotEmpty()) {
+                item(key = "ginv") { GrayHeader("股票（未指定證券帳戶）") { Text(Money.withSymbol(stockOf(null), lk.base), color = IncomeColor) } }
                 item(key = "inv") {
-                    AccountLine("股票持股（${holdings.count { it.shares > 0 }} 檔）", { section = 1 }) {
-                        Text(Money.withSymbol(stockValue, lk.base), color = IncomeColor)
+                    AccountLine("持股 ${orphan.size} 檔", { section = 1 }, "到股票分頁編輯交易，指定證券帳戶") {
+                        Text(Money.withSymbol(stockOf(null), lk.base), color = IncomeColor)
                     }
                 }
             }
@@ -237,10 +256,13 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
 }
 
 @Composable
-private fun AccountLine(name: String, onClick: () -> Unit, right: @Composable () -> Unit) {
+private fun AccountLine(name: String, onClick: () -> Unit, sub: String? = null, right: @Composable () -> Unit) {
     Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = if (sub != null) 12.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(name, style = MaterialTheme.typography.bodyLarge)
+                if (!sub.isNullOrEmpty()) Text(sub, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             right()
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -291,6 +313,9 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
     val endBalance = balanceBefore(current, id, end.plusDays(1).toMillis(LocalTime.MIDNIGHT), all, trades)
     val cur = acc?.currency ?: lk.base
     var reconcileOpen by remember { mutableStateOf(false) }
+    val byBrokerDetail by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
+    var cardInfo by remember { mutableStateOf<Map<Long, CardStatus>>(emptyMap()) }
+    LaunchedEffect(all) { cardInfo = repo.cardStatus() }
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -343,6 +368,47 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         "餘額" to (Money.full(endBalance) to balanceColor(endBalance, MaterialTheme.colorScheme.onSurface)),
                     ),
                 )
+            }
+            if (acc?.type == AccountType.BROKERAGE) item {
+                val list = byBrokerDetail[acc.id].orEmpty()
+                val value = list.sumOf { Money.toMinor(it.marketValue) }
+                val cost = list.filter { it.shares > 0 }.sumOf { Money.toMinor(it.cost) }
+                Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(horizontal = 20.dp, vertical = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("持股市值 ${Money.withSymbol(value)}", fontSize = 17.sp)
+                            Text("成本 ${Money.full(cost)} · 未實現 ${Money.full(value - cost)}", fontSize = 13.sp,
+                                color = if (value >= cost) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown)
+                            Text("交割帳戶：${lk.account(acc.linkedAccountId)?.name ?: "未設定（按右上編輯）"}", fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        androidx.compose.material3.OutlinedButton(onClick = { nav.navigate("trade/0?broker=${acc.id}") }) { Text("＋ 交易") }
+                    }
+                    list.filter { it.shares > 0 }.forEach { h ->
+                        Row(Modifier.fillMaxWidth().clickable { nav.navigate("holding/${h.market}/${h.symbol}") }.padding(vertical = 8.dp)) {
+                            Text("${h.symbol} ${h.name.orEmpty()}", Modifier.weight(1f))
+                            Text("${formatShares(h.shares)}　${Money.withSymbol(Money.toMinor(h.marketValue), h.currency)}")
+                        }
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            if (acc?.type == AccountType.CREDIT_CARD) item {
+                val st = cardInfo[acc.id]
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("應繳 ${Money.withSymbol(st?.payable ?: 0, acc.currency)}" + (st?.dueDate?.let { "　繳款日 ${it.monthValue}/${it.dayOfMonth}" } ?: ""), fontSize = 16.sp)
+                        Text("未出帳 ${Money.withSymbol(st?.outstanding ?: 0, acc.currency)}" + if (acc.creditLimit > 0) "　可用額度 ${Money.full(acc.creditLimit + current)}" else "",
+                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (acc.autopayFromId != null) "自動扣繳：${lk.account(acc.autopayFromId)?.name}" else "未設定自動扣繳", fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    androidx.compose.material3.OutlinedButton(onClick = {
+                        nav.navigate("txn/0?type=TRANSFER&account=${acc.autopayFromId ?: 0}&to=${acc.id}&amount=${st?.payable ?: 0}")
+                    }) { Text("繳卡費") }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
             if (acc?.type == AccountType.EWALLET) item {
                 Text(
@@ -548,3 +614,6 @@ fun AccountOrderScreen(nav: NavController) {
         }
     }
 }
+
+fun formatShares(shares: Double): String =
+    if (shares >= 1000 && shares % 1000 == 0.0) "${(shares / 1000).toLong()} 張" else "${com.enwei.moneymanager.ui.components.formatNum(shares, 0)} 股"

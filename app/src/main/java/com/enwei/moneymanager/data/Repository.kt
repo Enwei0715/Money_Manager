@@ -59,6 +59,11 @@ data class Backup(
     val recurring: List<RecurringEntity>,
     val trades: List<StockTradeEntity>,
     val rules: List<MerchantRuleEntity>,
+    val bookmarks: List<Bookmark> = emptyList(),
+    val memos: List<Memo> = emptyList(),
+    val budgets: Map<Long, Long> = emptyMap(),
+    val notifPackages: Set<String> = emptySet(),
+    val notifAccountMap: Map<String, Long> = emptyMap(),
 )
 
 data class CardStatus(val payable: Long, val outstanding: Long, val dueDate: LocalDate?)
@@ -87,13 +92,14 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
 
     // ---------- 餘額與淨資產 ----------
 
-    val balances: Flow<List<AccountBalance>> = combine(accounts, transactions, trades) { accs, txns, trades ->
-        computeBalances(accs, txns, trades)
+    val balances: Flow<List<AccountBalance>> = combine(accounts, transactions, trades, fx) { accs, txns, trades, fx ->
+        computeBalances(accs, txns, trades, fx)
     }
 
     private fun computeBalances(
-        accs: List<AccountEntity>, txns: List<TxnEntity>, trades: List<StockTradeEntity>,
+        accs: List<AccountEntity>, txns: List<TxnEntity>, trades: List<StockTradeEntity>, fx: FxConverter,
     ): List<AccountBalance> {
+        val currencyOf = accs.associate { it.id to it.currency }
         val delta = HashMap<Long, Long>()
         txns.filter { it.status == TxnStatus.CONFIRMED }.forEach { t ->
             when (t.type) {
@@ -107,14 +113,23 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
         }
         trades.forEach { tr ->
             val acc = tr.cashAccountId ?: return@forEach
-            delta.merge(acc, Money.toMinor(StockCalc.cashFlow(tr.toRecord())), ::sumLong)
+            // 美股交割到台幣帳戶等跨幣別情況：依匯率換算成交割帳戶幣別
+            val flow = Money.toMinor(StockCalc.cashFlow(tr.toRecord()))
+            delta.merge(acc, fx.convert(flow, tr.currency, currencyOf[acc] ?: tr.currency), ::sumLong)
         }
         return accs.map { AccountBalance(it, it.initialBalance + (delta[it.id] ?: 0)) }
     }
 
-    val holdings: Flow<List<HoldingView>> = combine(trades, quotes) { trades, quotes ->
+    val holdings: Flow<List<HoldingView>> = combine(trades, quotes) { trades, quotes -> buildHoldings(trades, quotes) }
+
+    /** 各證券帳戶的持股（key 為證券帳戶 id，null 表示未指定）。 */
+    val holdingsByBroker: Flow<Map<Long?, List<HoldingView>>> = combine(trades, quotes) { trades, quotes ->
+        trades.groupBy { it.brokerAccountId }.mapValues { (_, list) -> buildHoldings(list, quotes) }
+    }
+
+    private fun buildHoldings(trades: List<StockTradeEntity>, quotes: List<QuoteEntity>): List<HoldingView> {
         val quoteMap = quotes.associateBy { it.key }
-        trades.groupBy { it.market to it.symbol.uppercase() }.mapNotNull { (key, list) ->
+        return trades.groupBy { it.market to it.symbol.uppercase() }.mapNotNull { (key, list) ->
             val pos = StockCalc.positions(list.map { it.toRecord().copy(symbol = key.second) })[key.second] ?: return@mapNotNull null
             val q = quoteMap[quoteKey(key.first, key.second)]
             HoldingView(
@@ -232,12 +247,16 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
         if (fill != null) {
             val market = Market.TW
             val (fee, tax) = StockCalc.estimate(market, fill.symbol, fill.side, fill.shares, fill.price, s.feeSettings)
-            val brokerage = db.accounts().all().firstOrNull { it.type == AccountType.BROKERAGE && !it.archived }
+            val brokers = db.accounts().all().filter { it.type == AccountType.BROKERAGE && !it.archived }
+            val broker = s.notifAccountMap[pkg]?.let { id -> brokers.firstOrNull { it.id == id } } ?: brokers.firstOrNull()
+            val (bFee, bTax) = if (broker?.feeDiscount != null)
+                StockCalc.estimate(market, fill.symbol, fill.side, fill.shares, fill.price, s.feeSettings.copy(discount = broker.feeDiscount)) else fee to tax
             val id = db.stocks().insertTrade(
                 StockTradeEntity(
                     market = market, symbol = fill.symbol, name = fill.name, side = fill.side, shares = fill.shares,
-                    price = fill.price, fee = fee, tax = tax, date = postedAt.toLocalDate().toEpochDay(),
-                    cashAccountId = brokerage?.id, source = TxnSource.NOTIFICATION, note = "由成交通知自動建立",
+                    price = fill.price, fee = bFee, tax = bTax, date = postedAt.toLocalDate().toEpochDay(),
+                    cashAccountId = broker?.linkedAccountId ?: broker?.id, brokerAccountId = broker?.id,
+                    source = TxnSource.NOTIFICATION, note = "由成交通知自動建立",
                     externalKey = "N:${fill.symbol}:${fill.side}:${fill.shares}:${fill.price}:${postedAt / 60_000}",
                 ),
             )
@@ -280,6 +299,7 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
             val wallets = accounts.filter { it.type == AccountType.EWALLET }
             val aliases = p.walletHint?.let { NotificationParser.walletAliases[it] }.orEmpty()
             return wallets.firstOrNull { w -> aliases.any { w.name.contains(it, ignoreCase = true) } }
+                ?: wallets.filter { account != null && it.linkedAccountId == account.id }.singleOrNull()
                 ?: s.notifAccountMap[pkg]?.let { id -> wallets.firstOrNull { it.id == id } }
                 ?: wallets.singleOrNull()
         }
@@ -530,6 +550,11 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
             recurring = db.recurring().all(),
             trades = db.stocks().allTrades(),
             rules = db.rules().all(),
+            bookmarks = settings.value.bookmarks,
+            memos = settings.value.memos,
+            budgets = settings.value.budgets,
+            notifPackages = settings.value.notifPackages,
+            notifAccountMap = settings.value.notifAccountMap,
         ),
     )
 
@@ -544,6 +569,12 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
             db.recurring().insertAll(b.recurring)
             db.stocks().insertTrades(b.trades)
             db.rules().insertAll(b.rules)
+        }
+        settings.update {
+            it.copy(
+                bookmarks = b.bookmarks, memos = b.memos, budgets = b.budgets,
+                notifPackages = it.notifPackages + b.notifPackages, notifAccountMap = it.notifAccountMap + b.notifAccountMap,
+            )
         }
         return b
     }

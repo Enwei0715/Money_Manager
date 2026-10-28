@@ -50,6 +50,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.core.Market
+import com.enwei.moneymanager.ui.components.FormInput
+import com.enwei.moneymanager.ui.components.FormLine
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.enwei.moneymanager.data.HoldingView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
@@ -178,7 +183,7 @@ private fun HoldingRow(h: HoldingView, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text("${h.symbol}  ${h.name.orEmpty()}", fontSize = 17.sp, maxLines = 1)
                 Text(
-                    if (h.shares > 0.0001) "${formatNum(h.shares, 0)} 股 · 均價 ${formatNum(h.avgCost)}" else "已實現 ${formatNum(h.realizedPnl + h.dividends, 0)}",
+                    if (h.shares > 0.0001) "${formatShares(h.shares)} · 均價 ${formatNum(h.avgCost)}" else "已實現 ${formatNum(h.realizedPnl + h.dividends, 0)}",
                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -238,8 +243,9 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
     }
 }
 
+/** 新增／編輯股票交易：選證券帳戶 → 輸入代號（自動帶出名稱與現價）→ 張數或股數 → 成交價。 */
 @Composable
-fun TradeEditScreen(nav: NavController, id: Long, initMarket: String?, initSymbol: String?) {
+fun TradeEditScreen(nav: NavController, id: Long, initMarket: String?, initSymbol: String?, initBroker: Long? = null) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
@@ -248,96 +254,143 @@ fun TradeEditScreen(nav: NavController, id: Long, initMarket: String?, initSymbo
     var symbol by remember { mutableStateOf(initSymbol.orEmpty()) }
     var name by remember { mutableStateOf("") }
     var side by remember { mutableStateOf(StockSide.BUY) }
-    var shares by remember { mutableStateOf("") }
+    var qty by remember { mutableStateOf("") }
+    var byLot by remember { mutableStateOf(true) }
     var price by remember { mutableStateOf("") }
     var fee by remember { mutableStateOf("") }
     var tax by remember { mutableStateOf("") }
     var cash by remember { mutableStateOf("") }
     var feeEdited by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf(LocalDate.now()) }
+    var brokerId by remember { mutableStateOf<Long?>(initBroker) }
     var cashAccountId by remember { mutableStateOf<Long?>(null) }
+    var cashEdited by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
+    var lookup by remember { mutableStateOf<String?>(null) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
-    LaunchedEffect(id) {
+    val brokers = lk.accounts.filter { it.type == AccountType.BROKERAGE && !it.archived }
+    val broker = lk.account(brokerId)
+
+    LaunchedEffect(id, lk.accounts) {
+        if (original != null || lk.accounts.isEmpty()) return@LaunchedEffect
         if (id == 0L) {
-            cashAccountId = lk.accounts.firstOrNull { it.type == AccountType.BROKERAGE }?.id
+            if (brokerId == null) brokerId = brokers.firstOrNull()?.id
             return@LaunchedEffect
         }
         val t = repo.getTrade(id) ?: return@LaunchedEffect
         original = t
         market = t.market; symbol = t.symbol; name = t.name.orEmpty(); side = t.side
-        shares = formatPlain(t.shares); price = formatPlain(t.price); fee = formatPlain(t.fee); tax = formatPlain(t.tax)
-        cash = formatPlain(t.cashAmount); date = LocalDate.ofEpochDay(t.date); cashAccountId = t.cashAccountId; note = t.note.orEmpty()
-        feeEdited = true
+        val lots = t.market == Market.TW && t.shares >= 1000 && t.shares % 1000 == 0.0
+        byLot = lots
+        qty = formatPlain(if (lots) t.shares / 1000 else t.shares)
+        price = formatPlain(t.price); fee = formatPlain(t.fee); tax = formatPlain(t.tax)
+        cash = formatPlain(t.cashAmount); date = LocalDate.ofEpochDay(t.date); note = t.note.orEmpty()
+        brokerId = t.brokerAccountId; cashAccountId = t.cashAccountId
+        feeEdited = true; cashEdited = true
     }
+    // 交割帳戶預設為證券戶連結的銀行
+    LaunchedEffect(brokerId) { if (!cashEdited) cashAccountId = broker?.linkedAccountId ?: broker?.id }
+    // 輸入代號後自動查詢名稱與現價
+    LaunchedEffect(symbol, market) {
+        val sym = symbol.trim()
+        if (sym.length < (if (market == Market.TW) 4 else 1)) { lookup = null; return@LaunchedEffect }
+        kotlinx.coroutines.delay(600)
+        lookup = "查詢中…"
+        val q = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(listOf(market to sym)) }.getOrNull()?.firstOrNull()
+        lookup = if (q == null) "查無報價（仍可手動輸入）" else {
+            if (name.isBlank()) q.name?.let { name = it }
+            if (price.isBlank() && original == null) price = formatPlain(q.price)
+            "${q.name ?: sym} 現價 ${formatNum(q.price)}"
+        }
+    }
+    val shares = (qty.replace(",", "").toDoubleOrNull() ?: 0.0) * (if (market == Market.TW && byLot) 1000 else 1)
+    val feeSettings = settings.feeSettings.let { fs -> broker?.feeDiscount?.let { fs.copy(discount = it) } ?: fs }
     // 自動估算手續費與交易稅（可手動覆寫）
-    LaunchedEffect(market, symbol, side, shares, price, settings.feeSettings) {
+    LaunchedEffect(market, symbol, side, shares, price, feeSettings) {
         if (feeEdited) return@LaunchedEffect
-        val s = shares.replace(",", "").toDoubleOrNull() ?: return@LaunchedEffect
         val p = price.replace(",", "").toDoubleOrNull() ?: return@LaunchedEffect
-        if (side == StockSide.BUY || side == StockSide.SELL) {
-            val (f, t) = StockCalc.estimate(market, symbol, side, s, p, settings.feeSettings)
+        if (shares > 0 && (side == StockSide.BUY || side == StockSide.SELL)) {
+            val (f, t) = StockCalc.estimate(market, symbol, side, shares, p, feeSettings)
             fee = formatPlain(f); tax = formatPlain(t)
         }
     }
     val isDividend = side == StockSide.CASH_DIVIDEND
-    val total = (shares.replace(",", "").toDoubleOrNull() ?: 0.0) * (price.replace(",", "").toDoubleOrNull() ?: 0.0)
+    val amount = shares * (price.replace(",", "").toDoubleOrNull() ?: 0.0)
+    val feeV = fee.toDoubleOrNull() ?: 0.0
+    val taxV = tax.toDoubleOrNull() ?: 0.0
+    val settle = when (side) { StockSide.BUY -> amount + feeV + taxV; StockSide.SELL -> amount - feeV - taxV; else -> 0.0 }
 
-    Scaffold(topBar = {
+    Scaffold(containerColor = MaterialTheme.colorScheme.surface, topBar = {
         BackTopBar(if (id == 0L) "新增股票交易" else "編輯股票交易", { nav.popBackStack() }) {
-            if (original != null) IconButton(onClick = { scope.launch { repo.deleteTrade(id); nav.popBackStack() } }) { Icon(Icons.Filled.Delete, "刪除") }
+            if (original != null) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, "刪除") }
         }
     }) { pad ->
-        Column(
-            Modifier.padding(pad).imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                Market.entries.forEachIndexed { i, m ->
-                    SegmentedButton(market == m, { market = m }, SegmentedButtonDefaults.itemShape(i, 2)) { Text(if (m == Market.TW) "台股" else "美股") }
+        Column(Modifier.padding(pad).imePadding().verticalScroll(rememberScrollState())) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StockSide.entries.forEach { sd ->
+                    val sel = sd == side
+                    Box(
+                        Modifier.weight(1f).height(38.dp)
+                            .background(if (sel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                            .border(if (sel) 1.5.dp else 1.dp, if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+                            .clickable { side = sd },
+                        contentAlignment = Alignment.Center,
+                    ) { Text(sd.label, fontSize = 13.sp, color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
             }
-            Row {
-                OutlinedTextField(symbol, { symbol = it.uppercase().trim() }, label = { Text("代號") }, singleLine = true, modifier = Modifier.weight(1f))
-                Spacer(Modifier.width(8.dp))
-                OutlinedTextField(name, { name = it }, label = { Text("名稱（選填）") }, singleLine = true, modifier = Modifier.weight(1f))
+            DropdownLine("證券帳戶", broker?.name ?: if (brokers.isEmpty()) "尚未建立（帳戶 → 新增 → 群組選證券）" else "未指定",
+                listOf<Pair<Long?, String>>(null to "未指定") + brokers.map { it.id to it.name }) { brokerId = it }
+            DropdownLine("市場", if (market == Market.TW) "台股" else "美股", listOf(Market.TW to "台股", Market.US to "美股")) {
+                market = it; if (it == Market.US) byLot = false
             }
-            DropdownField("類型", StockSide.entries, side, { it.label }, { side = it })
+            FormLine("代號") {
+                FormInput(symbol, { symbol = it.uppercase().trim() }, if (market == Market.TW) "例：2330、0050" else "例：AAPL")
+            }
+            lookup?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp)) }
+            FormLine("名稱") { FormInput(name, { name = it }, "自動帶出，可修改") }
             if (isDividend) {
-                NumberField(cash, { cash = it }, "股利金額")
+                FormLine("股利金額") { FormInput(cash, { cash = it }, "入帳的現金股利", number = true) }
             } else {
-                Row {
-                    NumberField(shares, { shares = it }, if (side == StockSide.STOCK_DIVIDEND) "配發股數" else "股數（1 張 = 1000 股）", Modifier.weight(1f))
-                    if (side != StockSide.STOCK_DIVIDEND) {
-                        Spacer(Modifier.width(8.dp))
-                        NumberField(price, { price = it }, "成交價", Modifier.weight(1f))
+                FormLine(if (side == StockSide.STOCK_DIVIDEND) "配股" else "數量", trailing = {
+                    if (market == Market.TW) Row {
+                        listOf(true to "張", false to "股").forEach { (lot, label) ->
+                            Box(
+                                Modifier.padding(start = 4.dp).border(1.dp, if (byLot == lot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+                                    .clickable { byLot = lot }.padding(horizontal = 12.dp, vertical = 6.dp),
+                            ) { Text(label, color = if (byLot == lot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
                     }
-                }
+                }) { FormInput(qty, { qty = it }, if (market == Market.TW && byLot) "1 張 = 1000 股" else "股數（零股、美股可含小數）", number = true) }
+                if (market == Market.TW && byLot && shares > 0) Text("= ${formatNum(shares, 0)} 股", fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp))
                 if (side != StockSide.STOCK_DIVIDEND) {
-                    Row {
-                        NumberField(fee, { fee = it; feeEdited = true }, "手續費", Modifier.weight(1f))
-                        Spacer(Modifier.width(8.dp))
-                        NumberField(tax, { tax = it; feeEdited = true }, "交易稅", Modifier.weight(1f))
-                    }
-                    Text("成交金額 ${formatNum(total)}；手續費依設定的折扣（${settings.feeDiscount}）自動估算", style = MaterialTheme.typography.bodySmall)
+                    FormLine("成交價") { FormInput(price, { price = it }, "", number = true) }
+                    FormLine("手續費") { FormInput(fee, { fee = it; feeEdited = true }, "", number = true) }
+                    FormLine("交易稅") { FormInput(tax, { tax = it; feeEdited = true }, "", number = true) }
+                    Text(
+                        "成交金額 ${formatNum(amount)}　${if (side == StockSide.BUY) "應付" else "應收"} ${formatNum(settle)}\n" +
+                            "手續費依${if (broker?.feeDiscount != null) "「${broker.name}」" else "全域"}折數 ${feeSettings.discount} 估算；稅率一般股 0.3%、ETF 0.1%",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    )
                 }
             }
-            DateField(date, { date = it })
-            DropdownField(
-                "交割帳戶（金額會進出此帳戶）", lk.accounts.filter { !it.archived }, lk.account(cashAccountId), { "${it.type.icon} ${it.name}" },
-                { cashAccountId = it.id }, noneLabel = "不連動帳戶", onNone = { cashAccountId = null },
-            )
-            OutlinedTextField(note, { note = it }, label = { Text("備註") }, modifier = Modifier.fillMaxWidth())
+            FormLine("日期") { DateField(date, { date = it }) }
+            DropdownLine("交割帳戶", lk.account(cashAccountId)?.name ?: "不連動帳戶",
+                listOf<Pair<Long?, String>>(null to "不連動帳戶") + lk.accounts.filter { !it.archived }.map { it.id to it.name }) {
+                cashAccountId = it; cashEdited = true
+            }
+            FormLine("備註") { FormInput(note, { note = it }) }
             Button(
                 onClick = {
                     val t = (original ?: StockTradeEntity(market = market, symbol = symbol, side = side, shares = 0.0, price = 0.0, date = 0)).copy(
                         market = market, symbol = symbol.uppercase(), name = name.ifBlank { null }, side = side,
-                        shares = if (isDividend) 0.0 else shares.replace(",", "").toDoubleOrNull() ?: 0.0,
+                        shares = if (isDividend) 0.0 else shares,
                         price = if (isDividend || side == StockSide.STOCK_DIVIDEND) 0.0 else price.replace(",", "").toDoubleOrNull() ?: 0.0,
-                        fee = fee.toDoubleOrNull() ?: 0.0, tax = tax.toDoubleOrNull() ?: 0.0,
+                        fee = feeV, tax = taxV,
                         cashAmount = if (isDividend) cash.replace(",", "").toDoubleOrNull() ?: 0.0 else 0.0,
                         currency = if (market == Market.TW) "TWD" else "USD",
-                        date = date.toEpochDay(), cashAccountId = cashAccountId, note = note.ifBlank { null },
+                        date = date.toEpochDay(), cashAccountId = cashAccountId, brokerAccountId = brokerId, note = note.ifBlank { null },
                     )
                     // 用 App 層級的 scope，離開畫面後仍會完成儲存與報價更新
                     MoneyApp.instance.appScope.launch {
@@ -346,8 +399,28 @@ fun TradeEditScreen(nav: NavController, id: Long, initMarket: String?, initSymbo
                     }
                     nav.popBackStack()
                 },
-                enabled = symbol.isNotBlank(), modifier = Modifier.fillMaxWidth(),
+                enabled = symbol.isNotBlank() && (isDividend || shares > 0),
+                modifier = Modifier.fillMaxWidth().padding(16.dp).height(50.dp), shape = RoundedCornerShape(8.dp),
             ) { Text("儲存") }
+        }
+    }
+    if (confirmDelete) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { confirmDelete = false },
+        title = { Text("刪除這筆股票交易？") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { scope.launch { repo.deleteTrade(id); nav.popBackStack() } }) { Text("刪除") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmDelete = false }) { Text("取消") } },
+    )
+}
+
+@Composable
+fun <T> DropdownLine(label: String, value: String, options: List<Pair<T, String>>, onPick: (T) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    FormLine(label, onClick = { open = true }) {
+        Box {
+            Text(value, fontSize = 17.sp)
+            androidx.compose.material3.DropdownMenu(open, { open = false }) {
+                options.forEach { (v, l) -> androidx.compose.material3.DropdownMenuItem(text = { Text(l) }, onClick = { onPick(v); open = false }) }
+            }
         }
     }
 }
