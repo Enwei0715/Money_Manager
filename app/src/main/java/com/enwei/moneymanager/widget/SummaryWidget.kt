@@ -74,7 +74,7 @@ class SummaryWidget : AppWidgetProvider() {
                 .sortedByDescending { it.second }
             val top = byCat.take(4) + listOfNotNull(byCat.drop(4).takeIf { it.isNotEmpty() }?.let { rest -> "其他" to rest.sumOf { it.second } })
             val legend = top.joinToString("\n") { (name, v) ->
-                "● $name ${if (expenseTotal > 0) v * 100 / expenseTotal else 0}%"
+                "● ${com.enwei.moneymanager.ui.tr(name)} ${if (expenseTotal > 0) v * 100 / expenseTotal else 0}%"
             }.ifEmpty { "本月還沒有支出" }
             val cash = repo.accounts.first().firstOrNull { it.type == AccountType.CASH && !it.archived }
 

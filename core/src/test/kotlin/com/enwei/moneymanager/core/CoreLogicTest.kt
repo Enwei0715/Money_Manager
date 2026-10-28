@@ -188,6 +188,8 @@ class StatementShiftTest {
 class TaiwanBanksTest {
     @Test fun lookupAndOffset() {
         assertEquals("國泰世華", TaiwanBanks.find("013")!!.name)
+        assertEquals(16, TaiwanBanks.find("013")!!.dueOffsetDays)
+        assertEquals(StatementShift.FRI_SAT_TO_SUN, TaiwanBanks.find("國泰")!!.statementShift)
         assertEquals("國泰世華", TaiwanBanks.find("13")!!.name)
         assertEquals("永豐銀行", TaiwanBanks.find("永豐信用卡")!!.name)
         assertEquals("連線銀行（LINE Bank）", TaiwanBanks.find("824")!!.name)

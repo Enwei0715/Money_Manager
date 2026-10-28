@@ -212,7 +212,10 @@ fun ConfigScreen(nav: NavController) {
                 SectionHeader("自動記帳")
                 ConfigRow("通知自動記帳") { nav.navigate("notif") }
                 ConfigRow("錢包畫面讀取（街口、悠遊付）") { nav.navigate("walletreader") }
-                ConfigRow("股票手續費") { nav.navigate("settings") }
+
+                SectionHeader("股票")
+                ConfigRow("股票手續費與月退") { nav.navigate("settings") }
+                ConfigRow("證券帳戶") { nav.navigate("invest") }
 
                 SectionHeader("安全與提醒")
                 ConfigRow("密碼鎖", onOff(s.passcodeOn)) { nav.navigate("passcode") }

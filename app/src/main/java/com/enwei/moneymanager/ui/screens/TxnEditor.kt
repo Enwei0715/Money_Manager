@@ -208,7 +208,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                 expr = ""; merchant = ""; note = ""; toExpr = ""; feeExpr = ""; showFee = false
                 time = LocalTime.now().withSecond(0).withNano(0)
                 panel = if (settings.inputFromCategory && type != TxnType.TRANSFER) Panel.CATEGORY else Panel.AMOUNT
-                snack.showSnackbar("已儲存，繼續記下一筆")
+                snack.showSnackbar(com.enwei.moneymanager.ui.tr("已儲存，繼續記下一筆"))
             } else nav.popBackStack()
         }
     }
@@ -219,7 +219,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
             toAccountId = toAccountId, categoryId = categoryId, merchant = merchant.ifBlank { null }, note = note.ifBlank { null },
         )
         repo.settings.update { it.copy(bookmarks = it.bookmarks + b) }
-        scope.launch { snack.showSnackbar("已加入書籤") }
+        scope.launch { snack.showSnackbar(com.enwei.moneymanager.ui.tr("已加入書籤")) }
     }
 
     fun nextAfterAmount() {
@@ -379,7 +379,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                             scope.launch {
                                 val now = LocalDate.now().atTime(LocalTime.now()).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
                                 repo.saveTxn(t.copy(id = 0, date = now, externalKey = null, rawText = null, source = TxnSource.MANUAL))
-                                snack.showSnackbar("已複製為今天的新交易")
+                                snack.showSnackbar(com.enwei.moneymanager.ui.tr("已複製為今天的新交易"))
                             }
                         }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) { Text("複製", color = MaterialTheme.colorScheme.onSurface) }
                         OutlinedButton(onClick = { addBookmark() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp)) {

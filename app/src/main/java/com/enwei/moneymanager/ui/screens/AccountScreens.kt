@@ -164,6 +164,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                         // 輸入代碼或名稱即自動帶入該銀行的繳款規則
                         com.enwei.moneymanager.core.TaiwanBanks.find(q)?.let { b ->
                             dueOffset = b.dueOffsetDays
+                            if (b.statementShift != com.enwei.moneymanager.core.StatementShift.NONE) shift = b.statementShift
                             b.fixedStatementDay?.let { d -> statementDay = if (d < 0) "31" else d.toString() }
                             if (name.isBlank()) name = b.name.substringBefore("（") + "信用卡"
                         }

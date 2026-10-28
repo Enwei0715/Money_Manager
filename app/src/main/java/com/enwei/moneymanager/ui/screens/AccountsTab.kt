@@ -179,7 +179,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        if (section == 1) StockContent(nav, refreshTick) { msg -> scope.launch { snack.showSnackbar(msg) } }
+        if (section == 1) StockContent(nav, refreshTick) { msg -> scope.launch { snack.showSnackbar(com.enwei.moneymanager.ui.tr(msg)) } }
         else LazyColumn(Modifier.fillMaxSize()) {
             item {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

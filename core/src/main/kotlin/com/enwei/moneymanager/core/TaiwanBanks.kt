@@ -18,6 +18,8 @@ data class CardBank(
     val fixedStatementDay: Int? = null,
     val verified: Boolean = true,
     val note: String? = null,
+    /** 結帳日遇週末的調整（已知的銀行才填） */
+    val statementShift: StatementShift = StatementShift.NONE,
 )
 
 object TaiwanBanks {
@@ -30,7 +32,10 @@ object TaiwanBanks {
         CardBank("009", "彰化銀行", 18, fixedStatementDay = -1, note = "結帳日為每月最後一天"),
         CardBank("011", "上海商銀", 15, verified = false),
         CardBank("012", "台北富邦", 16, statementDays = (2..26 step 2).toList(), note = "結帳日可選每月 2～26 日的偶數日"),
-        CardBank("013", "國泰世華", 16, note = "繳款截止日＝名目結帳日＋16 天，遇六日順延至週一"),
+        CardBank(
+            "013", "國泰世華", 16, note = "結帳日遇週五、六延至週日；繳款截止日＝原結帳日＋16 天，遇六日順延至週一",
+            statementShift = StatementShift.FRI_SAT_TO_SUN,
+        ),
         CardBank("017", "兆豐銀行", 15),
         CardBank("048", "王道銀行", 15, verified = false),
         CardBank("050", "臺灣企銀", 15, verified = false),

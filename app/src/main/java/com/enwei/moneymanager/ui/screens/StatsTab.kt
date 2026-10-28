@@ -280,7 +280,7 @@ fun PieChart(slices: List<Pair<String, Long>>) {
             val mid = Math.toRadians((start + sweeps[i] / 2).toDouble())
             if (pct >= 1f && labels.size < 12) {
                 val layout = measurer.measure(
-                    "$name\n${"%.1f".format(pct)} %",
+                    "${com.enwei.moneymanager.ui.tr(name)}\n${"%.1f".format(pct)} %",
                     TextStyle(fontSize = 13.sp, color = labelColor, lineHeight = 16.sp),
                 )
                 val ly = (c.y + r * 1.22f * sin(mid)).toFloat()
