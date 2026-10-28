@@ -84,6 +84,7 @@ fun AccountEditScreen(nav: NavController, id: Long) {
     var autopayMenu by remember { mutableStateOf(false) }
     var linkedId by remember { mutableStateOf<Long?>(null) }
     var feeDiscount by remember { mutableStateOf("") }
+    var rebate by remember { mutableStateOf("") }
     val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
     // 「金額」欄位以目前餘額表示；儲存時換算回期初餘額
     val currentBalance = balances.find { it.account.id == id }?.balance
@@ -97,6 +98,7 @@ fun AccountEditScreen(nav: NavController, id: Long) {
         initial = Money.fromMinor(if (a.type == AccountType.CREDIT_CARD) -cur else cur).stripTrailingZeros().toPlainString()
         linkedId = a.linkedAccountId
         feeDiscount = a.feeDiscount?.toString().orEmpty()
+        rebate = repo.settings.value.brokerRebates[a.id]?.discount?.toString().orEmpty()
         description = a.description.orEmpty()
         limit = if (a.creditLimit > 0) Money.fromMinor(a.creditLimit).stripTrailingZeros().toPlainString() else ""
         last4 = a.cardLast4.orEmpty(); statementDay = a.statementDay?.toString().orEmpty(); dueDay = a.dueDay?.toString().orEmpty(); autopayDay = a.autopayDay?.toString().orEmpty()
@@ -173,7 +175,13 @@ fun AccountEditScreen(nav: NavController, id: Long) {
             } else if (type == AccountType.BROKERAGE) {
                 DropdownLine("交割帳戶", lk.account(linkedId)?.name ?: "未設定",
                     listOf<Pair<Long?, String>>(null to "未設定") + lk.accounts.filter { it.type == AccountType.BANK && !it.archived }.map { it.id to it.name }) { linkedId = it }
-                FormLine("手續費折數") { FormInput(feeDiscount, { feeDiscount = it }, "例：0.6（六折），空白用全域設定", number = true) }
+                FormLine("手續費折數") { FormInput(feeDiscount, { feeDiscount = it }, "成交當下的折數；月退券商填 1", number = true) }
+                FormLine("月退後折數") { FormInput(rebate, { rebate = it }, "例：永豐大戶投填 0.2；空白＝不月退", number = true) }
+                Text(
+                    "月退：成交時先收全額手續費，次月 15 日退回差額。填了之後，每月 15 日會自動在交割帳戶記一筆「手續費退佣」收入（從現在這個月的交易開始計算）。",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                )
                 Text(
                     "股票買賣的金額會進出「交割帳戶」；這個證券帳戶的價值 = 持股市值 ＋ 證券戶現金（台股通常為 0，複委託可填外幣餘額）。持股在「帳戶 → 股票」或本帳戶明細新增。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -221,7 +229,21 @@ fun AccountEditScreen(nav: NavController, id: Long) {
                         autopayDay = if (isCard) autopayDay.toIntOrNull()?.takeIf { it in 1..31 } else null,
                         includeInNetWorth = includeNet, archived = archived, description = description.ifBlank { null },
                     )
-                    scope.launch { repo.saveAccount(a); nav.popBackStack() }
+                    scope.launch {
+                        val savedId = repo.saveAccount(a)
+                        val r = rebate.toDoubleOrNull()?.takeIf { it > 0 && it < 1 && type == AccountType.BROKERAGE }
+                        repo.settings.update { st ->
+                            val old = st.brokerRebates[savedId]
+                            st.copy(
+                                brokerRebates = if (r == null) st.brokerRebates - savedId
+                                else st.brokerRebates + (savedId to com.enwei.moneymanager.data.RebateRule(
+                                    r, old?.sinceEpochDay ?: java.time.YearMonth.now().atDay(1).toEpochDay(),
+                                )),
+                            )
+                        }
+                        repo.runFeeRebates()
+                        nav.popBackStack()
+                    }
                 },
                 enabled = name.isNotBlank(),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).height(52.dp),

@@ -51,6 +51,16 @@ object StockCalc {
         return max(if (oddLot) settings.oddLotMinFee else settings.minFee, floor(amount * TW_FEE_RATE * settings.discount))
     }
 
+    /**
+     * 月退：成交時收全額手續費，之後退回「全額 − 折扣後手續費」。
+     * [fullFee] 為帳單上實收的手續費。
+     */
+    fun rebate(fullFee: Double, amount: Double, discount: Double, minFee: Double): Double {
+        if (fullFee <= 0 || discount >= 1.0) return 0.0
+        val discounted = max(minFee, floor(amount * TW_FEE_RATE * discount))
+        return max(0.0, fullFee - discounted)
+    }
+
     /** 不足 1000 股的交易算零股 */
     fun isOddLot(shares: Double) = shares < 1000
 

@@ -610,6 +610,48 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     /** 產生到今天為止所有到期的週期交易（離線多天也會補齊），回傳新增筆數。 */
+    /**
+     * 手續費月退：每個設定月退的證券帳戶，上個月（含以前、設定之後）的台股買賣，
+     * 在次月退款日自動記一筆收入到交割帳戶。以「REBATE:帳戶:年月」去重。
+     */
+    suspend fun runFeeRebates(today: LocalDate = LocalDate.now()): Int {
+        val s = settings.value
+        if (s.brokerRebates.isEmpty()) return 0
+        val accounts = db.accounts().all().associateBy { it.id }
+        val trades = db.stocks().allTrades()
+        var created = 0
+        s.brokerRebates.forEach { (brokerId, rule) ->
+            val broker = accounts[brokerId] ?: return@forEach
+            val since = java.time.YearMonth.from(LocalDate.ofEpochDay(rule.sinceEpochDay))
+            trades.filter { it.brokerAccountId == brokerId && it.market == Market.TW && (it.side == StockSide.BUY || it.side == StockSide.SELL) }
+                .groupBy { java.time.YearMonth.from(LocalDate.ofEpochDay(it.date)) }
+                .forEach { (ym, list) ->
+                    if (ym < since) return@forEach
+                    val payDate = ym.plusMonths(1).atDay(rule.payDay.coerceIn(1, 28))
+                    if (today.isBefore(payDate)) return@forEach
+                    val key = "REBATE:$brokerId:$ym"
+                    if (db.txns().byExternalKey(key) != null) return@forEach
+                    val amount = list.sumOf { t ->
+                        val min = if (StockCalc.isOddLot(t.shares)) s.oddLotMinFee else s.minFee
+                        StockCalc.rebate(t.fee, t.shares * t.price, rule.discount, min)
+                    }
+                    if (amount <= 0) return@forEach
+                    db.txns().upsert(
+                        TxnEntity(
+                            type = TxnType.INCOME, amount = Money.toMinor(amount), currency = broker.currency,
+                            accountId = broker.linkedAccountId ?: broker.id,
+                            categoryId = db.categories().all().firstOrNull { it.kind == TxnType.INCOME && it.name.contains("退") }?.id,
+                            merchant = "${broker.name} 手續費退佣 ${ym.year}/${ym.monthValue}",
+                            note = "月退估算：${list.size} 筆交易，實收手續費 ${list.sumOf { it.fee }.toLong()} 元，依 ${rule.discount} 折計算",
+                            date = payDate.toMillis(LocalTime.NOON), source = TxnSource.RECURRING, externalKey = key,
+                        ),
+                    )
+                    created++
+                }
+        }
+        return created
+    }
+
     suspend fun runRecurring(today: LocalDate = LocalDate.now()): Int {
         var created = 0
         db.recurring().enabled().forEach { r ->

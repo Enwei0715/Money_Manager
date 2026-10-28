@@ -31,6 +31,10 @@ data class Bookmark(
 @Serializable
 data class Memo(val id: Long, val date: Long, val text: String)
 
+/** 證券帳戶手續費月退：成交先收全額，次月 [payDay] 日退回差額。 */
+@Serializable
+data class RebateRule(val discount: Double, val sinceEpochDay: Long, val payDay: Int = 15)
+
 /** 使用者教過的通知格式：某 App、標題相同的通知一律視為指定收支，記到指定帳戶。 */
 @Serializable
 data class LearnedSource(val pkg: String, val title: String, val income: Boolean, val accountId: Long?)
@@ -103,6 +107,8 @@ data class AppSettings(
     /** 帳戶群組自訂名稱 */
     val accountGroupNames: Map<String, String> = emptyMap(),
     val learnedSources: List<LearnedSource> = emptyList(),
+    /** 證券帳戶 id → 月退設定 */
+    val brokerRebates: Map<Long, RebateRule> = emptyMap(),
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee, oddLotMinFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -118,6 +124,7 @@ class SettingsStore(context: Context) {
     private val memoSerializer = ListSerializer(Memo.serializer())
     private val budgetSerializer = MapSerializer(Long.serializer(), Long.serializer())
     private val pkgMapSerializer = MapSerializer(String.serializer(), Long.serializer())
+    private val rebateSerializer = MapSerializer(Long.serializer(), RebateRule.serializer())
     private val learnedSerializer = ListSerializer(LearnedSource.serializer())
     private val strMapSerializer = MapSerializer(String.serializer(), String.serializer())
     private val cashSerializer = MapSerializer(Long.serializer(), MapSerializer(Int.serializer(), Int.serializer()))
@@ -168,6 +175,7 @@ class SettingsStore(context: Context) {
         widgetTheme = prefs.getInt("widgetTheme", 0),
         widgetOpacity = prefs.getInt("widgetOpacity", 100),
         accountGroupOrder = prefs.getString("accountGroupOrder", "")!!.split(',').filter { it.isNotBlank() },
+        brokerRebates = runCatching { json.decodeFromString(rebateSerializer, prefs.getString("brokerRebates", "{}")!!) }.getOrDefault(emptyMap()),
         learnedSources = runCatching { json.decodeFromString(learnedSerializer, prefs.getString("learnedSources", "[]")!!) }.getOrDefault(emptyList()),
         accountGroupNames = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("accountGroupNames", "{}")!!) }.getOrDefault(emptyMap()),
     )
@@ -220,6 +228,7 @@ class SettingsStore(context: Context) {
             .putString("accountGroupOrder", s.accountGroupOrder.joinToString(","))
             .putString("accountGroupNames", json.encodeToString(strMapSerializer, s.accountGroupNames))
             .putString("learnedSources", json.encodeToString(learnedSerializer, s.learnedSources))
+            .putString("brokerRebates", json.encodeToString(rebateSerializer, s.brokerRebates))
             .apply()
         state.value = s
     }

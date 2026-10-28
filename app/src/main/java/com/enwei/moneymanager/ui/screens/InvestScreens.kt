@@ -111,10 +111,11 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
     }
 
     val totalValue = open.sumOf { lk.fx.convert(Money.toMinor(it.marketValue), it.currency) }
-    val totalCost = open.sumOf { lk.fx.convert(Money.toMinor(it.cost), it.currency) }
+    val totalCost = open.sumOf { lk.fx.convert(Money.toMinor(it.netCost), it.currency) }
     val dayChange = open.sumOf { lk.fx.convert(Money.toMinor(it.dayChange), it.currency) }
     val realized = holdings.sumOf { lk.fx.convert(Money.toMinor(it.realizedTotal), it.currency) }
-    val unreal = totalValue - totalCost
+    // 與持股明細相同的券商算法（扣預估賣出費用、成本扣股利）
+    val unreal = open.sumOf { lk.fx.convert(Money.toMinor(it.unrealized), it.currency) }
 
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         item {

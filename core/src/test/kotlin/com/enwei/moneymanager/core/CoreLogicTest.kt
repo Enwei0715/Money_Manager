@@ -55,6 +55,9 @@ class CoreLogicTest {
         assertEquals(30.0, StockCalc.estimate(Market.TW, "3661", StockSide.BUY, 5.0, 4280.0, full).first, 0.0)
         assertEquals(1.0, StockCalc.estimate(Market.TW, "2884", StockSide.BUY, 1.0, 30.0, full).first, 0.0)
         assertEquals(20.0, StockCalc.estimate(Market.TW, "2884", StockSide.BUY, 1000.0, 10.0, full).first, 0.0)
+        // 永豐 2 折月退：實收 102，2 折後 floor(72,375 × 0.1425% × 0.2) = 20，退 82
+        assertEquals(82.0, StockCalc.rebate(102.0, 72375.0, 0.2, 1.0), 0.0)
+        assertEquals(0.0, StockCalc.rebate(102.0, 72375.0, 1.0, 1.0), 0.0)
         assertEquals(3000.0, StockCalc.twTax("2330", 1_000_000.0), 0.0)
         assertEquals(1000.0, StockCalc.twTax("0050", 1_000_000.0), 0.0)
 

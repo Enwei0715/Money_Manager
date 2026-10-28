@@ -31,6 +31,7 @@ class MoneyApp : Application() {
         appScope.launch {
             repo.ensureSeedData()
             repo.runRecurring()
+            repo.runFeeRebates()
         }
         SyncWorker.schedule(this)
         // 資料有變動就更新桌面小工具

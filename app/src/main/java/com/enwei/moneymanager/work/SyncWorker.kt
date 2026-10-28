@@ -22,6 +22,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val repo = MoneyApp.repo
         repo.runRecurring()
+        repo.runFeeRebates()
         val ok = runCatching { refreshMarket(repo) }.isSuccess
         return if (ok || runAttemptCount > 2) Result.success() else Result.retry()
     }
