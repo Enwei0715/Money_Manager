@@ -293,7 +293,8 @@ fun NotificationSettingsScreen(nav: NavController) {
                 items(list.size, key = { "note$it" }) { i ->
                     val nn = list[i]
                     val (ok, desc) = previews.getOrNull(i) ?: (false to "")
-                    val parsedOk = !desc.startsWith("看不出") && !desc.startsWith("LINE 聊天")
+                    val redacted = repo.isRedacted(nn.text)
+                    val parsedOk = !redacted && !desc.startsWith("看不出") && !desc.startsWith("LINE 聊天")
                     Card(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                         colors = CardDefaults.cardColors(
@@ -305,7 +306,19 @@ fun NotificationSettingsScreen(nav: NavController) {
                             Text(listOfNotNull(nn.title, nn.text).joinToString("\n"), maxLines = 4, style = MaterialTheme.typography.bodySmall)
                             com.enwei.moneymanager.ui.components.StatusLine(ok, if (ok) "會自動記帳" else if (parsedOk) "辨識得出，但不會自動記帳" else "不會記帳")
                             Text(desc, style = MaterialTheme.typography.bodySmall)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (redacted) {
+                                val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+                                androidx.compose.foundation.text.selection.SelectionContainer {
+                                    androidx.compose.material3.Text(
+                                        repo.SENSITIVE_ADB, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                                TextButton(onClick = {
+                                    clip.setText(androidx.compose.ui.text.AnnotatedString(repo.SENSITIVE_ADB))
+                                    testMsg = "已複製指令"
+                                }) { Text("複製指令") }
+                            } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 if (parsedOk) OutlinedButton(onClick = {
                                     testScope.launch {
                                         val r = repo.ingestNotification(nn.pkg, nn.title, nn.text, nn.postedAt, force = true)

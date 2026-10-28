@@ -355,6 +355,12 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     // ---------- 通知自動記帳 ----------
 
+    /** Android 15 對含驗證碼的通知，第三方監聽只會收到「已隱藏敏感內容」的替代文字。 */
+    val SENSITIVE_ADB = "adb shell appops set com.enwei.moneymanager RECEIVE_SENSITIVE_NOTIFICATIONS allow"
+
+    fun isRedacted(text: String?): Boolean = text != null &&
+        (text.contains("notification content hidden", ignoreCase = true) || (text.contains("敏感") && text.contains("隱藏")))
+
     /** [force]：使用者在「測試辨識」手動按「記下這筆」，略過來源是否啟用的檢查。 */
     /**
      * 試算一則通知會被怎麼處理（不寫入任何資料），用來在不實際消費的情況下確認辨識是否正確。
@@ -363,6 +369,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     suspend fun previewNotification(pkg: String, title: String?, text: String?): Pair<Boolean, String> {
         val s = settings.value
         if (pkg == LINE_PACKAGE && !isLineWallet(title, text)) return false to "LINE 聊天訊息，不處理"
+        if (isRedacted(text)) return false to "內容被 Android 隱藏：Android 15 起，系統判斷含驗證碼（OTP）的通知會對第三方 App 隱藏內容，" +
+            "App 收不到金額。一般的消費通知不含驗證碼，通常不會被隱藏。若一定要讀取，可在電腦用 adb 執行下方指令開放。"
         val learned = s.learnedFor(pkg, title, text)
         val enabled = pkg == LINE_PACKAGE || learned != null || pkg in s.notifPackages
         NotificationParser.parseStockFill(title, text)?.let { f ->
