@@ -56,47 +56,6 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 @Composable
-fun AccountsScreen(nav: NavController) {
-    val lk = rememberLookups()
-    val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
-    Scaffold(
-        topBar = { BackTopBar("帳戶", { nav.popBackStack() }) },
-        floatingActionButton = { FloatingActionButton(onClick = { nav.navigate("account/0") }) { Icon(Icons.Filled.Add, "新增帳戶") } },
-    ) { pad ->
-        LazyColumn(Modifier.padding(pad)) {
-            balances.groupBy { it.account.type }.toSortedMap().forEach { (type, list) ->
-                item(key = type.name) {
-                    val total = list.filter { !it.account.archived }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        SectionTitle(type.label)
-                        Text(Money.format(total, lk.base), modifier = Modifier.padding(end = 16.dp), style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-                items(list, key = { it.account.id }) { b ->
-                    val a = b.account
-                    ListItem(
-                        leadingContent = { EmojiBadge(a.type.icon) },
-                        headlineContent = { Text(a.name + if (a.archived) "（已封存）" else "") },
-                        supportingContent = {
-                            val parts = buildList {
-                                a.cardLast4?.let { add("末四碼 $it") }
-                                if (a.statementDay != null && a.dueDay != null) add("結帳 ${a.statementDay} 日／繳款 ${a.dueDay} 日")
-                                if (a.autopayFromId != null) add("自動扣繳")
-                                if (a.creditLimit > 0) add("可用 ${Money.format(a.creditLimit + b.balance, a.currency)}")
-                            }
-                            if (parts.isNotEmpty()) Text(parts.joinToString(" · "))
-                        },
-                        trailingContent = { AmountText(b.balance, a.currency, colorBySign = true) },
-                        modifier = Modifier.clickable { nav.navigate("account/${a.id}") },
-                    )
-                }
-            }
-            item { Spacer(Modifier.height(88.dp)) }
-        }
-    }
-}
-
-@Composable
 fun AccountEditScreen(nav: NavController, id: Long) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()

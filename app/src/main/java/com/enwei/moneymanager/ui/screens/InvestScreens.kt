@@ -55,8 +55,8 @@ import com.enwei.moneymanager.core.StockSide
 import com.enwei.moneymanager.data.AccountType
 import com.enwei.moneymanager.data.StockTradeEntity
 import com.enwei.moneymanager.data.TxnSource
-import com.enwei.moneymanager.ui.ExpenseColor
-import com.enwei.moneymanager.ui.IncomeColor
+import com.enwei.moneymanager.ui.StockDown
+import com.enwei.moneymanager.ui.StockUp
 import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.DateField
 import com.enwei.moneymanager.ui.components.DropdownField
@@ -76,7 +76,7 @@ private val StockSide.label get() = when (this) {
     StockSide.BUY -> "買進"; StockSide.SELL -> "賣出"; StockSide.CASH_DIVIDEND -> "現金股利"; StockSide.STOCK_DIVIDEND -> "股票股利"
 }
 
-private fun pnlColor(v: Double) = if (v >= 0) IncomeColor else ExpenseColor
+private fun pnlColor(v: Double) = if (v >= 0) StockUp else StockDown
 
 @Composable
 fun InvestScreen(nav: NavController) {

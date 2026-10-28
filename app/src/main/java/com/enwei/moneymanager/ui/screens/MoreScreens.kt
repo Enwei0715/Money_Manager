@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -96,36 +98,40 @@ private val timeFmt = SimpleDateFormat("M/d HH:mm", Locale.TAIWAN)
 fun MoreScreen(nav: NavController) {
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
     val entries = listOf(
-        Triple("accounts", "帳戶與信用卡", Icons.Filled.AccountBalance),
-        Triple("recurring", "週期交易／自動扣款", Icons.Filled.EventRepeat),
+        Triple("recurring", "週期／自動扣款", Icons.Filled.EventRepeat),
         Triple("pending", "待確認", Icons.Filled.Inbox),
         Triple("notif", "通知自動記帳", Icons.Filled.NotificationsActive),
         Triple("invoice", "電子發票載具", Icons.AutoMirrored.Filled.ReceiptLong),
         Triple("fx", "即時匯率", Icons.Filled.CurrencyExchange),
         Triple("categories", "分類管理", Icons.Filled.Category),
+        Triple("account/0", "新增帳戶", Icons.Filled.AccountBalance),
         Triple("backup", "備份與還原", Icons.Filled.Backup),
         Triple("settings", "設定與更新", Icons.Filled.Settings),
     )
-    Scaffold(topBar = { TopAppBar(title = { Text("更多") }) }) { pad ->
-        LazyColumn(Modifier.padding(pad)) {
-            items(entries) { (route, label, icon) ->
-                MenuRow(label, icon, badge = if (route == "pending" && pending.isNotEmpty()) pending.size else null) { nav.navigate(route) }
+    Scaffold(topBar = { androidx.compose.material3.CenterAlignedTopAppBar(title = { Text("更多") }) }) { pad ->
+        Column(Modifier.padding(pad).fillMaxWidth()) {
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface),
+            ) {
+                items(entries.size) { i ->
+                    val (route, label, icon) = entries[i]
+                    Column(
+                        Modifier.height(96.dp).border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { nav.navigate(route) },
+                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                    ) {
+                        androidx.compose.material3.BadgedBox(badge = {
+                            if (route == "pending" && pending.isNotEmpty()) Badge { Text("${pending.size}") }
+                        }) { Icon(icon, null, tint = MaterialTheme.colorScheme.primary) }
+                        Spacer(Modifier.height(8.dp))
+                        Text(label, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
             }
-            item {
-                Text("版本 ${BuildConfig.VERSION_NAME}", Modifier.padding(16.dp), style = MaterialTheme.typography.labelSmall)
-            }
+            Text("版本 ${BuildConfig.VERSION_NAME}", Modifier.padding(16.dp), style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-}
-
-@Composable
-private fun MenuRow(label: String, icon: ImageVector, badge: Int? = null, onClick: () -> Unit) {
-    ListItem(
-        leadingContent = { Icon(icon, null) },
-        headlineContent = { Text(label) },
-        trailingContent = { badge?.let { Badge { Text("$it") } } },
-        modifier = Modifier.clickable(onClick = onClick),
-    )
 }
 
 /** 回到畫面時重新檢查（例如從系統設定開啟通知權限後返回）。 */
