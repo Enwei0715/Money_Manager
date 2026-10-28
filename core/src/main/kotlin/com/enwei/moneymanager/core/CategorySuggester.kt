@@ -109,7 +109,7 @@ object CategorySuggester {
     private val food = listOf("餐飲", "食物", "飲食", "美食", "餐費", "伙食", "food", "飲食費")
 
     private val groups = listOf(
-        Group(listOf("netflix", "spotify", "youtube", "disney", "kkbox", "apple.com", "icloud", "google", "chatgpt", "openai", "anthropic", "claude", "notion", "adobe"),
+        Group(listOf("netflix", "spotify", "youtube", "disney", "kkbox", "apple.com", "icloud", "google", "chatgpt", "openai", "anthropic", "claude", "notion", "adobe", "firstory", "soundon", "patreon", "pressplay"),
             listOf("訂閱", "數位", "會員", "娛樂", "entertainment")),
         Group(listOf("咖啡", "星巴克", "路易莎", "cama", "85度c", "50嵐", "可不可", "清心", "迷客夏", "茶湯會", "五十嵐", "麻古", "鶴茶樓", "得正", "coco都可", "飲料", "手搖"),
             listOf("飲料", "咖啡", "手搖", "drinks", "drink", "coffee") + food),
