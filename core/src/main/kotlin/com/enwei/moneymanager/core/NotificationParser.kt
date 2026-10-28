@@ -170,7 +170,9 @@ object NotificationParser {
     /**
      * 使用者「教過」的通知來源：不靠關鍵字，只要找得到金額就依指定的收支類型建立交易。
      */
-    fun parseLearned(title: String?, text: String?, type: ParsedType, now: LocalDateTime = LocalDateTime.now()): ParsedTransaction? {
+    fun parseLearned(
+        title: String?, text: String?, type: ParsedType, now: LocalDateTime = LocalDateTime.now(), kind: ParsedKind = ParsedKind.NORMAL,
+    ): ParsedTransaction? {
         val full = clean(listOfNotNull(title, text).joinToString(" ").replace('\n', ' '))
         if (full.isBlank() || shouldIgnore(full)) return null
         val (amount, currency) = findAmount(full) ?: return null
@@ -180,7 +182,7 @@ object NotificationParser {
             merchant = englishMerchant.find(listOfNotNull(title, text).joinToString("\n"))?.groupValues?.get(1)?.trim()?.trimEnd('.')
                 ?: findMerchant(full),
             cardLast4 = cardLast4Regex.find(full)?.groupValues?.get(1)?.takeLast(4),
-            kind = ParsedKind.NORMAL, occurredAt = findDateTime(full, now),
+            kind = kind, occurredAt = findDateTime(full, now),
         )
     }
 

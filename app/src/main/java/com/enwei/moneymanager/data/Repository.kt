@@ -398,7 +398,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val msg = "股票成交：${if (f.side == StockSide.SELL) "賣出" else "買進"} ${f.symbol} ${f.shares.toLong()} 股 @ ${f.price}"
             return enabled to (msg + if (enabled) "" else "\n這個 App 尚未勾選監聽，勾選後才會自動建立")
         }
-        val p = learned?.let { NotificationParser.parseLearned(title, text, if (it.income) ParsedType.INCOME else ParsedType.EXPENSE) }
+        val p = learned?.parse(title, text)
             ?: NotificationParser.parse(title, text)
             ?: return false to "看不出是交易（找不到金額，或沒有「消費／付款／入帳」等字樣）。若這是交易通知，按「教它辨識」。"
         val accounts = db.accounts().all().filter { !it.archived }
@@ -423,7 +423,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             p.merchant?.let { "商家：$it" },
             "分類：" + (cat ?: "無法判斷（沒有商家名稱或沒有相似紀錄），記帳後可在通知上一鍵選分類"),
             p.occurredAt?.let { "交易時間：${it.toLocalDate()} ${"%02d:%02d".format(it.hour, it.minute)}" },
-            learned?.let { "（依你教過的格式辨識）" },
+            learned?.let { l -> "（依你教過的格式辨識：${l.label}" + (l.toAccountId?.let { id -> accounts.firstOrNull { it.id == id }?.let { a -> if (l.parsedKind == ParsedKind.TRANSFER_IN) "，從「${a.name}」" else "，到「${a.name}」" } } ?: "") + "）" },
             if (!enabled) "這個 App 尚未勾選監聽，勾選後才會自動記帳" else null,
         )
         return (enabled && account != null) to lines.joinToString("\n")
@@ -459,7 +459,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val sides = list.mapIndexedNotNull { i, n ->
             if (n.pkg == GMAIL_PACKAGE || isRedacted(n.text)) return@mapIndexedNotNull null
             val learned = s.learnedFor(n.pkg, n.title, n.text)
-            val p = learned?.let { NotificationParser.parseLearned(n.title, n.text, if (it.income) ParsedType.INCOME else ParsedType.EXPENSE) }
+            val p = learned?.parse(n.title, n.text)
                 ?: NotificationParser.parse(n.title, n.text) ?: return@mapIndexedNotNull null
             if (p.kind != ParsedKind.TRANSFER_OUT && p.kind != ParsedKind.TRANSFER_IN) return@mapIndexedNotNull null
             val bank = sourceBank(n.pkg, n.title)
@@ -570,9 +570,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = result, txnId = txnId)
 
         val fill = NotificationParser.parseStockFill(title, text)
-        val parsed = if (fill != null) null else learned?.let {
-            NotificationParser.parseLearned(title, text, if (it.income) ParsedType.INCOME else ParsedType.EXPENSE)
-        } ?: NotificationParser.parse(title, text)
+        val parsed = if (fill != null) null else learned?.parse(title, text) ?: NotificationParser.parse(title, text)
         if (fill == null && parsed == null) {
             if (enabled) log.insert(logAs("UNPARSED"))
             return null
@@ -712,6 +710,17 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 // 已經記成轉帳（例如 Email 已補上轉入銀行）：這則是同一筆的另一端
                 if (account != null && nearby.any { it.type == TxnType.TRANSFER && (if (isOut) it.accountId else it.toAccountId) == account.id }) {
                     log.insert(logAs("DUPLICATE")); return null
+                }
+                // 教過「轉出到某帳戶／從某帳戶轉入」：另一端沒有通知也直接記成轉帳
+                val counterpart = learned?.toAccountId?.let { id -> accounts.firstOrNull { it.id == id } }
+                if (counterpart != null && counterpart.id != account?.id && nearby.none {
+                        it.type == (if (isOut) TxnType.INCOME else TxnType.EXPENSE) && it.rawText?.startsWith(TRANSFER_TAG) == true && it.accountId == counterpart.id
+                    }
+                ) {
+                    val from = if (isOut) account?.id else counterpart.id
+                    val to = if (isOut) counterpart.id else account?.id
+                    return insert(base.copy(type = TxnType.TRANSFER, accountId = from, toAccountId = to, merchant = "轉帳"), "RECORDED",
+                        "轉帳 $amountText：${lookupName(from)} → ${lookupName(to)}")
                 }
                 nearby.firstOrNull {
                     it.type == (if (isOut) TxnType.INCOME else TxnType.EXPENSE) && it.rawText?.startsWith(TRANSFER_TAG) == true &&

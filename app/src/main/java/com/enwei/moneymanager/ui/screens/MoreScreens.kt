@@ -335,7 +335,10 @@ fun NotificationSettingsScreen(nav: NavController) {
                     val l = settings.learnedSources[i]
                     ListItem(
                         headlineContent = { Text("${labelOf[l.pkg] ?: l.pkg}：「${l.title}」") },
-                        supportingContent = { Text("${if (l.income) "收入" else "支出"} → ${l.accountId?.let { lk.account(it)?.name } ?: "依卡號／預設帳戶"}") },
+                        supportingContent = {
+                            Text("${l.label} → ${l.accountId?.let { lk.account(it)?.name } ?: "依卡號／預設帳戶"}" +
+                                (l.toAccountId?.let { lk.account(it)?.name }?.let { if (l.parsedKind == com.enwei.moneymanager.core.ParsedKind.TRANSFER_IN) "（從 $it）" else "（到 $it）" } ?: ""))
+                        },
                         modifier = Modifier.clickable { repo.settings.update { it.copy(learnedSources = it.learnedSources - l) } },
                     )
                 }
@@ -421,8 +424,10 @@ fun NotificationSettingsScreen(nav: NavController) {
         }
     }
     teach?.let { nn ->
-        var income by remember(nn) { mutableStateOf(false) }
+        // 0 支出、1 收入、2 轉出、3 轉入
+        var mode by remember(nn) { mutableStateOf(0) }
         var accId by remember(nn) { mutableStateOf(settings.notifAccountMap[nn.pkg]) }
+        var toId by remember(nn) { mutableStateOf<Long?>(null) }
         val amount = NotificationParser.findAmount(listOfNotNull(nn.title, nn.text).joinToString(" "))
         AlertDialog(
             onDismissRequest = { teach = null },
@@ -433,14 +438,24 @@ fun NotificationSettingsScreen(nav: NavController) {
                         style = MaterialTheme.typography.bodySmall)
                     if (amount == null) Text("這則通知裡找不到金額，無法自動記帳。", color = MaterialTheme.colorScheme.error)
                     else Text("找到的金額：${Money.format(amount.first, amount.second)} ${amount.second}")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(!income, { income = false }, label = { Text("支出") })
-                        FilterChip(income, { income = true }, label = { Text("收入") })
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("支出", "收入", "轉出", "轉入").forEachIndexed { i, l -> FilterChip(mode == i, { mode = i }, label = { Text(l) }) }
                     }
                     DropdownField(
-                        "記到帳戶", lk.accounts.filter { !it.archived }, lk.account(accId), { it.name }, { accId = it.id },
+                        if (mode >= 2) "這則通知的帳戶" else "記到帳戶", lk.accounts.filter { !it.archived }, lk.account(accId), { it.name }, { accId = it.id },
                         noneLabel = "依卡號／預設帳戶", onNone = { accId = null },
                     )
+                    if (mode >= 2) {
+                        DropdownField(
+                            if (mode == 2) "轉到（選填）" else "從（選填）", lk.accounts.filter { !it.archived && it.id != accId }, lk.account(toId), { it.name }, { toId = it.id },
+                            noneLabel = "等另一端的通知自動配對", onNone = { toId = null },
+                        )
+                        Text(
+                            if (toId == null) "另一個帳戶也有通知時（金額相同、10 分鐘內），兩則會自動合併成一筆轉帳。"
+                            else "每次都直接記成轉帳，不用等另一端的通知（例如固定轉到街口、儲值到悠遊付）。",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -448,7 +463,11 @@ fun NotificationSettingsScreen(nav: NavController) {
                     val key = com.enwei.moneymanager.data.learnKey(nn.title, nn.text)
                     repo.settings.update { st ->
                         st.copy(learnedSources = st.learnedSources.filterNot { it.pkg == nn.pkg && it.title == key } +
-                            com.enwei.moneymanager.data.LearnedSource(nn.pkg, key, income, accId))
+                            com.enwei.moneymanager.data.LearnedSource(
+                                nn.pkg, key, income = mode == 1, accountId = accId,
+                                kind = when (mode) { 2 -> "TRANSFER_OUT"; 3 -> "TRANSFER_IN"; else -> "NORMAL" },
+                                toAccountId = if (mode >= 2) toId else null,
+                            ))
                     }
                     teach = null
                     if (notes != null) loadNotes()

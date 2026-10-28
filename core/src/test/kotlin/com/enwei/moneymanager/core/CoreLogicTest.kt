@@ -413,3 +413,11 @@ class LookAlikeCharsTest {
         assertEquals(10000L, p?.amountMinor)
     }
 }
+
+class LearnedKindTest {
+    @Test fun taughtTransferKeepsKind() {
+        val p = NotificationParser.parseLearned("某銀行通知", "您的帳戶支出 NT\$500 2026/10/29 09:00", ParsedType.EXPENSE, kind = ParsedKind.TRANSFER_OUT)
+        assertEquals(ParsedKind.TRANSFER_OUT, p?.kind)
+        assertEquals(50000L, p?.amountMinor)
+    }
+}

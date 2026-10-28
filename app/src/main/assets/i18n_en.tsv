@@ -860,3 +860,9 @@ App 名稱也會跟著語言切換（帳理／Ledgerly）。	The app name change
 依商家名稱推測	guessed from merchant name
 同金額的固定支出	same amount as a regular expense
 Email：寄件者不是銀行，不處理	Email: sender isn't a bank, ignored
+轉出	Transfer out
+轉入	Transfer in
+轉到（選填）	To (optional)
+從（選填）	From (optional)
+等另一端的通知自動配對	Pair with the other side's notification
+這則通知的帳戶	This notification's account

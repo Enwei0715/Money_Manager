@@ -53,7 +53,35 @@ data class RebateRule(val discount: Double, val sinceEpochDay: Long, val payDay:
 
 /** 使用者教過的通知格式：某 App、標題相同的通知一律視為指定收支，記到指定帳戶。 */
 @Serializable
-data class LearnedSource(val pkg: String, val title: String, val income: Boolean, val accountId: Long?)
+data class LearnedSource(
+    val pkg: String,
+    val title: String,
+    val income: Boolean,
+    val accountId: Long?,
+    /** NORMAL（收入／支出）、TRANSFER_OUT（轉出）、TRANSFER_IN（轉入） */
+    val kind: String = "NORMAL",
+    /** 轉帳的另一個帳戶（選填）；不填則等另一端的通知自動配對 */
+    val toAccountId: Long? = null,
+) {
+    val parsedKind: com.enwei.moneymanager.core.ParsedKind
+        get() = runCatching { com.enwei.moneymanager.core.ParsedKind.valueOf(kind) }.getOrDefault(com.enwei.moneymanager.core.ParsedKind.NORMAL)
+
+    /** 依教過的設定解析這則通知（關鍵是標題，金額、時間、卡號仍從內文找）。 */
+    fun parse(title: String?, text: String?): com.enwei.moneymanager.core.ParsedTransaction? =
+        com.enwei.moneymanager.core.NotificationParser.parseLearned(
+            title, text,
+            if (income || parsedKind == com.enwei.moneymanager.core.ParsedKind.TRANSFER_IN) com.enwei.moneymanager.core.ParsedType.INCOME
+            else com.enwei.moneymanager.core.ParsedType.EXPENSE,
+            kind = parsedKind,
+        )
+
+    val label: String
+        get() = when (parsedKind) {
+            com.enwei.moneymanager.core.ParsedKind.TRANSFER_OUT -> "轉出"
+            com.enwei.moneymanager.core.ParsedKind.TRANSFER_IN -> "轉入"
+            else -> if (income) "收入" else "支出"
+        }
+}
 
 data class AppSettings(
     val baseCurrency: String = "TWD",
