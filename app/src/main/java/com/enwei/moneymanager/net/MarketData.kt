@@ -113,6 +113,28 @@ object QuoteService {
         return emptyList()
     }
 
+    /** 近兩年每月收盤價（月 → 收盤；當月為最新價），來源 Yahoo Finance 月線。用於證券帳戶的資產走勢。 */
+    suspend fun fetchMonthlyCloses(market: Market, symbol: String): Map<java.time.YearMonth, Double> {
+        val candidates = if (market == Market.TW) listOf("$symbol.TW", "$symbol.TWO") else listOf(symbol)
+        for (ys in candidates) {
+            val root = runCatching {
+                Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(ys, "UTF-8")}?range=2y&interval=1mo")
+            }.getOrNull() ?: continue
+            val result = (root.obj("chart").obj("result") as? JsonArray)?.firstOrNull() ?: continue
+            val ts = result.obj("timestamp") as? JsonArray ?: continue
+            val close = ((result.obj("indicators").obj("quote") as? JsonArray)?.firstOrNull().obj("close") as? JsonArray) ?: continue
+            val zone = java.time.ZoneId.of(if (market == Market.TW) "Asia/Taipei" else "America/New_York")
+            val out = HashMap<java.time.YearMonth, Double>()
+            ts.forEachIndexed { i, t ->
+                val sec = (t as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull() ?: return@forEachIndexed
+                val c = (close.getOrNull(i) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return@forEachIndexed
+                out[java.time.YearMonth.from(java.time.Instant.ofEpochSecond(sec).atZone(zone))] = c
+            }
+            if (out.isNotEmpty()) return out
+        }
+        return emptyMap()
+    }
+
     private suspend fun fetchYahoo(yahooSymbol: String, market: Market, symbol: String): QuoteEntity? {
         val root = Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(yahooSymbol, "UTF-8")}?range=5d&interval=1d")
         val result = (root.obj("chart").obj("result") as? JsonArray)?.firstOrNull() ?: return null

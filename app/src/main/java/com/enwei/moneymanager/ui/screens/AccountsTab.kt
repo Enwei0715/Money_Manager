@@ -441,7 +441,39 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 item {
                     val months = (5 downTo 0).map { month.minusMonths(it.toLong()) }
                     val ranges = months.map { Periods.month(it, settings.monthStartDay) }
-                    val ends = ranges.map { balanceAt(current, it.second.plusDays(1).toMillis(LocalTime.MIDNIGHT), ledger) }
+                    val cashEnds = ranges.map { balanceAt(current, it.second.plusDays(1).toMillis(LocalTime.MIDNIGHT), ledger) }
+                    // 證券帳戶：折線＝現金＋當時的持股市值（月底收盤價），買股票不會看起來像資產歸零
+                    val isBroker = acc?.type == AccountType.BROKERAGE
+                    val brokerTrades = if (isBroker) trades.filter { it.brokerAccountId == id } else emptyList()
+                    val symbols = brokerTrades.map { it.market to it.symbol.uppercase() }.distinct()
+                    var closes by remember(id) { mutableStateOf<Map<String, Map<YearMonth, Double>>>(emptyMap()) }
+                    LaunchedEffect(symbols) {
+                        symbols.filter { "${it.first}:${it.second}" !in closes }.forEach { (mk, sym) ->
+                            val c = runCatching { com.enwei.moneymanager.net.QuoteService.fetchMonthlyCloses(mk, sym) }.getOrNull() ?: return@forEach
+                            closes = closes + ("$mk:$sym" to c)
+                        }
+                    }
+                    val live = byBrokerDetail[id].orEmpty().filter { it.shares > 0 }.associate { "${it.market}:${it.symbol.uppercase()}" to it.marketValue / it.shares }
+                    val ends = if (!isBroker) cashEnds else ranges.mapIndexed { i, r ->
+                        val endDay = r.second.toEpochDay()
+                        val ym = YearMonth.from(r.second)
+                        val value = brokerTrades.filter { it.date <= endDay }.groupBy { "${it.market}:${it.symbol.uppercase()}" }.entries.sumOf { (k, list) ->
+                            val shares = list.sumOf {
+                                when (it.side) {
+                                    com.enwei.moneymanager.core.StockSide.BUY, com.enwei.moneymanager.core.StockSide.STOCK_DIVIDEND -> it.shares
+                                    com.enwei.moneymanager.core.StockSide.SELL -> -it.shares
+                                    else -> 0.0
+                                }
+                            }
+                            if (shares <= 1e-9) return@sumOf 0.0
+                            val hist = closes[k].orEmpty()
+                            val price = (if (!ym.isBefore(YearMonth.now())) live[k] else null)
+                                ?: hist[ym] ?: hist.filterKeys { !it.isAfter(ym) }.maxByOrNull { it.key }?.value
+                                ?: list.filter { it.price > 0 }.maxByOrNull { it.date }?.price ?: 0.0
+                            shares * price
+                        }
+                        cashEnds[i] + Money.toMinor(value)
+                    }
                     val deps = ranges.map { r -> entriesIn(r.first, r.second).sumOf { maxOf(0, it.delta) } }
                     val wds = ranges.map { r -> -entriesIn(r.first, r.second).sumOf { minOf(0, it.delta) } }
                     val labels = months.map { "${it.monthValue}月" }
@@ -449,6 +481,11 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         LineChart(ends, labels, MaterialTheme.colorScheme.primary, autoMin = false)
                         HorizontalDivider(Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         DualBarChart(deps, wds, labels, IncomeColor, ExpenseColor)
+                        if (isBroker) Text(
+                            "折線：帳戶現金＋持股市值（各月以月底收盤價計算，本月用即時價）\n長條：帳戶現金的存入／提出（買進股票算提出、賣出與股利算存入）",
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                        )
                     }
                 }
             } else when (tab) {
