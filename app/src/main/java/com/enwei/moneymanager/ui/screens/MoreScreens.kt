@@ -749,7 +749,7 @@ fun SettingsScreen(nav: NavController) {
         } else Updater.install(ctx, file)
     }
 
-    Scaffold(topBar = { BackTopBar("設定與更新", { nav.popBackStack() }) }) { pad ->
+    Scaffold(topBar = { BackTopBar("App 更新", { nav.popBackStack() }) }) { pad ->
         Column(
             Modifier.padding(pad).imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -783,9 +783,6 @@ fun SettingsScreen(nav: NavController) {
                     "請先到 更多 → 備份 匯出備份，解除安裝後再安裝新版並還原；之後的版本都能直接覆蓋更新。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            HorizontalDivider()
-
-            OutlinedButton(onClick = { nav.navigate("stockfees") }) { Text("股票手續費與月退設定") }
         }
     }
 }
