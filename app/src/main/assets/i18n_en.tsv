@@ -866,3 +866,16 @@ Email：寄件者不是銀行，不處理	Email: sender isn't a bank, ignored
 從（選填）	From (optional)
 等另一端的通知自動配對	Pair with the other side's notification
 這則通知的帳戶	This notification's account
+AI 智慧辨識	AI recognition
+AI 智慧辨識（Groq）	AI recognition (Groq)
+啟用 AI 智慧辨識	Enable AI recognition
+規則判斷不出來時才使用	Used only when rules can't tell
+Groq API 金鑰	Groq API key
+模型	Model
+測試連線	Test connection
+測試中…	Testing…
+連線成功，可以使用	Connected
+會用在哪裡	Where it's used
+會送出什麼	What is sent
+自動扣繳	autopay
+還差	short by

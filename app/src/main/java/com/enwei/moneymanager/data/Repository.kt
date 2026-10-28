@@ -17,6 +17,7 @@ import com.enwei.moneymanager.core.StockSide
 import com.enwei.moneymanager.core.Market
 import com.enwei.moneymanager.core.TradeRecord
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -93,6 +94,7 @@ data class CardStatus(val payable: Long, val outstanding: Long, val dueDate: Loc
 
 private const val TRANSFER_TAG = "#轉帳"
 private const val GMAIL_PACKAGE = "com.google.android.gm"
+private const val AI_TAG = "#AI"
 
 data class IngestResult(val kind: String, val txnId: Long? = null, val message: String)
 
@@ -398,8 +400,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val msg = "股票成交：${if (f.side == StockSide.SELL) "賣出" else "買進"} ${f.symbol} ${f.shares.toLong()} 股 @ ${f.price}"
             return enabled to (msg + if (enabled) "" else "\n這個 App 尚未勾選監聽，勾選後才會自動建立")
         }
+        var aiParsed = false
         val p = learned?.parse(title, text)
             ?: NotificationParser.parse(title, text)
+            ?: (if (enabled && com.enwei.moneymanager.net.GroqAi.enabled) com.enwei.moneymanager.net.GroqAi.parseNotification(title, text)?.also { aiParsed = true } else null)
             ?: return false to "看不出是交易（找不到金額，或沒有「消費／付款／入帳」等字樣）。若這是交易通知，按「教它辨識」。"
         val accounts = db.accounts().all().filter { !it.archived }
         val raw0 = listOfNotNull(title, text).joinToString("\n")
@@ -415,12 +419,20 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
         val type = if (p.type == ParsedType.INCOME) TxnType.INCOME else TxnType.EXPENSE
         val at = p.occurredAt?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis()
-        val cat = if (p.kind == ParsedKind.NORMAL) suggestCategory(p.merchant, type, at, p.amountMinor, account?.id)
+        var cat = if (p.kind == ParsedKind.NORMAL) suggestCategory(p.merchant, type, at, p.amountMinor, account?.id)
             ?.let { sg -> categoryPath(sg.categoryId)?.let { "$it（${sg.reason}）" } } else null
+        var aiName: String? = null
+        if (p.kind == ParsedKind.NORMAL && p.merchant != null && (cat == null || looksRaw(p.merchant))) {
+            aiNameAndCategory(p.merchant, type, at)?.let { (name, c) ->
+                if (looksRaw(p.merchant)) aiName = name
+                if (cat == null && c != null) cat = categoryPath(c)?.let { "$it（AI 推測）" }
+            }
+        }
         val lines = listOfNotNull(
             "$what ${Money.format(p.amountMinor, p.currency)} ${p.currency}",
             "帳戶：${account?.name ?: "（未指定，請設定預設帳戶）"}" + (p.cardLast4?.let { "（卡號末四碼 $it）" } ?: ""),
-            p.merchant?.let { "商家：$it" },
+            p.merchant?.let { "商家：$it" + (aiName?.let { n -> " → AI 命名「$n」" } ?: "") },
+            if (aiParsed) "（規則看不懂，由 AI 判讀；記帳時會放到「待確認」）" else null,
             "分類：" + (cat ?: "無法判斷（沒有商家名稱或沒有相似紀錄），記帳後可在通知上一鍵選分類"),
             p.occurredAt?.let { "交易時間：${it.toLocalDate()} ${"%02d:%02d".format(it.hour, it.minute)}" },
             learned?.let { l -> "（依你教過的格式辨識：${l.label}" + (l.toAccountId?.let { id -> accounts.firstOrNull { it.id == id }?.let { a -> if (l.parsedKind == ParsedKind.TRANSFER_IN) "，從「${a.name}」" else "，到「${a.name}」" } } ?: "") + "）" },
@@ -570,7 +582,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = result, txnId = txnId)
 
         val fill = NotificationParser.parseStockFill(title, text)
-        val parsed = if (fill != null) null else learned?.parse(title, text) ?: NotificationParser.parse(title, text)
+        var parsed = if (fill != null) null else learned?.parse(title, text) ?: NotificationParser.parse(title, text)
+        // 規則看不懂、但來自已啟用的銀行／支付 App：請 AI 判讀（結果一律放「待確認」）
+        var aiParsed = false
+        if (fill == null && parsed == null && enabled && !isRedacted(text) && com.enwei.moneymanager.net.GroqAi.enabled) {
+            parsed = com.enwei.moneymanager.net.GroqAi.parseNotification(title, text)
+            aiParsed = parsed != null
+        }
         if (fill == null && parsed == null) {
             if (enabled) log.insert(logAs("UNPARSED"))
             return null
@@ -631,7 +649,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             }.groupBy { it.date }.values.map { l -> Money.toMinor(l.sumOf { it.cashAmount }) }
             if (autoDiv.any { kotlin.math.abs(it - p.amountMinor) <= 100 }) { log.insert(logAs("DUPLICATE")); return null }
         }
-        val status = if (s.notifAutoConfirm) TxnStatus.CONFIRMED else TxnStatus.PENDING
+        val status = if (s.notifAutoConfirm && !aiParsed) TxnStatus.CONFIRMED else TxnStatus.PENDING
         val raw = listOfNotNull(title, text).joinToString("\n")
         val window = 10 * 60_000L
         val nearby = db.txns().all().filter {
@@ -761,19 +779,43 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             return null
         }
         val tagged = if (p.kind == ParsedKind.TRANSFER_OUT || p.kind == ParsedKind.TRANSFER_IN) "$TRANSFER_TAG\n$raw" else raw
-        val merchant = p.merchant ?: when (p.kind) {
+        var merchant = p.merchant ?: when (p.kind) {
             ParsedKind.TRANSFER_OUT -> "轉出"
             ParsedKind.TRANSFER_IN -> "轉入"
             else -> null
         }
+        // 轉出／轉入多半是自己帳戶間的轉帳（之後會合併），不猜分類
+        var categoryId = if (p.kind == ParsedKind.NORMAL) suggestCategory(p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId else null
+        // 規則挑不出分類，或商家名稱是代碼（例如「GOOGLE*WALLET TEMP」）：請 AI 命名並挑分類
+        var aiNote = if (aiParsed) "（AI 判讀，請確認）" else ""
+        if (p.kind == ParsedKind.NORMAL && p.merchant != null && (categoryId == null || looksRaw(p.merchant))) {
+            aiNameAndCategory(p.merchant, type, occurred)?.let { (name, cat) ->
+                if (name != null && looksRaw(p.merchant)) merchant = name
+                if (categoryId == null && cat != null) { categoryId = cat; aiNote += "（分類由 AI 推測）" }
+            }
+        }
         return insert(
-            base.copy(
-                type = type, merchant = merchant, rawText = tagged,
-                // 轉出／轉入多半是自己帳戶間的轉帳（之後會合併），不猜分類
-                categoryId = if (p.kind == ParsedKind.NORMAL) suggestCategory(p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId else null,
-            ),
-            "RECORDED", "${type.label} $amountText ${p.merchant.orEmpty()}",
+            base.copy(type = type, merchant = merchant, rawText = if (aiParsed) "$tagged\n$AI_TAG" else tagged, categoryId = categoryId),
+            "RECORDED", "${type.label} $amountText ${merchant.orEmpty()}$aiNote",
         )
+    }
+
+    /** 商家名稱看起來是代碼：有星號、底線，或幾乎全是大寫英數。 */
+    private fun looksRaw(m: String): Boolean {
+        val letters = m.filter { it.isLetter() }
+        return '*' in m || '_' in m || (letters.length >= 4 && letters.all { it in 'A'..'Z' } && m.length > 8)
+    }
+
+    /** AI 命名與分類；AI 未啟用、失敗或超過額度時回傳 null。 */
+    suspend fun aiNameAndCategory(merchant: String, type: TxnType, at: Long): Pair<String?, Long?>? {
+        if (!com.enwei.moneymanager.net.GroqAi.enabled || type == TxnType.TRANSFER) return null
+        val all = db.categories().all()
+        val cats = all.filter { it.kind == type && !it.archived }.map { c ->
+            c.id to (c.parentId?.let { pid -> all.find { it.id == pid }?.let { "${it.name} / ${c.name}" } } ?: c.name)
+        }
+        if (cats.isEmpty()) return null
+        val hour = java.time.Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()).hour
+        return com.enwei.moneymanager.net.GroqAi.nameAndCategory(merchant, hour, cats).takeIf { it.first != null || it.second != null }
     }
 
     /**
@@ -1017,6 +1059,35 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val due = cycle.nextDueDate(lastStatement)
             card.id to CardStatus(payable, maxOf(0, owed - payable), due, if (card.autopayFromId != null) cycle.autopayDateFor(due, card.autopayDay) else null)
         }
+    }
+
+    /** 扣款帳戶餘額不足：[needed] 是這個帳戶接下來要自動扣繳的卡費合計。 */
+    data class FundingWarning(
+        val from: AccountEntity, val balance: Long, val needed: Long, val date: LocalDate, val cards: List<Pair<AccountEntity, Long>>,
+    ) { val shortBy: Long get() = needed - balance }
+
+    /**
+     * 檢查 [days] 天內的信用卡自動扣繳：同一個扣款帳戶的應繳金額加總後，若大於帳戶目前餘額就警告。
+     * 只看有設定自動扣繳的卡（手動繳費的卡不知道會從哪個帳戶付）。
+     */
+    suspend fun fundingWarnings(today: LocalDate = LocalDate.now(), days: Long = 45): List<FundingWarning> {
+        val status = cardStatus(today)
+        val accounts = db.accounts().all().filter { !it.archived }
+        val bal = balances.first().associate { it.account.id to it.balance }
+        return accounts.filter { it.type == AccountType.CREDIT_CARD && it.autopayFromId != null }
+            .mapNotNull { card ->
+                val st = status[card.id] ?: return@mapNotNull null
+                val d = st.autopayDate ?: return@mapNotNull null
+                if (st.payable <= 0 || d.isBefore(today) || d.isAfter(today.plusDays(days))) null else Triple(card, st.payable, d)
+            }
+            .groupBy { it.first.autopayFromId!! }
+            .mapNotNull { (fromId, list) ->
+                val from = accounts.firstOrNull { it.id == fromId } ?: return@mapNotNull null
+                val needed = list.sumOf { it.second }
+                val b = bal[fromId] ?: 0L
+                if (b >= needed) null else FundingWarning(from, b, needed, list.minOf { it.third }, list.map { it.first to it.second })
+            }
+            .sortedBy { it.date }
     }
 
     /** 首頁「即將到來」：信用卡繳款日與預估金額。 */

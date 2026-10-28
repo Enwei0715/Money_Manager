@@ -60,6 +60,7 @@ import androidx.navigation.navArgument
 import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.data.TxnType
 import com.enwei.moneymanager.ui.screens.AccountDetailScreen
+import com.enwei.moneymanager.ui.screens.AiSettingsScreen
 import com.enwei.moneymanager.ui.screens.AccountEditScreen
 import com.enwei.moneymanager.ui.screens.AccountOrderScreen
 import com.enwei.moneymanager.ui.screens.AccountsTab
@@ -300,6 +301,7 @@ private fun AppScaffold(nav: NavHostController) {
             }
             composable("pending") { PendingScreen(nav) }
             composable("notif") { NotificationSettingsScreen(nav) }
+            composable("ai") { AiSettingsScreen(nav) }
             composable("fx") { FxScreen(nav) }
             composable(
                 "categories?kind={kind}",

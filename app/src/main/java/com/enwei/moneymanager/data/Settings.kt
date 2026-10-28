@@ -174,6 +174,13 @@ data class AppSettings(
     val holidayCache: String = "",
     /** 颱風假等停止上班日，格式 yyyy-MM-dd:名稱;… */
     val typhoonDays: String = "",
+    /** Groq API 金鑰（憑證，不放進備份檔） */
+    val groqKey: String = "",
+    /** AI 智慧辨識：規則判斷不出來時用 AI 判讀通知、命名商家、挑分類 */
+    val aiEnabled: Boolean = false,
+    val aiModel: String = "llama-3.1-8b-instant",
+    /** 上次提醒「扣款帳戶餘額不足」的內容，避免同一件事重複通知 */
+    val fundingWarnKey: String = "",
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee, oddLotMinFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -250,6 +257,10 @@ class SettingsStore(context: Context) {
         lastAutoBackupError = prefs.getString("lastAutoBackupError", "")!!,
         holidayCache = prefs.getString("holidayCache", "")!!,
         typhoonDays = prefs.getString("typhoonDays", "")!!,
+        groqKey = prefs.getString("groqKey", "")!!,
+        aiEnabled = prefs.getBoolean("aiEnabled", false),
+        aiModel = prefs.getString("aiModel", "llama-3.1-8b-instant")!!,
+        fundingWarnKey = prefs.getString("fundingWarnKey", "")!!,
         cardBank = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardBank", "{}")!!) }.getOrDefault(emptyMap()),
         cardDueOffset = runCatching { json.decodeFromString(longIntSerializer, prefs.getString("cardDueOffset", "{}")!!) }.getOrDefault(emptyMap()),
         cardShift = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardShift", "{}")!!) }.getOrDefault(emptyMap()),
@@ -262,7 +273,7 @@ class SettingsStore(context: Context) {
     @Synchronized
     /** 匯出所有設定（完整備份用）；GitHub Token 屬於憑證，不放進備份檔。 */
     fun exportRaw(): Map<String, kotlinx.serialization.json.JsonElement> = prefs.all.filterKeys {
-        it !in setOf("githubToken", "autoBackupUri", "lastAutoBackup", "lastAutoBackupError")
+        it !in setOf("githubToken", "groqKey", "autoBackupUri", "lastAutoBackup", "lastAutoBackupError")
     }.mapNotNull { (k, v) ->
         val e: kotlinx.serialization.json.JsonElement = when (v) {
             is Boolean -> kotlinx.serialization.json.buildJsonObject { put("t", "b"); put("v", v) }
@@ -282,6 +293,7 @@ class SettingsStore(context: Context) {
     @Synchronized
     fun importRaw(map: Map<String, kotlinx.serialization.json.JsonElement>) {
         val token = prefs.getString("githubToken", "")
+        val groq = prefs.getString("groqKey", "")
         val keepUri = prefs.getString("autoBackupUri", "")
         val ed = prefs.edit().clear()
         map.forEach { (k, e) ->
@@ -298,7 +310,7 @@ class SettingsStore(context: Context) {
                 "ss" -> (v as? kotlinx.serialization.json.JsonArray)?.let { arr -> ed.putStringSet(k, arr.map { (it as kotlinx.serialization.json.JsonPrimitive).content }.toSet()) }
             }
         }
-        ed.putString("githubToken", token).putString("autoBackupUri", keepUri).commit()
+        ed.putString("githubToken", token).putString("groqKey", groq).putString("autoBackupUri", keepUri).commit()
         state.value = read()
     }
 
@@ -367,6 +379,10 @@ class SettingsStore(context: Context) {
             .putString("lastAutoBackupError", s.lastAutoBackupError)
             .putString("holidayCache", s.holidayCache)
             .putString("typhoonDays", s.typhoonDays)
+            .putString("groqKey", s.groqKey)
+            .putBoolean("aiEnabled", s.aiEnabled)
+            .putString("aiModel", s.aiModel)
+            .putString("fundingWarnKey", s.fundingWarnKey)
             .putString("cardDueOffset", json.encodeToString(longIntSerializer, s.cardDueOffset))
             .apply()
         state.value = s

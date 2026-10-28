@@ -332,8 +332,10 @@ fun DayBlock(
     trades: List<com.enwei.moneymanager.data.StockTradeEntity> = emptyList(), tradeBalances: Map<Long, Long> = emptyMap(),
     /** 從帳戶明細進入時的帳戶；股票金額依此帳戶顯示 */
     accountId: Long? = null,
+    /** 帳戶明細：這一天在帳本上的項目（新到舊）。有給時標題顯示這個帳戶的存入／提出（含轉帳、股票），並依帳本順序列出 */
+    ledger: List<LedgerEntry>? = null,
 ) {
-    val t = totalsOf(txns, lk.fx)
+    val t = if (ledger != null) Totals(ledger.sumOf { maxOf(0, it.delta) }, -ledger.sumOf { minOf(0, it.delta) }) else totalsOf(txns, lk.fx)
     Column(Modifier.padding(top = 10.dp).background(MaterialTheme.colorScheme.surface)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -350,8 +352,13 @@ fun DayBlock(
             Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = 15.sp, modifier = Modifier.width(112.dp), textAlign = TextAlign.End)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        txns.sortedByDescending { it.date }.forEach { MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
-        trades.sortedByDescending { it.id }.forEach { tr -> TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
+        if (ledger != null) ledger.forEach { e ->
+            e.txn?.let { MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
+            e.trade?.let { tr -> TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
+        } else {
+            txns.sortedByDescending { it.date }.forEach { MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
+            trades.sortedByDescending { it.id }.forEach { tr -> TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
@@ -390,8 +397,9 @@ fun TradeRow(tr: com.enwei.moneymanager.data.StockTradeEntity, lk: Lookups, acco
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
             val affects = accountId == null || tr.cashAccountId == accountId
-            Text(Money.withSymbol(flow, tr.currency), fontSize = 16.sp,
-                color = if (affects) MaterialTheme.colorScheme.onSurface else gray)
+            // 和其他列一致：金額不帶正負號，流入用收入色、流出用支出色
+            Text(Money.withSymbol(kotlin.math.abs(flow), tr.currency), fontSize = 16.sp,
+                color = if (!affects || flow == 0L) gray else if (flow > 0) IncomeColor else ExpenseColor)
             if (balanceAfter != null && affects) Text("(${Money.full(balanceAfter)})", fontSize = 12.sp, color = gray)
         }
     }

@@ -129,7 +129,8 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
     var cards by remember { mutableStateOf<Map<Long, CardStatus>>(emptyMap()) }
     var menu by remember { mutableStateOf(false) }
     var showHidden by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(all, balances) { cards = repo.cardStatus() }
+    var funding by remember { mutableStateOf<List<com.enwei.moneymanager.data.Repository.FundingWarning>>(emptyList()) }
+    LaunchedEffect(all, balances) { cards = repo.cardStatus(); funding = repo.fundingWarnings() }
     val st by repo.settings.flow.collectAsStateWithLifecycle()
     val groupRank = st.groupOrder()
 
@@ -187,6 +188,25 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     listOf("資產" to (Money.full(assets) to IncomeColor), "負債" to (Money.full(debts) to ExpenseColor),
                         "合計" to (Money.full(assets - debts) to MaterialTheme.colorScheme.onSurface)),
                 )
+            }
+            // 扣款帳戶餘額不夠付接下來的卡費
+            items(funding.size, key = { "fund${funding[it].from.id}" }) { i ->
+                val w = funding[i]
+                androidx.compose.material3.Surface(
+                    color = MaterialTheme.colorScheme.errorContainer, shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable { nav.navigate("acct/${w.from.id}") },
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text("「${w.from.name}」餘額不足，卡費可能扣款失敗", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(
+                            w.cards.joinToString("、") { (c, amt) -> "${c.name} ${Money.withSymbol(amt, c.currency)}" } +
+                                "\n${w.date.monthValue}/${w.date.dayOfMonth} 起自動扣繳共 ${Money.withSymbol(w.needed, w.from.currency)}，" +
+                                "目前餘額 ${Money.withSymbol(w.balance, w.from.currency)}，還差 ${Money.withSymbol(w.shortBy, w.from.currency)}",
+                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
             }
             visible.groupBy { it.account.type }.toSortedMap(compareBy { groupRank.indexOf(it) }).forEach { (type, list) ->
                 if (type == AccountType.CREDIT_CARD) {
@@ -497,7 +517,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                     if (inRange.isEmpty()) item { EmptyHint("這段期間沒有交易") }
                     inRange.groupBy { it.date.toLocalDate() }.toSortedMap(Comparator.reverseOrder()).forEach { (d, entries) ->
                         item(key = "d$d") {
-                            DayBlock(d, entries.mapNotNull { it.txn }, lk, nav, txnAfter, entries.mapNotNull { it.trade }, tradeAfter, id)
+                            DayBlock(d, entries.mapNotNull { it.txn }, lk, nav, txnAfter, entries.mapNotNull { it.trade }, tradeAfter, id, ledger = entries)
                         }
                     }
                 }

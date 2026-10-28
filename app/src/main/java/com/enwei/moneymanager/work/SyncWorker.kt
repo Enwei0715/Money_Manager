@@ -23,6 +23,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val repo = MoneyApp.repo
         repo.runRecurring()
         repo.runFeeRebates()
+        runCatching { warnFunding(applicationContext, repo) }
         val ok = runCatching { refreshMarket(repo) }.isSuccess
         return if (ok || runAttemptCount > 2) Result.success() else Result.retry()
     }
@@ -121,6 +122,36 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             merged.keys.removeAll { it.isBefore(today.minusYears(2)) }
             com.enwei.moneymanager.core.TaiwanHolidays.setExtra(merged)
             if (merged != old) repo.settings.update { it.copy(typhoonDays = com.enwei.moneymanager.data.TyphoonDays.encode(merged)) }
+        }
+
+        /** 7 天內要自動扣繳卡費、扣款帳戶餘額卻不夠時通知（同一件事只通知一次）。 */
+        suspend fun warnFunding(context: Context, repo: Repository) {
+            val list = repo.fundingWarnings(days = 7)
+            val key = list.joinToString(";") { "${it.from.id}:${it.date}:${it.needed}" }
+            if (key == repo.settings.value.fundingWarnKey) return
+            repo.settings.update { it.copy(fundingWarnKey = key) }
+            val nm = context.getSystemService(android.app.NotificationManager::class.java)
+            if (list.isEmpty() || !nm.areNotificationsEnabled()) return
+            val w = list.first()
+            val open = android.app.PendingIntent.getActivity(
+                context, 9300,
+                android.content.Intent(context, com.enwei.moneymanager.ui.MainActivity::class.java)
+                    .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "acct/${w.from.id}"),
+                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            nm.notify(
+                9300,
+                androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
+                    .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
+                    .setContentTitle(com.enwei.moneymanager.ui.tr("「${w.from.name}」餘額不足，卡費可能扣款失敗"))
+                    .setContentText(
+                        "${w.date.monthValue}/${w.date.dayOfMonth} " + com.enwei.moneymanager.ui.tr("自動扣繳") + " ${com.enwei.moneymanager.core.Money.withSymbol(w.needed, w.from.currency)}，" +
+                            com.enwei.moneymanager.ui.tr("還差") + " ${com.enwei.moneymanager.core.Money.withSymbol(w.shortBy, w.from.currency)}",
+                    )
+                    .setContentIntent(open)
+                    .setAutoCancel(true)
+                    .build(),
+            )
         }
 
         suspend fun refreshMarket(repo: Repository) {

@@ -212,6 +212,7 @@ fun ConfigScreen(nav: NavController) {
                 SectionHeader("自動記帳")
                 ConfigRow("通知自動記帳") { nav.navigate("notif") }
                 ConfigRow("錢包畫面讀取（街口、悠遊付）") { nav.navigate("walletreader") }
+                ConfigRow("AI 智慧辨識（Groq）", onOff(s.aiEnabled && s.groqKey.isNotBlank())) { nav.navigate("ai") }
 
                 SectionHeader("股票")
                 ConfigRow("股票手續費與月退") { nav.navigate("settings") }
