@@ -30,7 +30,7 @@ class WalletScreenReader : AccessibilityService() {
         pendingJob?.cancel()
         pendingJob = MoneyApp.instance.appScope.launch {
             delay(1200)
-            val texts = runCatching { collectTexts() }.getOrNull() ?: return@launch
+            val texts = runCatching { collectTexts(pkg) }.getOrNull() ?: return@launch
             val records = ScreenRecordParser.parse(texts)
             if (records.isEmpty()) return@launch
             val created = runCatching { MoneyApp.repo.ingestScreenRecords(pkg, records) }.getOrDefault(0)
@@ -38,8 +38,10 @@ class WalletScreenReader : AccessibilityService() {
         }
     }
 
-    private fun collectTexts(): List<String> {
+    private fun collectTexts(pkg: String): List<String> {
         val root = rootInActiveWindow ?: return emptyList()
+        // 等待期間使用者可能已切到別的 App：只讀取仍屬於該錢包的畫面
+        if (root.packageName?.toString() != pkg) return emptyList()
         val out = ArrayList<String>()
         fun walk(node: AccessibilityNodeInfo?, depth: Int) {
             if (node == null || depth > 40) return
