@@ -86,3 +86,54 @@ class CoreLogicTest {
         assertTrue(CategoryGuesser.guess("不知名店家") == null)
     }
 }
+
+/** 以永豐「台股庫存明細」實際三筆 3661 世芯-KY 驗證（現價 3,800、手續費無折扣、零股最低 1 元）。 */
+class LotCalcTest {
+    private val fees = FeeSettings(discount = 1.0, minFee = 20.0, oddLotMinFee = 1.0)
+    private val trades = listOf(
+        TradeRecord("3661", StockSide.BUY, 15.0, 4825.0, 102.0, 0.0, 20586, id = 1),   // 2026/05/13
+        TradeRecord("3661", StockSide.BUY, 5.0, 4280.0, 30.0, 0.0, 20640, id = 2),     // 2026/07/06
+        TradeRecord("3661", StockSide.BUY, 5.0, 3745.0, 26.0, 0.0, 20649, id = 3),     // 2026/07/15
+        TradeRecord("3661", StockSide.CASH_DIVIDEND, 0.0, 0.0, 0.0, 0.0, 20680, cashAmount = 489.0, id = 4, lotId = 1),
+        TradeRecord("3661", StockSide.CASH_DIVIDEND, 0.0, 0.0, 0.0, 0.0, 20680, cashAmount = 163.0, id = 5, lotId = 2),
+        TradeRecord("3661", StockSide.CASH_DIVIDEND, 0.0, 0.0, 0.0, 0.0, 20680, cashAmount = 162.0, id = 6, lotId = 3),
+    )
+
+    @Test fun matchesBroker() {
+        val book = LotCalc.build(trades)
+        assertEquals(3, book.lots.size)
+        val byId = book.lots.associateBy { it.tradeId }
+        // 原幣成本
+        assertEquals(71988.0, byId.getValue(1).netCost, 1e-6)
+        assertEquals(21267.0, byId.getValue(2).netCost, 1e-6)
+        assertEquals(18589.0, byId.getValue(3).netCost, 1e-6)
+        // 預估損益
+        assertEquals(-15240.0, byId.getValue(1).pnl(Market.TW, "3661", 3800.0, fees), 1e-6)
+        assertEquals(-2351.0, byId.getValue(2).pnl(Market.TW, "3661", 3800.0, fees), 1e-6)
+        assertEquals(327.0, byId.getValue(3).pnl(Market.TW, "3661", 3800.0, fees), 1e-6)
+        assertEquals(25.0, book.shares, 0.0)
+        assertEquals(0.0, book.realizedPnl, 1e-9)
+    }
+
+    @Test fun fifoSell() {
+        val book = LotCalc.build(
+            trades + TradeRecord("3661", StockSide.SELL, 20.0, 4000.0, 114.0, 240.0, 20700, id = 7),
+        )
+        // 先賣掉 5/13 的 15 股與 7/06 的 5 股，剩 7/15 那批
+        assertEquals(listOf(3L), book.lots.map { it.tradeId })
+        val proceeds = 20 * 4000.0 - 114 - 240
+        assertEquals(proceeds - (71988.0 + 21267.0), book.realizedPnl, 1e-6)
+    }
+
+    @Test fun proportionalDividend() {
+        val book = LotCalc.build(
+            listOf(
+                TradeRecord("2330", StockSide.BUY, 1000.0, 500.0, 0.0, 0.0, 1, id = 1),
+                TradeRecord("2330", StockSide.BUY, 3000.0, 600.0, 0.0, 0.0, 2, id = 2),
+                TradeRecord("2330", StockSide.CASH_DIVIDEND, 0.0, 0.0, 0.0, 0.0, 3, cashAmount = 400.0, id = 3),
+            ),
+        )
+        assertEquals(100.0, book.lots[0].dividends, 1e-9)
+        assertEquals(300.0, book.lots[1].dividends, 1e-9)
+    }
+}

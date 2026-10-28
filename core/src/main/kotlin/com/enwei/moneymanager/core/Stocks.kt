@@ -17,6 +17,9 @@ data class TradeRecord(
     val epochDay: Long,
     /** 現金股利總額（side = CASH_DIVIDEND 時使用） */
     val cashAmount: Double = 0.0,
+    val id: Long = 0,
+    /** 現金股利指定給哪一筆買進（[id]）；null 表示依持股比例分配 */
+    val lotId: Long? = null,
 )
 
 data class Position(

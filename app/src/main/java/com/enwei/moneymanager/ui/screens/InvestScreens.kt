@@ -21,6 +21,9 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Card
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.Color
+import com.enwei.moneymanager.ui.components.SectionTitle
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -241,18 +244,57 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
                             LabelValue("預估賣出費用", formatNum(h.estSellCost, 0))
                         }
                         Text(
-                            "預估損益＝市值－賣出手續費與交易稅－成本；成本＝價金＋買進手續費－已領現金股利（與券商「除息試算」相同）。",
+                            "預估損益＝各批（市值－賣出手續費與交易稅－原幣成本）加總；原幣成本＝價金＋買進手續費－該批除息金額（同券商「除息試算」）。賣出以先進先出計算。",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
             }
-            items(list, key = { it.id }) { t ->
+            if (h != null && h.lots.isNotEmpty()) {
+                item { SectionTitle("庫存明細（每批買進，與券商「台股庫存明細」相同）") }
+                items(h.lots.sortedBy { it.epochDay }, key = { "lot${it.tradeId}" }) { lot ->
+                    val buy = list.find { it.id == lot.tradeId }
+                    val pnl = h.lotPnl[lot.tradeId]
+                    val gross = lot.shares * lot.price
+                    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("成交日期 ${LocalDate.ofEpochDay(lot.epochDay)}", style = MaterialTheme.typography.labelLarge)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                LabelValue("預估損益", pnl?.let { formatNum(it, 0) } ?: "—", valueColor = pnl?.let { pnlColor(it) } ?: Color.Unspecified)
+                                LabelValue("現值", h.price?.let { formatNum(lot.shares * it, 0) } ?: "—")
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                LabelValue("庫存／股", formatNum(lot.shares, 0), Modifier.weight(1f))
+                                LabelValue("單價", formatNum(lot.price), Modifier.weight(1f))
+                                LabelValue("價金", formatNum(gross, 0), Modifier.weight(1f))
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                LabelValue("手續費＋稅", formatNum(lot.cost - gross, 0), Modifier.weight(1f))
+                                LabelValue("除息金額", formatNum(lot.dividends, 0), Modifier.weight(1f))
+                                LabelValue("原幣成本", formatNum(lot.netCost, 0), Modifier.weight(1f))
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                androidx.compose.material3.OutlinedButton(onClick = {
+                                    nav.navigate("trade/0?market=$market&symbol=$symbol&lot=${lot.tradeId}&side=CASH_DIVIDEND&broker=${buy?.brokerAccountId ?: 0}")
+                                }) { Text("＋ 除息") }
+                                TextButton(onClick = { nav.navigate("trade/${lot.tradeId}") }) { Text("編輯這批") }
+                            }
+                        }
+                    }
+                }
+            }
+            item { SectionTitle("全部紀錄") }
+            items(list.sortedWith(compareByDescending<StockTradeEntity> { it.date }.thenByDescending { it.id }), key = { it.id }) { t ->
+                val lotOf = t.lotTradeId?.let { id -> list.find { it.id == id } }
                 ListItem(
                     headlineContent = { Text("${t.side.label}  ${if (t.side == StockSide.CASH_DIVIDEND) formatNum(t.cashAmount) else "${formatNum(t.shares, 0)} 股 @ ${formatNum(t.price)}"}") },
                     supportingContent = {
-                        Text("${LocalDate.ofEpochDay(t.date)} · 手續費 ${formatNum(t.fee, 0)} · 稅 ${formatNum(t.tax, 0)}" +
-                            if (t.source != TxnSource.MANUAL) " · ${t.source.label}" else "")
+                        Text(
+                            "${LocalDate.ofEpochDay(t.date)}" +
+                                (if (t.side == StockSide.CASH_DIVIDEND) lotOf?.let { " · 屬於 ${LocalDate.ofEpochDay(it.date)} 那批" } ?: " · 依持股比例分配"
+                                else " · 手續費 ${formatNum(t.fee, 0)} · 稅 ${formatNum(t.tax, 0)}") +
+                                (if (t.source != TxnSource.MANUAL) " · ${t.source.label}" else ""),
+                        )
                     },
                     trailingContent = {
                         IconButton(onClick = { deleteOne = t }) { Icon(Icons.Filled.Delete, "刪除", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -260,6 +302,7 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
                     modifier = Modifier.clickable { nav.navigate("trade/${t.id}") },
                 )
             }
+            item { Spacer(Modifier.height(88.dp)) }
         }
     }
     // 刪除前說明對交割帳戶的影響
@@ -301,7 +344,10 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
 
 /** 新增／編輯股票交易：選證券帳戶 → 輸入代號（自動帶出名稱與現價）→ 張數或股數 → 成交價。 */
 @Composable
-fun TradeEditScreen(nav: NavController, id: Long, initMarket: String?, initSymbol: String?, initBroker: Long? = null) {
+fun TradeEditScreen(
+    nav: NavController, id: Long, initMarket: String?, initSymbol: String?, initBroker: Long? = null,
+    initLot: Long? = null, initSide: String? = null,
+) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
@@ -309,7 +355,9 @@ fun TradeEditScreen(nav: NavController, id: Long, initMarket: String?, initSymbo
     var market by remember { mutableStateOf(initMarket?.let { Market.valueOf(it) } ?: Market.TW) }
     var symbol by remember { mutableStateOf(initSymbol.orEmpty()) }
     var name by remember { mutableStateOf("") }
-    var side by remember { mutableStateOf(StockSide.BUY) }
+    var side by remember { mutableStateOf(initSide?.let { runCatching { StockSide.valueOf(it) }.getOrNull() } ?: StockSide.BUY) }
+    var lotId by remember { mutableStateOf(initLot) }
+    val allTrades by repo.trades.collectAsStateWithLifecycle(emptyList())
     var qty by remember { mutableStateOf("") }
     var byLot by remember { mutableStateOf(true) }
     var price by remember { mutableStateOf("") }
@@ -342,7 +390,7 @@ fun TradeEditScreen(nav: NavController, id: Long, initMarket: String?, initSymbo
         qty = formatPlain(if (lots) t.shares / 1000 else t.shares)
         price = formatPlain(t.price); fee = formatPlain(t.fee); tax = formatPlain(t.tax)
         cash = formatPlain(t.cashAmount); date = LocalDate.ofEpochDay(t.date); note = t.note.orEmpty()
-        brokerId = t.brokerAccountId; cashAccountId = t.cashAccountId
+        brokerId = t.brokerAccountId; cashAccountId = t.cashAccountId; lotId = t.lotTradeId
         feeEdited = true; cashEdited = true
     }
     // 交割帳戶預設為證券戶連結的銀行
@@ -406,7 +454,16 @@ fun TradeEditScreen(nav: NavController, id: Long, initMarket: String?, initSymbo
             lookup?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp)) }
             FormLine("名稱") { FormInput(name, { name = it }, "自動帶出，可修改") }
             if (isDividend) {
-                FormLine("股利金額") { FormInput(cash, { cash = it }, "入帳的現金股利", number = true) }
+                FormLine("股利金額") { FormInput(cash, { cash = it }, "入帳的現金股利（券商的除息金額）", number = true) }
+                // 指定給哪一批買進，該批的原幣成本與預估損益才會和券商「除息試算」完全一致
+                val buys = allTrades.filter { it.side == StockSide.BUY && it.market == market && it.symbol.equals(symbol.trim(), true) }
+                    .sortedBy { it.date }
+                DropdownLine(
+                    "屬於",
+                    buys.find { it.id == lotId }?.let { "${LocalDate.ofEpochDay(it.date)} 買 ${formatNum(it.shares, 0)} 股 @ ${formatNum(it.price)}" } ?: "依持股比例分配",
+                    listOf<Pair<Long?, String>>(null to "依持股比例分配") +
+                        buys.map { it.id to "${LocalDate.ofEpochDay(it.date)} 買 ${formatNum(it.shares, 0)} 股 @ ${formatNum(it.price)}" },
+                ) { lotId = it }
             } else {
                 FormLine(if (side == StockSide.STOCK_DIVIDEND) "配股" else "數量", trailing = {
                     if (market == Market.TW) Row {
@@ -426,7 +483,8 @@ fun TradeEditScreen(nav: NavController, id: Long, initMarket: String?, initSymbo
                     FormLine("交易稅") { FormInput(tax, { tax = it; feeEdited = true }, "", number = true) }
                     Text(
                         "成交金額 ${formatNum(amount)}　${if (side == StockSide.BUY) "應付" else "應收"} ${formatNum(settle)}\n" +
-                            "手續費依${if (broker?.feeDiscount != null) "「${broker.name}」" else "全域"}折數 ${feeSettings.discount} 估算；稅率一般股 0.3%、ETF 0.1%",
+                            "手續費依${if (broker?.feeDiscount != null) "「${broker.name}」" else "全域"}折數 ${feeSettings.discount} 估算；稅率一般股 0.3%、ETF 0.1%\n" +
+                            "請以券商帳單上的手續費為準：分次成交時每次各自捨去，可能比估算少 1～2 元",
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
@@ -447,6 +505,7 @@ fun TradeEditScreen(nav: NavController, id: Long, initMarket: String?, initSymbo
                         cashAmount = if (isDividend) cash.replace(",", "").toDoubleOrNull() ?: 0.0 else 0.0,
                         currency = if (market == Market.TW) "TWD" else "USD",
                         date = date.toEpochDay(), cashAccountId = cashAccountId, brokerAccountId = brokerId, note = note.ifBlank { null },
+                        lotTradeId = if (side == StockSide.CASH_DIVIDEND) lotId else null,
                     )
                     // 用 App 層級的 scope，離開畫面後仍會完成儲存與報價更新
                     MoneyApp.instance.appScope.launch {

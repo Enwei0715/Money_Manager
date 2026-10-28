@@ -233,7 +233,15 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                             AccountType.EWALLET -> lk.account(a.linkedAccountId)?.let { "儲值來源：${it.name}" }
                             else -> null
                         }
-                        AccountLine(a.name + if (a.archived) "（隱藏）" else "", { nav.navigate("acct/${a.id}") }, sub) {
+                        // 證券帳戶：小字標示持股損益（同券商預估損益算法）
+                        val pnlNote = if (isBroker) byBroker[a.id].orEmpty().filter { it.shares > 0 }.takeIf { it.isNotEmpty() }?.let { hs ->
+                            val pnl = hs.sumOf { lk.fx.convert(Money.toMinor(it.unrealized), it.currency) }
+                            val cost = hs.sumOf { lk.fx.convert(Money.toMinor(it.netCost), it.currency) }
+                            val pct = if (cost > 0) pnl * 100.0 / cost else 0.0
+                            "股票損益 ${if (pnl > 0) "+" else ""}${Money.full(pnl)}（${"%+.2f".format(pct)}%）" to
+                                (if (pnl >= 0) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown)
+                        } else null
+                        AccountLine(a.name + if (a.archived) "（隱藏）" else "", { nav.navigate("acct/${a.id}") }, sub, pnlNote) {
                             if (isBroker) {
                                 val v = lk.fx.convert(b.balance, a.currency) + stockOf(a.id)
                                 Text(Money.withSymbol(v, lk.base), color = balanceColor(v, MaterialTheme.colorScheme.onSurface))
@@ -247,7 +255,11 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
             if (orphan.isNotEmpty()) {
                 item(key = "ginv") { GrayHeader("股票（未指定證券帳戶）") { Text(Money.withSymbol(stockOf(null), lk.base), color = IncomeColor) } }
                 item(key = "inv") {
-                    AccountLine("持股 ${orphan.size} 檔", { section = 1 }, "到股票分頁編輯交易，指定證券帳戶") {
+                    val oPnl = orphan.sumOf { lk.fx.convert(Money.toMinor(it.unrealized), it.currency) }
+                    AccountLine(
+                        "持股 ${orphan.size} 檔", { section = 1 }, "到股票分頁編輯交易，指定證券帳戶",
+                        "股票損益 ${if (oPnl > 0) "+" else ""}${Money.full(oPnl)}" to (if (oPnl >= 0) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown),
+                    ) {
                         Text(Money.withSymbol(stockOf(null), lk.base), color = IncomeColor)
                     }
                 }
@@ -260,12 +272,18 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
 }
 
 @Composable
-private fun AccountLine(name: String, onClick: () -> Unit, sub: String? = null, right: @Composable () -> Unit) {
+private fun AccountLine(
+    name: String, onClick: () -> Unit, sub: String? = null,
+    /** 第二行的小字（例如股票損益，可自訂顏色） */
+    note: Pair<String, Color>? = null,
+    right: @Composable () -> Unit,
+) {
     Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = if (sub != null) 12.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = if (sub != null || note != null) 12.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(name, style = MaterialTheme.typography.bodyLarge)
                 if (!sub.isNullOrEmpty()) Text(sub, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                note?.let { (t, c) -> Text(t, fontSize = 12.sp, color = c) }
             }
             right()
         }
@@ -379,13 +397,15 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
             if (acc?.type == AccountType.BROKERAGE) item {
                 val list = byBrokerDetail[acc.id].orEmpty()
                 val value = list.sumOf { Money.toMinor(it.marketValue) }
-                val cost = list.filter { it.shares > 0 }.sumOf { Money.toMinor(it.cost) }
+                val open = list.filter { it.shares > 0 }
+                val cost = open.sumOf { Money.toMinor(it.netCost) }
+                val pnl = open.sumOf { Money.toMinor(it.unrealized) }
                 Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(horizontal = 20.dp, vertical = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("持股市值 ${Money.withSymbol(value)}", fontSize = 17.sp)
-                            Text("成本 ${Money.full(cost)} · 未實現 ${Money.full(value - cost)}", fontSize = 13.sp,
-                                color = if (value >= cost) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown)
+                            Text("原幣成本 ${Money.full(cost)} · 預估損益 ${Money.full(pnl)}", fontSize = 13.sp,
+                                color = if (pnl >= 0) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown)
                             Text("交割帳戶：${lk.account(acc.linkedAccountId)?.name ?: "未設定（按右上編輯）"}", fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

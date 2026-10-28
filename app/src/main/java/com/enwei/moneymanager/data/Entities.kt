@@ -147,6 +147,8 @@ data class StockTradeEntity(
     val note: String? = null,
     val source: TxnSource = TxnSource.MANUAL,
     val externalKey: String? = null,
+    /** 現金股利（除息）屬於哪一筆買進；null 表示依持股比例分配 */
+    val lotTradeId: Long? = null,
 )
 
 @Serializable

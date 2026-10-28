@@ -41,21 +41,25 @@ data class HoldingView(
     val cost: Double,
     val price: Double?,
     val previousClose: Double?,
+    /** 已實現損益（先進先出；已出清部分的股利也算在內） */
     val realizedPnl: Double,
+    /** 目前庫存已領的現金股利（除息），從成本扣除 */
     val dividends: Double,
-    /** 現在全部賣出的預估手續費＋交易稅（與券商「預估損益」相同算法） */
+    /** 現在全部賣出的預估手續費＋交易稅（逐批計算，同券商） */
     val estSellCost: Double = 0.0,
+    /** 每一批買進的庫存（券商「台股庫存明細」） */
+    val lots: List<com.enwei.moneymanager.core.Lot> = emptyList(),
+    /** 每一批的預估損益（key 為買進交易 id） */
+    val lotPnl: Map<Long, Double> = emptyMap(),
 ) {
     val marketValue: Double get() = shares * (price ?: avgCost)
     private val open get() = shares > 0.0001
-    /** 仍持有時，已領股利視為成本扣除（券商「除息試算」） */
     val openDividends: Double get() = if (open) dividends else 0.0
-    /** 券商算法的成本：價金＋手續費－已領股利 */
+    /** 券商「原幣成本」合計：價金＋手續費－已領股利 */
     val netCost: Double get() = cost - openDividends
-    /** 預估損益：市值－賣出手續費與交易稅－成本（已扣股利） */
-    val unrealized: Double get() = if (price == null || !open) 0.0 else marketValue - estSellCost - netCost
-    /** 已實現損益（含已出清部位的股利） */
-    val realizedTotal: Double get() = realizedPnl + dividends - openDividends
+    /** 預估損益＝各批（市值－賣出手續費與交易稅－原幣成本）加總 */
+    val unrealized: Double get() = if (price == null || !open) 0.0 else lotPnl.values.sum()
+    val realizedTotal: Double get() = realizedPnl
     val unrealizedPct: Double get() = if (netCost > 0) unrealized / netCost * 100 else 0.0
     val dayChange: Double get() = if (price != null && previousClose != null) (price - previousClose) * shares else 0.0
 }
@@ -136,38 +140,46 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return accs.map { AccountBalance(it, it.initialBalance + (delta[it.id] ?: 0)) }
     }
 
-    val holdings: Flow<List<HoldingView>> = combine(trades, quotes, accounts) { trades, quotes, accs -> buildHoldings(trades, quotes, accs) }
-
-    /** 各證券帳戶的持股（key 為證券帳戶 id，null 表示未指定）。 */
-    val holdingsByBroker: Flow<Map<Long?, List<HoldingView>>> = combine(trades, quotes, accounts) { trades, quotes, accs ->
-        trades.groupBy { it.brokerAccountId }.mapValues { (_, list) -> buildHoldings(list, quotes, accs) }
+    // 手續費設定變更時也要重算（預估賣出費用）
+    val holdings: Flow<List<HoldingView>> = combine(trades, quotes, accounts, settings.flow) { trades, quotes, accs, s ->
+        buildHoldings(trades, quotes, accs, s.feeSettings)
     }
 
-    private fun buildHoldings(trades: List<StockTradeEntity>, quotes: List<QuoteEntity>, accounts: List<AccountEntity>): List<HoldingView> {
+    /** 各證券帳戶的持股（key 為證券帳戶 id，null 表示未指定）。 */
+    val holdingsByBroker: Flow<Map<Long?, List<HoldingView>>> = combine(trades, quotes, accounts, settings.flow) { trades, quotes, accs, s ->
+        // 指定給某一批的股利跟著那一批的證券帳戶
+        val brokerOf = trades.associate { it.id to it.brokerAccountId }
+        trades.groupBy { t -> t.lotTradeId?.let { brokerOf[it] } ?: t.brokerAccountId }
+            .mapValues { (_, list) -> buildHoldings(list, quotes, accs, s.feeSettings) }
+    }
+
+    private fun buildHoldings(
+        trades: List<StockTradeEntity>, quotes: List<QuoteEntity>, accounts: List<AccountEntity>, fees: com.enwei.moneymanager.core.FeeSettings,
+    ): List<HoldingView> {
         val quoteMap = quotes.associateBy { it.key }
-        val fees = settings.value.feeSettings
         val accMap = accounts.associateBy { it.id }
         return trades.groupBy { it.market to it.symbol.uppercase() }.mapNotNull { (key, list) ->
-            val pos = StockCalc.positions(list.map { it.toRecord().copy(symbol = key.second) })[key.second] ?: return@mapNotNull null
+            val book = com.enwei.moneymanager.core.LotCalc.build(list.map { it.toRecord().copy(symbol = key.second) })
+            if (list.none { it.side == StockSide.BUY || it.side == StockSide.STOCK_DIVIDEND }) return@mapNotNull null
             val q = quoteMap[quoteKey(key.first, key.second)]
+            val broker = list.lastOrNull { it.brokerAccountId != null }?.brokerAccountId?.let { accMap[it] }
+            val fs = broker?.feeDiscount?.let { fees.copy(discount = it) } ?: fees
+            val price = q?.price
             HoldingView(
                 market = key.first,
                 symbol = key.second,
                 name = list.firstNotNullOfOrNull { it.name } ?: q?.name,
                 currency = list.first().currency,
-                shares = pos.shares,
-                avgCost = pos.avgCost,
-                cost = pos.cost,
-                price = q?.price,
+                shares = book.shares,
+                avgCost = if (book.shares > 0) book.cost / book.shares else 0.0,
+                cost = book.cost,
+                price = price,
                 previousClose = q?.previousClose,
-                realizedPnl = pos.realizedPnl,
-                dividends = pos.dividends,
-                estSellCost = q?.price?.takeIf { pos.shares > 0.0001 }?.let { p ->
-                    val broker = list.lastOrNull { it.brokerAccountId != null }?.brokerAccountId?.let { accMap[it] }
-                    val fs = broker?.feeDiscount?.let { fees.copy(discount = it) } ?: fees
-                    val (f, t) = StockCalc.estimate(key.first, key.second, StockSide.SELL, pos.shares, p, fs)
-                    f + t
-                } ?: 0.0,
+                realizedPnl = book.realizedPnl,
+                dividends = book.dividends,
+                estSellCost = price?.let { p -> book.lots.sumOf { it.sellCost(key.first, key.second, p, fs) } } ?: 0.0,
+                lots = book.lots,
+                lotPnl = price?.let { p -> book.lots.associate { it.tradeId to it.pnl(key.first, key.second, p, fs) } }.orEmpty(),
             )
         }.sortedByDescending { it.marketValue }
     }
@@ -858,7 +870,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 }
 
-fun StockTradeEntity.toRecord() = TradeRecord(symbol.uppercase(), side, shares, price, fee, tax, date, cashAmount)
+fun StockTradeEntity.toRecord() = TradeRecord(symbol.uppercase(), side, shares, price, fee, tax, date, cashAmount, id, lotTradeId)
 
 /** 淨資產（基準幣）= 帳戶餘額換算 + 持股市值換算。 */
 fun netWorth(balances: List<AccountBalance>, holdings: List<HoldingView>, fx: FxConverter): Long =
