@@ -552,12 +552,58 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
         var catId by remember { mutableStateOf(lk.categories.firstOrNull { it.kind == TxnType.EXPENSE && it.name == "其他" }?.id) }
         var catMenu by remember { mutableStateOf(false) }
         val actual = Money.parseMinor(actualText)
+        // 從銀行 App 的截圖或照片讀出餘額：手機上 OCR → AI（有啟用時）或規則挑出餘額 → 填入，使用者確認後才調整
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        var reading by remember { mutableStateOf(false) }
+        var ocrMsg by remember { mutableStateOf<String?>(null) }
+        var found by remember { mutableStateOf<List<com.enwei.moneymanager.core.BalanceExtractor.Candidate>>(emptyList()) }
+        fun plain(minor: Long) = if (minor % 100 == 0L) (minor / 100).toString() else "%.2f".format(minor / 100.0)
+        fun readImage(load: suspend () -> List<String>) {
+            reading = true; ocrMsg = null; found = emptyList()
+            scope.launch {
+                val lines = runCatching { load() }.getOrElse { ocrMsg = "讀取圖片失敗：${it.message}"; reading = false; return@launch }
+                found = com.enwei.moneymanager.core.BalanceExtractor.candidates(lines)
+                val ai = com.enwei.moneymanager.net.GroqAi.pickBalance(acc.name, lines)
+                val best = ai ?: found.firstOrNull()?.amountMinor
+                ocrMsg = when {
+                    best == null -> "圖片裡找不到餘額，請手動輸入（截圖請包含「餘額」字樣與金額）"
+                    ai != null -> "AI 從圖片讀到餘額 ${Money.withSymbol(best, acc.currency)}，請確認"
+                    else -> "從圖片的「${found.first().label}」讀到 ${Money.withSymbol(best, acc.currency)}，請確認"
+                }
+                if (best != null) actualText = plain(best)
+                reading = false
+            }
+        }
+        val pickShot = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+        ) { uri -> if (uri != null) readImage { com.enwei.moneymanager.ocr.ScreenOcr.read(ctx, uri) } }
+        val photoUri = remember {
+            val f = java.io.File(ctx.cacheDir, "photos").apply { mkdirs() }.let { java.io.File(it, "balance.jpg") }
+            androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
+        }
+        val takePhoto = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.TakePicture(),
+        ) { ok -> if (ok) readImage { com.enwei.moneymanager.ocr.ScreenOcr.read(ctx, photoUri) } }
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { reconcileOpen = false },
             title = { Text("對帳：${acc.name}") },
             text = {
                 Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
                     Text("帳理目前餘額：${Money.withSymbol(current, acc.currency)}")
+                    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                        androidx.compose.material3.OutlinedButton(enabled = !reading, onClick = {
+                            pickShot.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        }) { Text("選截圖") }
+                        androidx.compose.material3.OutlinedButton(enabled = !reading, onClick = { takePhoto.launch(photoUri) }) { Text("拍照") }
+                    }
+                    if (reading) Text("讀取中…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ocrMsg?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
+                    if (found.size > 1) Text("也讀到這些金額，點一下可改用：", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (found.size > 1) Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+                        found.take(3).forEach { c ->
+                            androidx.compose.material3.AssistChip({ actualText = plain(c.amountMinor) }, label = { Text("${c.label} ${Money.full(c.amountMinor)}", fontSize = 12.sp) })
+                        }
+                    }
                     androidx.compose.material3.OutlinedTextField(
                         actualText, { actualText = it.filter { c -> c.isDigit() || c == '.' || c == '-' } },
                         label = { Text("App 裡的實際餘額") }, singleLine = true,

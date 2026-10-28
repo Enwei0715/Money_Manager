@@ -84,6 +84,7 @@ dependencies {
     ksp(libs.room.compiler)
     implementation(libs.work.runtime)
     implementation(libs.okhttp)
+    implementation(libs.mlkit.text.chinese)
     implementation(libs.serialization.json)
     implementation(libs.coroutines.android)
     testImplementation(libs.junit)

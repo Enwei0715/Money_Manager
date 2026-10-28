@@ -421,3 +421,19 @@ class LearnedKindTest {
         assertEquals(50000L, p?.amountMinor)
     }
 }
+
+class BalanceExtractorTest {
+    @Test fun bankScreen() {
+        val lines = listOf("台幣活存", "帳號 0000030****14773", "可用餘額", "NT$ 12,345", "帳戶餘額 12,845", "2026/10/29 02:30 更新")
+        val c = BalanceExtractor.candidates(lines)
+        assertEquals("可用餘額", c.first().label)
+        assertEquals(1234500L, c.first().amountMinor)
+        assertEquals(1284500L, c[1].amountMinor)
+    }
+
+    @Test fun walletScreenSameLine() {
+        val c = BalanceExtractor.candidates(listOf("街口帳戶", "餘額：$1,234.50", "交易紀錄", "10/28 全家 -85"))
+        assertEquals(123450L, c.first().amountMinor)
+        assertTrue(BalanceExtractor.candidates(listOf("登入成功", "2026/10/29 02:30")).isEmpty())
+    }
+}

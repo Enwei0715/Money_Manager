@@ -101,6 +101,20 @@ object GroqAi {
         return (name to id).also { nameCache[merchant + "@" + hour / 6] = it }
     }
 
+    /**
+     * 從銀行 App 畫面的文字（OCR）找出這個帳戶目前的餘額。只接受畫面上真的出現過的金額，避免 AI 自己編數字。
+     */
+    suspend fun pickBalance(accountName: String, lines: List<String>): Long? {
+        if (!enabled || lines.isEmpty()) return null
+        val seen = lines.flatMap { com.enwei.moneymanager.core.BalanceExtractor.amounts(it) }.toSet()
+        if (seen.isEmpty()) return null
+        val system = "你是記帳 App 的助理。以下是銀行或錢包 App 畫面的文字（由上到下）。找出帳戶「$accountName」目前的餘額" +
+            "（優先：可用餘額、帳戶餘額）。不是餘額的數字（交易金額、額度、帳號、日期）不要選。只回 JSON：{\"balance\": number|null}。"
+        val r = chatJson(system, lines.joinToString("\n").take(1500), 40) ?: return null
+        val v = r.str("balance")?.replace(",", "")?.toDoubleOrNull() ?: return null
+        return Math.round(v * 100).takeIf { it in seen || -it in seen }
+    }
+
     /** 規則看不懂的銀行／支付通知：請 AI 判讀是否為交易與內容。 */
     suspend fun parseNotification(title: String?, text: String?, now: LocalDateTime = LocalDateTime.now()): ParsedTransaction? {
         if (!enabled) return null
