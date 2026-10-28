@@ -911,3 +911,24 @@ AI：不是同一筆	AI: different transactions
 顯示全部	Show all
 收起	Collapse
 ＋ 備註	+ Note
+股票手續費與月退設定	Stock fee & rebate settings
+預設（沒有個別設定的證券帳戶使用）	Defaults (for brokerages without their own setting)
+台股手續費折數（1 = 不打折，2.8 折填 0.28）	TW fee discount (1 = none, 0.28 = 72% off)
+整股最低手續費	Min fee (board lot)
+零股最低手續費	Min fee (odd lot)
+美股每筆手續費	US fee per trade
+各證券帳戶	Brokerage accounts
+用預設	Default
+成交即折	Discount at trade
+月退	Monthly rebate
+成交時的折數（例如 0.6）	Discount at trade (e.g. 0.6)
+月退後的折數（例如 0.28）	Discount after rebate (e.g. 0.28)
+每月退款日（次月）	Rebate day (next month)
+從第一筆開始	From first trade
+各月退佣	Monthly rebates
+使用上方的預設折數。	Uses the default discount above.
+已儲存	Saved
+手續費試算	Fee calculator
+股數	Shares
+一般股票	Stock
+買進總付 = 成交金額 + 手續費；賣出實收 = 成交金額 − 手續費 − 交易稅。	Buy total = amount + fee; sell proceeds = amount − fee − tax.

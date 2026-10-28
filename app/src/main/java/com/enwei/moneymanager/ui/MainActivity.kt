@@ -333,6 +333,7 @@ private fun AppScaffold(nav: NavHostController) {
             composable("accountsettings") { AccountSettingsScreen(nav) }
             composable("backup") { BackupScreen(nav) }
             composable("settings") { SettingsScreen(nav) }
+            composable("stockfees") { StockFeeScreen(nav) }
         }
     }
 }

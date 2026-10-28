@@ -943,6 +943,16 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
 
         val type = if (p.type == ParsedType.INCOME) TxnType.INCOME else TxnType.EXPENSE
+        // 券商手續費退佣入帳：已自動估算記過的那筆，改成銀行實際入帳的金額與日期
+        if (type == TxnType.INCOME && account != null && rebateWords.any { raw0.contains(it) }) {
+            db.txns().all().filter {
+                it.externalKey?.startsWith("REBATE:") == true && it.accountId == account.id && it.rawText == null &&
+                    kotlin.math.abs(it.date - occurred) <= 20L * 86_400_000
+            }.minByOrNull { kotlin.math.abs(it.date - occurred) }?.let { est ->
+                return merged(est, est.copy(amount = p.amountMinor, date = occurred, note = "${est.note.orEmpty()}（已依實際入帳 $amountText 校正）".trim()),
+                    "手續費退佣 $amountText → ${account.name}（校正估算金額）")
+            }
+        }
         // 錢包畫面先讀到、或自己先手動記了同一筆：合併成一筆（帳戶以通知為準，商家名稱保留較完整的）
         if (p.kind == ParsedKind.NORMAL) db.txns().all().firstOrNull {
             it.type == type && it.amount == p.amountMinor &&
@@ -1146,6 +1156,43 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 手續費月退：每個設定月退的證券帳戶，上個月（含以前、設定之後）的台股買賣，
      * 在次月退款日自動記一筆收入到交割帳戶。以「REBATE:帳戶:年月」去重。
      */
+    /** 一個月的月退：交易筆數、實收手續費、估算退佣、退款日，以及已入帳的那筆（若有）。 */
+    data class RebateMonth(
+        val month: java.time.YearMonth, val trades: Int, val paidFee: Double, val rebate: Double, val payDate: LocalDate, val booked: TxnEntity?,
+    )
+
+    private fun rebateOf(list: List<com.enwei.moneymanager.data.StockTradeEntity>, rule: RebateRule, s: AppSettings) = list.sumOf { t ->
+        val min = if (StockCalc.isOddLot(t.shares)) s.oddLotMinFee else s.minFee
+        StockCalc.rebate(t.fee, t.shares * t.price, rule.discount, min)
+    }
+
+    private val rebateWords = listOf("退佣", "手續費退", "退手續費", "手續費折讓", "折讓")
+
+    /** 證券帳戶各月的月退狀況（新到舊）：從起算月到本月，沒有交易的月份略過。 */
+    suspend fun rebateMonths(brokerId: Long): List<RebateMonth> {
+        val s = settings.value
+        val rule = s.brokerRebates[brokerId] ?: return emptyList()
+        val since = java.time.YearMonth.from(LocalDate.ofEpochDay(rule.sinceEpochDay))
+        val txns = db.txns().all()
+        return db.stocks().allTrades()
+            .filter { it.brokerAccountId == brokerId && it.market == Market.TW && (it.side == StockSide.BUY || it.side == StockSide.SELL) }
+            .groupBy { java.time.YearMonth.from(LocalDate.ofEpochDay(it.date)) }
+            .filterKeys { it >= since }
+            .map { (ym, list) ->
+                RebateMonth(
+                    ym, list.size, list.sumOf { it.fee }, rebateOf(list, rule, s), ym.plusMonths(1).atDay(rule.payDay.coerceIn(1, 28)),
+                    txns.firstOrNull { it.externalKey == "REBATE:$brokerId:$ym" },
+                )
+            }.sortedByDescending { it.month }
+    }
+
+    /** 設定證券帳戶的手續費方式：成交即折（[atTrade]）或月退（[rebate]），兩者擇一。 */
+    suspend fun setBrokerFees(brokerId: Long, atTrade: Double?, rebate: RebateRule?) {
+        db.accounts().get(brokerId)?.let { db.accounts().upsert(it.copy(feeDiscount = if (rebate != null) null else atTrade)) }
+        settings.update { st -> st.copy(brokerRebates = if (rebate == null) st.brokerRebates - brokerId else st.brokerRebates + (brokerId to rebate)) }
+        runFeeRebates()
+    }
+
     suspend fun runFeeRebates(today: LocalDate = LocalDate.now()): Int {
         val s = settings.value
         if (s.brokerRebates.isEmpty()) return 0
@@ -1163,10 +1210,16 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                     if (today.isBefore(payDate)) return@forEach
                     val key = "REBATE:$brokerId:$ym"
                     if (db.txns().byExternalKey(key) != null) return@forEach
-                    val amount = list.sumOf { t ->
-                        val min = if (StockCalc.isOddLot(t.shares)) s.oddLotMinFee else s.minFee
-                        StockCalc.rebate(t.fee, t.shares * t.price, rule.discount, min)
-                    }
+                    // 銀行的退佣入帳通知已經記過：不再估算一筆
+                    val cash = broker.linkedAccountId ?: broker.id
+                    val payMs = payDate.toMillis(LocalTime.NOON)
+                    if (db.txns().all().any { t ->
+                            t.type == TxnType.INCOME && t.accountId == cash && kotlin.math.abs(t.date - payMs) <= 12L * 86_400_000 &&
+                                t.externalKey?.startsWith("REBATE:") != true &&
+                                rebateWords.any { w -> t.merchant?.contains(w) == true || t.rawText?.contains(w) == true }
+                        }
+                    ) return@forEach
+                    val amount = rebateOf(list, rule, s)
                     if (amount <= 0) return@forEach
                     db.txns().upsert(
                         TxnEntity(

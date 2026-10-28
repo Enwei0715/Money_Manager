@@ -215,7 +215,7 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("AI 智慧辨識（Groq）", onOff(s.aiEnabled && s.groqKey.isNotBlank())) { nav.navigate("ai") }
 
                 SectionHeader("股票")
-                ConfigRow("股票手續費與月退") { nav.navigate("settings") }
+                ConfigRow("股票手續費與月退") { nav.navigate("stockfees") }
                 ConfigRow("證券帳戶") { nav.navigate("invest") }
 
                 SectionHeader("安全與提醒")

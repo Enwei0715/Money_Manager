@@ -290,7 +290,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                             st.copy(
                                 brokerRebates = if (r == null) st.brokerRebates - savedId
                                 else st.brokerRebates + (savedId to com.enwei.moneymanager.data.RebateRule(
-                                    r, old?.sinceEpochDay ?: java.time.YearMonth.now().atDay(1).toEpochDay(),
+                                    r, old?.sinceEpochDay ?: java.time.YearMonth.now().atDay(1).toEpochDay(), old?.payDay ?: 15,
                                 )),
                             )
                         }
