@@ -384,10 +384,12 @@ object HolidayCache {
         val year = parts.getOrNull(0)?.toIntOrNull() ?: return@mapNotNull null
         val hol = parts.getOrNull(1).orEmpty().split(';').filter { ':' in it }.associate { it.substringBefore(':') to it.substringAfter(':') }
         val work = parts.getOrNull(2).orEmpty().split(';').filter { it.length == 4 }.toSet()
-        year to com.enwei.moneymanager.core.YearCalendar(hol, work)
+        val names = parts.getOrNull(3).orEmpty().split(';').filter { ':' in it }.associate { it.substringBefore(':') to it.substringAfter(':') }
+        year to com.enwei.moneymanager.core.YearCalendar(hol, work, names)
     }.toMap()
 
     fun encode(map: Map<Int, com.enwei.moneymanager.core.YearCalendar>): String = map.entries.sortedBy { it.key }.joinToString("\n") { (y, c) ->
-        "$y|" + c.holidays.entries.joinToString(";") { "${it.key}:${it.value.replace(';', ' ').replace('|', ' ')}" } + "|" + c.workdays.joinToString(";")
+        "$y|" + c.holidays.entries.joinToString(";") { "${it.key}:${it.value.replace(';', ' ').replace('|', ' ')}" } + "|" + c.workdays.joinToString(";") +
+            "|" + c.names.entries.joinToString(";") { "${it.key}:${it.value.replace(';', ' ').replace('|', ' ')}" }
     }
 }

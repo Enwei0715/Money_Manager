@@ -287,3 +287,19 @@ class TyphoonNoticeTest {
         } finally { TaiwanHolidays.setExtra(emptyMap()) }
     }
 }
+
+class HolidayLabelTest {
+    @Test fun weekendHolidayLabelled() {
+        val d = LocalDate.of(2026, 10, 10)
+        assertEquals("國慶日", TaiwanHolidays.label(d))
+        assertTrue(!TaiwanHolidays.isBusinessDay(d))
+    }
+
+    @Test fun shortNames() {
+        assertEquals("光復節", TaiwanHolidays.shortLabel(LocalDate.of(2026, 10, 25)))
+        assertEquals("教師節", TaiwanHolidays.shortLabel(LocalDate.of(2026, 9, 28)))
+        assertEquals("補假", TaiwanHolidays.shortLabel(LocalDate.of(2026, 10, 26)))
+        assertEquals("補班", TaiwanHolidays.shortLabel(LocalDate.of(2025, 2, 8)))
+        assertEquals(null, TaiwanHolidays.label(LocalDate.of(2026, 10, 27)))
+    }
+}

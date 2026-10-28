@@ -87,7 +87,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 val root = runCatching {
                     com.enwei.moneymanager.net.Http.getJson("https://raw.githubusercontent.com/ruyut/TaiwanCalendar/master/data/$y.json")
                 }.getOrNull() as? kotlinx.serialization.json.JsonArray ?: continue
-                val hol = HashMap<String, String>(); val work = HashSet<String>()
+                val hol = HashMap<String, String>(); val work = HashSet<String>(); val names = HashMap<String, String>()
                 root.forEach { e ->
                     val o = e as? kotlinx.serialization.json.JsonObject ?: return@forEach
                     val date = (o["date"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return@forEach
@@ -98,9 +98,11 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                     val md = date.substring(4)
                     if (isHoliday && !weekend) hol[md] = (o["description"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
                     if (!isHoliday && weekend) work += md
+                    val desc = (o["description"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+                    if (desc.isNotBlank() && (weekend || !isHoliday)) names[md] = desc
                 }
                 // 資料不完整（例如明年尚未公布）就不採用
-                if (root.size >= 300 && hol.size >= 5) got[y] = com.enwei.moneymanager.core.YearCalendar(hol, work)
+                if (root.size >= 300 && hol.size >= 5) got[y] = com.enwei.moneymanager.core.YearCalendar(hol, work, names)
             }
             if (got.isEmpty()) return
             com.enwei.moneymanager.core.TaiwanHolidays.update(got)

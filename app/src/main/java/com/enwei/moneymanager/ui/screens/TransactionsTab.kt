@@ -476,8 +476,9 @@ private fun CalendarView(
                         val label = if (date.dayOfMonth == 1) "${date.monthValue}.1" else "${date.dayOfMonth}"
                         val isToday = date == today
                         // 國定假日（含補假）以紅字標示並顯示名稱；週末補班日以一般顏色顯示
-                        val holiday = com.enwei.moneymanager.core.TaiwanHolidays.holidayName(date)
                         val offDay = !com.enwei.moneymanager.core.TaiwanHolidays.isBusinessDay(date)
+                        // 放假日（含落在週末的節日）日期用紅字
+                        val holiday = com.enwei.moneymanager.core.TaiwanHolidays.label(date)?.takeIf { offDay }
                         Row(
                             Modifier.fillMaxWidth().background(if (isToday) NavyHighlight else Color.Transparent).padding(horizontal = 4.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -491,9 +492,13 @@ private fun CalendarView(
                                     else -> weekdayColor(date.dayOfWeek, MaterialTheme.colorScheme.onSurface).copy(alpha = alpha)
                                 },
                             )
-                            if (holiday != null) Text(
-                                " $holiday", fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                color = if (isToday) Color.White else SundayColor.copy(alpha = alpha),
+                        }
+                        // 節日名稱放在日期下方（短名稱、最多兩行），不再被截掉；補行上班用一般顏色
+                        com.enwei.moneymanager.core.TaiwanHolidays.shortLabel(date)?.let { name ->
+                            Text(
+                                name, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                color = (if (offDay) SundayColor else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = alpha),
+                                modifier = Modifier.padding(horizontal = 4.dp),
                             )
                         }
                         Spacer(Modifier.weight(1f))
@@ -515,7 +520,10 @@ private fun CalendarView(
     sheetDay?.let { day ->
         ModalBottomSheet(onDismissRequest = { sheetDay = null }, containerColor = MaterialTheme.colorScheme.surface) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${day.year}/${day.monthValue}/${day.dayOfMonth}（${Recurrence.weekdayName(day.dayOfWeek)}）", Modifier.weight(1f), fontSize = 18.sp)
+                Column(Modifier.weight(1f)) {
+                    Text("${day.year}/${day.monthValue}/${day.dayOfMonth}（${Recurrence.weekdayName(day.dayOfWeek)}）", fontSize = 18.sp)
+                    com.enwei.moneymanager.core.TaiwanHolidays.label(day)?.let { Text(it, fontSize = 13.sp, color = SundayColor) }
+                }
                 TextButton(onClick = { sheetDay = null; nav.navigate("txn/0?date=${day.toEpochDay()}") }) { Text("＋ 記一筆") }
             }
             val txns = byDay[day].orEmpty()

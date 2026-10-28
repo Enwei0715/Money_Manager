@@ -9,21 +9,29 @@ import java.time.LocalDate
  * 內建 2025～2027 年；App 連網時會定期下載最新的辦公日曆（[update]，以下載資料為準），
  * 並另外記錄颱風等天然災害的停止上班日（[setExtra]）。沒有資料的年份只排除週末。
  */
-data class YearCalendar(val holidays: Map<String, String>, val workdays: Set<String> = emptySet())
+data class YearCalendar(
+    val holidays: Map<String, String>,
+    val workdays: Set<String> = emptySet(),
+    /** 落在週末的節日、補行上班等只用來標示的名稱（不影響營業日計算） */
+    val names: Map<String, String> = emptyMap(),
+)
 
 object TaiwanHolidays {
     private val builtIn: Map<Int, YearCalendar> = mapOf(
         2025 to YearCalendar(
             holidays = mapOf("0101" to "開國紀念日", "0127" to "小年夜", "0128" to "農曆除夕", "0129" to "春節", "0130" to "春節", "0131" to "春節", "0228" to "和平紀念日", "0403" to "補假", "0404" to "兒童節及民族掃墓節", "0501" to "勞動節（金融機構休假）", "0530" to "補假", "0929" to "補假", "1006" to "中秋節", "1010" to "國慶日", "1024" to "補假", "1225" to "行憲紀念日"),
             workdays = setOf("0208"),
+            names = mapOf("0208" to "補行上班", "0531" to "端午節", "0928" to "孔子誕辰紀念日", "1025" to "臺灣光復暨金門古寧頭大捷紀念日"),
         ),
         2026 to YearCalendar(
             holidays = mapOf("0101" to "開國紀念日", "0216" to "農曆除夕", "0217" to "春節", "0218" to "春節", "0219" to "春節", "0220" to "補假", "0227" to "補假", "0403" to "補假", "0406" to "補假", "0501" to "勞動節", "0619" to "端午節", "0925" to "中秋節", "0928" to "孔子誕辰紀念日/教師節", "1009" to "補假", "1026" to "補假", "1225" to "行憲紀念日"),
             workdays = setOf(),
+            names = mapOf("0215" to "小年夜", "0228" to "和平紀念日", "0404" to "兒童節", "0405" to "清明節", "1010" to "國慶日", "1025" to "臺灣光復暨金門古寧頭大捷紀念日", "1128" to "地方公職人員選舉"),
         ),
         2027 to YearCalendar(
             holidays = mapOf("0101" to "開國紀念日", "0204" to "小年夜", "0205" to "農曆除夕", "0208" to "春節", "0209" to "補假", "0210" to "補假", "0301" to "補假", "0405" to "清明節", "0406" to "補假", "0430" to "補假", "0609" to "端午節", "0915" to "中秋節", "0928" to "孔子誕辰紀念日/教師節", "1011" to "補假", "1025" to "臺灣光復暨金門古寧頭大捷紀念日", "1224" to "補假", "1231" to "補假"),
             workdays = setOf(),
+            names = mapOf("0206" to "春節", "0207" to "春節", "0228" to "和平紀念日", "0404" to "兒童節", "0501" to "勞動節", "1010" to "國慶日", "1225" to "行憲紀念日"),
         ),
     )
 
@@ -36,8 +44,10 @@ object TaiwanHolidays {
     fun update(years: Map<Int, YearCalendar>) {
         // 政府辦公日曆不含「只有金融機構休假」的日子，保留內建的這類假日
         downloaded = downloaded + years.mapValues { (y, c) ->
-            val bankOnly = builtIn[y]?.holidays.orEmpty().filterValues { "金融機構" in it }
-            if (bankOnly.isEmpty()) c else c.copy(holidays = c.holidays + bankOnly)
+            val b = builtIn[y]
+            val bankOnly = b?.holidays.orEmpty().filterValues { "金融機構" in it }
+            // 選舉等下載資料沒有的標示名稱也保留
+            c.copy(holidays = c.holidays + bankOnly, names = b?.names.orEmpty() + c.names)
         }
     }
 
@@ -50,6 +60,26 @@ object TaiwanHolidays {
 
     /** 假日名稱（平日放假，含颱風假）；週末回傳 null。 */
     fun holidayName(d: LocalDate): String? = extra[d] ?: cal(d.year)?.holidays?.get(key(d))
+
+    /** 日曆要顯示的名稱：放假（含颱風假、週末的節日）或補行上班。 */
+    fun label(d: LocalDate): String? = holidayName(d) ?: cal(d.year)?.names?.get(key(d))
+
+    /** 日曆格子裡的短名稱（完整名稱太長會被截掉）。 */
+    fun shortLabel(d: LocalDate): String? = label(d)?.let { shortName(it) }
+
+    fun shortName(n: String): String = when {
+        "光復" in n -> "光復節"
+        "教師節" in n || "孔子" in n -> "教師節"
+        "兒童節" in n && "掃墓" in n -> "兒童節"
+        "勞動節" in n -> "勞動節"
+        "開國紀念" in n -> "元旦"
+        "和平紀念" in n -> "228"
+        "行憲" in n -> "行憲紀念"
+        "選舉" in n || "投票" in n -> "選舉日"
+        "補行上班" in n -> "補班"
+        "除夕" in n -> "除夕"
+        else -> n
+    }
 
     /** 銀行營業日：非週末（補班日除外）且非國定假日。 */
     fun isBusinessDay(d: LocalDate): Boolean {
