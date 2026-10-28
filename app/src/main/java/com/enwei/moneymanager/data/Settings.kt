@@ -274,8 +274,14 @@ class SettingsStore(context: Context) {
         state.value = read()
     }
 
+    /**
+     * 修改設定。必須同步：背景同步（匯率、報價、假日、備份時間）和畫面上的修改可能同時發生，
+     * 不同步時兩邊都以舊設定為基礎各自整份寫回，後寫的會把先寫的蓋掉（例如剛改的設定在重開後又變回去）。
+     */
+    @Synchronized
     fun update(block: (AppSettings) -> AppSettings) {
         val s = block(state.value)
+        if (s == state.value) return
         prefs.edit()
             .putString("baseCurrency", s.baseCurrency)
             .putString("subCurrency", s.subCurrency)
