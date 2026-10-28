@@ -23,15 +23,15 @@ android {
     }
 
     // 固定簽章：每次更新的 APK 都用同一把金鑰，才能直接覆蓋安裝、保留資料。
-    // 金鑰由 CI 從 GitHub Secrets 還原（見 README），不放進版本庫。
+    // 金鑰由 CI 從 GitHub Secrets 或草稿 Release「signing-key」還原（見 README），不放進版本庫。
     val keystore = file(System.getenv("KEYSTORE_FILE") ?: "release.jks")
-    val hasKeystore = keystore.exists() && System.getenv("KEYSTORE_PASSWORD") != null
+    val hasKeystore = keystore.exists() && !System.getenv("KEYSTORE_PASSWORD").isNullOrBlank()
     signingConfigs {
         if (hasKeystore) create("release") {
             storeFile = keystore
             storePassword = System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("KEY_ALIAS") ?: "moneymanager"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "moneymanager"
+            keyPassword = System.getenv("KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: System.getenv("KEYSTORE_PASSWORD")
         }
     }
 

@@ -27,30 +27,17 @@
 
 ## 安裝與更新
 
-1. 程式推到 `main` 分支時，GitHub Actions 會自動編譯並發布 Release（`v1.0.<build>`）。
-   其他分支的建置結果在 Actions 頁面的 Artifacts 下載。
+1. 每次推送程式，GitHub Actions 都會自動編譯並發布 Release（`v1.0.<build>`）。
 2. 手機下載 APK 安裝（需允許「安裝不明應用程式」）。
 3. 之後到 App 的 **更多 → 設定與更新** 填入 GitHub Token（因為儲存庫是私人的），按「檢查更新」即可一鍵更新。
    Token 建立方式：GitHub → Settings → Developer settings → Fine-grained tokens → 只選此儲存庫，權限 Contents: Read-only。
 
-### 固定簽章金鑰（建議設定一次）
+### 固定簽章金鑰（自動）
 
-Android 只允許「相同簽章」的 APK 覆蓋安裝。CI 會優先使用 Secrets 中的金鑰；未設定時改用快取的 debug 金鑰（快取 7 天未使用會被清除，之後的版本就無法直接覆蓋安裝）。
+Android 只允許「相同簽章」的 APK 覆蓋安裝。CI 第一次建置時會自動產生一把簽章金鑰，保存在**草稿 Release「signing-key」**（只有對儲存庫有寫入權限的人看得到），之後每次建置都用同一把，所以新版可以直接覆蓋安裝、資料不會遺失。
 
-在電腦上產生金鑰並加到 GitHub → Settings → Secrets and variables → Actions：
-
-```bash
-keytool -genkeypair -keystore release.jks -alias moneymanager -keyalg RSA -keysize 2048 -validity 36500
-base64 -w0 release.jks   # macOS 用 base64 -i release.jks
-```
-
-| Secret | 內容 |
-| --- | --- |
-| `KEYSTORE_BASE64` | 上面 base64 的輸出 |
-| `KEYSTORE_PASSWORD` | 金鑰庫密碼 |
-| `KEY_PASSWORD` | 金鑰密碼（與上面相同可省略） |
-
-> 從 debug 金鑰換成正式金鑰時，需要先手動解除安裝舊版一次（請先匯出備份）。
+- **請勿刪除**草稿 Release「signing-key」，否則下一版的簽章會不同，必須解除安裝才能更新。
+- 如果之後要把儲存庫改成公開，請先改用 Secrets：下載草稿裡的 `signing.jks`，把 `base64 -w0 signing.jks` 的結果存成 `KEYSTORE_BASE64`、`KEYSTORE_PASSWORD` 設為 `mm-release-key`，再刪除草稿 Release。CI 會優先使用 Secrets。
 
 ## 第一次使用建議
 

@@ -26,24 +26,37 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # 簽章金鑰：優先使用 Secrets（KEYSTORE_BASE64 / KEYSTORE_PASSWORD）；
-      # 未設定時改用快取的 debug 金鑰，讓連續版本仍可覆蓋安裝。
+      # 固定簽章金鑰：Android 只允許「相同簽章」的新版覆蓋安裝。
+      # 1. 有設定 Secrets（KEYSTORE_BASE64 / KEYSTORE_PASSWORD）就用 Secrets。
+      # 2. 否則使用存放在草稿 Release「signing-key」中的金鑰（只有對儲存庫有寫入權限的人看得到）；
+      #    第一次執行時自動產生並上傳，之後每次建置都用同一把，因此可以直接覆蓋更新。
       - name: Restore signing key
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > app/release.jks
             echo "使用 Secrets 中的簽章金鑰"
-          else
-            echo "::warning::未設定 KEYSTORE_BASE64，改用快取的 debug 金鑰簽章"
+            exit 0
           fi
-
-      - name: Cache debug keystore
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: debug-keystore-v1
+          echo "KEYSTORE_PASSWORD=mm-release-key" >> "$GITHUB_ENV"
+          asset=$(gh api "repos/$REPO/releases?per_page=100" --jq '[.[] | select(.draft and .name == "signing-key") | .assets[] | select(.name == "signing.jks") | .id] | first // empty')
+          if [ -n "$asset" ]; then
+            gh api -H "Accept: application/octet-stream" "repos/$REPO/releases/assets/$asset" > app/release.jks
+            echo "使用草稿 Release 中保存的簽章金鑰"
+          else
+            keytool -genkeypair -keystore app/release.jks -alias moneymanager -keyalg RSA -keysize 2048 -validity 36500 \
+              -storepass mm-release-key -keypass mm-release-key -dname "CN=Money Manager, O=Personal"
+            mkdir -p /tmp/key && cp app/release.jks /tmp/key/signing.jks
+            gh release create signing-key /tmp/key/signing.jks --repo "$REPO" --draft --title "signing-key" \
+              --notes "App 簽章金鑰（自動產生）。請勿刪除：刪除後新版本將無法覆蓋安裝。" --target "${{ github.sha }}"
+            rm -rf /tmp/key
+            echo "已產生新的簽章金鑰並保存到草稿 Release"
+          fi
 
       - name: Unit tests
         run: ./gradlew :core:test --no-daemon
@@ -51,10 +64,12 @@ jobs:
       - name: Build release APK
         env:
           BUILD_NUMBER: ${{ github.run_number }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          SECRET_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        run: ./gradlew :app:assembleRelease --no-daemon
+        run: |
+          if [ -n "$SECRET_KEYSTORE_PASSWORD" ]; then export KEYSTORE_PASSWORD="$SECRET_KEYSTORE_PASSWORD"; fi
+          ./gradlew :app:assembleRelease --no-daemon
 
       - name: Rename APK
         run: |
