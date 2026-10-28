@@ -325,6 +325,81 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return created
     }
 
+    // ---------- 可能重複的交易 ----------
+
+    /** 一組可能重複的交易：[keep] 為合併時保留的那筆（帳戶以通知為準）。 */
+    data class DupPair(val keep: TxnEntity, val drop: TxnEntity) {
+        val key: String get() = "${minOf(keep.id, drop.id)}-${maxOf(keep.id, drop.id)}"
+    }
+
+    /**
+     * 找出近 [days] 天可能重複記的交易：同收支、同金額、30 分鐘內（錢包畫面只有日期時為同一天），
+     * 而且至少一筆來自通知或錢包畫面（自動記帳最容易重複）。標記過「不是重複」的不再列出。
+     */
+    suspend fun findDuplicates(days: Long = 90): List<DupPair> {
+        val since = System.currentTimeMillis() - days * 86_400_000
+        val dismissed = settings.value.dupDismissed
+        val list = db.txns().all().filter { it.type != TxnType.TRANSFER && it.date >= since }
+        fun rank(t: TxnEntity) = when (t.source) { TxnSource.NOTIFICATION -> 0; TxnSource.MANUAL -> 1; TxnSource.SCREEN -> 2; else -> 3 }
+        fun midnight(t: TxnEntity) = java.time.Instant.ofEpochMilli(t.date).atZone(ZoneId.systemDefault()).toLocalTime() == LocalTime.MIDNIGHT
+        val out = ArrayList<DupPair>()
+        val used = HashSet<Long>()
+        list.groupBy { it.type to it.amount }.values.filter { it.size > 1 }.forEach { group ->
+            val sorted = group.sortedBy { it.date }
+            for (i in sorted.indices) for (j in i + 1 until sorted.size) {
+                val a = sorted[i]; val b = sorted[j]
+                if (a.id in used || b.id in used) continue
+                val auto = setOf(TxnSource.NOTIFICATION, TxnSource.SCREEN)
+                if (a.source !in auto && b.source !in auto) continue
+                val near = kotlin.math.abs(a.date - b.date) <= 30 * 60_000L ||
+                    ((midnight(a) || midnight(b)) && a.date.toLocalDate() == b.date.toLocalDate())
+                if (!near) continue
+                val (keep, drop) = if (rank(a) <= rank(b)) a to b else b to a
+                val p = DupPair(keep, drop)
+                if (p.key in dismissed) continue
+                out += p; used += a.id; used += b.id
+            }
+        }
+        return out.sortedByDescending { it.keep.date }
+    }
+
+    /** 合併：保留一筆，套用較好的名稱與分類，刪掉另一筆。 */
+    suspend fun mergeDuplicate(p: DupPair, name: String? = null, categoryId: Long? = null) {
+        val keep = db.txns().get(p.keep.id) ?: return
+        val drop = db.txns().get(p.drop.id)
+        val merchant = name ?: if (weakMerchant(keep.merchant) && drop != null && !weakMerchant(drop.merchant)) drop.merchant else keep.merchant
+        db.txns().upsert(
+            keep.copy(
+                merchant = merchant, categoryId = categoryId ?: keep.categoryId ?: drop?.categoryId,
+                note = keep.note ?: drop?.note,
+                rawText = listOfNotNull(keep.rawText, drop?.rawText).joinToString("\n—\n").ifEmpty { null },
+            ),
+        )
+        if (drop != null) db.txns().delete(drop.id)
+    }
+
+    fun dismissDuplicate(p: DupPair) = settings.update { it.copy(dupDismissed = it.dupDismissed + p.key) }
+
+    /** 請 AI 判斷每組是否為同一筆，並給出較精確的交易名稱與分類。 */
+    suspend fun aiJudgeDuplicates(pairs: List<DupPair>): Map<String, com.enwei.moneymanager.net.GroqAi.DupVerdict> {
+        if (!com.enwei.moneymanager.net.GroqAi.enabled || pairs.isEmpty()) return emptyMap()
+        val all = db.categories().all()
+        val accounts = db.accounts().all().associateBy { it.id }
+        fun path(id: Long) = all.find { it.id == id }?.let { c -> c.parentId?.let { pid -> all.find { it.id == pid }?.name + " / " }.orEmpty() + c.name } ?: "?"
+        fun desc(t: TxnEntity) = "${t.date.toLocalDateTime().toString().replace('T', ' ').take(16)}｜${accounts[t.accountId]?.name ?: "未指定"}｜" +
+            "${t.source.label}｜${t.merchant ?: "（無名稱）"}${t.note?.let { "，$it" } ?: ""}" +
+            (t.categoryId?.let { "｜分類 ${path(it)}" } ?: "") + (t.rawText?.take(120)?.let { "｜原文：${it.replace('\n', ' ')}" } ?: "")
+        val out = HashMap<String, com.enwei.moneymanager.net.GroqAi.DupVerdict>()
+        for (chunk in pairs.chunked(6)) {
+            val type = chunk.first().keep.type
+            val cats = all.filter { it.kind == type && !it.archived && all.none { c -> c.parentId == it.id } && it.name != "不明" }.map { it.id to path(it.id) }
+            val items = chunk.map { p -> p.key to "金額 ${Money.format(p.keep.amount, p.keep.currency)}\n  A：${desc(p.keep)}\n  B：${desc(p.drop)}" }
+            out += com.enwei.moneymanager.net.GroqAi.judgeDuplicates(items, cats)
+            kotlinx.coroutines.delay(2500)
+        }
+        return out
+    }
+
     /** 接受 AI 建議：套用分類。 */
     suspend fun acceptAiSuggestion(sg: AiSuggestion) {
         db.txns().get(sg.txnId)?.let { t -> if (db.categories().all().any { it.id == sg.categoryId }) db.txns().upsert(t.copy(categoryId = sg.categoryId)) }
@@ -464,7 +539,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 試算一則通知會被怎麼處理（不寫入任何資料），用來在不實際消費的情況下確認辨識是否正確。
      * 回傳 (是否會記帳, 說明)。
      */
-    suspend fun previewNotification(pkg: String, title: String?, text: String?): Pair<Boolean, String> {
+    suspend fun previewNotification(pkg: String, title: String?, text: String?, postedAt: Long? = null): Pair<Boolean, String> {
         val s = settings.value
         if (pkg == LINE_PACKAGE && !isLineWallet(title, text)) return false to "LINE 聊天訊息，不處理"
         if (pkg == GMAIL_PACKAGE) return false to previewEmail(title, text)
@@ -496,7 +571,19 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             else -> if (p.type == ParsedType.INCOME) "收入" else "支出"
         }
         val type = if (p.type == ParsedType.INCOME) TxnType.INCOME else TxnType.EXPENSE
-        val at = p.occurredAt?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis()
+        val at = p.occurredAt?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli() ?: postedAt ?: System.currentTimeMillis()
+        // 已經記過的同一筆（這則通知本身、錢包畫面讀到的、手動記的）：說明記帳時會怎麼處理
+        val raw1 = listOfNotNull(title, text).joinToString("\n")
+        val same = if (p.kind == ParsedKind.NORMAL) db.txns().all().filter { it.type == type && it.amount == p.amountMinor }.let { c ->
+            c.firstOrNull { it.rawText?.contains(raw1) == true && kotlin.math.abs(it.date - at) <= 24L * 3600 * 1000 }?.let { "這則通知已經記過（${it.date.toLocalDate()}），不會重複記帳" }
+                ?: c.firstOrNull {
+                    (it.source == TxnSource.SCREEN || (it.source == TxnSource.MANUAL && (it.accountId == null || it.accountId == account?.id))) &&
+                        (kotlin.math.abs(it.date - at) <= 15L * 60 * 1000 || (it.source == TxnSource.SCREEN && it.date.toLocalDate() == at.toLocalDate() &&
+                            Instant.ofEpochMilli(it.date).atZone(ZoneId.systemDefault()).toLocalTime() == LocalTime.MIDNIGHT))
+                }?.let { "和${if (it.source == TxnSource.SCREEN) "錢包畫面讀到" else "手動記"}的「${it.merchant ?: "未命名"}」是同一筆：會合併，帳戶改成這則通知的帳戶" }
+                ?: c.firstOrNull { it.source == TxnSource.NOTIFICATION && kotlin.math.abs(it.date - at) <= 3 * 60_000 }
+                    ?.let { "3 分鐘內另一個 App 已通知同一筆（${it.merchant ?: "未命名"}），不會重複記帳" }
+        } else null
         var cat = if (p.kind == ParsedKind.NORMAL) suggestCategory(p.merchant, type, at, p.amountMinor, account?.id)
             ?.let { sg -> categoryPath(sg.categoryId)?.let { "$it（${sg.reason}）" } } else null
         var aiName: String? = null
@@ -515,6 +602,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             "分類：" + (cat ?: "無法判斷（沒有商家名稱或沒有相似紀錄），記帳後可在通知上一鍵選分類"),
             p.occurredAt?.let { "交易時間：${it.toLocalDate()} ${"%02d:%02d".format(it.hour, it.minute)}" },
             learned?.let { l -> "（依你教過的格式辨識：${l.label}" + (l.toAccountId?.let { id -> accounts.firstOrNull { it.id == id }?.let { a -> if (l.parsedKind == ParsedKind.TRANSFER_IN) "，從「${a.name}」" else "，到「${a.name}」" } } ?: "") + "）" },
+            same?.let { "重複檢查：$it" },
             if (!enabled) "這個 App 尚未勾選監聽，勾選後才會自動記帳" else null,
         )
         return (enabled && account != null) to lines.joinToString("\n")
@@ -543,7 +631,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 銀行的轉帳 Email 寫有轉入銀行時，會把同一家銀行剛剛的轉出改成轉帳。
      */
     suspend fun previewBatch(list: List<NotePreview>): List<Pair<Boolean, String>> {
-        val base = list.map { previewNotification(it.pkg, it.title, it.text) }.toMutableList()
+        val base = list.map { previewNotification(it.pkg, it.title, it.text, it.postedAt) }.toMutableList()
         val s = settings.value
         val accounts = db.accounts().all().filter { !it.archived }
         data class Side(val i: Int, val out: Boolean, val amount: Long, val at: Long, val account: AccountEntity?, val bank: BankDirectory.Bank?)
@@ -855,6 +943,22 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
 
         val type = if (p.type == ParsedType.INCOME) TxnType.INCOME else TxnType.EXPENSE
+        // 錢包畫面先讀到、或自己先手動記了同一筆：合併成一筆（帳戶以通知為準，商家名稱保留較完整的）
+        if (p.kind == ParsedKind.NORMAL) db.txns().all().firstOrNull {
+            it.type == type && it.amount == p.amountMinor &&
+                (kotlin.math.abs(it.date - occurred) <= 15L * 60 * 1000 ||
+                    // 錢包畫面只有日期（記在當天 0:00）
+                    (it.source == TxnSource.SCREEN && it.date.toLocalDate() == occurred.toLocalDate() &&
+                        java.time.Instant.ofEpochMilli(it.date).atZone(ZoneId.systemDefault()).toLocalTime() == LocalTime.MIDNIGHT)) &&
+                (it.source == TxnSource.SCREEN || (it.source == TxnSource.MANUAL && (it.accountId == null || it.accountId == account?.id)))
+        }?.let { other ->
+            val name = if (weakMerchant(other.merchant) && !weakMerchant(p.merchant)) p.merchant else other.merchant
+            val updated = other.copy(
+                accountId = account?.id ?: other.accountId, merchant = name,
+                categoryId = other.categoryId ?: suggestCategory(name, type, occurred, p.amountMinor, account?.id)?.categoryId,
+            )
+            return merged(other, updated, "${type.label} $amountText ${name.orEmpty()}（和${if (other.source == TxnSource.SCREEN) "錢包畫面" else "手動記帳"}的同一筆合併）")
+        }
         // 多個 App 同時通知同一筆消費（例如信用卡 + 支付 App）
         if (nearby.any { it.type == type && kotlin.math.abs(it.date - occurred) <= 3 * 60_000 }) {
             log.insert(logAs("DUPLICATE", nearby.first().id))
@@ -906,7 +1010,30 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 以「日期＋金額＋商家＋同畫面序號」去重；儲值若已由銀行通知記成轉帳則略過。
      */
     /** 錢包畫面讀取結果（測試模式時 created 為「會新增」的筆數）。 */
-    data class ScreenIngestResult(val wallet: String?, val total: Int, val tooOld: Int, val existing: Int, val created: Int, val since: LocalDate)
+    data class ScreenIngestResult(
+        val wallet: String?, val total: Int, val tooOld: Int, val existing: Int, val created: Int, val since: LocalDate,
+        /** 和已記的交易（通知、手動）合併、補上商家名稱的筆數 */
+        val merged: Int = 0,
+        /** 每一筆的處理結果（測試頁顯示） */
+        val details: List<String> = emptyList(),
+    )
+
+    /** 商家名稱有沒有參考價值：空白、支付工具名稱、代碼都算沒有。 */
+    private fun weakMerchant(m: String?): Boolean = m.isNullOrBlank() || CategoryGuesser.isGenericMerchant(m) || looksRaw(m) ||
+        m in setOf("轉出", "轉入", "儲值", "電支儲值", "提款")
+
+    /**
+     * 找已經記過的同一筆：同收支、同金額，時間在 15 分鐘內（畫面只有日期時同一天），
+     * 而且記在這個錢包、或是從通知來的（例如錢包綁信用卡，刷卡通知先到）。
+     */
+    private fun findSameTxn(all: List<TxnEntity>, type: TxnType, amount: Long, millis: Long, dateOnly: Boolean, walletId: Long?, claimed: Set<Long>): TxnEntity? {
+        val day = millis.toLocalDate()
+        return all.firstOrNull { t ->
+            t.id !in claimed && t.type == type && t.amount == amount && t.externalKey?.startsWith("AX:") != true &&
+                (if (dateOnly) t.date.toLocalDate() == day else kotlin.math.abs(t.date - millis) <= 15L * 60 * 1000) &&
+                (t.accountId == walletId || t.source == TxnSource.NOTIFICATION)
+        }
+    }
 
     suspend fun ingestScreenRecords(pkg: String, records: List<ScreenRecord>, dryRun: Boolean = false): ScreenIngestResult {
         val s = settings.value
@@ -918,49 +1045,67 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val seen = HashMap<String, Int>()
         var created = 0
         var existing = 0
+        var merged = 0
+        var aiCalls = 0
+        val details = ArrayList<String>()
+        // 這次讀取已對到的紀錄（同一天買兩筆一樣金額時，不會兩筆都對到同一則通知）
+        val claimed = HashSet<Long>()
         val fresh = records.filter { !it.time.toLocalDate().isBefore(since) }
         fresh.forEach { r ->
+            val label = "${r.time.toLocalDate()}${if (r.dateOnly) "" else " %02d:%02d".format(r.time.hour, r.time.minute)} " +
+                "${r.merchant ?: r.typeLabel ?: ""} ${Money.format(r.amountMinor, wallet.currency)}"
             val base = "${r.time.toLocalDate()}${if (r.dateOnly) "" else "T" + r.time.toLocalTime()}:${if (r.isIncome) "+" else "-"}${r.amountMinor}:${r.merchant}"
             val n = seen.merge(base, 1) { x, y -> x + y }!!
             val key = "AX:$pkg:$base#$n"
-            if (db.txns().byExternalKey(key) != null) { existing++; return@forEach }
-            if (dryRun) { created++; return@forEach }
+            if (db.txns().byExternalKey(key) != null) { existing++; details += "$label：已匯入過"; return@forEach }
             val millis = r.time.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val all = db.txns().all()
             if (r.isTopUp) {
                 val window = if (r.dateOnly) 36L * 3600 * 1000 else 15L * 60 * 1000
-                val exists = db.txns().all().any {
+                val exists = all.any {
                     it.type == TxnType.TRANSFER && it.toAccountId == wallet.id && it.amount == r.amountMinor && kotlin.math.abs(it.date - millis) <= window
                 }
-                if (!exists) {
-                    if (db.txns().insert(
-                            TxnEntity(
-                                type = TxnType.TRANSFER, amount = r.amountMinor, accountId = wallet.linkedAccountId, toAccountId = wallet.id,
-                                merchant = "儲值", date = millis, source = TxnSource.SCREEN,
-                                status = if (wallet.linkedAccountId == null) TxnStatus.PENDING else TxnStatus.CONFIRMED, externalKey = key,
-                            ),
-                        ) > 0
-                    ) created++
-                }
-                // 已由銀行通知記成轉帳的儲值：略過
+                if (exists) { existing++; details += "$label：儲值已由銀行通知記成轉帳"; return@forEach }
+                details += "$label：${if (dryRun) "會新增" else "新增"}儲值（${lookupName(wallet.linkedAccountId)} → ${wallet.name}）"
+                if (dryRun) { created++; return@forEach }
+                if (db.txns().insert(
+                        TxnEntity(
+                            type = TxnType.TRANSFER, amount = r.amountMinor, accountId = wallet.linkedAccountId, toAccountId = wallet.id,
+                            merchant = "儲值", date = millis, source = TxnSource.SCREEN,
+                            status = if (wallet.linkedAccountId == null) TxnStatus.PENDING else TxnStatus.CONFIRMED, externalKey = key,
+                        ),
+                    ) > 0
+                ) created++
                 return@forEach
             }
             val type = if (r.isIncome) TxnType.INCOME else TxnType.EXPENSE
-            // 錢包綁信用卡付款時，刷卡通知可能已記過同一筆
-            if (!r.dateOnly && db.txns().all().any {
-                    it.source == TxnSource.NOTIFICATION && it.type == type && it.amount == r.amountMinor && kotlin.math.abs(it.date - millis) <= 15L * 60 * 1000
+            // 已經記過（刷卡通知、錢包通知或手動記的）：不重複記，把畫面上的商家名稱、分類補到那一筆
+            findSameTxn(all, type, r.amountMinor, millis, r.dateOnly, wallet.id, claimed)?.let { t ->
+                merged++; claimed += t.id
+                val better = !r.merchant.isNullOrBlank() && weakMerchant(t.merchant)
+                details += "$label：和已記的「${t.merchant ?: "未命名"}」是同一筆" + if (better) "，${if (dryRun) "會" else "已"}補上商家名稱" else "，不重複記帳"
+                if (!dryRun && (better || t.categoryId == null)) {
+                    val name = if (better) r.merchant else t.merchant
+                    val cat = t.categoryId ?: suggestCategory(name ?: r.typeLabel, type, t.date, t.amount, t.accountId)?.categoryId
+                    db.txns().upsert(t.copy(merchant = name, categoryId = cat, note = t.note ?: r.typeLabel))
                 }
-            ) return@forEach
+                return@forEach
+            }
+            details += "$label：${if (dryRun) "會新增" else "新增"}"
+            if (dryRun) { created++; return@forEach }
+            var cat = suggestCategory(r.merchant ?: r.typeLabel, type, millis, r.amountMinor, wallet.id)?.categoryId
+            // 規則判斷不出分類時請 AI 幫忙（每次讀取最多 5 筆，避免一次用掉太多額度）
+            if (cat == null && r.merchant != null && aiCalls < 5) { aiCalls++; cat = aiNameAndCategory(r.merchant, type, millis)?.second }
             val id = db.txns().insert(
                 TxnEntity(
                     type = type, amount = r.amountMinor, currency = wallet.currency, accountId = wallet.id,
-                    categoryId = suggestCategory(r.merchant ?: r.typeLabel, type, millis, r.amountMinor, wallet.id)?.categoryId,
-                    merchant = r.merchant, note = r.typeLabel, date = millis, source = TxnSource.SCREEN,
+                    categoryId = cat, merchant = r.merchant, note = r.typeLabel, date = millis, source = TxnSource.SCREEN,
                     status = if (s.notifAutoConfirm) TxnStatus.CONFIRMED else TxnStatus.PENDING, externalKey = key,
                 ),
             )
             if (id > 0) created++
         }
-        return ScreenIngestResult(wallet.name, records.size, records.size - fresh.size, existing, created, since)
+        return ScreenIngestResult(wallet.name, records.size, records.size - fresh.size, existing, created, since, merged, details)
     }
 
     private suspend fun lookupName(id: Long?) = id?.let { db.accounts().get(it)?.name } ?: "?"

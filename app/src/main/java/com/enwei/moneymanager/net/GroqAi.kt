@@ -212,6 +212,31 @@ object GroqAi {
         return Math.round(v * 100).takeIf { it in seen || -it in seen }
     }
 
+    /** AI 對一組可能重複交易的判斷。 */
+    data class DupVerdict(val same: Boolean, val name: String?, val categoryId: Long?, val reason: String)
+
+    /** 判斷每組（A、B）是不是同一筆交易，同一筆時給較精確的名稱與分類。[items] 為 (組別代號, 說明)。 */
+    suspend fun judgeDuplicates(items: List<Pair<String, String>>, categories: List<Pair<Long, String>>): Map<String, DupVerdict> {
+        if (!enabled || items.isEmpty()) return emptyMap()
+        val system = "你是台灣記帳 App 的助理。每組 A、B 是金額相同、時間相近的兩筆紀錄，可能是同一筆消費被通知和錢包畫面（或手動）各記了一次，" +
+            "也可能真的是兩筆（例如同一天買兩張一樣的票）。判斷是否同一筆；若是，從兩筆的名稱與原文整理出最精確、好讀的交易名稱（例如店名），並從分類清單挑一個。" +
+            "理由 15 字以內。只回 JSON：{\"results\": [{\"id\": string, \"same\": boolean, \"name\": string|null, \"category_id\": number|null, \"reason\": string}]}"
+        val user = "分類清單（id: 名稱）：\n" + categories.joinToString("\n") { "${it.first}: ${it.second}" } +
+            "\n\n" + items.joinToString("\n") { "[${it.first}] ${it.second}" }
+        val r = chatJson(system, user, 80 + 60 * items.size) ?: return emptyMap()
+        val arr = r["results"] as? kotlinx.serialization.json.JsonArray ?: return emptyMap()
+        val valid = categories.map { it.first }.toSet()
+        return arr.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val id = o.str("id") ?: return@mapNotNull null
+            if (items.none { it.first == id }) return@mapNotNull null
+            id to DupVerdict(
+                same = o.str("same") == "true", name = o.str("name")?.take(30),
+                categoryId = o.str("category_id")?.toDoubleOrNull()?.toLong()?.takeIf { it in valid }, reason = o.str("reason")?.take(40) ?: "",
+            )
+        }.toMap()
+    }
+
     /** 一筆要請 AI 分類的交易：[desc] 為交易內容（日期時間、金額、帳戶、說明），[hints] 為類似情境過去常用的分類。 */
     data class Unsorted(val id: Long, val desc: String, val hints: String)
 

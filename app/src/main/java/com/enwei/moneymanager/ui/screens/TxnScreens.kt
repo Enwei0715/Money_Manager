@@ -191,6 +191,8 @@ fun PendingScreen(nav: NavController) {
             }
             // AI 建議分類：只在使用者接受後才修改交易
             item { AiSuggestionSection(lk) }
+            // 通知、錢包畫面、手動記帳可能重複記了同一筆：AI 判斷後合併
+            item { DuplicateSection(lk) }
             if (pending.isEmpty()) item { EmptyHint("沒有待確認的交易") }
             items(pending, key = { it.id }) { t ->
                 Column {
@@ -261,6 +263,70 @@ private fun AiSuggestionSection(lk: Lookups) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { repo.rejectAiSuggestion(sg) }) { Text("略過") }
                 Button(onClick = { scope.launch { repo.acceptAiSuggestion(sg) } }) { Text("接受") }
+            }
+            HorizontalDivider()
+        }
+    }
+}
+
+/** 待確認頁的「可能重複的交易」：同金額、時間相近的兩筆，AI 判斷是不是同一筆並整理名稱與分類，使用者確認後合併。 */
+@Composable
+private fun DuplicateSection(lk: Lookups) {
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
+    val scope = rememberCoroutineScope()
+    var pairs by remember { mutableStateOf<List<com.enwei.moneymanager.data.Repository.DupPair>>(emptyList()) }
+    var verdicts by remember { mutableStateOf<Map<String, com.enwei.moneymanager.net.GroqAi.DupVerdict>>(emptyMap()) }
+    var running by remember { mutableStateOf(false) }
+    var msg by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(all, settings.dupDismissed) { pairs = repo.findDuplicates() }
+    if (pairs.isEmpty()) return
+    val aiOn = settings.aiEnabled && settings.groqKey.isNotBlank()
+    fun line(t: com.enwei.moneymanager.data.TxnEntity): String {
+        val time = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
+        val clock = if (time.toLocalTime() == java.time.LocalTime.MIDNIGHT) "" else " %02d:%02d".format(time.hour, time.minute)
+        return "${t.source.label} · ${time.toLocalDate()}$clock · ${lk.account(t.accountId)?.name ?: "未指定"} · ${t.merchant ?: "未命名"}" +
+            (lk.catLabel(t.categoryId)?.let { " · $it" } ?: "")
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("可能重複的交易（${pairs.size}）", fontSize = 17.sp, modifier = Modifier.weight(1f))
+            val sure = pairs.filter { verdicts[it.key]?.same == true }
+            if (sure.size > 1) TextButton(onClick = {
+                scope.launch { sure.forEach { p -> verdicts[p.key].let { v -> repo.mergeDuplicate(p, v?.name, v?.categoryId) } } }
+            }) { Text("合併 AI 判定的 ${sure.size} 組") }
+        }
+        Text(
+            "金額相同、時間相近，而且至少一筆是通知或錢包畫面自動記的。合併時保留帳戶較準確的那筆，名稱與分類取較完整的。",
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (aiOn) OutlinedButton(enabled = !running, onClick = {
+            running = true; msg = null
+            scope.launch {
+                val r = repo.aiJudgeDuplicates(pairs)
+                verdicts = verdicts + r
+                msg = if (r.isEmpty()) "AI 連線失敗：${com.enwei.moneymanager.net.GroqAi.lastError ?: "沒有回應"}"
+                else "AI 判斷 ${r.size} 組：${r.values.count { it.same }} 組是同一筆"
+                running = false
+            }
+        }) { Text(if (running) "判斷中…" else "請 AI 判斷並整理名稱") }
+        msg?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
+    }
+    pairs.forEach { p ->
+        val v = verdicts[p.key]
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+            Text(com.enwei.moneymanager.core.Money.withSymbol(p.keep.amount, p.keep.currency) + " · ${p.keep.type.label}", fontSize = 15.sp)
+            Text("保留：${line(p.keep)}", fontSize = 13.sp)
+            Text("刪除：${line(p.drop)}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (v != null) Text(
+                (if (v.same) "AI：同一筆" else "AI：不是同一筆") +
+                    (if (v.same) listOfNotNull(v.name, lk.catLabel(v.categoryId)).joinToString(" · ", prefix = " → ").takeIf { it != " → " }.orEmpty() else "") +
+                    (if (v.reason.isNotBlank()) "（${v.reason}）" else ""),
+                fontSize = 13.sp, color = if (v.same) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { repo.dismissDuplicate(p) }) { Text("不是重複") }
+                Button(onClick = { scope.launch { repo.mergeDuplicate(p, v?.takeIf { it.same }?.name, v?.takeIf { it.same }?.categoryId) } }) { Text("合併") }
             }
             HorizontalDivider()
         }

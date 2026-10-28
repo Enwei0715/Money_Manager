@@ -842,7 +842,9 @@ fun WalletReaderScreen(nav: NavController) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         com.enwei.moneymanager.ui.components.StatusLine(enabled, if (enabled) "錢包讀取已開啟" else "尚未開啟無障礙服務「帳理錢包讀取」")
                         Text(
-                            "街口、悠遊付不會推播每筆消費。開啟後，只要打開下方勾選的 App 並進入「交易紀錄」頁，帳理就會讀取畫面上的商家、金額、日期並自動匯入（重複的不會再匯入；已由銀行通知記成轉帳的儲值也會自動略過）。只讀取勾選的 App。",
+                            "街口、悠遊付不會推播每筆消費。開啟後，只要打開下方勾選的 App 並進入「交易紀錄」頁，帳理就會讀取畫面上的商家、金額、日期並自動匯入。" +
+                                "已經由通知（例如綁定的信用卡刷卡通知）或手動記過的同一筆不會重複記，只會補上畫面上較完整的商家名稱與分類；已由銀行通知記成轉帳的儲值也會自動略過。" +
+                                "仍有疑似重複的，會列在「待確認 → 可能重複的交易」由 AI 協助整理。只讀取勾選的 App。",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
@@ -891,19 +893,43 @@ fun WalletReaderScreen(nav: NavController) {
                                 if (r.wallet == null) "辨識出 ${r.total} 筆，但找不到要記入的電子支付帳戶（請在下方指定）"
                                 else "辨識出 ${r.total} 筆 → 記入「${r.wallet}」：" +
                                     "${if (testMode) "會新增" else "新增"} ${r.created} 筆、已存在 ${r.existing} 筆" +
+                                    (if (r.merged > 0) "、和通知／手動記的對上 ${r.merged} 筆（不重複記）" else "") +
                                     (if (r.tooOld > 0) "、早於開始日 ${r.since} 略過 ${r.tooOld} 筆" else ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (r.wallet == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                             )
                         }
-                        e.records.take(6).forEach { rec ->
-                            Text(
-                                "${rec.time.toLocalDate()}${if (rec.dateOnly) "" else " %02d:%02d".format(rec.time.hour, rec.time.minute)}　" +
-                                    "${rec.merchant ?: rec.typeLabel ?: ""}　${if (rec.isIncome || rec.isTopUp) "+" else "-"}${Money.format(rec.amountMinor, "TWD")}",
-                                style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                        var expanded by remember(e.time) { mutableStateOf(false) }
+                        val details = e.result?.details.orEmpty()
+                        if (details.isNotEmpty()) {
+                            // 每一筆的處理結果：新增、已匯入、和通知對上（補名稱）…
+                            details.take(if (expanded) details.size else 6).forEach { d ->
+                                Text(
+                                    d, style = MaterialTheme.typography.bodySmall,
+                                    color = when {
+                                        "同一筆" in d || "轉帳" in d -> MaterialTheme.colorScheme.tertiary
+                                        "新增" in d -> MaterialTheme.colorScheme.onSurface
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            }
+                            if (details.size > 6) Text(
+                                if (expanded) "收起" else "顯示全部 ${details.size} 筆", color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodySmall, modifier = Modifier.clickable { expanded = !expanded }.padding(vertical = 2.dp),
+                            )
+                        } else {
+                            e.records.take(if (expanded) e.records.size else 6).forEach { rec ->
+                                Text(
+                                    "${rec.time.toLocalDate()}${if (rec.dateOnly) "" else " %02d:%02d".format(rec.time.hour, rec.time.minute)}　" +
+                                        "${rec.merchant ?: rec.typeLabel ?: ""}　${if (rec.isIncome || rec.isTopUp) "+" else "-"}${Money.format(rec.amountMinor, "TWD")}",
+                                    style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                                )
+                            }
+                            if (e.records.size > 6) Text(
+                                if (expanded) "收起" else "顯示全部 ${e.records.size} 筆", color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodySmall, modifier = Modifier.clickable { expanded = !expanded }.padding(vertical = 2.dp),
                             )
                         }
-                        if (e.records.size > 6) Text("…共 ${e.records.size} 筆", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }

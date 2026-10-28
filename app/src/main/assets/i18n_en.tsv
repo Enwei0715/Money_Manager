@@ -1,5 +1,4 @@
 開啟後，帳理會讀取你勾選的銀行、信用卡、電子支付或簡訊 App 的通知，自動辨識金額、商家與卡號末四碼。資料只存在手機中。\n若顯示「受限制的設定」無法開啟：設定 → 應用程式 → 帳理 → 右上角 ⋮ →「允許受限制的設定」。	When on, Ledgerly reads notifications from the bank, card, e-wallet or SMS apps you check and detects amount, merchant and card digits. Data stays on your phone.\nIf it says "Restricted setting": Settings → Apps → Ledgerly → ⋮ → "Allow restricted settings".
-街口、悠遊付不會推播每筆消費。開啟後，只要打開下方勾選的 App 並進入「交易紀錄」頁，帳理就會讀取畫面上的商家、金額、日期並自動匯入（重複的不會再匯入；已由銀行通知記成轉帳的儲值也會自動略過）。只讀取勾選的 App。	JKO and Easy Wallet don't notify every payment. Once enabled, open a checked app's "Transactions" page and Ledgerly reads merchants, amounts and dates and imports them (no duplicates; top-ups already recorded from bank notifications are skipped). Only checked apps are read.
 在 Money Manager 的「更多 → 備份 → 匯出」取得 .mmbak 檔，在這裡匯入即可搬移所有帳戶、分類（含子分類）、交易、轉帳、餘額調整與備忘。也可以把帳理的資料匯出成 .mmbak。	Export a .mmbak file in Money Manager (More → Backup → Export) and import it here to move all accounts, categories (with subcategories), transactions, transfers, adjustments and memos. You can also export Ledgerly data as .mmbak.
 到 GitHub → Settings → Developer settings → Fine-grained tokens 建立，只勾選此儲存庫的 Contents: Read-only	Create at GitHub → Settings → Developer settings → Fine-grained tokens, with only this repository and Contents: Read-only
 股票買賣的金額會進出「交割帳戶」；這個證券帳戶的價值 = 持股市值 ＋ 證券戶現金（台股通常為 0，複委託可填外幣餘額）。持股在「帳戶 → 股票」或本帳戶明細新增。	Trade amounts move in/out of the "settlement account"; this brokerage's value = holdings market value + brokerage cash (usually 0 for TW stocks). Add holdings in "Stocks" or this account's details.
@@ -894,3 +893,20 @@ AI 建議分類	AI category suggestions
 進階模型（整理不明花費）	Advanced model (sorting unknown)
 一般模型	Standard model
 看圖模型（截圖對帳）	Vision model (screenshot reconcile)
+街口、悠遊付不會推播每筆消費。開啟後，只要打開下方勾選的 App 並進入「交易紀錄」頁，帳理就會讀取畫面上的商家、金額、日期並自動匯入。已經由通知（例如綁定的信用卡刷卡通知）或手動記過的同一筆不會重複記，只會補上畫面上較完整的商家名稱與分類；已由銀行通知記成轉帳的儲值也會自動略過。仍有疑似重複的，會列在「待確認 → 可能重複的交易」由 AI 協助整理。只讀取勾選的 App。	JKO and Easy Wallet don't notify every payment. Once enabled, open a checked app's "Transactions" page and Ledgerly reads merchants, amounts and dates and imports them. A payment already recorded from a notification (e.g. the linked card) or by hand isn't recorded twice; it only gets the fuller merchant name and category from the screen. Top-ups already recorded from bank notifications are skipped. Remaining possible duplicates are listed in "Pending → Possible duplicates" for AI cleanup. Only checked apps are read.
+可能重複的交易	Possible duplicates
+金額相同、時間相近，而且至少一筆是通知或錢包畫面自動記的。合併時保留帳戶較準確的那筆，名稱與分類取較完整的。	Same amount, close in time, and at least one was recorded automatically from a notification or wallet screen. Merging keeps the record with the more accurate account and the fuller name and category.
+請 AI 判斷並整理名稱	Ask AI to judge and tidy names
+判斷中…	Judging…
+保留：	Keep: 
+刪除：	Delete: 
+AI：同一筆	AI: same transaction
+AI：不是同一筆	AI: different transactions
+不是重複	Not a duplicate
+重複檢查：	Duplicate check: 
+這則通知已經記過	This notification was already recorded
+不會重複記帳	won't be recorded twice
+已匯入過	already imported
+會新增	Would add
+顯示全部	Show all
+收起	Collapse

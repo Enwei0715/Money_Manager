@@ -191,6 +191,8 @@ data class AppSettings(
     val aiUsageDay: Long = 0,
     val aiUsageRequests: Int = 0,
     val aiUsageTokens: Long = 0,
+    /** 使用者標記「不是重複」的交易組合（"小id-大id"） */
+    val dupDismissed: Set<String> = emptySet(),
     /** AI 建議的分類（待使用者確認） */
     val aiSuggestions: List<AiSuggestion> = emptyList(),
     /** 上次提醒「扣款帳戶餘額不足」的內容，避免同一件事重複通知 */
@@ -278,6 +280,7 @@ class SettingsStore(context: Context) {
         aiModel = prefs.getString("aiModel", "openai/gpt-oss-20b")!!.let { if (it == "llama-3.1-8b-instant") "openai/gpt-oss-20b" else it },
         fundingWarnKey = prefs.getString("fundingWarnKey", "")!!,
         aiModelHard = prefs.getString("aiModelHard", "openai/gpt-oss-120b")!!,
+        dupDismissed = prefs.getStringSet("dupDismissed", emptySet())!!.toSet(),
         aiModelVision = prefs.getString("aiModelVision", "qwen/qwen3.8-27b")!!,
         aiUsageDay = prefs.getLong("aiUsageDay", 0),
         aiUsageRequests = prefs.getInt("aiUsageRequests", 0),
@@ -406,6 +409,7 @@ class SettingsStore(context: Context) {
             .putString("aiModel", s.aiModel)
             .putString("fundingWarnKey", s.fundingWarnKey)
             .putString("aiModelHard", s.aiModelHard)
+            .putStringSet("dupDismissed", s.dupDismissed)
             .putString("aiModelVision", s.aiModelVision)
             .putLong("aiUsageDay", s.aiUsageDay)
             .putInt("aiUsageRequests", s.aiUsageRequests)
