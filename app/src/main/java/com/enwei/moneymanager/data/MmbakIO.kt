@@ -137,6 +137,7 @@ object MmbakIO {
             db.withTransaction {
                 if (replace) {
                     db.txns().clear(); db.accounts().clear(); db.categories().clear(); db.recurring().clear(); db.rules().clear()
+                    db.stocks().detachAllAccounts()
                 }
                 // 帳戶
                 val existingAcc = db.accounts().all()
@@ -170,7 +171,7 @@ object MmbakIO {
                 val existingCats = db.categories().all()
                 val catMap = HashMap<String, Long>()
                 fun cat(u: String?): Long? = u?.let { catMap[it] }
-                fun findOrCreate(c: MmCat, parentId: Long?): Long =
+                suspend fun findOrCreate(c: MmCat, parentId: Long?): Long =
                     existingCats.firstOrNull { it.name == c.name && it.kind == c.kind && it.parentId == parentId }?.id
                         ?: db.categories().upsert(
                             CategoryEntity(name = c.name, kind = c.kind, icon = if (parentId == null) "📁" else "•", sortOrder = c.order,
@@ -181,12 +182,19 @@ object MmbakIO {
 
                 // 交易
                 val transferIn = txs.filter { it.type == "4" && it.pair != null }.associateBy { it.pair }
+                val assetCurrency = assets.associate { it.uid to it.currency }
                 txs.forEach { t ->
                     val key = "MM:${t.uid}"
+                    // ZMONEY 是帳戶幣別的金額；外幣交易的原幣金額在 IN_ZMONEY，寫進說明保留
                     val amount = Money.toMinor(kotlin.math.abs(t.amount))
+                    val accCur = t.asset?.let { assetCurrency[it] } ?: base
+                    val foreign = if (t.currency != accCur && t.inAmount != null) "原幣 ${t.currency} ${Money.fromMinor(Money.toMinor(t.inAmount)).stripTrailingZeros().toPlainString()}" else null
+                    val adjust = t.cat == "-4"
                     val base0 = TxnEntity(
-                        type = TxnType.EXPENSE, amount = amount, currency = t.currency, accountId = acc(t.asset),
-                        merchant = t.content, note = t.memo, date = t.millis, source = TxnSource.IMPORT, externalKey = key,
+                        type = TxnType.EXPENSE, amount = amount, currency = accCur, accountId = acc(t.asset),
+                        merchant = t.content ?: if (adjust) "餘額調整" else null,
+                        note = listOfNotNull(t.memo, foreign).joinToString("　").ifEmpty { null },
+                        date = t.millis, source = TxnSource.IMPORT, externalKey = key,
                     )
                     val entity = when (t.type) {
                         "0" -> base0.copy(type = TxnType.INCOME, categoryId = cat(t.cat))
@@ -194,7 +202,7 @@ object MmbakIO {
                         "3" -> {
                             val inRow = t.pair?.let { transferIn[it] }
                             val toAcc = acc(t.toAsset) ?: acc(inRow?.asset)
-                            val toAmount = (inRow?.inAmount ?: inRow?.amount)?.let { Money.toMinor(kotlin.math.abs(it)) }?.takeIf { it != amount }
+                            val toAmount = inRow?.amount?.let { Money.toMinor(kotlin.math.abs(it)) }?.takeIf { it != amount }
                             base0.copy(type = TxnType.TRANSFER, toAccountId = toAcc, toAmount = toAmount)
                         }
                         "7" -> base0.copy(type = TxnType.INCOME, merchant = t.content ?: "餘額調整", note = t.memo ?: "Money Manager 餘額調整")
@@ -206,15 +214,20 @@ object MmbakIO {
                 }
 
                 // 週期：僅確定的「每月」直接啟用，其餘匯入為停用待確認
+                val existingRules = db.recurring().all()
                 repeats.forEach { r ->
-                    val acc = acc(r.asset) ?: return@forEach
+                    val accId = acc(r.asset) ?: return@forEach
                     val next = r.next?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() } ?: return@forEach
                     val type = when (r.type) { "0" -> TxnType.INCOME; "3" -> TxnType.TRANSFER; else -> TxnType.EXPENSE }
                     val monthly = r.repeatType == 1
+                    val name = r.payee ?: r.memo ?: cat(r.cat)?.let { id -> db.categories().all().firstOrNull { it.id == id }?.name } ?: "週期交易"
+                    val amountMinor = Money.toMinor(kotlin.math.abs(r.amount))
+                    // 合併匯入時，同名、同金額、同帳戶的週期設定視為已存在
+                    if (existingRules.any { it.name == name && it.amount == amountMinor && it.accountId == accId }) return@forEach
                     db.recurring().upsert(
                         RecurringEntity(
-                            name = r.payee ?: r.memo ?: cat(r.cat)?.let { id -> db.categories().all().firstOrNull { it.id == id }?.name } ?: "週期交易",
-                            type = type, amount = Money.toMinor(kotlin.math.abs(r.amount)), currency = r.currency, accountId = acc,
+                            name = name,
+                            type = type, amount = amountMinor, currency = r.asset?.let { assetCurrency[it] } ?: r.currency, accountId = accId,
                             toAccountId = if (type == TxnType.TRANSFER) acc(r.toAsset) else null,
                             categoryId = if (type == TxnType.TRANSFER) null else cat(r.cat),
                             frequency = com.enwei.moneymanager.core.Frequency.MONTHLY, dayOfMonth = next.dayOfMonth,
@@ -224,9 +237,18 @@ object MmbakIO {
                     )
                 }
             }
+            val accountsNow = db.accounts().all()
+            val ids = accountsNow.map { it.id }.toSet()
             repo.settings.update { s ->
                 val existing = s.memos.map { it.text }.toSet()
-                s.copy(memos = s.memos + memos.filter { it.text !in existing }.mapIndexed { i, m -> m.copy(id = System.currentTimeMillis() + i) })
+                s.copy(
+                    memos = s.memos + memos.filter { it.text !in existing }.mapIndexed { i, m -> m.copy(id = System.currentTimeMillis() + i) },
+                    // 取代匯入後舊帳戶已不存在：預設帳戶改為現金，移除失效的對應
+                    defaultAccountId = s.defaultAccountId?.takeIf { it in ids }
+                        ?: accountsNow.firstOrNull { it.type == AccountType.CASH && !it.archived }?.id ?: accountsNow.firstOrNull()?.id,
+                    notifAccountMap = s.notifAccountMap.filterValues { it in ids },
+                    cashCounts = s.cashCounts.filterKeys { it in ids },
+                )
             }
             MmImportSummary(accCount, catCount, created, skipped, memos.size, repeats.size)
         }

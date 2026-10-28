@@ -68,7 +68,8 @@ class SummaryWidget : AppWidgetProvider() {
             val expenseTotal = expense.sumOf { fx.convert(it.amount, it.currency) }
             val incomeTotal = txns.filter { it.type == TxnType.INCOME }.sumOf { fx.convert(it.amount, it.currency) }
             val categories = repo.categories.first().associateBy { it.id }
-            val byCat = expense.groupBy { it.categoryId }
+            // 子分類併入所屬大分類
+            val byCat = expense.groupBy { t -> categories[t.categoryId]?.let { it.parentId ?: it.id } }
                 .map { (id, l) -> (categories[id]?.name ?: "未分類") to l.sumOf { fx.convert(it.amount, it.currency) } }
                 .sortedByDescending { it.second }
             val top = byCat.take(4) + listOfNotNull(byCat.drop(4).takeIf { it.isNotEmpty() }?.let { rest -> "其他" to rest.sumOf { it.second } })

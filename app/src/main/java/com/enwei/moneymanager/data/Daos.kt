@@ -160,6 +160,9 @@ interface StockDao {
     @Query("UPDATE stock_trades SET brokerAccountId = NULL WHERE brokerAccountId = :id")
     suspend fun detachBroker(id: Long)
 
+    @Query("UPDATE stock_trades SET cashAccountId = NULL, brokerAccountId = NULL")
+    suspend fun detachAllAccounts()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTrades(list: List<StockTradeEntity>)
 
