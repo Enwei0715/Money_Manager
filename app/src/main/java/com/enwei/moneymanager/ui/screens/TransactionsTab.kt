@@ -73,6 +73,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -239,8 +240,9 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
             }
             if (tab != 4) SummaryBar(if (tab == 3) base else totals, lk.base)
             when (tab) {
-                0 -> DailyView(inPeriod, lk, nav, range, carry, recurring, trades.filter { inRange(LocalDate.ofEpochDay(it.date), range) })
-                1 -> CalendarView(range, all, lk, nav, DayOfWeek.of(settings.weekStartDay), carry)
+                0 -> DailyView(inPeriod, lk, nav, range, carry, recurring, trades.filter { inRange(LocalDate.ofEpochDay(it.date), range) },
+                    memos = settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }
+                1 -> CalendarView(range, all, lk, nav, DayOfWeek.of(settings.weekStartDay), carry, settings.memos) { memoEditing = it }
                 2 -> MonthlyView(month.year, all, lk, startDay, DayOfWeek.of(settings.weekStartDay))
                 3 -> TotalView(inPeriod, all, lk, nav, month, range)
                 else -> MemoView(settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }
@@ -276,11 +278,15 @@ private fun SummaryCell(label: String, value: String, color: Color, modifier: Mo
 private fun DailyView(
     list: List<TxnEntity>, lk: Lookups, nav: NavController, range: Pair<LocalDate, LocalDate>, carry: Long, recurring: List<RecurringEntity>,
     trades: List<com.enwei.moneymanager.data.StockTradeEntity> = emptyList(),
+    memos: List<Memo> = emptyList(),
+    onMemo: (Memo) -> Unit = {},
 ) {
     val days = remember(list) { list.groupBy { it.date.toLocalDate() }.toSortedMap(Comparator.reverseOrder()) }
     // 股票交易顯示在當天（不計入收支）
     val tradeDays = remember(trades) { trades.groupBy { LocalDate.ofEpochDay(it.date) } }
-    val allDays = (days.keys + tradeDays.keys).toSortedSet(Comparator.reverseOrder())
+    // 有備註的日子也列出來（備註顯示在當天標題下方）
+    val memoDays = remember(memos) { memos.groupBy { it.date.toLocalDate() } }
+    val allDays = (days.keys + tradeDays.keys + memoDays.keys).toSortedSet(Comparator.reverseOrder())
     val today = LocalDate.now()
     // 本期之後還會發生的週期交易
     val upcoming = recurring.filter { it.enabled }.mapNotNull { r ->
@@ -301,7 +307,7 @@ private fun DailyView(
             Spacer(Modifier.height(8.dp))
         }
         if (allDays.isEmpty() && carry == 0L) item { NoData() }
-        allDays.forEach { day -> item(key = "d$day") { DayBlock(day, days[day].orEmpty(), lk, nav, trades = tradeDays[day].orEmpty()) } }
+        allDays.forEach { day -> item(key = "d$day") { DayBlock(day, days[day].orEmpty(), lk, nav, trades = tradeDays[day].orEmpty(), memos = memoDays[day].orEmpty(), onMemo = onMemo) } }
         if (carry != 0L) item {
             Column(Modifier.padding(top = 8.dp).background(MaterialTheme.colorScheme.surface)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
@@ -334,6 +340,9 @@ fun DayBlock(
     accountId: Long? = null,
     /** 帳戶明細：這一天在帳本上的項目（新到舊）。有給時標題顯示這個帳戶的存入／提出（含轉帳、股票），並依帳本順序列出 */
     ledger: List<LedgerEntry>? = null,
+    /** 這一天的備註（顯示在標題下方，點一下編輯） */
+    memos: List<Memo> = emptyList(),
+    onMemo: (Memo) -> Unit = {},
 ) {
     val t = if (ledger != null) Totals(ledger.sumOf { maxOf(0, it.delta) }, -ledger.sumOf { minOf(0, it.delta) }) else totalsOf(txns, lk.fx)
     Column(Modifier.padding(top = 10.dp).background(MaterialTheme.colorScheme.surface)) {
@@ -352,6 +361,10 @@ fun DayBlock(
             Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = 15.sp, modifier = Modifier.width(112.dp), textAlign = TextAlign.End)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        if (memos.isNotEmpty()) {
+            memos.sortedWith(compareByDescending<Memo> { it.pinned }.thenBy { it.id }).forEach { m -> MemoLine(m) { onMemo(m) } }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
         if (ledger != null) ledger.forEach { e ->
             e.txn?.let { MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
             e.trade?.let { tr -> TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
@@ -449,9 +462,11 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
 @Composable
 private fun CalendarView(
     range: Pair<LocalDate, LocalDate>, all: List<TxnEntity>, lk: Lookups, nav: NavController, weekStart: DayOfWeek, carry: Long,
+    memos: List<Memo> = emptyList(), onMemo: (Memo) -> Unit = {},
 ) {
     var sheetDay by remember { mutableStateOf<LocalDate?>(null) }
     val byDay = remember(all) { all.groupBy { it.date.toLocalDate() } }
+    val memoDays = remember(memos) { memos.groupBy { it.date.toLocalDate() } }
     val today = LocalDate.now()
     val start = range.first.with(TemporalAdjusters.previousOrSame(weekStart))
     val end = range.second.with(TemporalAdjusters.nextOrSame(weekStart.minus(1)))
@@ -498,6 +513,11 @@ private fun CalendarView(
                                     else -> weekdayColor(date.dayOfWeek, MaterialTheme.colorScheme.onSurface).copy(alpha = alpha)
                                 },
                             )
+                            // 有備註：日期右側一個小圓圈（顏色同備註主題色）
+                            memoDays[date]?.let { ms ->
+                                Spacer(Modifier.weight(1f))
+                                MemoDot(ms.first().color, Modifier.size(8.dp).alpha(alpha))
+                            }
                         }
                         // 節日名稱放在日期下方（短名稱、最多兩行），不再被截掉；補行上班用一般顏色
                         com.enwei.moneymanager.core.TaiwanHolidays.shortLabel(date)?.let { name ->
@@ -533,9 +553,15 @@ private fun CalendarView(
                 TextButton(onClick = { sheetDay = null; nav.navigate("txn/0?date=${day.toEpochDay()}") }) { Text("＋ 記一筆") }
             }
             val txns = byDay[day].orEmpty()
-            if (txns.isEmpty()) Text("沒有交易", color = gray, modifier = Modifier.padding(20.dp))
-            else Column(Modifier.verticalScroll(rememberScrollState())) {
-                txns.sortedByDescending { it.date }.forEach { t -> MmTxnRow(t, lk) { sheetDay = null; nav.navigate("txn/${t.id}") } }
+            val dayMemos = memoDays[day].orEmpty()
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                dayMemos.forEach { m -> MemoLine(m) { sheetDay = null; onMemo(m) } }
+                TextButton(onClick = { sheetDay = null; onMemo(Memo(0, day.toMillis(), "")) }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    Text("＋ 備註")
+                }
+                if (dayMemos.isNotEmpty() || txns.isNotEmpty()) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                if (txns.isEmpty()) Text("沒有交易", color = gray, modifier = Modifier.padding(20.dp))
+                else txns.sortedByDescending { it.date }.forEach { t -> MmTxnRow(t, lk) { sheetDay = null; nav.navigate("txn/${t.id}") } }
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -740,6 +766,28 @@ private fun KV(k: String, v: String, color: Color = Color.Unspecified) {
 
 // ---------------- 備註 ----------------
 
+/** 備註標示：空心小圓圈，有主題色時用主題色。 */
+@Composable
+private fun MemoDot(color: Int, modifier: Modifier = Modifier) {
+    val tint = com.enwei.moneymanager.data.memoColors.getOrElse(color) { 0L }
+    Box(modifier.border(1.5.dp, if (tint == 0L) MaterialTheme.colorScheme.primary else Color(tint), CircleShape))
+}
+
+/** 每日列表與日曆當天的一則備註：小圓圈＋標題（沒有標題時顯示內容第一行）。 */
+@Composable
+private fun MemoLine(m: Memo, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MemoDot(m.color, Modifier.size(12.dp))
+        Spacer(Modifier.width(14.dp))
+        Text(m.title.ifBlank { m.text.lineSequence().firstOrNull().orEmpty() }, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f))
+        if (m.pinned) Icon(Icons.Filled.PushPin, "置頂", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+    }
+}
+
 @Composable
 private fun MemoView(memos: List<Memo>, onEdit: (Memo) -> Unit) {
     if (memos.isEmpty()) { NoData(); return }
@@ -778,8 +826,8 @@ private fun MemoDialog(memo: Memo, onDismiss: () -> Unit) {
     var text by remember(memo) { mutableStateOf(memo.text) }
     var color by remember(memo) { mutableStateOf(memo.color) }
     var pinned by remember(memo) { mutableStateOf(memo.pinned) }
+    var date by remember(memo) { mutableStateOf(memo.date.toLocalDate()) }
     val tint = com.enwei.moneymanager.data.memoColors.getOrElse(color) { 0L }
-    val d = memo.date.toLocalDate()
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = if (tint == 0L) MaterialTheme.colorScheme.surfaceContainerHigh
@@ -797,8 +845,8 @@ private fun MemoDialog(memo: Memo, onDismiss: () -> Unit) {
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("${d.monthValue}.${d.dayOfMonth}（${Recurrence.weekdayName(d.dayOfWeek)}）", fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // 備註記在哪一天：每日列表與日曆會在那天顯示小圓圈
+                com.enwei.moneymanager.ui.components.DateField(date, { date = it })
                 OutlinedTextField(title, { title = it }, label = { Text("標題") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(text, { text = it }, label = { Text("內容") }, minLines = 3, modifier = Modifier.fillMaxWidth())
                 Text("主題色", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -823,7 +871,7 @@ private fun MemoDialog(memo: Memo, onDismiss: () -> Unit) {
         confirmButton = {
             TextButton(enabled = text.isNotBlank() || title.isNotBlank(), onClick = {
                 repo.settings.update { s ->
-                    val edited = memo.copy(title = title.trim(), text = text.trim(), color = color, pinned = pinned)
+                    val edited = memo.copy(date = date.toMillis(), title = title.trim(), text = text.trim(), color = color, pinned = pinned)
                     val updated = if (memo.id == 0L) s.memos + edited.copy(id = System.currentTimeMillis())
                     else s.memos.map { if (it.id == memo.id) edited else it }
                     s.copy(memos = updated)
