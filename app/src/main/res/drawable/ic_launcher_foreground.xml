@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 帳理圖示：珊瑚紅底上的白色帳本與硬幣（扁平實心風格），圖形以外框置中 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- 帳理圖示：珊瑚紅底上的白色硬幣，內有上升長條圖（扁平實心） -->
-    <path android:fillColor="#FFFFFF" android:pathData="M26.000,54.000a28.000,28.000 0 1 0 56.000,0a28.000,28.000 0 1 0 -56.000,0z" />
-    <path android:fillColor="#F0605A" android:pathData="M30.500,54.000a23.500,23.500 0 1 0 47.000,0a23.500,23.500 0 1 0 -47.000,0zM32.500,54.000a21.500,21.500 0 1 0 43.000,0a21.500,21.500 0 1 0 -43.000,0z" android:fillType="evenOdd" />
-    <path android:fillColor="#F0605A" android:pathData="M44.300,57.000h2.400a1.800,1.800 0 0 1 1.800,1.800v5.400a1.800,1.800 0 0 1 -1.800,1.800h-2.400a1.800,1.800 0 0 1 -1.800,-1.800v-5.400a1.800,1.800 0 0 1 1.800,-1.800zM52.800,50.500h2.400a1.800,1.800 0 0 1 1.800,1.800v11.900a1.800,1.800 0 0 1 -1.800,1.800h-2.400a1.800,1.800 0 0 1 -1.800,-1.800v-11.900a1.800,1.800 0 0 1 1.800,-1.800zM61.300,44.000h2.400a1.800,1.800 0 0 1 1.800,1.800v18.400a1.800,1.800 0 0 1 -1.800,1.800h-2.400a1.800,1.800 0 0 1 -1.800,-1.800v-18.400a1.800,1.800 0 0 1 1.800,-1.800z" />
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.95" android:scaleY="0.95" android:translateX="-2.85" android:translateY="-0.95">
+    <path android:fillColor="#FFFFFF" android:pathData="M39,29h26a6,6 0 0 1 6,6v38a6,6 0 0 1 -6,6h-26a6,6 0 0 1 -6,-6v-38a6,6 0 0 1 6,-6z" />
+    <path android:fillColor="#F0605A" android:pathData="M40.01,29h2.98a0.01,0.01 0 0 1 0.01,0.01v49.98a0.01,0.01 0 0 1 -0.01,0.01h-2.98a0.01,0.01 0 0 1 -0.01,-0.01v-49.98a0.01,0.01 0 0 1 0.01,-0.01z" />
+    <path android:fillColor="#F0605A" android:pathData="M50.7,40h11.6a1.7,1.7 0 0 1 1.7,1.7v0.0a1.7,1.7 0 0 1 -1.7,1.7h-11.6a1.7,1.7 0 0 1 -1.7,-1.7v-0.0a1.7,1.7 0 0 1 1.7,-1.7z" />
+    <path android:fillColor="#F0605A" android:pathData="M50.7,48.5h7.6a1.7,1.7 0 0 1 1.7,1.7v0.0a1.7,1.7 0 0 1 -1.7,1.7h-7.6a1.7,1.7 0 0 1 -1.7,-1.7v-0.0a1.7,1.7 0 0 1 1.7,-1.7z" />
+    <path android:fillColor="#F0605A" android:pathData="M52,68a16,16 0 1 0 32,0a16,16 0 1 0 -32,0z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M55,68a13,13 0 1 0 26,0a13,13 0 1 0 -26,0z" />
+    <path android:fillColor="#F0605A" android:pathData="M60.6,68a7.4,7.4 0 1 0 14.8,0a7.4,7.4 0 1 0 -14.8,0z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M63,68a5,5 0 1 0 10,0a5,5 0 1 0 -10,0z" />
+    </group>
 </vector>
