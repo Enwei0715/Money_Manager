@@ -1,4 +1,4 @@
-# 帳理（Android 記帳 App）
+# 帳理 Ledgerly（Android 記帳 App）
 
 為台灣日常生活設計的個人記帳 App。資料只存在手機本機（Room / SQLite），可匯出 JSON 備份。
 
