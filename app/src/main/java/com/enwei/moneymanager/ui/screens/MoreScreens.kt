@@ -515,13 +515,15 @@ fun BackupScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<String?>(null) }
     var confirmUri by remember { mutableStateOf<android.net.Uri?>(null) }
-    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+    // 帳理完整備份（.lgbak）：所有資料表＋所有設定
+    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             status = runCatching {
-                val json = repo.exportJson()
-                withContext(Dispatchers.IO) { ctx.contentResolver.openOutputStream(uri)!!.use { it.write(json.toByteArray()) } }
-                "已匯出備份"
+                withContext(Dispatchers.IO) {
+                    ctx.contentResolver.openOutputStream(uri)!!.use { com.enwei.moneymanager.data.FullBackupIO.export(repo, BuildConfig.VERSION_NAME, it) }
+                }
+                "已匯出完整備份（所有帳戶、交易、股票、週期、分類、規則與設定）"
             }.getOrElse { "匯出失敗：${it.message}" }
         }
     }
@@ -570,13 +572,17 @@ fun BackupScreen(nav: NavController) {
                 modifier = Modifier.fillMaxWidth()) { Text("匯出為 .mmbak") }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             HorizontalDivider()
-            Text("帳理備份（JSON）", style = MaterialTheme.typography.titleMedium)
-            Text("所有資料都只存在這支手機。建議定期匯出備份到 Google 雲端硬碟或電腦；換手機時在新手機匯入即可。", style = MaterialTheme.typography.bodyMedium)
-            Button(onClick = { exporter.launch("帳理備份-${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.json") }, modifier = Modifier.fillMaxWidth()) {
-                Text("匯出備份（JSON）")
+            Text("帳理完整備份（.lgbak）", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "帳理專屬的備份檔，包含所有帳戶、交易、股票、週期、分類、商家規則、通知紀錄與全部設定。所有資料都只存在這支手機，建議定期匯出到雲端硬碟；換手機時在新手機還原即可。" +
+                    "（GitHub Token 不會放進備份；股價與匯率會自動重新抓取）",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(onClick = { exporter.launch("帳理備份-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.lgbak") }, modifier = Modifier.fillMaxWidth()) {
+                Text("匯出完整備份（.lgbak）")
             }
-            OutlinedButton(onClick = { importer.launch(arrayOf("application/json", "application/octet-stream", "text/*")) }, modifier = Modifier.fillMaxWidth()) {
-                Text("從備份還原")
+            OutlinedButton(onClick = { importer.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
+                Text("從備份還原（.lgbak 或舊版 JSON）")
             }
             status?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         }
@@ -599,15 +605,23 @@ fun BackupScreen(nav: NavController) {
         AlertDialog(
             onDismissRequest = { confirmUri = null },
             title = { Text("還原備份？") },
-            text = { Text("目前手機上的帳戶、交易、週期規則與股票紀錄會被備份內容取代。") },
+            text = { Text("目前手機上的所有資料與設定會被備份內容取代。") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmUri = null
                     scope.launch {
                         status = runCatching {
-                            val text = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes().decodeToString() } }
-                            val b = repo.importJson(text)
-                            "已還原：${b.accounts.size} 個帳戶、${b.transactions.size} 筆交易、${b.trades.size} 筆股票交易"
+                            val bytes = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() } }
+                            // gzip 開頭 1F 8B：帳理完整備份；否則當作舊版 JSON
+                            if (bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
+                                val b = withContext(Dispatchers.IO) { com.enwei.moneymanager.data.FullBackupIO.read(bytes.inputStream()) }
+                                com.enwei.moneymanager.data.FullBackupIO.restore(repo, b)
+                                com.enwei.moneymanager.notify.QuickAdd.sync(ctx, repo.settings.value.quickAdd)
+                                "已還原完整備份：${b.accounts.size} 個帳戶、${b.transactions.size} 筆交易、${b.trades.size} 筆股票紀錄與所有設定"
+                            } else {
+                                val b = repo.importJson(bytes.decodeToString())
+                                "已還原：${b.accounts.size} 個帳戶、${b.transactions.size} 筆交易、${b.trades.size} 筆股票交易"
+                            }
                         }.getOrElse { "還原失敗：${it.message}" }
                     }
                 }) { Text("還原") }
@@ -708,7 +722,7 @@ fun SettingsScreen(nav: NavController) {
             HorizontalDivider()
 
             Text("股票手續費", style = MaterialTheme.typography.titleMedium)
-            NumberField(discount, { discount = it; saveFees() }, "台股手續費折數（例：0.6 = 六折，0.28 = 2.8 折）")
+            NumberField(discount, { discount = it; saveFees() }, "台股手續費折數（1 = 不打折）")
             NumberField(minFee, { minFee = it; saveFees() }, "台股整股最低手續費（常見 20 元）")
             NumberField(oddMin, { oddMin = it; saveFees() }, "台股零股最低手續費（永豐等電子下單為 1 元）")
             NumberField(usFee, { usFee = it; saveFees() }, "美股每筆手續費（USD）")
@@ -730,6 +744,8 @@ fun WalletReaderScreen(nav: NavController) {
     var filter by remember { mutableStateOf("") }
     val wallets = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.EWALLET && !it.archived }
     val today = java.time.LocalDate.now().toEpochDay()
+    val testMode by com.enwei.moneymanager.notify.WalletScreenReader.testMode.collectAsStateWithLifecycle()
+    val scans by com.enwei.moneymanager.notify.WalletScreenReader.scans.collectAsStateWithLifecycle()
 
     fun toggle(pkg: String, on: Boolean) = repo.settings.update {
         it.copy(
@@ -763,13 +779,65 @@ fun WalletReaderScreen(nav: NavController) {
                     }
                 }
             }
+            // 測試：確認讀取是否真的有運作
+            item { SectionTitle("測試錢包讀取") }
+            item {
+                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("測試模式（只讀取，不入帳）")
+                            Text("開啟後打開下方勾選的錢包 App 的交易紀錄頁，再回到這裡查看讀到什麼", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(testMode, { com.enwei.moneymanager.notify.WalletScreenReader.testMode.value = it })
+                    }
+                    val connected = com.enwei.moneymanager.notify.WalletScreenReader.connected
+                    com.enwei.moneymanager.ui.components.StatusLine(
+                        enabled && connected,
+                        when {
+                            !enabled -> "無障礙服務未開啟"
+                            !connected -> "服務已開啟但尚未連線（關閉再開啟一次無障礙服務）"
+                            settings.screenPackages.isEmpty() -> "服務運作中，但還沒有勾選要讀取的錢包 App"
+                            else -> "服務運作中"
+                        },
+                    )
+                    if (scans.isEmpty()) Text("還沒有讀取紀錄", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            items(scans.size, key = { "scan$it" }) { i ->
+                val e = scans[i]
+                val label = apps.find { it.pkg == e.pkg }?.label ?: e.pkg
+                Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("$label · ${timeFmt.format(Date(e.time))} · 讀到 ${e.lines} 行文字", style = MaterialTheme.typography.labelSmall)
+                        e.problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                        e.result?.let { r ->
+                            Text(
+                                if (r.wallet == null) "辨識出 ${r.total} 筆，但找不到要記入的電子支付帳戶（請在下方指定）"
+                                else "辨識出 ${r.total} 筆 → 記入「${r.wallet}」：" +
+                                    "${if (testMode) "會新增" else "新增"} ${r.created} 筆、已存在 ${r.existing} 筆" +
+                                    (if (r.tooOld > 0) "、早於開始日 ${r.since} 略過 ${r.tooOld} 筆" else ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (r.wallet == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        e.records.take(6).forEach { rec ->
+                            Text(
+                                "${rec.time.toLocalDate()}${if (rec.dateOnly) "" else " %02d:%02d".format(rec.time.hour, rec.time.minute)}　" +
+                                    "${rec.merchant ?: rec.typeLabel ?: ""}　${if (rec.isIncome || rec.isTopUp) "+" else "-"}${Money.format(rec.amountMinor, "TWD")}",
+                                style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                            )
+                        }
+                        if (e.records.size > 6) Text("…共 ${e.records.size} 筆", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
             if (wallets.isEmpty()) item {
                 Text("提醒：請先到「帳戶」新增群組為「電子支付」的帳戶（例如：街口、悠遊付），匯入的交易才有地方記。",
                     color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp))
             }
             item { SectionTitle("要讀取的錢包 App（已選 ${settings.screenPackages.size}）") }
             item {
-                OutlinedTextField(filter, { filter = it }, label = { Text("搜尋 App，例如：街口、悠遊付") }, singleLine = true,
+                OutlinedTextField(filter, { filter = it }, label = { Text("搜尋 App") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
             }
             val sorted = apps.filter { filter.isBlank() || it.label.contains(filter, true) || it.pkg.contains(filter, true) }

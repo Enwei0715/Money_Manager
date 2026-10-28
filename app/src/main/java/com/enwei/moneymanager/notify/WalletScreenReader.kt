@@ -26,15 +26,22 @@ class WalletScreenReader : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg = event?.packageName?.toString() ?: return
         if (pkg !in MoneyApp.repo.settings.value.screenPackages) return
+        // 錢包畫面讀取：使用者在測試頁時記錄每一次讀取的結果
         // 畫面捲動、載入時會連續觸發，等畫面穩定 1.2 秒後再讀
         pendingJob?.cancel()
         pendingJob = MoneyApp.instance.appScope.launch {
             delay(1200)
             val texts = runCatching { collectTexts(pkg) }.getOrNull() ?: return@launch
+            if (texts.isEmpty()) return@launch
             val records = ScreenRecordParser.parse(texts)
-            if (records.isEmpty()) return@launch
-            val created = runCatching { MoneyApp.repo.ingestScreenRecords(pkg, records) }.getOrDefault(0)
-            if (created > 0) notifyImported(created)
+            if (records.isEmpty()) {
+                record(ScanEntry(System.currentTimeMillis(), pkg, texts.size, emptyList(), null, "讀到 ${texts.size} 行文字，但沒有符合交易紀錄的格式（請打開「交易紀錄／明細」頁）"))
+                return@launch
+            }
+            val test = testMode.value
+            val r = runCatching { MoneyApp.repo.ingestScreenRecords(pkg, records, dryRun = test) }.getOrNull()
+            record(ScanEntry(System.currentTimeMillis(), pkg, texts.size, records, r, null))
+            if (!test && r != null && r.created > 0) notifyImported(r.created)
         }
     }
 
@@ -69,7 +76,33 @@ class WalletScreenReader : AccessibilityService() {
 
     override fun onInterrupt() = Unit
 
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        connected = true
+    }
+
+    override fun onDestroy() {
+        connected = false
+        super.onDestroy()
+    }
+
+    /** 一次讀取的紀錄（測試頁顯示用）。 */
+    data class ScanEntry(
+        val time: Long, val pkg: String, val lines: Int,
+        val records: List<com.enwei.moneymanager.core.ScreenRecord>,
+        val result: com.enwei.moneymanager.data.Repository.ScreenIngestResult?, val problem: String?,
+    )
+
     companion object {
+        /** 測試模式：只讀取與辨識，不寫入任何交易 */
+        val testMode = kotlinx.coroutines.flow.MutableStateFlow(false)
+        /** 最近 10 次讀取 */
+        val scans = kotlinx.coroutines.flow.MutableStateFlow<List<ScanEntry>>(emptyList())
+        @Volatile var connected = false
+            private set
+
+        private fun record(e: ScanEntry) { scans.value = (listOf(e) + scans.value).take(10) }
+
         fun isEnabled(context: Context): Boolean {
             val flat = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
             val me = ComponentName(context, WalletScreenReader::class.java)

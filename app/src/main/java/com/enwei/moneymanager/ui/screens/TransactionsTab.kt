@@ -732,7 +732,7 @@ private fun MemoDialog(memo: Memo, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (memo.id == 0L) "新增備註" else "編輯備註") },
-        text = { OutlinedTextField(text, { text = it }, placeholder = { Text("例如：這個月要繳房屋稅") }, modifier = Modifier.fillMaxWidth()) },
+        text = { OutlinedTextField(text, { text = it }, placeholder = { Text("") }, modifier = Modifier.fillMaxWidth()) },
         confirmButton = {
             TextButton(enabled = text.isNotBlank(), onClick = {
                 repo.settings.update { s ->

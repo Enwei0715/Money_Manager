@@ -148,7 +148,7 @@ fun RecurringEditScreen(nav: NavController, id: Long) {
             Modifier.padding(pad).imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedTextField(name, { name = it }, label = { Text("名稱（例：Netflix、房租、薪水）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(name, { name = it }, label = { Text("名稱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 TxnType.entries.forEachIndexed { i, t ->
                     SegmentedButton(selected = type == t, onClick = { type = t }, shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(t.label) }

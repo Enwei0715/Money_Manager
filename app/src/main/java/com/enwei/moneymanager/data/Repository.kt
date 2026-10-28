@@ -586,20 +586,26 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 匯入從錢包 App 交易紀錄畫面讀到的資料（街口、悠遊付等不推播消費的錢包）。
      * 以「日期＋金額＋商家＋同畫面序號」去重；儲值若已由銀行通知記成轉帳則略過。
      */
-    suspend fun ingestScreenRecords(pkg: String, records: List<ScreenRecord>): Int {
+    /** 錢包畫面讀取結果（測試模式時 created 為「會新增」的筆數）。 */
+    data class ScreenIngestResult(val wallet: String?, val total: Int, val tooOld: Int, val existing: Int, val created: Int, val since: LocalDate)
+
+    suspend fun ingestScreenRecords(pkg: String, records: List<ScreenRecord>, dryRun: Boolean = false): ScreenIngestResult {
         val s = settings.value
         val since = s.screenReadSince[pkg]?.let(LocalDate::ofEpochDay) ?: LocalDate.now()
         val accounts = db.accounts().all().filter { !it.archived }
         val wallet = s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
             ?: accounts.filter { it.type == AccountType.EWALLET }.singleOrNull()
-            ?: return 0
+            ?: return ScreenIngestResult(null, records.size, 0, 0, 0, since)
         val seen = HashMap<String, Int>()
         var created = 0
-        records.filter { !it.time.toLocalDate().isBefore(since) }.forEach { r ->
+        var existing = 0
+        val fresh = records.filter { !it.time.toLocalDate().isBefore(since) }
+        fresh.forEach { r ->
             val base = "${r.time.toLocalDate()}${if (r.dateOnly) "" else "T" + r.time.toLocalTime()}:${if (r.isIncome) "+" else "-"}${r.amountMinor}:${r.merchant}"
             val n = seen.merge(base, 1) { x, y -> x + y }!!
             val key = "AX:$pkg:$base#$n"
-            if (db.txns().byExternalKey(key) != null) return@forEach
+            if (db.txns().byExternalKey(key) != null) { existing++; return@forEach }
+            if (dryRun) { created++; return@forEach }
             val millis = r.time.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
             if (r.isTopUp) {
                 val window = if (r.dateOnly) 36L * 3600 * 1000 else 15L * 60 * 1000
@@ -635,7 +641,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             )
             if (id > 0) created++
         }
-        return created
+        return ScreenIngestResult(wallet.name, records.size, records.size - fresh.size, existing, created, since)
     }
 
     private suspend fun lookupName(id: Long?) = id?.let { db.accounts().get(it)?.name } ?: "?"

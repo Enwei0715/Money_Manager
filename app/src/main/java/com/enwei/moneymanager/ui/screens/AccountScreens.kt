@@ -167,7 +167,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                             b.fixedStatementDay?.let { d -> statementDay = if (d < 0) "31" else d.toString() }
                             if (name.isBlank()) name = b.name.substringBefore("（") + "信用卡"
                         }
-                    }, "銀行代碼或名稱，例：013、國泰")
+                    }, "銀行代碼或名稱")
                 }
                 if (bank != null) Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp)) {
                     Text(
@@ -184,12 +184,12 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                         }
                     }
                 }
-                FormLine("結帳日") { FormInput(statementDay, { statementDay = it.filter(Char::isDigit).take(2) }, "例：5（月底填 31）", number = true) }
+                FormLine("結帳日") { FormInput(statementDay, { statementDay = it.filter(Char::isDigit).take(2) }, "月底填 31", number = true) }
                 if (dueOffset != null) FormLine("繳款日", trailing = {
                     androidx.compose.material3.TextButton(onClick = { dueOffset = null }) { Text("改用固定日") }
                 }) {
                     Text("結帳日＋$dueOffset 天" + (sDay?.let { s0 -> CardCycle(s0, 1, shift, dueOffset).let { c -> "（本期 ${c.nextDueDate(LocalDate.now().minusDays(1))}）" } } ?: ""), fontSize = 17.sp)
-                } else FormLine("繳款日") { FormInput(dueDay, { dueDay = it.filter(Char::isDigit).take(2) }, "例：20", number = true) }
+                } else FormLine("繳款日") { FormInput(dueDay, { dueDay = it.filter(Char::isDigit).take(2) }, "", number = true) }
                 FormLine("扣繳日") { FormInput(autopayDay, { autopayDay = it.filter(Char::isDigit).take(2) }, "銀行實際扣款日，空白＝繳款日", number = true) }
                 FormLine("扣繳帳戶", onClick = { autopayMenu = true }) {
                     Box {
@@ -218,7 +218,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 DropdownLine("交割帳戶", lk.account(linkedId)?.name ?: "未設定",
                     listOf<Pair<Long?, String>>(null to "未設定") + lk.accounts.filter { it.type == AccountType.BANK && !it.archived }.map { it.id to it.name }) { linkedId = it }
                 FormLine("手續費折數") { FormInput(feeDiscount, { feeDiscount = it }, "成交當下的折數；月退券商填 1", number = true) }
-                FormLine("月退後折數") { FormInput(rebate, { rebate = it }, "例：永豐大戶投填 0.2；空白＝不月退", number = true) }
+                FormLine("月退後折數") { FormInput(rebate, { rebate = it }, "空白＝不月退", number = true) }
                 Text(
                     "月退：成交時先收全額手續費，次月 15 日退回差額。填了之後，每月 15 日會自動在交割帳戶記一筆「手續費退佣」收入（從現在這個月的交易開始計算）。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

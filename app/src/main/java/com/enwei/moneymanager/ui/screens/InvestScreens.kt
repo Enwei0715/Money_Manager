@@ -497,7 +497,7 @@ fun TradeEditScreen(
                 market = it; if (it == Market.US) byLot = false
             }
             FormLine("代號") {
-                FormInput(symbol, { symbol = it.uppercase().trim() }, if (market == Market.TW) "例：2330、0050" else "例：AAPL")
+                FormInput(symbol, { symbol = it.uppercase().trim() }, if (market == Market.TW) "" else "")
             }
             lookup?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp)) }
             FormLine("名稱") { FormInput(name, { name = it }, "自動帶出，可修改") }
@@ -528,7 +528,7 @@ fun TradeEditScreen(
                 if (side != StockSide.STOCK_DIVIDEND) {
                     FormLine("成交價") { FormInput(price, { price = it }, "", number = true) }
                     if (market == Market.TW) {
-                        FormLine("分次成交") { FormInput(fills, { fills = it; feeEdited = false }, "選填，例：10+5（每次成交股數）") }
+                        FormLine("分次成交") { FormInput(fills, { fills = it; feeEdited = false }, "選填，每次成交股數用 + 分隔") }
                         if (fillParts.size > 1 && kotlin.math.abs(fillParts.sum() - shares) >= 1e-6) Text(
                             "分次股數合計 ${formatNum(fillParts.sum(), 0)} 與數量 ${formatNum(shares, 0)} 不同，先以一次成交估算",
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 108.dp, top = 4.dp),

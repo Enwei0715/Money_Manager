@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 
@@ -198,6 +199,45 @@ class SettingsStore(context: Context) {
     )
 
     @Synchronized
+    /** 匯出所有設定（完整備份用）；GitHub Token 屬於憑證，不放進備份檔。 */
+    fun exportRaw(): Map<String, kotlinx.serialization.json.JsonElement> = prefs.all.filterKeys { it != "githubToken" }.mapNotNull { (k, v) ->
+        val e: kotlinx.serialization.json.JsonElement = when (v) {
+            is Boolean -> kotlinx.serialization.json.buildJsonObject { put("t", "b"); put("v", v) }
+            is Int -> kotlinx.serialization.json.buildJsonObject { put("t", "i"); put("v", v) }
+            is Long -> kotlinx.serialization.json.buildJsonObject { put("t", "l"); put("v", v) }
+            is Float -> kotlinx.serialization.json.buildJsonObject { put("t", "f"); put("v", v) }
+            is String -> kotlinx.serialization.json.buildJsonObject { put("t", "s"); put("v", v) }
+            is Set<*> -> kotlinx.serialization.json.buildJsonObject {
+                put("t", "ss"); put("v", kotlinx.serialization.json.JsonArray(v.map { kotlinx.serialization.json.JsonPrimitive(it.toString()) }))
+            }
+            else -> return@mapNotNull null
+        }
+        k to e
+    }.toMap()
+
+    /** 以備份檔的設定取代目前設定（保留本機的 GitHub Token），並重新載入。 */
+    @Synchronized
+    fun importRaw(map: Map<String, kotlinx.serialization.json.JsonElement>) {
+        val token = prefs.getString("githubToken", "")
+        val ed = prefs.edit().clear()
+        map.forEach { (k, e) ->
+            val o = e as? kotlinx.serialization.json.JsonObject ?: return@forEach
+            val t = (o["t"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+            val v = o["v"] ?: return@forEach
+            val p = v as? kotlinx.serialization.json.JsonPrimitive
+            when (t) {
+                "b" -> p?.content?.toBooleanStrictOrNull()?.let { ed.putBoolean(k, it) }
+                "i" -> p?.content?.toIntOrNull()?.let { ed.putInt(k, it) }
+                "l" -> p?.content?.toLongOrNull()?.let { ed.putLong(k, it) }
+                "f" -> p?.content?.toFloatOrNull()?.let { ed.putFloat(k, it) }
+                "s" -> p?.content?.let { ed.putString(k, it) }
+                "ss" -> (v as? kotlinx.serialization.json.JsonArray)?.let { arr -> ed.putStringSet(k, arr.map { (it as kotlinx.serialization.json.JsonPrimitive).content }.toSet()) }
+            }
+        }
+        ed.putString("githubToken", token).commit()
+        state.value = read()
+    }
+
     fun update(block: (AppSettings) -> AppSettings) {
         val s = block(state.value)
         prefs.edit()

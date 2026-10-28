@@ -199,6 +199,9 @@ interface FxDao {
     @Query("SELECT * FROM fx_rates")
     suspend fun all(): List<FxRateEntity>
 
+    @Query("DELETE FROM fx_rates")
+    suspend fun clear()
+
     @Upsert
     suspend fun upsertAll(list: List<FxRateEntity>)
 }
@@ -228,6 +231,15 @@ interface RuleDao {
 interface NotificationLogDao {
     @Query("SELECT * FROM notification_log ORDER BY postedAt DESC LIMIT 200")
     fun observeRecent(): Flow<List<NotificationLogEntity>>
+
+    @Query("SELECT * FROM notification_log")
+    suspend fun all(): List<NotificationLogEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(list: List<NotificationLogEntity>)
+
+    @Query("DELETE FROM notification_log")
+    suspend fun clear()
 
     @Insert
     suspend fun insert(e: NotificationLogEntity): Long
