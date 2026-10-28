@@ -446,3 +446,27 @@ class SinopacAutopayTest {
         assertEquals(LocalDate.of(2026, 11, 10), c.autopayDateFor(due, null))
     }
 }
+
+/** 以使用者實際帳單驗證：永豐（結帳 23 日）、國泰（結帳 17 日，週五六延至週日）。 */
+class RealBillDatesTest {
+    private val sinopac = CardCycle(23, 1, StatementShift.NONE, 15, autopayLagBusinessDays = 1)
+    private val cathay = CardCycle(17, 1, StatementShift.FRI_SAT_TO_SUN, 16, autopayLagBusinessDays = 1)
+    private fun autopay(c: CardCycle, y: Int, m: Int): LocalDate {
+        val due = c.dueFor(c.statementIn(java.time.YearMonth.of(y, m)))
+        return c.autopayDateFor(due, null)
+    }
+
+    @Test fun sinopacHistory() {
+        assertEquals(LocalDate.of(2026, 7, 8), autopay(sinopac, 2026, 6))
+        assertEquals(LocalDate.of(2026, 8, 7), autopay(sinopac, 2026, 7))
+        assertEquals(LocalDate.of(2026, 9, 7), autopay(sinopac, 2026, 8))
+        assertEquals(LocalDate.of(2026, 10, 8), autopay(sinopac, 2026, 9))
+        assertEquals(LocalDate.of(2026, 11, 10), autopay(sinopac, 2026, 10))
+    }
+
+    @Test fun cathayHistory() {
+        assertEquals(LocalDate.of(2026, 10, 6), autopay(cathay, 2026, 9))
+        assertEquals(LocalDate.of(2026, 11, 2), cathay.dueFor(cathay.statementIn(java.time.YearMonth.of(2026, 10))))
+        assertEquals(LocalDate.of(2026, 11, 2), autopay(cathay, 2026, 10))
+    }
+}
