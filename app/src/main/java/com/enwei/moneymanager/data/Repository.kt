@@ -412,6 +412,15 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
             ?: (if (isLine) accounts.firstOrNull { it.type != AccountType.CREDIT_CARD && it.name.contains("line", ignoreCase = true) } else null)
             ?: accounts.firstOrNull { it.id == s.defaultAccountId }
+        // 銀行的股利入帳通知：已由「自動除息」記到這個帳戶時不再重複記收入
+        if (p.type == ParsedType.INCOME && account != null && listOf("股利", "股息", "配息").any { raw0.contains(it) }) {
+            val day = java.time.Instant.ofEpochMilli(occurred).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+            val autoDiv = db.stocks().allTrades().filter {
+                it.side == StockSide.CASH_DIVIDEND && it.cashAccountId == account.id && it.externalKey?.startsWith("DIV") == true &&
+                    day - it.date in -15..75
+            }.groupBy { it.date }.values.map { l -> Money.toMinor(l.sumOf { it.cashAmount }) }
+            if (autoDiv.any { kotlin.math.abs(it - p.amountMinor) <= 100 }) { log.insert(logAs("DUPLICATE")); return null }
+        }
         val status = if (s.notifAutoConfirm) TxnStatus.CONFIRMED else TxnStatus.PENDING
         val raw = listOfNotNull(title, text).joinToString("\n")
         val window = 10 * 60_000L
@@ -799,7 +808,68 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     suspend fun getTrade(id: Long) = db.stocks().getTrade(id)
-    suspend fun deleteTrade(id: Long) = db.stocks().deleteTrade(id)
+    suspend fun deleteTrade(id: Long) {
+        val t = db.stocks().getTrade(id)
+        // 刪除自動除息：記住，之後不再自動建立
+        t?.externalKey?.takeIf { it.startsWith("DIV:") }?.let { k ->
+            settings.update { it.copy(dismissedDividends = it.dismissedDividends + k.removePrefix("DIV:")) }
+        }
+        db.stocks().deleteTrade(id)
+    }
+
+    /**
+     * 自動除息：依除息資料與當時持有的各批庫存，建立／更新「自動除息」股利紀錄（不需使用者輸入）。
+     * - 紀錄以 externalKey「DIV:代號:除息日:批次」去重；使用者手動改過的會變成「DIVM:」並不再覆蓋。
+     * - 同一次除息若使用者已手動輸入股利（沒有 externalKey），就不自動建立。
+     * - 庫存變動（新增、刪除、修改買賣）後重新計算，金額跟著更新，不再持有的批次會移除。
+     */
+    suspend fun applyDividends(market: Market, symbol: String, events: List<com.enwei.moneymanager.core.DividendEvent>, today: LocalDate = LocalDate.now()): Int {
+        val sym = symbol.uppercase()
+        val all = db.stocks().allTrades().filter { it.market == market && it.symbol.uppercase() == sym }
+        val buys = all.filter { it.side == StockSide.BUY }
+        if (buys.isEmpty()) return 0
+        val firstDay = buys.minOf { it.date }
+        val byId = all.associateBy { it.id }
+        val records = all.map { it.toRecord() }
+        var changed = 0
+        db.withTransaction {
+            events.filter { it.exEpochDay > firstDay && it.exEpochDay <= today.toEpochDay() }.forEach { ev ->
+                val manual = all.any { it.side == StockSide.CASH_DIVIDEND && it.externalKey == null && kotlin.math.abs(it.date - ev.exEpochDay) <= 20 }
+                val prefix = "$sym:${LocalDate.ofEpochDay(ev.exEpochDay)}:"
+                val autoExisting = all.filter { it.externalKey?.startsWith("DIV:$prefix") == true }
+                if (manual) {
+                    autoExisting.forEach { db.stocks().deleteTrade(it.id); changed++ }
+                    return@forEach
+                }
+                val alloc = com.enwei.moneymanager.core.DividendCalc.allocate(records, ev)
+                val keep = HashSet<String>()
+                alloc.forEach { (lotId, amt) ->
+                    val suffix = "$prefix$lotId"
+                    keep += "DIV:$suffix"
+                    if (all.any { it.externalKey == "DIVM:$suffix" } || suffix in settings.value.dismissedDividends) return@forEach
+                    val lot = byId[lotId] ?: return@forEach
+                    val old = autoExisting.find { it.externalKey == "DIV:$suffix" }
+                    val note = "自動除息：每股 ${"%.4f".format(ev.perShare).trimEnd('0').trimEnd('.')} 元 × ${lot.shares.toLong()} 股"
+                    if (old == null) {
+                        db.stocks().upsertTrade(
+                            StockTradeEntity(
+                                market = market, symbol = sym, name = lot.name, side = StockSide.CASH_DIVIDEND, shares = 0.0, price = 0.0,
+                                cashAmount = amt, currency = lot.currency, date = ev.exEpochDay,
+                                cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId,
+                                note = note, source = TxnSource.DIVIDEND, externalKey = "DIV:$suffix", lotTradeId = lotId,
+                            ),
+                        )
+                        changed++
+                    } else if (old.cashAmount != amt || old.cashAccountId != lot.cashAccountId || old.brokerAccountId != lot.brokerAccountId) {
+                        db.stocks().upsertTrade(old.copy(cashAmount = amt, cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId, note = note))
+                        changed++
+                    }
+                }
+                autoExisting.filter { it.externalKey !in keep }.forEach { db.stocks().deleteTrade(it.id); changed++ }
+            }
+        }
+        return changed
+    }
 
     /** 刪除整檔持股（這個代號的所有買賣與股利紀錄）；交割帳戶餘額會自動回復。 */
     suspend fun deleteHolding(market: Market, symbol: String) = db.stocks().deleteSymbol(market, symbol.uppercase())

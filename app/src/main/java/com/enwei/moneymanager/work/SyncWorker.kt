@@ -61,9 +61,20 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             repo.settings.update { it.copy(lastQuoteUpdate = System.currentTimeMillis()) }
         }
 
+        /** 自動除息：抓持有過的台股除息資料並分配到各批庫存。 */
+        suspend fun refreshDividends(repo: Repository) {
+            repo.allTrades().filter { it.market == com.enwei.moneymanager.core.Market.TW && it.side == com.enwei.moneymanager.core.StockSide.BUY }
+                .map { it.symbol.uppercase() }.distinct().forEach { sym ->
+                    val events = runCatching { com.enwei.moneymanager.net.QuoteService.fetchDividends(com.enwei.moneymanager.core.Market.TW, sym) }.getOrNull()
+                        ?: return@forEach
+                    if (events.isNotEmpty()) runCatching { repo.applyDividends(com.enwei.moneymanager.core.Market.TW, sym, events) }
+                }
+        }
+
         suspend fun refreshMarket(repo: Repository) {
             val fx = runCatching { refreshFx(repo) }
             val q = runCatching { refreshQuotes(repo) }
+            runCatching { refreshDividends(repo) }
             fx.getOrThrow(); q.getOrThrow()
         }
     }

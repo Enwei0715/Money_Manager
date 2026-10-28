@@ -91,5 +91,32 @@ object LotCalc {
     }
 }
 
+/** 一次除息事件：除息日與每股現金股利。 */
+data class DividendEvent(val exEpochDay: Long, val perShare: Double)
+
+object DividendCalc {
+    /**
+     * 依券商「除息試算」分配一次除息到各批庫存：
+     * 只計算除息日前一天仍持有的批次；股利總額＝總股數×每股股利（元以下捨去），
+     * 各批＝股數×每股股利（四捨五入），最後一批用總額減去前面各批（尾差歸最後一批）。
+     * 回傳 (買進交易 id, 金額)。
+     */
+    fun allocate(trades: List<TradeRecord>, event: DividendEvent): List<Pair<Long, Double>> {
+        val held = LotCalc.build(trades.filter { it.epochDay < event.exEpochDay && it.side != StockSide.CASH_DIVIDEND })
+            .lots.filter { it.shares > 0 }.sortedWith(compareBy({ it.epochDay }, { it.tradeId }))
+        if (held.isEmpty() || event.perShare <= 0) return emptyList()
+        val total = floor(held.sumOf { it.shares } * event.perShare + 1e-6)
+        val out = ArrayList<Pair<Long, Double>>()
+        var used = 0.0
+        held.forEachIndexed { i, l ->
+            val amt = if (i == held.lastIndex) (total - used).coerceAtLeast(0.0)
+            else kotlin.math.round(l.shares * event.perShare).coerceAtMost(total - used)
+            used += amt
+            out += l.tradeId to amt
+        }
+        return out.filter { it.second > 0 }
+    }
+}
+
 /** 元以下無條件捨去（券商帳單顯示用）。 */
 fun floorYuan(v: Double): Double = floor(v + 1e-9)

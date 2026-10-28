@@ -80,6 +80,27 @@ object QuoteService {
         }
     }
 
+    /**
+     * 歷年除息（除息日、每股現金股利），來源 Yahoo Finance。台股先試上市 .TW，再試上櫃 .TWO。
+     */
+    suspend fun fetchDividends(market: Market, symbol: String): List<com.enwei.moneymanager.core.DividendEvent> {
+        val candidates = if (market == Market.TW) listOf("$symbol.TW", "$symbol.TWO") else listOf(symbol)
+        for (ys in candidates) {
+            val root = runCatching {
+                Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(ys, "UTF-8")}?range=10y&interval=1mo&events=div")
+            }.getOrNull() ?: continue
+            val result = (root.obj("chart").obj("result") as? JsonArray)?.firstOrNull() ?: continue
+            val divs = result.obj("events").obj("dividends") as? JsonObject ?: return emptyList()
+            val zone = java.time.ZoneId.of(if (market == Market.TW) "Asia/Taipei" else "America/New_York")
+            return divs.values.mapNotNull { e ->
+                val ts = e.num("date")?.toLong() ?: return@mapNotNull null
+                val amt = e.num("amount") ?: return@mapNotNull null
+                com.enwei.moneymanager.core.DividendEvent(java.time.Instant.ofEpochSecond(ts).atZone(zone).toLocalDate().toEpochDay(), amt)
+            }.sortedBy { it.exEpochDay }
+        }
+        return emptyList()
+    }
+
     private suspend fun fetchYahoo(yahooSymbol: String, market: Market, symbol: String): QuoteEntity? {
         val root = Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(yahooSymbol, "UTF-8")}?range=5d&interval=1d")
         val result = (root.obj("chart").obj("result") as? JsonArray)?.firstOrNull() ?: return null

@@ -125,6 +125,25 @@ class LotCalcTest {
         assertEquals(proceeds - (71988.0 + 21267.0), book.realizedPnl, 1e-6)
     }
 
+    @Test fun autoDividendMatchesBroker() {
+        val buys = trades.filter { it.side == StockSide.BUY }
+        // 永豐除息試算：489、163、162（總額 814）
+        val alloc = DividendCalc.allocate(buys, DividendEvent(20680, 32.5996)).toMap()
+        assertEquals(489.0, alloc.getValue(1), 0.0)
+        assertEquals(163.0, alloc.getValue(2), 0.0)
+        assertEquals(162.0, alloc.getValue(3), 0.0)
+        // 除息日之後才買的那批不分配
+        val late = DividendCalc.allocate(buys, DividendEvent(20645, 32.5996)).toMap()
+        assertEquals(setOf(1L, 2L), late.keys)
+    }
+
+    @Test fun fillsExplainFee() {
+        // 5/13 買 15 股 @4,825：一次成交 103，分 10 股＋5 股兩次成交各自捨去 = 68 + 34 = 102（帳單金額）
+        val fees = FeeSettings(discount = 1.0, minFee = 20.0, oddLotMinFee = 1.0)
+        assertEquals(103.0, StockCalc.twFee(72375.0, fees, oddLot = true), 0.0)
+        assertEquals(102.0, StockCalc.twFee(48250.0, fees, true) + StockCalc.twFee(24125.0, fees, true), 0.0)
+    }
+
     @Test fun proportionalDividend() {
         val book = LotCalc.build(
             listOf(

@@ -108,6 +108,8 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
         var first = true
         while (true) {
             val r = runCatching { SyncWorker.refreshQuotes(repo) }
+            // 開啟股票頁時（或按更新）順便同步除息
+            if (first) MoneyApp.instance.appScope.launch { runCatching { SyncWorker.refreshDividends(repo) } }
             if (first && refreshTick > 0) onMessage(if (r.isSuccess) "股價已更新" else "更新失敗：${r.exceptionOrNull()?.message}")
             first = false
             kotlinx.coroutines.delay(30_000)
@@ -359,6 +361,8 @@ fun TradeEditScreen(
     var lotId by remember { mutableStateOf(initLot) }
     val allTrades by repo.trades.collectAsStateWithLifecycle(emptyList())
     var qty by remember { mutableStateOf("") }
+    /** 分次成交的股數，例如「10+5」：券商每次成交各自計算手續費並捨去 */
+    var fills by remember { mutableStateOf("") }
     var byLot by remember { mutableStateOf(true) }
     var price by remember { mutableStateOf("") }
     var fee by remember { mutableStateOf("") }
@@ -411,12 +415,14 @@ fun TradeEditScreen(
     val shares = (qty.replace(",", "").toDoubleOrNull() ?: 0.0) * (if (market == Market.TW && byLot) 1000 else 1)
     val feeSettings = settings.feeSettings.let { fs -> broker?.feeDiscount?.let { fs.copy(discount = it) } ?: fs }
     // 自動估算手續費與交易稅（可手動覆寫）
-    LaunchedEffect(market, symbol, side, shares, price, feeSettings) {
+    val fillParts = fills.split('+', '＋', ',', ' ').mapNotNull { it.trim().toDoubleOrNull() }.filter { it > 0 }
+    LaunchedEffect(market, symbol, side, shares, price, feeSettings, fills) {
         if (feeEdited) return@LaunchedEffect
         val p = price.replace(",", "").toDoubleOrNull() ?: return@LaunchedEffect
         if (shares > 0 && (side == StockSide.BUY || side == StockSide.SELL)) {
-            val (f, t) = StockCalc.estimate(market, symbol, side, shares, p, feeSettings)
-            fee = formatPlain(f); tax = formatPlain(t)
+            val parts = fillParts.takeIf { it.size > 1 && kotlin.math.abs(it.sum() - shares) < 1e-6 } ?: listOf(shares)
+            val est = parts.map { StockCalc.estimate(market, symbol, side, it, p, feeSettings) }
+            fee = formatPlain(est.sumOf { it.first }); tax = formatPlain(est.sumOf { it.second })
         }
     }
     val isDividend = side == StockSide.CASH_DIVIDEND
@@ -479,6 +485,13 @@ fun TradeEditScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp))
                 if (side != StockSide.STOCK_DIVIDEND) {
                     FormLine("成交價") { FormInput(price, { price = it }, "", number = true) }
+                    if (market == Market.TW) {
+                        FormLine("分次成交") { FormInput(fills, { fills = it; feeEdited = false }, "選填，例：10+5（每次成交股數）") }
+                        if (fillParts.size > 1 && kotlin.math.abs(fillParts.sum() - shares) >= 1e-6) Text(
+                            "分次股數合計 ${formatNum(fillParts.sum(), 0)} 與數量 ${formatNum(shares, 0)} 不同，先以一次成交估算",
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 108.dp, top = 4.dp),
+                        )
+                    }
                     FormLine("手續費") { FormInput(fee, { fee = it; feeEdited = true }, "", number = true) }
                     FormLine("交易稅") { FormInput(tax, { tax = it; feeEdited = true }, "", number = true) }
                     Text(
@@ -506,11 +519,16 @@ fun TradeEditScreen(
                         currency = if (market == Market.TW) "TWD" else "USD",
                         date = date.toEpochDay(), cashAccountId = cashAccountId, brokerAccountId = brokerId, note = note.ifBlank { null },
                         lotTradeId = if (side == StockSide.CASH_DIVIDEND) lotId else null,
-                    )
+                    ).let { e ->
+                        // 改過的自動除息不再被自動同步覆蓋
+                        val k = e.externalKey
+                        if (k != null && k.startsWith("DIV:")) e.copy(externalKey = "DIVM:" + k.removePrefix("DIV:"), source = TxnSource.MANUAL) else e
+                    }
                     // 用 App 層級的 scope，離開畫面後仍會完成儲存與報價更新
                     MoneyApp.instance.appScope.launch {
                         repo.saveTrade(t)
                         runCatching { SyncWorker.refreshQuotes(repo) }
+                        runCatching { SyncWorker.refreshDividends(repo) }
                     }
                     nav.popBackStack()
                 },
