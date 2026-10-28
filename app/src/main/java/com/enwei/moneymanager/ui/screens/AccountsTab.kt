@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FactCheck
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -353,6 +354,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         Text(if (tab == 2) "全部" else "${start.monthValue}.${start.dayOfMonth}.${start.year % 100} ~ ${end.monthValue}.${end.dayOfMonth}.${end.year % 100}",
                             fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                     }
+                    if (acc?.type == AccountType.CASH) IconButton(onClick = { nav.navigate("cashcount/$id") }) { Icon(Icons.Outlined.Payments, "點鈔") }
                     IconButton(onClick = { reconcileOpen = true }) { Icon(Icons.Outlined.FactCheck, "對帳") }
                     IconButton(onClick = { chart = !chart }) {
                         Icon(if (chart) Icons.AutoMirrored.Filled.List else Icons.Outlined.BarChart, if (chart) "列表" else "圖表")
@@ -401,8 +403,14 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         Text("應繳 ${Money.withSymbol(st?.payable ?: 0, acc.currency)}" + (st?.dueDate?.let { "　繳款日 ${it.monthValue}/${it.dayOfMonth}" } ?: ""), fontSize = 16.sp)
                         Text("未出帳 ${Money.withSymbol(st?.outstanding ?: 0, acc.currency)}" + if (acc.creditLimit > 0) "　可用額度 ${Money.full(acc.creditLimit + current)}" else "",
                             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(if (acc.autopayFromId != null) "自動扣繳：${lk.account(acc.autopayFromId)?.name}" else "未設定自動扣繳", fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            listOfNotNull(
+                                acc.statementDay?.let { "結帳日 $it 日" },
+                                acc.dueDay?.let { "繳款日 $it 日" },
+                                st?.autopayDate?.let { "${it.monthValue}/${it.dayOfMonth} 由「${lk.account(acc.autopayFromId)?.name}」自動扣繳" } ?: "未設定自動扣繳",
+                            ).joinToString(" · "),
+                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     androidx.compose.material3.OutlinedButton(onClick = {
                         nav.navigate("txn/0?type=TRANSFER&account=${acc.autopayFromId ?: 0}&to=${acc.id}&amount=${st?.payable ?: 0}")

@@ -5,6 +5,7 @@ import com.enwei.moneymanager.core.CardCycle
 import com.enwei.moneymanager.core.CategoryGuesser
 import com.enwei.moneymanager.core.FxConverter
 import com.enwei.moneymanager.core.ParsedKind
+import com.enwei.moneymanager.core.ScreenRecord
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.core.NotificationParser
 import com.enwei.moneymanager.core.ParsedType
@@ -66,7 +67,7 @@ data class Backup(
     val notifAccountMap: Map<String, Long> = emptyMap(),
 )
 
-data class CardStatus(val payable: Long, val outstanding: Long, val dueDate: LocalDate?)
+data class CardStatus(val payable: Long, val outstanding: Long, val dueDate: LocalDate?, val autopayDate: LocalDate? = null)
 
 private const val TRANSFER_TAG = "#轉帳"
 
@@ -323,6 +324,14 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
                 nearby.firstOrNull { it.type == TxnType.TRANSFER && it.accountId == null && (w == null || it.toAccountId == w.id) }?.let {
                     return merged(it, it.copy(accountId = account?.id), "儲值 $amountText：${account?.name ?: "?"} → ${lookupName(it.toAccountId)}")
                 }
+                // 錢包畫面讀取已先記下這筆儲值：補上扣款帳戶即可
+                if (w != null) db.txns().all().firstOrNull {
+                    it.source == TxnSource.SCREEN && it.type == TxnType.TRANSFER && it.toAccountId == w.id && it.amount == p.amountMinor &&
+                        kotlin.math.abs(it.date - occurred) <= 36L * 3600 * 1000
+                }?.let {
+                    return merged(it, it.copy(accountId = account?.id ?: it.accountId, date = occurred, status = TxnStatus.CONFIRMED),
+                        "儲值 $amountText：${account?.name ?: "?"} → ${w.name}")
+                }
                 if (w != null && w.id != account?.id) {
                     return insert(base.copy(type = TxnType.TRANSFER, toAccountId = w.id, merchant = "電支儲值"), "RECORDED",
                         "儲值 $amountText：${account?.name ?: "?"} → ${w.name}")
@@ -353,6 +362,25 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
                         "轉帳 $amountText：${lookupName(from)} → ${lookupName(to)}")
                 }
             }
+            ParsedKind.CARD_PAYMENT -> {
+                val cards = accounts.filter { it.type == AccountType.CREDIT_CARD }
+                val card = p.cardLast4?.let { l4 -> cards.firstOrNull { it.cardLast4 == l4 } }
+                    ?: cards.filter { account != null && it.autopayFromId == account.id }.singleOrNull()
+                    ?: cards.singleOrNull()
+                if (card != null) {
+                    // 已由排程建立的自動扣繳：以銀行實際扣款金額與時間校正，不重複記帳
+                    val window5d = 5L * 24 * 3600 * 1000
+                    db.txns().all().firstOrNull {
+                        it.source == TxnSource.AUTOPAY && it.toAccountId == card.id && kotlin.math.abs(it.date - occurred) <= window5d
+                    }?.let { ap ->
+                        db.txns().upsert(ap.copy(amount = p.amountMinor, date = occurred, accountId = account?.id ?: ap.accountId, rawText = raw))
+                        log.insert(logAs("MERGED", ap.id))
+                        return IngestResult("RECORDED", ap.id, "卡費扣繳 $amountText：${card.name}（已校正金額）")
+                    }
+                    return insert(base.copy(type = TxnType.TRANSFER, toAccountId = card.id, merchant = "${card.name} 卡費"), "RECORDED",
+                        "卡費 $amountText：${account?.name ?: "?"} → ${card.name}")
+                }
+            }
             ParsedKind.NORMAL -> Unit
         }
 
@@ -372,6 +400,62 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
             base.copy(type = type, categoryId = guessCategory(p.merchant, type), merchant = merchant, rawText = tagged),
             "RECORDED", "${type.label} $amountText ${p.merchant.orEmpty()}",
         )
+    }
+
+    /**
+     * 匯入從錢包 App 交易紀錄畫面讀到的資料（街口、悠遊付等不推播消費的錢包）。
+     * 以「日期＋金額＋商家＋同畫面序號」去重；儲值若已由銀行通知記成轉帳則略過。
+     */
+    suspend fun ingestScreenRecords(pkg: String, records: List<ScreenRecord>): Int {
+        val s = settings.value
+        val since = s.screenReadSince[pkg]?.let(LocalDate::ofEpochDay) ?: LocalDate.now()
+        val accounts = db.accounts().all().filter { !it.archived }
+        val wallet = s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
+            ?: accounts.filter { it.type == AccountType.EWALLET }.singleOrNull()
+            ?: return 0
+        val seen = HashMap<String, Int>()
+        var created = 0
+        records.filter { !it.time.toLocalDate().isBefore(since) }.forEach { r ->
+            val base = "${r.time.toLocalDate()}${if (r.dateOnly) "" else "T" + r.time.toLocalTime()}:${if (r.isIncome) "+" else "-"}${r.amountMinor}:${r.merchant}"
+            val n = seen.merge(base, 1) { x, y -> x + y }!!
+            val key = "AX:$pkg:$base#$n"
+            if (db.txns().byExternalKey(key) != null) return@forEach
+            val millis = r.time.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            if (r.isTopUp) {
+                val window = if (r.dateOnly) 36L * 3600 * 1000 else 15L * 60 * 1000
+                val exists = db.txns().all().any {
+                    it.type == TxnType.TRANSFER && it.toAccountId == wallet.id && it.amount == r.amountMinor && kotlin.math.abs(it.date - millis) <= window
+                }
+                if (!exists) {
+                    if (db.txns().insert(
+                            TxnEntity(
+                                type = TxnType.TRANSFER, amount = r.amountMinor, accountId = wallet.linkedAccountId, toAccountId = wallet.id,
+                                merchant = "儲值", date = millis, source = TxnSource.SCREEN,
+                                status = if (wallet.linkedAccountId == null) TxnStatus.PENDING else TxnStatus.CONFIRMED, externalKey = key,
+                            ),
+                        ) > 0
+                    ) created++
+                }
+                // 已由銀行通知記成轉帳的儲值：略過
+                return@forEach
+            }
+            val type = if (r.isIncome) TxnType.INCOME else TxnType.EXPENSE
+            // 錢包綁信用卡付款時，刷卡通知可能已記過同一筆
+            if (!r.dateOnly && db.txns().all().any {
+                    it.source == TxnSource.NOTIFICATION && it.type == type && it.amount == r.amountMinor && kotlin.math.abs(it.date - millis) <= 15L * 60 * 1000
+                }
+            ) return@forEach
+            val id = db.txns().insert(
+                TxnEntity(
+                    type = type, amount = r.amountMinor, currency = wallet.currency, accountId = wallet.id,
+                    categoryId = guessCategory(listOfNotNull(r.merchant, r.typeLabel).joinToString(" "), type),
+                    merchant = r.merchant, note = r.typeLabel, date = millis, source = TxnSource.SCREEN,
+                    status = if (s.notifAutoConfirm) TxnStatus.CONFIRMED else TxnStatus.PENDING, externalKey = key,
+                ),
+            )
+            if (id > 0) created++
+        }
+        return created
     }
 
     private suspend fun lookupName(id: Long?) = id?.let { db.accounts().get(it)?.name } ?: "?"
@@ -446,22 +530,23 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
             var cursor = card.autopayLastRun?.let(LocalDate::ofEpochDay) ?: today.minusDays(1)
             while (true) {
                 val due = cycle.nextDueDate(cursor)
-                if (due.isAfter(today)) break
+                val deduct = cycle.autopayDateFor(due, card.autopayDay)
+                if (deduct.isAfter(today)) break
                 val statement = cycle.statementDateFor(due)
                 val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
                 val owed = -balanceAsOf(card, txns, statement.plusDays(1).toMillis(LocalTime.MIDNIGHT))
                 val paidSince = txns.filter {
                     it.type == TxnType.TRANSFER && it.toAccountId == card.id &&
                         it.date >= statement.plusDays(1).toMillis(LocalTime.MIDNIGHT) &&
-                        it.date < due.plusDays(1).toMillis(LocalTime.MIDNIGHT)
+                        it.date < deduct.plusDays(1).toMillis(LocalTime.MIDNIGHT) && it.source != TxnSource.AUTOPAY
                 }.sumOf { it.toAmount ?: it.amount }
                 val pay = owed - paidSince
                 if (pay > 0) {
                     val id = db.txns().insert(
                         TxnEntity(
                             type = TxnType.TRANSFER, amount = pay, currency = card.currency, accountId = card.autopayFromId,
-                            toAccountId = card.id, merchant = "${card.name} 自動扣繳", note = "帳單結帳日 $statement",
-                            date = due.toMillis(LocalTime.of(8, 0)), source = TxnSource.AUTOPAY,
+                            toAccountId = card.id, merchant = "${card.name} 自動扣繳", note = "結帳日 $statement · 繳款日 $due",
+                            date = deduct.toMillis(LocalTime.of(8, 0)), source = TxnSource.AUTOPAY,
                             externalKey = "AP:${card.id}:${due.toEpochDay()}",
                         ),
                     )
@@ -503,7 +588,7 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
             val paid = txns.filter { it.type == TxnType.TRANSFER && it.toAccountId == card.id && it.date >= cutoff }.sumOf { it.toAmount ?: it.amount }
             val payable = maxOf(0, billed - paid)
             val due = cycle.nextDueDate(lastStatement)
-            card.id to CardStatus(payable, maxOf(0, owed - payable), due)
+            card.id to CardStatus(payable, maxOf(0, owed - payable), due, if (card.autopayFromId != null) cycle.autopayDateFor(due, card.autopayDay) else null)
         }
     }
 

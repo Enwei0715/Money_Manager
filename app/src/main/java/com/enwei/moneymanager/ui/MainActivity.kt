@@ -58,6 +58,8 @@ import com.enwei.moneymanager.ui.screens.AccountsTab
 import com.enwei.moneymanager.ui.screens.BackupScreen
 import com.enwei.moneymanager.ui.screens.BookmarksScreen
 import com.enwei.moneymanager.ui.screens.BudgetScreen
+import com.enwei.moneymanager.ui.screens.CashCounterScreen
+import com.enwei.moneymanager.ui.screens.WalletReaderScreen
 import com.enwei.moneymanager.ui.screens.CategoriesScreen
 import com.enwei.moneymanager.ui.screens.CategoryStatScreen
 import com.enwei.moneymanager.ui.screens.ConfigScreen
@@ -193,6 +195,10 @@ private fun AppScaffold(nav: NavHostController) {
                 arguments = listOf(navArgument("filter") { type = NavType.BoolType; defaultValue = false }),
             ) { e -> SearchScreen(nav, e.arguments!!.getBoolean("filter")) }
             composable("budget") { BudgetScreen(nav) }
+            composable("walletreader") { WalletReaderScreen(nav) }
+            composable("cashcount/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->
+                CashCounterScreen(nav, e.arguments!!.getLong("id"))
+            }
             composable("bookmarks") { BookmarksScreen(nav) }
             composable("config") { ConfigScreen(nav) }
             composable("totalstats") { TotalStatsScreen(nav) }

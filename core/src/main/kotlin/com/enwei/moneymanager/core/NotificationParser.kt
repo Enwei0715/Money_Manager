@@ -5,7 +5,7 @@ import java.time.LocalDateTime
 enum class ParsedType { EXPENSE, INCOME }
 
 /** 通知的性質：一般收支、提款、電子支付儲值（扣款方／入帳方）、帳戶間轉帳。 */
-enum class ParsedKind { NORMAL, WITHDRAWAL, TOPUP_OUT, TOPUP_IN, TRANSFER_OUT, TRANSFER_IN }
+enum class ParsedKind { NORMAL, WITHDRAWAL, TOPUP_OUT, TOPUP_IN, TRANSFER_OUT, TRANSFER_IN, CARD_PAYMENT }
 
 data class ParsedTransaction(
     val type: ParsedType,
@@ -109,6 +109,10 @@ object NotificationParser {
         val (type, kind) = when {
             // 退款、退貨即使含「消費」字樣仍屬收入
             full.contains("退款") || full.contains("退貨") -> ParsedType.INCOME to ParsedKind.NORMAL
+            // 信用卡款自動扣繳／繳款（銀行帳戶扣款，不是刷卡消費）
+            (full.contains("卡款") || full.contains("卡費") || full.contains("信用卡")) &&
+                (full.contains("扣繳") || full.contains("繳款") || full.contains("繳費")) && !full.contains("刷卡") ->
+                ParsedType.EXPENSE to ParsedKind.CARD_PAYMENT
             has(withdrawalKeywords) && !full.contains("存入") -> ParsedType.EXPENSE to ParsedKind.WITHDRAWAL
             has(topupKeywords) -> if (has(debitKeywords)) ParsedType.EXPENSE to ParsedKind.TOPUP_OUT else ParsedType.INCOME to ParsedKind.TOPUP_IN
             has(transferOutKeywords) -> ParsedType.EXPENSE to ParsedKind.TRANSFER_OUT

@@ -148,6 +148,7 @@ fun ConfigScreen(nav: NavController) {
                     } else pickTime = true
                 }
                 ConfigRow("通知自動記帳") { nav.navigate("notif") }
+                ConfigRow("錢包畫面讀取（街口、悠遊付）") { nav.navigate("walletreader") }
                 ConfigRow("即時匯率") { nav.navigate("fx") }
                 ConfigRow("股票手續費與 App 更新") { nav.navigate("settings") }
                 ConfigRow("備份與還原") { nav.navigate("backup") }

@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
@@ -83,6 +84,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.BuildConfig
 import com.enwei.moneymanager.core.Money
+import kotlinx.coroutines.flow.first
 import com.enwei.moneymanager.core.NotificationParser
 import com.enwei.moneymanager.data.CategoryEntity
 import com.enwei.moneymanager.data.TxnType
@@ -112,6 +114,7 @@ fun MoreScreen(nav: NavController) {
         Triple("config", "設定", Icons.Outlined.Settings),
         Triple("backup", "備份", Icons.Outlined.SettingsBackupRestore),
         Triple("notif", "通知記帳", Icons.Outlined.NotificationsActive),
+        Triple("walletreader", "錢包讀取", Icons.Outlined.AccountBalanceWallet),
         Triple("invest", "股票", Icons.AutoMirrored.Outlined.ShowChart),
         Triple("recurring", "週期扣款", Icons.Outlined.EventRepeat),
         Triple("fx", "匯率", Icons.Outlined.CurrencyExchange),
@@ -206,7 +209,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     Column(Modifier.padding(16.dp)) {
                         Text(if (enabled) "✅ 已取得通知存取權" else "⚠️ 尚未開啟通知存取權", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "開啟後，記帳本會讀取你勾選的銀行、信用卡、電子支付（LINE Pay、街口、全支付…）或簡訊 App 的通知，自動辨識金額、商家與卡號末四碼。資料只存在手機中。",
+                            "開啟後，記帳本會讀取你勾選的銀行、信用卡、電子支付或簡訊 App 的通知，自動辨識金額、商家與卡號末四碼。資料只存在手機中。\n若顯示「受限制的設定」無法開啟：設定 → 應用程式 → 記帳本 → 右上角 ⋮ →「允許受限制的設定」。",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Spacer(Modifier.height(8.dp))
@@ -248,7 +251,8 @@ fun NotificationSettingsScreen(nav: NavController) {
                             "• 跨行提款／ATM 領出 → 記成「銀行 → 現金」轉帳\n" +
                                 "• 銀行「電支交易」扣款（例如街口自動儲值）→ 記成「銀行 → 錢包」轉帳；錢包名稱需含「街口」「悠遊付」等字樣，或只有一個電子支付帳戶\n" +
                                 "• 兩個自己的帳戶一邊轉出、一邊轉入，金額相同且 10 分鐘內 → 合併成一筆轉帳\n" +
-                                "• 街口、悠遊付等不推播消費的錢包：到「帳戶 → 錢包 → 對帳」輸入實際餘額，差額自動記成支出\n" +
+                                "• 街口、悠遊付等不推播消費的錢包：用「更多 → 錢包讀取」，打開錢包的交易紀錄頁就會自動匯入；或在帳戶明細「對帳」\n" +
+                                "• 信用卡自動扣繳通知：校正排程扣繳的金額，不會重複記帳\n" +
                                 "• 通知內有交易時間時，以「金額＋時間」去重，重複跳出的通知不會重複記帳",
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -587,6 +591,187 @@ fun SettingsScreen(nav: NavController) {
             NumberField(minFee, { minFee = it; saveFees() }, "台股最低手續費（整股常見 20 元）")
             NumberField(usFee, { usFee = it; saveFees() }, "美股每筆手續費（USD）")
             Text("台股交易稅：一般股票 0.3%、ETF 0.1%，自動計算。", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** 錢包畫面讀取設定：給不推播消費的街口、悠遊付等錢包使用。 */
+@Composable
+fun WalletReaderScreen(nav: NavController) {
+    val ctx = LocalContext.current
+    val lk = rememberLookups()
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    var enabled by remember { mutableStateOf(com.enwei.moneymanager.notify.WalletScreenReader.isEnabled(ctx)) }
+    OnResume { enabled = com.enwei.moneymanager.notify.WalletScreenReader.isEnabled(ctx) }
+    var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
+    LaunchedEffect(Unit) { apps = withContext(Dispatchers.Default) { installedApps(ctx) } }
+    var filter by remember { mutableStateOf("") }
+    val wallets = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.EWALLET && !it.archived }
+    val today = java.time.LocalDate.now().toEpochDay()
+
+    fun toggle(pkg: String, on: Boolean) = repo.settings.update {
+        it.copy(
+            screenPackages = if (on) it.screenPackages + pkg else it.screenPackages - pkg,
+            screenReadSince = if (on && pkg !in it.screenReadSince) it.screenReadSince + (pkg to today) else it.screenReadSince,
+        )
+    }
+
+    Scaffold(topBar = { BackTopBar("錢包畫面讀取", { nav.popBackStack() }) }) { pad ->
+        LazyColumn(Modifier.padding(pad)) {
+            item {
+                Card(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                    ),
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(if (enabled) "✅ 錢包讀取已開啟" else "⚠️ 尚未開啟無障礙服務「記帳本錢包讀取」", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "街口、悠遊付不會推播每筆消費。開啟後，只要打開下方勾選的 App 並進入「交易紀錄」頁，記帳本就會讀取畫面上的商家、金額、日期並自動匯入（重複的不會再匯入；已由銀行通知記成轉帳的儲值也會自動略過）。只讀取勾選的 App。",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "若系統顯示「受限制的設定」而無法開啟：設定 → 應用程式 → 記帳本 → 右上角 ⋮ →「允許受限制的設定」，再回來開啟。通知存取權也是同樣步驟。",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Button(onClick = { com.enwei.moneymanager.notify.WalletScreenReader.openSettings(ctx) }) {
+                            Text(if (enabled) "無障礙設定" else "前往開啟")
+                        }
+                    }
+                }
+            }
+            if (wallets.isEmpty()) item {
+                Text("提醒：請先到「帳戶」新增群組為「電子支付」的帳戶（例如：街口、悠遊付），匯入的交易才有地方記。",
+                    color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp))
+            }
+            item { SectionTitle("要讀取的錢包 App（已選 ${settings.screenPackages.size}）") }
+            item {
+                OutlinedTextField(filter, { filter = it }, label = { Text("搜尋 App，例如：街口、悠遊付") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+            }
+            val sorted = apps.filter { filter.isBlank() || it.label.contains(filter, true) || it.pkg.contains(filter, true) }
+                .sortedByDescending { it.pkg in settings.screenPackages }
+            items(sorted, key = { "w" + it.pkg }) { a ->
+                val on = a.pkg in settings.screenPackages
+                ListItem(
+                    headlineContent = { Text(a.label) },
+                    supportingContent = {
+                        if (on) Column {
+                            var menu by remember { mutableStateOf(false) }
+                            Box {
+                                Text(
+                                    "記入：" + (settings.notifAccountMap[a.pkg]?.let { lk.account(it)?.name } ?: wallets.singleOrNull()?.name ?: "請選擇錢包帳戶") + " ▾",
+                                    color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.clickable { menu = true }.padding(vertical = 4.dp),
+                                )
+                                androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                                    wallets.forEach { w ->
+                                        androidx.compose.material3.DropdownMenuItem(text = { Text(w.name) }, onClick = {
+                                            repo.settings.update { it.copy(notifAccountMap = it.notifAccountMap + (a.pkg to w.id)) }; menu = false
+                                        })
+                                    }
+                                }
+                            }
+                            val since = settings.screenReadSince[a.pkg]?.let(java.time.LocalDate::ofEpochDay)
+                            Text(
+                                "匯入 ${since ?: "今天"} 之後的紀錄　（改為過去 30 天）",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.clickable {
+                                    repo.settings.update { it.copy(screenReadSince = it.screenReadSince + (a.pkg to today - 30)) }
+                                }.padding(vertical = 4.dp),
+                            )
+                        } else Text(a.pkg, style = MaterialTheme.typography.labelSmall)
+                    },
+                    trailingContent = { Checkbox(on, { toggle(a.pkg, it) }) },
+                    modifier = Modifier.clickable { toggle(a.pkg, !on) },
+                )
+            }
+        }
+    }
+}
+
+/** 現金點鈔：輸入各面額數量，算出總額並可對帳。 */
+@Composable
+fun CashCounterScreen(nav: NavController, accountId: Long) {
+    val scope = rememberCoroutineScope()
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
+    val b = balances.find { it.account.id == accountId }
+    val denoms = listOf(2000, 1000, 500, 200, 100, 50, 10, 5, 1)
+    var counts by remember(settings.cashCounts[accountId]) { mutableStateOf(settings.cashCounts[accountId].orEmpty()) }
+    val total = denoms.sumOf { it.toLong() * (counts[it] ?: 0) } * 100
+    val recorded = b?.balance ?: 0
+    var done by remember { mutableStateOf<String?>(null) }
+
+    fun set(d: Int, n: Int) {
+        counts = counts + (d to n.coerceAtLeast(0))
+        repo.settings.update { it.copy(cashCounts = it.cashCounts + (accountId to counts)) }
+    }
+
+    Scaffold(containerColor = MaterialTheme.colorScheme.surface, topBar = { BackTopBar("點鈔：${b?.account?.name.orEmpty()}", { nav.popBackStack() }) }) { pad ->
+        LazyColumn(Modifier.padding(pad)) {
+            item {
+                Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("點鈔合計", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(Money.withSymbol(total), fontSize = 28.sp)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("帳上餘額 ${Money.withSymbol(recorded)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val diff = total - recorded
+                        Text(
+                            if (diff == 0L) "相符" else "差額 ${Money.withSymbol(diff)}",
+                            color = if (diff == 0L) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                HorizontalDivider()
+            }
+            items(denoms, key = { it }) { d ->
+                val n = counts[d] ?: 0
+                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (d >= 100) "💵 $d 元" else "🪙 $d 元", Modifier.width(110.dp), fontSize = 17.sp)
+                    IconButton(onClick = { set(d, n - 1) }) { Text("－", fontSize = 22.sp) }
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = if (n == 0) "" else n.toString(),
+                        onValueChange = { t -> set(d, t.filter(Char::isDigit).take(5).toIntOrNull() ?: 0) },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        modifier = Modifier.width(64.dp),
+                        decorationBox = { inner -> Box(contentAlignment = Alignment.Center) { if (n == 0) Text("0", color = MaterialTheme.colorScheme.outlineVariant, fontSize = 20.sp); inner() } },
+                    )
+                    IconButton(onClick = { set(d, n + 1) }) { Text("＋", fontSize = 22.sp) }
+                    Text(Money.full(d.toLong() * n * 100), Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            item {
+                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = { counts = emptyMap(); repo.settings.update { it.copy(cashCounts = it.cashCounts - accountId) } },
+                        modifier = Modifier.weight(1f)) { Text("清除") }
+                    Button(
+                        enabled = b != null && total != recorded,
+                        onClick = {
+                            val acc = b?.account ?: return@Button
+                            scope.launch {
+                                val other = repo.categories.first().firstOrNull { it.kind == com.enwei.moneymanager.data.TxnType.EXPENSE && it.name == "其他" }?.id
+                                repo.reconcile(acc, recorded, total, if (total < recorded) other else null)
+                                done = "已將帳上餘額調整為 ${Money.withSymbol(total)}"
+                            }
+                        },
+                        modifier = Modifier.weight(2f),
+                    ) { Text("以點鈔金額對帳") }
+                }
+                done?.let { Text(it, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 20.dp)) }
+                Text(
+                    "張數會記住，下次打開可直接增減。花掉或收到現金時記得也在這裡調整，或直接按「以點鈔金額對帳」把差額記成一筆支出（分類：其他）。",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(20.dp),
+                )
+            }
         }
     }
 }

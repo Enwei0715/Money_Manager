@@ -77,3 +77,11 @@ class RealNotificationTest {
         assertNull(p(null, "【裝置綁定】您好，您於2026/09/28 19:57:57新增ASUS AI2302綁定，請您確認是否在此"))
     }
 }
+
+class CardPaymentTest {
+    @Test fun autopay() {
+        val r = NotificationParser.parse("帳戶出帳通知", "您於2026/10/20 08:01:02信用卡款自動扣繳,金額為NT\$6,146元")!!
+        assertEquals(ParsedKind.CARD_PAYMENT, r.kind)
+        assertEquals(614600L, r.amountMinor)
+    }
+}

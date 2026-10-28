@@ -20,7 +20,7 @@ enum class AccountType(val label: String, val icon: String) {
 enum class TxnType(val label: String) { EXPENSE("支出"), INCOME("收入"), TRANSFER("轉帳") }
 
 enum class TxnSource(val label: String) {
-    MANUAL("手動"), NOTIFICATION("通知"), RECURRING("週期"), INVOICE("發票"), AUTOPAY("自動扣繳"), IMPORT("匯入")
+    MANUAL("手動"), NOTIFICATION("通知"), RECURRING("週期"), INVOICE("發票"), AUTOPAY("自動扣繳"), IMPORT("匯入"), SCREEN("錢包畫面")
 }
 
 enum class TxnStatus { CONFIRMED, PENDING }
@@ -52,6 +52,8 @@ data class AccountEntity(
     val linkedAccountId: Long? = null,
     /** 證券戶的手續費折數（空白則用全域設定） */
     val feeDiscount: Double? = null,
+    /** 信用卡實際自動扣繳日（空白則等於繳款日） */
+    val autopayDay: Int? = null,
 )
 
 @Serializable

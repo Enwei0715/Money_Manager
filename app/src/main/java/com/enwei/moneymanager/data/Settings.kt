@@ -65,6 +65,12 @@ data class AppSettings(
     val budgets: Map<Long, Long> = emptyMap(),
     /** 通知來源 App → 記入的帳戶 */
     val notifAccountMap: Map<String, Long> = emptyMap(),
+    /** 讀取交易紀錄畫面的錢包 App */
+    val screenPackages: Set<String> = emptySet(),
+    /** 每個錢包 App 從哪一天開始匯入（epochDay），避免第一次把半年歷史全部匯入 */
+    val screenReadSince: Map<String, Long> = emptyMap(),
+    /** 現金點鈔：帳戶 id → 面額 → 數量 */
+    val cashCounts: Map<Long, Map<Int, Int>> = emptyMap(),
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -80,6 +86,7 @@ class SettingsStore(context: Context) {
     private val memoSerializer = ListSerializer(Memo.serializer())
     private val budgetSerializer = MapSerializer(Long.serializer(), Long.serializer())
     private val pkgMapSerializer = MapSerializer(String.serializer(), Long.serializer())
+    private val cashSerializer = MapSerializer(Long.serializer(), MapSerializer(Int.serializer(), Int.serializer()))
     private val state = MutableStateFlow(read())
     val flow: StateFlow<AppSettings> = state.asStateFlow()
     val value: AppSettings get() = state.value
@@ -111,6 +118,9 @@ class SettingsStore(context: Context) {
         memos = runCatching { json.decodeFromString(memoSerializer, prefs.getString("memos", "[]")!!) }.getOrDefault(emptyList()),
         budgets = runCatching { json.decodeFromString(budgetSerializer, prefs.getString("budgets", "{}")!!) }.getOrDefault(emptyMap()),
         notifAccountMap = runCatching { json.decodeFromString(pkgMapSerializer, prefs.getString("notifAccountMap", "{}")!!) }.getOrDefault(emptyMap()),
+        screenPackages = prefs.getStringSet("screenPackages", emptySet())!!.toSet(),
+        screenReadSince = runCatching { json.decodeFromString(pkgMapSerializer, prefs.getString("screenReadSince", "{}")!!) }.getOrDefault(emptyMap()),
+        cashCounts = runCatching { json.decodeFromString(cashSerializer, prefs.getString("cashCounts", "{}")!!) }.getOrDefault(emptyMap()),
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
@@ -142,6 +152,9 @@ class SettingsStore(context: Context) {
             .putString("memos", json.encodeToString(memoSerializer, s.memos))
             .putString("budgets", json.encodeToString(budgetSerializer, s.budgets))
             .putString("notifAccountMap", json.encodeToString(pkgMapSerializer, s.notifAccountMap))
+            .putStringSet("screenPackages", s.screenPackages)
+            .putString("screenReadSince", json.encodeToString(pkgMapSerializer, s.screenReadSince))
+            .putString("cashCounts", json.encodeToString(cashSerializer, s.cashCounts))
             .apply()
         state.value = s
     }

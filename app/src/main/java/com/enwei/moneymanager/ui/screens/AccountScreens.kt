@@ -74,6 +74,7 @@ fun AccountEditScreen(nav: NavController, id: Long) {
     var last4 by remember { mutableStateOf("") }
     var statementDay by remember { mutableStateOf("") }
     var dueDay by remember { mutableStateOf("") }
+    var autopayDay by remember { mutableStateOf("") }
     var autopayFrom by remember { mutableStateOf<Long?>(null) }
     var includeNet by remember { mutableStateOf(true) }
     var archived by remember { mutableStateOf(false) }
@@ -98,7 +99,7 @@ fun AccountEditScreen(nav: NavController, id: Long) {
         feeDiscount = a.feeDiscount?.toString().orEmpty()
         description = a.description.orEmpty()
         limit = if (a.creditLimit > 0) Money.fromMinor(a.creditLimit).stripTrailingZeros().toPlainString() else ""
-        last4 = a.cardLast4.orEmpty(); statementDay = a.statementDay?.toString().orEmpty(); dueDay = a.dueDay?.toString().orEmpty()
+        last4 = a.cardLast4.orEmpty(); statementDay = a.statementDay?.toString().orEmpty(); dueDay = a.dueDay?.toString().orEmpty(); autopayDay = a.autopayDay?.toString().orEmpty()
         autopayFrom = a.autopayFromId; includeNet = a.includeInNetWorth; archived = a.archived
     }
     val isCard = type == AccountType.CREDIT_CARD
@@ -146,7 +147,8 @@ fun AccountEditScreen(nav: NavController, id: Long) {
                 FormLine("信用額度") { FormInput(limit, { limit = it }, "", number = true) }
                 FormLine("結帳日") { FormInput(statementDay, { statementDay = it.filter(Char::isDigit).take(2) }, "例：5", number = true) }
                 FormLine("繳款日") { FormInput(dueDay, { dueDay = it.filter(Char::isDigit).take(2) }, "例：20", number = true) }
-                FormLine("自動扣繳", onClick = { autopayMenu = true }) {
+                FormLine("扣繳日") { FormInput(autopayDay, { autopayDay = it.filter(Char::isDigit).take(2) }, "銀行實際扣款日，空白＝繳款日", number = true) }
+                FormLine("扣繳帳戶", onClick = { autopayMenu = true }) {
                     Box {
                         Text(lk.account(autopayFrom)?.name ?: "不自動扣繳", fontSize = 17.sp)
                         DropdownMenu(autopayMenu, { autopayMenu = false }) {
@@ -160,9 +162,10 @@ fun AccountEditScreen(nav: NavController, id: Long) {
                 if (sDay != null && dDay != null) {
                     val cycle = CardCycle(sDay, dDay)
                     val due = cycle.nextDueDate(LocalDate.now().minusDays(1))
+                    val apDay = autopayDay.toIntOrNull()?.takeIf { it in 1..31 }
                     Text(
-                        "下次繳款日 $due（帳單結帳日 ${cycle.statementDateFor(due)}）" +
-                            if (autopayFrom != null) "\n繳款日會自動從扣款帳戶轉帳「結帳日欠款 − 已繳金額」。" else "",
+                        "本期：結帳日 ${cycle.statementDateFor(due)} → 繳款日 $due" +
+                            if (autopayFrom != null) "\n${cycle.autopayDateFor(due, apDay)} 會自動從「${lk.account(autopayFrom)?.name}」轉帳「結帳日欠款 − 已繳金額」到這張卡；銀行若傳來扣繳通知，會以實際金額校正。" else "\n選擇扣繳帳戶後，到期會自動記一筆轉帳。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
@@ -215,6 +218,7 @@ fun AccountEditScreen(nav: NavController, id: Long) {
                         cardLast4 = last4.ifBlank { null },
                         statementDay = if (isCard) sDay else null, dueDay = if (isCard) dDay else null,
                         autopayFromId = if (isCard) autopayFrom else null,
+                        autopayDay = if (isCard) autopayDay.toIntOrNull()?.takeIf { it in 1..31 } else null,
                         includeInNetWorth = includeNet, archived = archived, description = description.ifBlank { null },
                     )
                     scope.launch { repo.saveAccount(a); nav.popBackStack() }

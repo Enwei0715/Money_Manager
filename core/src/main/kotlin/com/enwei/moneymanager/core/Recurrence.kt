@@ -105,6 +105,16 @@ data class CardCycle(val statementDay: Int, val dueDay: Int) {
     fun nextDueDate(after: LocalDate): LocalDate =
         Recurrence.next(Frequency.MONTHLY, 1, after.withDayOfMonth(1), after, dueDay)
 
+    /**
+     * 實際自動扣繳日：同一期帳單、指定日（[autopayDay]，空白則等於繳款日）。
+     * 若指定日落在繳款日之後超過 10 天，視為前一個月（例如繳款日 3 號、扣繳日 28 號）。
+     */
+    fun autopayDateFor(dueDate: LocalDate, autopayDay: Int?): LocalDate {
+        if (autopayDay == null) return dueDate
+        val candidate = Recurrence.dayInMonth(YearMonth.from(dueDate), autopayDay)
+        return if (candidate.isAfter(dueDate.plusDays(10))) Recurrence.dayInMonth(YearMonth.from(dueDate).minusMonths(1), autopayDay) else candidate
+    }
+
     fun nextStatementDate(after: LocalDate): LocalDate =
         Recurrence.next(Frequency.MONTHLY, 1, after.withDayOfMonth(1), after, statementDay)
 }

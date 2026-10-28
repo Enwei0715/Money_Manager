@@ -36,6 +36,15 @@ class CoreLogicTest {
         assertEquals(LocalDate.of(2026, 11, 10), c2.nextDueDate(LocalDate.of(2026, 10, 28)))
     }
 
+    @Test fun autopayDate() {
+        val c = CardCycle(statementDay = 5, dueDay = 20)
+        val due = LocalDate.of(2026, 10, 20)
+        assertEquals(due, c.autopayDateFor(due, null))
+        assertEquals(LocalDate.of(2026, 10, 18), c.autopayDateFor(due, 18))
+        val c2 = CardCycle(statementDay = 15, dueDay = 3)
+        assertEquals(LocalDate.of(2026, 10, 28), c2.autopayDateFor(LocalDate.of(2026, 11, 3), 28))
+    }
+
     @Test fun twStockFeesAndPositions() {
         val s = FeeSettings(discount = 0.6, minFee = 20.0)
         assertEquals(20.0, StockCalc.twFee(10_000.0, s), 0.0)
