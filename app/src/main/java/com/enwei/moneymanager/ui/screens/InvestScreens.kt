@@ -113,7 +113,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
     val totalValue = open.sumOf { lk.fx.convert(Money.toMinor(it.marketValue), it.currency) }
     val totalCost = open.sumOf { lk.fx.convert(Money.toMinor(it.cost), it.currency) }
     val dayChange = open.sumOf { lk.fx.convert(Money.toMinor(it.dayChange), it.currency) }
-    val realized = holdings.sumOf { lk.fx.convert(Money.toMinor(it.realizedPnl + it.dividends), it.currency) }
+    val realized = holdings.sumOf { lk.fx.convert(Money.toMinor(it.realizedTotal), it.currency) }
     val unreal = totalValue - totalCost
 
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -183,7 +183,7 @@ private fun HoldingRow(h: HoldingView, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text("${h.symbol}  ${h.name.orEmpty()}", fontSize = 17.sp, maxLines = 1)
                 Text(
-                    if (h.shares > 0.0001) "${formatShares(h.shares)} · 均價 ${formatNum(h.avgCost)}" else "已實現 ${formatNum(h.realizedPnl + h.dividends, 0)}",
+                    if (h.shares > 0.0001) "${formatShares(h.shares)} · 均價 ${formatNum(h.avgCost)}" else "已實現 ${formatNum(h.realizedTotal, 0)}",
                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -223,9 +223,18 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             LabelValue("市值", formatNum(h.marketValue, 0))
-                            LabelValue("未實現", formatNum(h.unrealized, 0), valueColor = pnlColor(h.unrealized))
-                            LabelValue("已實現＋股利", formatNum(h.realizedPnl + h.dividends, 0), valueColor = pnlColor(h.realizedPnl + h.dividends))
+                            LabelValue("預估損益", formatNum(h.unrealized, 0), valueColor = pnlColor(h.unrealized))
+                            LabelValue("已實現", formatNum(h.realizedTotal, 0), valueColor = pnlColor(h.realizedTotal))
                         }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            LabelValue("成本（扣股利）", formatNum(h.netCost, 0))
+                            LabelValue("已領股利", formatNum(h.openDividends, 0))
+                            LabelValue("預估賣出費用", formatNum(h.estSellCost, 0))
+                        }
+                        Text(
+                            "預估損益＝市值－賣出手續費與交易稅－成本；成本＝價金＋買進手續費－已領現金股利（與券商「除息試算」相同）。",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

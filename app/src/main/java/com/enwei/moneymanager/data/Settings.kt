@@ -40,6 +40,7 @@ data class AppSettings(
     val feeDiscount: Double = 1.0,
     val minFee: Double = 20.0,
     val usFee: Double = 0.0,
+    val oddLotMinFee: Double = 1.0,
     val githubToken: String = "",
     val lastFxUpdate: Long = 0,
     val lastQuoteUpdate: Long = 0,
@@ -98,7 +99,7 @@ data class AppSettings(
     /** 帳戶群組自訂名稱 */
     val accountGroupNames: Map<String, String> = emptyMap(),
 ) {
-    val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee)
+    val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee, oddLotMinFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
 }
 
@@ -127,6 +128,7 @@ class SettingsStore(context: Context) {
         feeDiscount = prefs.getFloat("feeDiscount", 1f).toDouble(),
         minFee = prefs.getFloat("minFee", 20f).toDouble(),
         usFee = prefs.getFloat("usFee", 0f).toDouble(),
+        oddLotMinFee = prefs.getFloat("oddLotMinFee", 1f).toDouble(),
         githubToken = prefs.getString("githubToken", "")!!,
         lastFxUpdate = prefs.getLong("lastFxUpdate", 0),
         lastQuoteUpdate = prefs.getLong("lastQuoteUpdate", 0),
@@ -175,6 +177,7 @@ class SettingsStore(context: Context) {
             .putFloat("feeDiscount", s.feeDiscount.toFloat())
             .putFloat("minFee", s.minFee.toFloat())
             .putFloat("usFee", s.usFee.toFloat())
+            .putFloat("oddLotMinFee", s.oddLotMinFee.toFloat())
             .putString("githubToken", s.githubToken)
             .putLong("lastFxUpdate", s.lastFxUpdate)
             .putLong("lastQuoteUpdate", s.lastQuoteUpdate)

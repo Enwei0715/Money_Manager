@@ -49,6 +49,12 @@ class CoreLogicTest {
         val s = FeeSettings(discount = 0.6, minFee = 20.0)
         assertEquals(20.0, StockCalc.twFee(10_000.0, s), 0.0)
         assertEquals(855.0, StockCalc.twFee(1_000_000.0, s), 0.0)
+        // 永豐零股實例：5 股 × 3,745 = 18,725 → 手續費 26（無折扣、零股最低 1 元）
+        val full = FeeSettings(discount = 1.0, minFee = 20.0, oddLotMinFee = 1.0)
+        assertEquals(26.0, StockCalc.estimate(Market.TW, "3661", StockSide.BUY, 5.0, 3745.0, full).first, 0.0)
+        assertEquals(30.0, StockCalc.estimate(Market.TW, "3661", StockSide.BUY, 5.0, 4280.0, full).first, 0.0)
+        assertEquals(1.0, StockCalc.estimate(Market.TW, "2884", StockSide.BUY, 1.0, 30.0, full).first, 0.0)
+        assertEquals(20.0, StockCalc.estimate(Market.TW, "2884", StockSide.BUY, 1000.0, 10.0, full).first, 0.0)
         assertEquals(3000.0, StockCalc.twTax("2330", 1_000_000.0), 0.0)
         assertEquals(1000.0, StockCalc.twTax("0050", 1_000_000.0), 0.0)
 

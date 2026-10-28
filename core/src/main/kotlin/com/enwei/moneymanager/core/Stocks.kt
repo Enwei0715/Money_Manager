@@ -37,6 +37,8 @@ data class FeeSettings(
     val discount: Double = 1.0,
     val minFee: Double = 20.0,
     val usFeePerTrade: Double = 0.0,
+    /** 零股（不足 1 張）的最低手續費，多數券商電子下單為 1 元 */
+    val oddLotMinFee: Double = 1.0,
 )
 
 object StockCalc {
@@ -44,10 +46,13 @@ object StockCalc {
 
     fun isTwEtf(symbol: String) = symbol.startsWith("00")
 
-    fun twFee(amount: Double, settings: FeeSettings): Double {
+    fun twFee(amount: Double, settings: FeeSettings, oddLot: Boolean = false): Double {
         if (amount <= 0) return 0.0
-        return max(settings.minFee, floor(amount * TW_FEE_RATE * settings.discount))
+        return max(if (oddLot) settings.oddLotMinFee else settings.minFee, floor(amount * TW_FEE_RATE * settings.discount))
     }
+
+    /** 不足 1000 股的交易算零股 */
+    fun isOddLot(shares: Double) = shares < 1000
 
     fun twTax(symbol: String, amount: Double, dayTrade: Boolean = false): Double {
         val rate = when {
@@ -61,7 +66,7 @@ object StockCalc {
     fun estimate(market: Market, symbol: String, side: StockSide, shares: Double, price: Double, settings: FeeSettings): Pair<Double, Double> {
         val amount = shares * price
         return when (market) {
-            Market.TW -> twFee(amount, settings) to (if (side == StockSide.SELL) twTax(symbol, amount) else 0.0)
+            Market.TW -> twFee(amount, settings, isOddLot(shares)) to (if (side == StockSide.SELL) twTax(symbol, amount) else 0.0)
             Market.US -> settings.usFeePerTrade to 0.0
         }
     }

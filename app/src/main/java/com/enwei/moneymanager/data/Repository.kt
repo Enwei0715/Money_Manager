@@ -43,10 +43,20 @@ data class HoldingView(
     val previousClose: Double?,
     val realizedPnl: Double,
     val dividends: Double,
+    /** 現在全部賣出的預估手續費＋交易稅（與券商「預估損益」相同算法） */
+    val estSellCost: Double = 0.0,
 ) {
     val marketValue: Double get() = shares * (price ?: avgCost)
-    val unrealized: Double get() = if (price == null) 0.0 else marketValue - cost
-    val unrealizedPct: Double get() = if (cost > 0) unrealized / cost * 100 else 0.0
+    private val open get() = shares > 0.0001
+    /** 仍持有時，已領股利視為成本扣除（券商「除息試算」） */
+    val openDividends: Double get() = if (open) dividends else 0.0
+    /** 券商算法的成本：價金＋手續費－已領股利 */
+    val netCost: Double get() = cost - openDividends
+    /** 預估損益：市值－賣出手續費與交易稅－成本（已扣股利） */
+    val unrealized: Double get() = if (price == null || !open) 0.0 else marketValue - estSellCost - netCost
+    /** 已實現損益（含已出清部位的股利） */
+    val realizedTotal: Double get() = realizedPnl + dividends - openDividends
+    val unrealizedPct: Double get() = if (netCost > 0) unrealized / netCost * 100 else 0.0
     val dayChange: Double get() = if (price != null && previousClose != null) (price - previousClose) * shares else 0.0
 }
 
@@ -123,15 +133,17 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return accs.map { AccountBalance(it, it.initialBalance + (delta[it.id] ?: 0)) }
     }
 
-    val holdings: Flow<List<HoldingView>> = combine(trades, quotes) { trades, quotes -> buildHoldings(trades, quotes) }
+    val holdings: Flow<List<HoldingView>> = combine(trades, quotes, accounts) { trades, quotes, accs -> buildHoldings(trades, quotes, accs) }
 
     /** 各證券帳戶的持股（key 為證券帳戶 id，null 表示未指定）。 */
-    val holdingsByBroker: Flow<Map<Long?, List<HoldingView>>> = combine(trades, quotes) { trades, quotes ->
-        trades.groupBy { it.brokerAccountId }.mapValues { (_, list) -> buildHoldings(list, quotes) }
+    val holdingsByBroker: Flow<Map<Long?, List<HoldingView>>> = combine(trades, quotes, accounts) { trades, quotes, accs ->
+        trades.groupBy { it.brokerAccountId }.mapValues { (_, list) -> buildHoldings(list, quotes, accs) }
     }
 
-    private fun buildHoldings(trades: List<StockTradeEntity>, quotes: List<QuoteEntity>): List<HoldingView> {
+    private fun buildHoldings(trades: List<StockTradeEntity>, quotes: List<QuoteEntity>, accounts: List<AccountEntity>): List<HoldingView> {
         val quoteMap = quotes.associateBy { it.key }
+        val fees = settings.value.feeSettings
+        val accMap = accounts.associateBy { it.id }
         return trades.groupBy { it.market to it.symbol.uppercase() }.mapNotNull { (key, list) ->
             val pos = StockCalc.positions(list.map { it.toRecord().copy(symbol = key.second) })[key.second] ?: return@mapNotNull null
             val q = quoteMap[quoteKey(key.first, key.second)]
@@ -147,6 +159,12 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 previousClose = q?.previousClose,
                 realizedPnl = pos.realizedPnl,
                 dividends = pos.dividends,
+                estSellCost = q?.price?.takeIf { pos.shares > 0.0001 }?.let { p ->
+                    val broker = list.lastOrNull { it.brokerAccountId != null }?.brokerAccountId?.let { accMap[it] }
+                    val fs = broker?.feeDiscount?.let { fees.copy(discount = it) } ?: fees
+                    val (f, t) = StockCalc.estimate(key.first, key.second, StockSide.SELL, pos.shares, p, fs)
+                    f + t
+                } ?: 0.0,
             )
         }.sortedByDescending { it.marketValue }
     }

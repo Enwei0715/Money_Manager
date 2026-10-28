@@ -517,6 +517,7 @@ fun SettingsScreen(nav: NavController) {
     var discount by remember { mutableStateOf(settings.feeDiscount.toString()) }
     var minFee by remember { mutableStateOf(settings.minFee.toString()) }
     var usFee by remember { mutableStateOf(settings.usFee.toString()) }
+    var oddMin by remember { mutableStateOf(settings.oddLotMinFee.toString()) }
     var token by remember { mutableStateOf(settings.githubToken) }
     var release by remember { mutableStateOf<ReleaseInfo?>(null) }
     var updateStatus by remember { mutableStateOf<String?>(null) }
@@ -528,6 +529,7 @@ fun SettingsScreen(nav: NavController) {
             feeDiscount = discount.toDoubleOrNull()?.coerceIn(0.01, 1.0) ?: it.feeDiscount,
             minFee = minFee.toDoubleOrNull() ?: it.minFee,
             usFee = usFee.toDoubleOrNull() ?: it.usFee,
+            oddLotMinFee = oddMin.toDoubleOrNull() ?: it.oddLotMinFee,
         )
     }
 
@@ -599,7 +601,8 @@ fun SettingsScreen(nav: NavController) {
 
             Text("股票手續費", style = MaterialTheme.typography.titleMedium)
             NumberField(discount, { discount = it; saveFees() }, "台股手續費折數（例：0.6 = 六折，0.28 = 2.8 折）")
-            NumberField(minFee, { minFee = it; saveFees() }, "台股最低手續費（整股常見 20 元）")
+            NumberField(minFee, { minFee = it; saveFees() }, "台股整股最低手續費（常見 20 元）")
+            NumberField(oddMin, { oddMin = it; saveFees() }, "台股零股最低手續費（永豐等電子下單為 1 元）")
             NumberField(usFee, { usFee = it; saveFees() }, "美股每筆手續費（USD）")
             Text("台股交易稅：一般股票 0.3%、ETF 0.1%，自動計算。", style = MaterialTheme.typography.bodySmall)
         }
