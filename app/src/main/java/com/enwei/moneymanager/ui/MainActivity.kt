@@ -101,7 +101,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        pendingRoute.value = intent?.getStringExtra(EXTRA_ROUTE)
+        // 只在第一次建立時處理（切換語言、主題重建畫面時不要再開一次），讀完就清掉
+        if (savedInstanceState == null) pendingRoute.value = intent?.getStringExtra(EXTRA_ROUTE)
+        intent?.removeExtra(EXTRA_ROUTE)
         if (Build.VERSION.SDK_INT >= 33) {
             registerForActivityResult(ActivityResultContracts.RequestPermission()) {}.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -122,7 +124,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     val nav = rememberNavController()
                     val route by pendingRoute
                     LaunchedEffect(route) {
-                        route?.takeIf { it != "home" && it != "txns" }?.let { nav.navigate(it) }
+                        // 小工具、通知開啟的分頁要「切換分頁」，不是疊在目前畫面上，否則底部分頁列會失靈
+                        route?.takeIf { it != "home" }?.let { r -> if (tabs.any { it.route == r }) nav.openTab(r) else nav.navigate(r) }
                         pendingRoute.value = null
                     }
                     AppScaffold(nav)
@@ -157,6 +160,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         pendingRoute.value = intent.getStringExtra(EXTRA_ROUTE)
+        intent.removeExtra(EXTRA_ROUTE)
+        setIntent(intent)
     }
 
     companion object {
@@ -196,24 +201,37 @@ private fun BottomTabs(current: String?, onSelect: (String) -> Unit) {
     }
 }
 
+/**
+ * 切換底部分頁。「交易」是起始頁：直接退回起始頁，不能用 restoreState——
+ * 其他分頁的狀態是存在起始頁底下的，還原會把剛離開的分頁（例如統計）又帶回來，看起來就像按了沒反應。
+ */
+private fun NavHostController.openTab(route: String) {
+    val start = graph.findStartDestination()
+    if (route == start.route) {
+        if (!popBackStack(start.id, inclusive = false)) navigate(route) { launchSingleTop = true }
+        return
+    }
+    navigate(route) {
+        popUpTo(start.id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
 @Composable
 private fun AppScaffold(nav: NavHostController) {
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination?.route
-    val showBar = tabs.any { it.route == current }
+    // 只有分頁的最上層才顯示底部分頁列；從其他畫面疊上來的（例如記帳時開「帳戶」）不顯示，避免按分頁把正在編輯的內容丟掉
+    val showBar = tabs.any { it.route == current } &&
+        nav.previousBackStackEntry?.destination?.route.let { prev -> prev == null || tabs.any { it.route == prev } }
     val startScreen = remember { MoneyApp.repo.settings.value.startScreen }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         // 外層只負責底部分頁列；狀態列與導覽列的留白交給各頁自己的標題列處理，才會依手機實際高度自動調整
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (showBar) BottomTabs(current) { route ->
-                nav.navigate(route) {
-                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            }
+            if (showBar) BottomTabs(current) { route -> nav.openTab(route) }
         },
     ) { inner ->
         NavHost(
