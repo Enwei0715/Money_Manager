@@ -422,9 +422,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         var cat = if (p.kind == ParsedKind.NORMAL) suggestCategory(p.merchant, type, at, p.amountMinor, account?.id)
             ?.let { sg -> categoryPath(sg.categoryId)?.let { "$it（${sg.reason}）" } } else null
         var aiName: String? = null
-        if (p.kind == ParsedKind.NORMAL && p.merchant != null && (cat == null || looksRaw(p.merchant))) {
-            aiNameAndCategory(p.merchant, type, at)?.let { (name, c) ->
-                if (looksRaw(p.merchant)) aiName = name
+        val pm = p.merchant
+        if (p.kind == ParsedKind.NORMAL && pm != null && (cat == null || looksRaw(pm))) {
+            aiNameAndCategory(pm, type, at)?.let { (name, c) ->
+                if (looksRaw(pm)) aiName = name
                 if (cat == null && c != null) cat = categoryPath(c)?.let { "$it（AI 推測）" }
             }
         }
@@ -788,9 +789,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         var categoryId = if (p.kind == ParsedKind.NORMAL) suggestCategory(p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId else null
         // 規則挑不出分類，或商家名稱是代碼（例如「GOOGLE*WALLET TEMP」）：請 AI 命名並挑分類
         var aiNote = if (aiParsed) "（AI 判讀，請確認）" else ""
-        if (p.kind == ParsedKind.NORMAL && p.merchant != null && (categoryId == null || looksRaw(p.merchant))) {
-            aiNameAndCategory(p.merchant, type, occurred)?.let { (name, cat) ->
-                if (name != null && looksRaw(p.merchant)) merchant = name
+        val pm = p.merchant
+        if (p.kind == ParsedKind.NORMAL && pm != null && (categoryId == null || looksRaw(pm))) {
+            aiNameAndCategory(pm, type, occurred)?.let { (name, cat) ->
+                if (name != null && looksRaw(pm)) merchant = name
                 if (categoryId == null && cat != null) { categoryId = cat; aiNote += "（分類由 AI 推測）" }
             }
         }
