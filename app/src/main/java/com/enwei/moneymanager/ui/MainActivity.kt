@@ -6,7 +6,9 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import android.graphics.Color
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -102,7 +104,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings by MoneyApp.repo.settings.flow.collectAsStateWithLifecycle()
             ColorPrefs.setB = settings.colorSetB
-            MoneyTheme {
+            val dark = isDarkTheme(settings.themeMode)
+            // 狀態列、導覽列的圖示顏色跟著 App 主題（不是系統主題）切換
+            LaunchedEffect(dark) {
+                val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
+            MoneyTheme(dark = dark, uiScale = settings.uiScale) {
                 if (locked.value && settings.passcodeOn) {
                     LockScreen(settings.passcodeHash) { locked.value = false }
                 } else {
@@ -152,7 +160,7 @@ private val tabs = listOf(
 
 @Composable
 private fun BottomTabs(current: String?, onSelect: (String) -> Unit) {
-    Column(Modifier.background(BarBackground)) {
+    Column(Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxWidth().navigationBarsPadding().height(60.dp)) {
             tabs.forEach { t ->

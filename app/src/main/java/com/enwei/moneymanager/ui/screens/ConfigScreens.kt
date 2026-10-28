@@ -58,6 +58,14 @@ import com.enwei.moneymanager.ui.components.FormLine
 import com.enwei.moneymanager.work.ReminderWorker
 import java.time.DayOfWeek
 
+private fun uiScaleLabel(v: Float) = when {
+    v <= 0.8f -> "較小"
+    v <= 0.85f -> "小"
+    v <= 0.9f -> "標準"
+    v <= 1f -> "原始"
+    else -> "大"
+}
+
 @Composable
 private fun SectionHeader(title: String) {
     Text(
@@ -110,6 +118,16 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("支出分類設定") { nav.navigate("categories") }
                 ConfigRow("預算設定") { nav.navigate("budget") }
                 ConfigRow("週期設定") { nav.navigate("recurring") }
+
+                SectionHeader("外觀")
+                ConfigRow("主題", listOf("跟隨系統", "淺色", "深色")[s.themeMode.coerceIn(0, 2)]) {
+                    ask("主題", listOf(0 to "跟隨系統", 1 to "淺色", 2 to "深色")) { v -> repo.settings.update { it.copy(themeMode = v) } }
+                }
+                ConfigRow("介面大小", uiScaleLabel(s.uiScale)) {
+                    ask("介面大小", listOf(0.8f to "較小（80%）", 0.85f to "小（85%）", 0.9f to "標準（90%）", 1f to "原始（100%）", 1.1f to "大（110%）")) { v ->
+                        repo.settings.update { it.copy(uiScale = v) }
+                    }
+                }
 
                 SectionHeader("設定")
                 ConfigRow("主幣別設定", "${s.baseCurrency} (${Money.symbolOf(s.baseCurrency).trim()})") {

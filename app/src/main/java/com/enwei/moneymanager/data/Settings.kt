@@ -71,6 +71,10 @@ data class AppSettings(
     val screenReadSince: Map<String, Long> = emptyMap(),
     /** 現金點鈔：帳戶 id → 面額 → 數量 */
     val cashCounts: Map<Long, Map<Int, Int>> = emptyMap(),
+    /** 0 跟隨系統、1 淺色、2 深色 */
+    val themeMode: Int = 0,
+    /** 介面縮放比例（整體文字、間距、圖示等比例） */
+    val uiScale: Float = 0.9f,
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -121,6 +125,8 @@ class SettingsStore(context: Context) {
         screenPackages = prefs.getStringSet("screenPackages", emptySet())!!.toSet(),
         screenReadSince = runCatching { json.decodeFromString(pkgMapSerializer, prefs.getString("screenReadSince", "{}")!!) }.getOrDefault(emptyMap()),
         cashCounts = runCatching { json.decodeFromString(cashSerializer, prefs.getString("cashCounts", "{}")!!) }.getOrDefault(emptyMap()),
+        themeMode = prefs.getInt("themeMode", 0),
+        uiScale = prefs.getFloat("uiScale", 0.9f),
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
@@ -155,6 +161,8 @@ class SettingsStore(context: Context) {
             .putStringSet("screenPackages", s.screenPackages)
             .putString("screenReadSince", json.encodeToString(pkgMapSerializer, s.screenReadSince))
             .putString("cashCounts", json.encodeToString(cashSerializer, s.cashCounts))
+            .putInt("themeMode", s.themeMode)
+            .putFloat("uiScale", s.uiScale)
             .apply()
         state.value = s
     }

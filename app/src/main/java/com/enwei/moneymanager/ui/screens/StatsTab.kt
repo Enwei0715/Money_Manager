@@ -244,7 +244,7 @@ fun PieChart(slices: List<Pair<String, Long>>) {
     val labelColor = MaterialTheme.colorScheme.onSurface
     val empty = MaterialTheme.colorScheme.surfaceVariant
     val separator = MaterialTheme.colorScheme.surface
-    Canvas(Modifier.fillMaxWidth().height(330.dp).padding(vertical = 16.dp)) {
+    Canvas(Modifier.fillMaxWidth().height(340.dp).padding(vertical = 16.dp)) {
         val r = minOf(size.width, size.height) / 2 * 0.66f
         val c = Offset(size.width / 2, size.height / 2)
         val topLeft = Offset(c.x - r, c.y - r)
@@ -265,24 +265,49 @@ fun PieChart(slices: List<Pair<String, Long>>) {
             drawLine(separator, c, Offset(c.x + (r * cos(rad)).toFloat(), c.y + (r * sin(rad)).toFloat()), strokeWidth = 3f)
             start += sw
         }
-        // 標籤與引線
+        // 標籤與引線：同一側的標籤依高度排序後上下推開，避免小比例的標籤重疊
+        data class Label(val color: Color, val p1: Offset, val p2: Offset, val right: Boolean, val layout: androidx.compose.ui.text.TextLayoutResult, var y: Float)
+        val labels = mutableListOf<Label>()
         start = -90f
+        val twoLine = slices.count { it.second * 100f / total >= 0.5f } <= 10
         slices.forEachIndexed { i, (name, v) ->
             val pct = v * 100f / total
             val mid = Math.toRadians((start + sweeps[i] / 2).toDouble())
-            if (pct >= 2f) {
-                val color = chartPalette[i % chartPalette.size]
+            if (pct >= 0.5f) {
                 val p1 = Offset(c.x + (r * cos(mid)).toFloat(), c.y + (r * sin(mid)).toFloat())
-                val p2 = Offset(c.x + (r * 1.18f * cos(mid)).toFloat(), c.y + (r * 1.18f * sin(mid)).toFloat())
-                val right = cos(mid) >= 0
-                val p3 = Offset(p2.x + if (right) 24f else -24f, p2.y)
-                drawLine(color, p1, p2, strokeWidth = 2.5f)
-                drawLine(color, p2, p3, strokeWidth = 2.5f)
-                val layout = measurer.measure("$name\n${"%.1f".format(pct)} %", TextStyle(fontSize = 13.sp, color = labelColor))
-                val x = if (right) p3.x + 6f else p3.x - 6f - layout.size.width
-                drawText(layout, topLeft = Offset(x.coerceIn(0f, size.width - layout.size.width), (p3.y - layout.size.height / 2).coerceIn(0f, size.height - layout.size.height)))
+                val p2 = Offset(c.x + (r * 1.12f * cos(mid)).toFloat(), c.y + (r * 1.12f * sin(mid)).toFloat())
+                val text = if (twoLine) "$name\n${"%.1f".format(pct)} %" else "$name ${"%.1f".format(pct)}%"
+                val layout = measurer.measure(text, TextStyle(fontSize = 12.sp, color = labelColor, lineHeight = 14.sp))
+                labels += Label(chartPalette[i % chartPalette.size], p1, p2, cos(mid) >= 0, layout, p2.y)
             }
             start += sweeps[i]
+        }
+        listOf(true, false).forEach { side ->
+            val list = labels.filter { it.right == side }.sortedBy { it.p2.y }
+            // 由上往下：與上一個標籤至少隔一個標籤高度
+            var prevBottom = Float.NEGATIVE_INFINITY
+            list.forEach { l ->
+                val h = l.layout.size.height.toFloat()
+                l.y = maxOf(l.p2.y, prevBottom + h / 2 + 2f)
+                prevBottom = l.y + h / 2
+            }
+            // 超出底部時由下往上推回
+            var nextTop = size.height
+            list.asReversed().forEach { l ->
+                val h = l.layout.size.height.toFloat()
+                l.y = minOf(l.y, nextTop - h / 2 - 2f).coerceAtLeast(h / 2)
+                nextTop = l.y - h / 2
+            }
+        }
+        labels.forEach { l ->
+            val elbow = Offset(l.p2.x + if (l.right) 14f else -14f, l.y)
+            val end = Offset(if (l.right) maxOf(elbow.x, c.x + r * 1.18f) else minOf(elbow.x, c.x - r * 1.18f), l.y)
+            drawLine(l.color, l.p1, l.p2, strokeWidth = 2.5f)
+            drawLine(l.color, l.p2, elbow, strokeWidth = 2.5f)
+            drawLine(l.color, elbow, end, strokeWidth = 2.5f)
+            val w = l.layout.size.width.toFloat()
+            val x = if (l.right) end.x + 6f else end.x - 6f - w
+            drawText(l.layout, topLeft = Offset(x.coerceIn(0f, size.width - w), l.y - l.layout.size.height / 2))
         }
     }
 }

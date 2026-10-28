@@ -5,6 +5,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -65,7 +68,22 @@ private val Dark = darkColorScheme(
     outlineVariant = Color(0xFF333333),
 )
 
+/** themeMode：0 跟隨系統、1 淺色、2 深色 */
 @Composable
-fun MoneyTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) Dark else Light, content = content)
+fun isDarkTheme(themeMode: Int): Boolean = when (themeMode) {
+    1 -> false
+    2 -> true
+    else -> isSystemInDarkTheme()
+}
+
+/**
+ * [uiScale] 等比例縮放整個介面（dp 與 sp 一起縮放），讓所有畫面的大小一致調整，
+ * 不必逐一修改各元件的字級與間距。
+ */
+@Composable
+fun MoneyTheme(dark: Boolean = isSystemInDarkTheme(), uiScale: Float = 1f, content: @Composable () -> Unit) {
+    val base = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale, base.fontScale)) {
+        MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
+    }
 }
