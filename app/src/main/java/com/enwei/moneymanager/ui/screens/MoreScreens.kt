@@ -590,6 +590,11 @@ fun SettingsScreen(nav: NavController) {
             progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
             updateStatus?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             release?.notes?.takeIf { it.isNotBlank() && Updater.isNewer(release!!) }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            Text(
+                "安裝時若出現「應用程式與現有套件衝突」，表示目前手機上的版本簽章不同（1.0.15 以前的版本）。" +
+                    "請先到 更多 → 備份 匯出備份，解除安裝後再安裝新版並還原；之後的版本都能直接覆蓋更新。",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             HorizontalDivider()
 
             Text("股票手續費", style = MaterialTheme.typography.titleMedium)
