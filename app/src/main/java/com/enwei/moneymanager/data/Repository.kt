@@ -136,6 +136,7 @@ class Repository(private val db: AppDatabase, val settings: SettingsStore) {
     // ---------- 交易 ----------
 
     suspend fun getTxn(id: Long) = db.txns().get(id)
+    suspend fun allTxns() = db.txns().all()
 
     suspend fun saveTxn(t: TxnEntity): Long {
         val r = db.txns().upsert(t)

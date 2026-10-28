@@ -114,7 +114,7 @@ private fun minorToExpr(minor: Long) = Money.fromMinor(minor).stripTrailingZeros
 
 /** 記一筆：上方表單、下方依欄位切換計算機鍵盤／分類格／帳戶格。 */
 @Composable
-fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId: Long = 0, initialEpochDay: Long? = null) {
+fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId: Long = 0, initialEpochDay: Long? = null, initialAccountId: Long? = null) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
@@ -128,7 +128,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
     var feeExpr by rememberSaveable { mutableStateOf("") }
     var showFee by rememberSaveable { mutableStateOf(false) }
     var currency by rememberSaveable { mutableStateOf(settings.baseCurrency) }
-    var accountId by rememberSaveable { mutableStateOf(settings.defaultAccountId) }
+    var accountId by rememberSaveable { mutableStateOf(initialAccountId ?: settings.defaultAccountId) }
     var toAccountId by rememberSaveable { mutableStateOf<Long?>(null) }
     var toExpr by rememberSaveable { mutableStateOf("") }
     var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }

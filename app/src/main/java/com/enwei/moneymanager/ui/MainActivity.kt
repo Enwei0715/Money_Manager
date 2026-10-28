@@ -208,16 +208,17 @@ private fun AppScaffold(nav: NavHostController) {
                 )
             }
             composable(
-                "txn/{id}?type={type}&bookmark={bookmark}&date={date}",
+                "txn/{id}?type={type}&bookmark={bookmark}&date={date}&account={account}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.LongType },
                     navArgument("type") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("bookmark") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("date") { type = NavType.LongType; defaultValue = Long.MIN_VALUE },
+                    navArgument("account") { type = NavType.LongType; defaultValue = 0L },
                 ),
             ) { e ->
                 val a = e.arguments!!
-                TxnEditScreen(nav, a.getLong("id"), a.getString("type"), a.getLong("bookmark"), a.getLong("date").takeIf { it != Long.MIN_VALUE })
+                TxnEditScreen(nav, a.getLong("id"), a.getString("type"), a.getLong("bookmark"), a.getLong("date").takeIf { it != Long.MIN_VALUE }, a.getLong("account").takeIf { it > 0 })
             }
             composable("account/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->
                 AccountEditScreen(nav, e.arguments!!.getLong("id"))

@@ -10,8 +10,10 @@ import com.enwei.moneymanager.work.SyncWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 class MoneyApp : Application() {
     lateinit var repo: Repository
         private set
@@ -31,6 +33,10 @@ class MoneyApp : Application() {
             repo.runRecurring()
         }
         SyncWorker.schedule(this)
+        // 資料有變動就更新桌面小工具
+        appScope.launch {
+            repo.transactions.debounce(1500).collect { com.enwei.moneymanager.widget.SummaryWidget.refresh(this@MoneyApp) }
+        }
         com.enwei.moneymanager.work.ReminderWorker.schedule(this)
     }
 
