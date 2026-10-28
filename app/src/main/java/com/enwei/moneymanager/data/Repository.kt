@@ -288,10 +288,39 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             expense.mapIndexed { i, n -> CategoryEntity(name = n, kind = TxnType.EXPENSE, icon = "", sortOrder = i) } +
                 income.mapIndexed { i, n -> CategoryEntity(name = n, kind = TxnType.INCOME, icon = "", sortOrder = i) },
         )
-        if (db.accounts().all().isEmpty()) {
-            val cash = db.accounts().upsert(AccountEntity(name = "現金", type = AccountType.CASH, sortOrder = 0))
-            db.accounts().upsert(AccountEntity(name = "銀行帳戶", type = AccountType.BANK, sortOrder = 1))
-            settings.update { it.copy(defaultAccountId = cash) }
+        // 不再自動建立預設帳戶（避免重新安裝後匯入資料時多出「現金」「銀行帳戶」）
+        if (!settings.value.seedCleaned) {
+            removeUnusedSeedAccounts()
+            settings.update { it.copy(seedCleaned = true) }
+        }
+    }
+
+    /**
+     * 清掉舊版自動建立、從未使用的「現金」「銀行帳戶」：餘額 0、沒有任何交易、股票、週期、連結或點鈔紀錄，
+     * 而且還有其他帳戶時才刪除。
+     */
+    private suspend fun removeUnusedSeedAccounts() {
+        val accounts = db.accounts().all()
+        val txns = db.txns().all()
+        val trades = db.stocks().allTrades()
+        val recurring = db.recurring().all()
+        val s = settings.value
+        val candidates = accounts.filter { a ->
+            (a.name == "現金" && a.type == AccountType.CASH || a.name == "銀行帳戶" && a.type == AccountType.BANK) &&
+                a.initialBalance == 0L &&
+                txns.none { it.accountId == a.id || it.toAccountId == a.id } &&
+                trades.none { it.cashAccountId == a.id || it.brokerAccountId == a.id } &&
+                recurring.none { it.accountId == a.id || it.toAccountId == a.id } &&
+                accounts.none { it.autopayFromId == a.id || it.linkedAccountId == a.id } &&
+                (s.cashCounts[a.id]?.values?.sum() ?: 0) == 0
+        }
+        if (candidates.isEmpty() || accounts.size - candidates.size < 1) return
+        candidates.forEach { deleteAccount(it) }
+        // 預設帳戶被刪掉時改用第一個現金帳戶
+        if (settings.value.defaultAccountId == null) {
+            db.accounts().all().firstOrNull { it.type == AccountType.CASH && !it.archived }?.let { c ->
+                settings.update { it.copy(defaultAccountId = c.id) }
+            }
         }
     }
 

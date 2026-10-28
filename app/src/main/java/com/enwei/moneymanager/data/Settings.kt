@@ -111,6 +111,8 @@ data class AppSettings(
     val brokerRebates: Map<Long, RebateRule> = emptyMap(),
     /** 使用者刪除過的自動除息（代號:除息日:批次），不再自動建立 */
     val dismissedDividends: Set<String> = emptySet(),
+    /** 已清理過舊版自動建立的預設帳戶 */
+    val seedCleaned: Boolean = false,
 ) {
     val feeSettings get() = FeeSettings(feeDiscount, minFee, usFee, oddLotMinFee)
     val passcodeOn get() = passcodeHash.isNotEmpty()
@@ -177,6 +179,7 @@ class SettingsStore(context: Context) {
         widgetTheme = prefs.getInt("widgetTheme", 0),
         widgetOpacity = prefs.getInt("widgetOpacity", 100),
         accountGroupOrder = prefs.getString("accountGroupOrder", "")!!.split(',').filter { it.isNotBlank() },
+        seedCleaned = prefs.getBoolean("seedCleaned", false),
         dismissedDividends = prefs.getStringSet("dismissedDividends", emptySet())!!.toSet(),
         brokerRebates = runCatching { json.decodeFromString(rebateSerializer, prefs.getString("brokerRebates", "{}")!!) }.getOrDefault(emptyMap()),
         learnedSources = runCatching { json.decodeFromString(learnedSerializer, prefs.getString("learnedSources", "[]")!!) }.getOrDefault(emptyList()),
@@ -233,6 +236,7 @@ class SettingsStore(context: Context) {
             .putString("learnedSources", json.encodeToString(learnedSerializer, s.learnedSources))
             .putString("brokerRebates", json.encodeToString(rebateSerializer, s.brokerRebates))
             .putStringSet("dismissedDividends", s.dismissedDividends)
+            .putBoolean("seedCleaned", s.seedCleaned)
             .apply()
         state.value = s
     }
