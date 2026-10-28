@@ -65,6 +65,7 @@ import com.enwei.moneymanager.core.StockCalc
 import com.enwei.moneymanager.core.StockSide
 import com.enwei.moneymanager.data.AccountType
 import com.enwei.moneymanager.data.StockTradeEntity
+import com.enwei.moneymanager.data.toRecord
 import com.enwei.moneymanager.data.TxnSource
 import com.enwei.moneymanager.ui.StockDown
 import com.enwei.moneymanager.ui.StockUp
@@ -207,8 +208,15 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
     val holdings by repo.holdings.collectAsStateWithLifecycle(emptyList())
     val h = holdings.find { it.market.name == market && it.symbol == symbol }
     val list = trades.filter { it.market.name == market && it.symbol.uppercase() == symbol }
+    val lk = rememberLookups()
+    var deleteAll by remember { mutableStateOf(false) }
+    var deleteOne by remember { mutableStateOf<StockTradeEntity?>(null) }
     Scaffold(
-        topBar = { BackTopBar("$symbol ${h?.name.orEmpty()}", { nav.popBackStack() }) },
+        topBar = {
+            BackTopBar("$symbol ${h?.name.orEmpty()}", { nav.popBackStack() }) {
+                if (list.isNotEmpty()) IconButton(onClick = { deleteAll = true }) { Icon(Icons.Filled.Delete, "刪除整檔持股") }
+            }
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = { nav.navigate("trade/0?market=$market&symbol=$symbol") }) { Icon(Icons.Filled.Add, "新增交易") }
         },
@@ -246,10 +254,48 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
                         Text("${LocalDate.ofEpochDay(t.date)} · 手續費 ${formatNum(t.fee, 0)} · 稅 ${formatNum(t.tax, 0)}" +
                             if (t.source != TxnSource.MANUAL) " · ${t.source.label}" else "")
                     },
+                    trailingContent = {
+                        IconButton(onClick = { deleteOne = t }) { Icon(Icons.Filled.Delete, "刪除", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    },
                     modifier = Modifier.clickable { nav.navigate("trade/${t.id}") },
                 )
             }
         }
+    }
+    // 刪除前說明對交割帳戶的影響
+    fun impact(ts: List<StockTradeEntity>): String {
+        val byAcc = ts.filter { it.cashAccountId != null }.groupBy { it.cashAccountId }
+            .map { (acc, l) -> (lk.account(acc)?.name ?: "?") to l.sumOf { Money.toMinor(StockCalc.cashFlow(it.toRecord())) } }
+            .filter { it.second != 0L }
+        return if (byAcc.isEmpty()) "持股與損益會同步更新。"
+        else byAcc.joinToString("\n") { (n, f) -> "「$n」餘額${if (f < 0) "增加" else "減少"} ${Money.withSymbol(kotlin.math.abs(f))}" } + "\n持股與損益會同步更新。"
+    }
+    if (deleteAll) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { deleteAll = false },
+        title = { Text("刪除 $symbol 的全部 ${list.size} 筆紀錄？") },
+        text = { Text(impact(list)) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                MoneyApp.instance.appScope.launch { repo.deleteHolding(Market.valueOf(market), symbol) }
+                deleteAll = false
+                nav.popBackStack()
+            }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { deleteAll = false }) { Text("取消") } },
+    )
+    deleteOne?.let { t ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deleteOne = null },
+            title = { Text("刪除這筆股票交易？") },
+            text = { Text(impact(listOf(t))) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    MoneyApp.instance.appScope.launch { repo.deleteTrade(t.id) }
+                    deleteOne = null
+                }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { deleteOne = null }) { Text("取消") } },
+        )
     }
 }
 
@@ -412,12 +458,33 @@ fun TradeEditScreen(nav: NavController, id: Long, initMarket: String?, initSymbo
                 enabled = symbol.isNotBlank() && (isDividend || shares > 0),
                 modifier = Modifier.fillMaxWidth().padding(16.dp).height(50.dp), shape = RoundedCornerShape(8.dp),
             ) { Text("儲存") }
+            if (original != null) androidx.compose.material3.OutlinedButton(
+                onClick = { confirmDelete = true },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(48.dp), shape = RoundedCornerShape(8.dp),
+            ) { Text("刪除這筆交易", color = MaterialTheme.colorScheme.error) }
         }
     }
     if (confirmDelete) androidx.compose.material3.AlertDialog(
         onDismissRequest = { confirmDelete = false },
         title = { Text("刪除這筆股票交易？") },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = { scope.launch { repo.deleteTrade(id); nav.popBackStack() } }) { Text("刪除") } },
+        text = {
+            val o = original
+            if (o != null) {
+                val flow = Money.toMinor(StockCalc.cashFlow(o.toRecord()))
+                val cashName = lk.account(o.cashAccountId)?.name
+                Text(
+                    if (cashName != null && flow != 0L) "「$cashName」的餘額會${if (flow < 0) "增加" else "減少"} ${Money.withSymbol(kotlin.math.abs(flow), o.currency)}，持股與損益同步更新。"
+                    else "持股與損益會同步更新。",
+                )
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                MoneyApp.instance.appScope.launch { repo.deleteTrade(id) }
+                confirmDelete = false
+                nav.popBackStack()
+            }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
+        },
         dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmDelete = false }) { Text("取消") } },
     )
 }

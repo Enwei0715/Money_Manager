@@ -166,6 +166,9 @@ interface StockDao {
     @Query("DELETE FROM stock_trades WHERE id = :id")
     suspend fun deleteTrade(id: Long)
 
+    @Query("DELETE FROM stock_trades WHERE market = :market AND UPPER(symbol) = :symbol")
+    suspend fun deleteSymbol(market: com.enwei.moneymanager.core.Market, symbol: String)
+
     @Query("UPDATE stock_trades SET cashAccountId = NULL WHERE cashAccountId = :id")
     suspend fun detachCash(id: Long)
 

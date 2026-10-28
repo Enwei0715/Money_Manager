@@ -94,6 +94,7 @@ import com.enwei.moneymanager.data.TxnStatus
 import com.enwei.moneymanager.data.TxnType
 import com.enwei.moneymanager.data.toLocalDate
 import com.enwei.moneymanager.data.toMillis
+import com.enwei.moneymanager.data.toRecord
 import com.enwei.moneymanager.ui.ExpenseColor
 import com.enwei.moneymanager.ui.IncomeColor
 import com.enwei.moneymanager.ui.SaturdayColor
@@ -237,7 +238,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
             }
             if (tab != 4) SummaryBar(if (tab == 3) base else totals, lk.base)
             when (tab) {
-                0 -> DailyView(inPeriod, lk, nav, range, carry, recurring)
+                0 -> DailyView(inPeriod, lk, nav, range, carry, recurring, trades.filter { inRange(LocalDate.ofEpochDay(it.date), range) })
                 1 -> CalendarView(range, all, lk, nav, DayOfWeek.of(settings.weekStartDay), carry)
                 2 -> MonthlyView(month.year, all, lk, startDay, DayOfWeek.of(settings.weekStartDay))
                 3 -> TotalView(inPeriod, all, lk, nav, month, range)
@@ -273,8 +274,12 @@ private fun SummaryCell(label: String, value: String, color: Color, modifier: Mo
 @Composable
 private fun DailyView(
     list: List<TxnEntity>, lk: Lookups, nav: NavController, range: Pair<LocalDate, LocalDate>, carry: Long, recurring: List<RecurringEntity>,
+    trades: List<com.enwei.moneymanager.data.StockTradeEntity> = emptyList(),
 ) {
     val days = remember(list) { list.groupBy { it.date.toLocalDate() }.toSortedMap(Comparator.reverseOrder()) }
+    // 股票交易顯示在當天（不計入收支）
+    val tradeDays = remember(trades) { trades.groupBy { LocalDate.ofEpochDay(it.date) } }
+    val allDays = (days.keys + tradeDays.keys).toSortedSet(Comparator.reverseOrder())
     val today = LocalDate.now()
     // 本期之後還會發生的週期交易
     val upcoming = recurring.filter { it.enabled }.mapNotNull { r ->
@@ -294,8 +299,8 @@ private fun DailyView(
             }
             Spacer(Modifier.height(8.dp))
         }
-        if (days.isEmpty() && carry == 0L) item { NoData() }
-        days.forEach { (day, txns) -> item(key = "d$day") { DayBlock(day, txns, lk, nav) } }
+        if (allDays.isEmpty() && carry == 0L) item { NoData() }
+        allDays.forEach { day -> item(key = "d$day") { DayBlock(day, days[day].orEmpty(), lk, nav, trades = tradeDays[day].orEmpty()) } }
         if (carry != 0L) item {
             Column(Modifier.padding(top = 8.dp).background(MaterialTheme.colorScheme.surface)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
@@ -321,7 +326,12 @@ fun NoData(text: String = "沒有資料") {
 }
 
 @Composable
-fun DayBlock(day: LocalDate, txns: List<TxnEntity>, lk: Lookups, nav: NavController, balances: Map<Long, Long> = emptyMap()) {
+fun DayBlock(
+    day: LocalDate, txns: List<TxnEntity>, lk: Lookups, nav: NavController, balances: Map<Long, Long> = emptyMap(),
+    trades: List<com.enwei.moneymanager.data.StockTradeEntity> = emptyList(), tradeBalances: Map<Long, Long> = emptyMap(),
+    /** 從帳戶明細進入時的帳戶；股票金額依此帳戶顯示 */
+    accountId: Long? = null,
+) {
     val t = totalsOf(txns, lk.fx)
     Column(Modifier.padding(top = 10.dp).background(MaterialTheme.colorScheme.surface)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -340,7 +350,49 @@ fun DayBlock(day: LocalDate, txns: List<TxnEntity>, lk: Lookups, nav: NavControl
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         txns.sortedByDescending { it.date }.forEach { MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
+        trades.sortedByDescending { it.id }.forEach { tr -> TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+/**
+ * 一筆股票交易（不算收入／支出）：顯示買賣內容與對交割帳戶的金額影響。
+ * [accountId] 為目前檢視的帳戶；不是交割帳戶時金額以灰色顯示（證券帳戶只看持股）。
+ */
+@Composable
+fun TradeRow(tr: com.enwei.moneymanager.data.StockTradeEntity, lk: Lookups, accountId: Long?, balanceAfter: Long?, onClick: () -> Unit) {
+    val gray = MaterialTheme.colorScheme.onSurfaceVariant
+    val side = when (tr.side) {
+        com.enwei.moneymanager.core.StockSide.BUY -> "買進"; com.enwei.moneymanager.core.StockSide.SELL -> "賣出"
+        com.enwei.moneymanager.core.StockSide.CASH_DIVIDEND -> "現金股利"; com.enwei.moneymanager.core.StockSide.STOCK_DIVIDEND -> "股票股利"
+    }
+    val flow = Money.toMinor(com.enwei.moneymanager.core.StockCalc.cashFlow(tr.toRecord()))
+    val cashAcc = lk.account(tr.cashAccountId)
+    val detail = when (tr.side) {
+        com.enwei.moneymanager.core.StockSide.CASH_DIVIDEND -> null
+        else -> "${com.enwei.moneymanager.ui.components.formatNum(tr.shares, 0)} 股" +
+            if (tr.side != com.enwei.moneymanager.core.StockSide.STOCK_DIVIDEND) " @ ${com.enwei.moneymanager.ui.components.formatNum(tr.price)}" else ""
+    }
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.width(96.dp)) {
+            Text("股票", color = gray, fontSize = 14.sp)
+            Text(side, color = gray, fontSize = 12.sp)
+        }
+        Column(Modifier.weight(1f)) {
+            Text("${tr.symbol} ${tr.name.orEmpty()}".trim(), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(listOfNotNull(detail, cashAcc?.name ?: "未指定交割帳戶").joinToString(" · "), color = gray, fontSize = 14.sp, maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(horizontalAlignment = Alignment.End) {
+            val affects = accountId == null || tr.cashAccountId == accountId
+            Text(Money.withSymbol(flow, tr.currency), fontSize = 16.sp,
+                color = if (affects) MaterialTheme.colorScheme.onSurface else gray)
+            if (balanceAfter != null && affects) Text("(${Money.full(balanceAfter)})", fontSize = 12.sp, color = gray)
+        }
     }
 }
 

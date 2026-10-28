@@ -75,6 +75,9 @@ data class Backup(
     val budgets: Map<Long, Long> = emptyMap(),
     val notifPackages: Set<String> = emptySet(),
     val notifAccountMap: Map<String, Long> = emptyMap(),
+    val brokerRebates: Map<Long, RebateRule> = emptyMap(),
+    val learnedSources: List<LearnedSource> = emptyList(),
+    val cashCounts: Map<Long, Map<Int, Int>> = emptyMap(),
 )
 
 data class CardStatus(val payable: Long, val outstanding: Long, val dueDate: LocalDate?, val autopayDate: LocalDate? = null)
@@ -230,6 +233,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 defaultAccountId = s.defaultAccountId.takeIf { it != a.id },
                 notifAccountMap = s.notifAccountMap.filterValues { it != a.id },
                 cashCounts = s.cashCounts - a.id,
+                brokerRebates = s.brokerRebates - a.id,
+                learnedSources = s.learnedSources.map { if (it.accountId == a.id) it.copy(accountId = null) else it },
             )
         }
     }
@@ -783,6 +788,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     suspend fun getTrade(id: Long) = db.stocks().getTrade(id)
     suspend fun deleteTrade(id: Long) = db.stocks().deleteTrade(id)
+
+    /** 刪除整檔持股（這個代號的所有買賣與股利紀錄）；交割帳戶餘額會自動回復。 */
+    suspend fun deleteHolding(market: Market, symbol: String) = db.stocks().deleteSymbol(market, symbol.uppercase())
     suspend fun saveQuotes(list: List<QuoteEntity>) = db.stocks().upsertQuotes(list)
     suspend fun allTrades() = db.stocks().allTrades()
     suspend fun saveFx(list: List<FxRateEntity>) = db.fx().upsertAll(list)
@@ -808,6 +816,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             budgets = settings.value.budgets,
             notifPackages = settings.value.notifPackages,
             notifAccountMap = settings.value.notifAccountMap,
+            brokerRebates = settings.value.brokerRebates,
+            learnedSources = settings.value.learnedSources,
+            cashCounts = settings.value.cashCounts,
         ),
     )
 
@@ -827,6 +838,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             it.copy(
                 bookmarks = b.bookmarks, memos = b.memos, budgets = b.budgets,
                 notifPackages = it.notifPackages + b.notifPackages, notifAccountMap = it.notifAccountMap + b.notifAccountMap,
+                brokerRebates = b.brokerRebates, learnedSources = it.learnedSources + b.learnedSources, cashCounts = b.cashCounts,
             )
         }
         return b

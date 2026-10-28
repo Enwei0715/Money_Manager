@@ -96,16 +96,11 @@ fun deltaFor(t: TxnEntity, accountId: Long, fx: com.enwei.moneymanager.core.FxCo
     }
 }
 
-private fun tradeDelta(tr: StockTradeEntity, accountId: Long): Long =
-    if (tr.cashAccountId == accountId) Money.toMinor(com.enwei.moneymanager.core.StockCalc.cashFlow(tr.toRecord())) else 0
-
-/** 帳戶在指定時間點（不含）之前的餘額 = 目前餘額 − 之後所有變動。 */
+/** 帳戶在指定時間點（不含）之前的餘額 = 目前餘額 − 之後所有變動（含股票交易，與帳戶餘額同一算法）。 */
 fun balanceBefore(
     current: Long, accountId: Long, millis: Long, txns: List<TxnEntity>, trades: List<StockTradeEntity>,
-    fx: com.enwei.moneymanager.core.FxConverter? = null, accountCurrency: String? = null,
-): Long =
-    current - txns.filter { it.date >= millis }.sumOf { deltaFor(it, accountId, fx, accountCurrency) } -
-        trades.filter { LocalDate.ofEpochDay(it.date).toMillis(LocalTime.NOON) >= millis }.sumOf { tradeDelta(it, accountId) }
+    fx: com.enwei.moneymanager.core.FxConverter, accountCurrency: String,
+): Long = balanceAt(current, millis, ledgerFor(accountId, accountCurrency, txns, trades, fx))
 
 @Composable
 private fun GrayHeader(title: String, right: @Composable () -> Unit = {}) {
@@ -310,17 +305,19 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
     val acc = b?.account
     val cur = acc?.currency ?: lk.base
     val current = b?.balance ?: 0
-    val mine = remember(all, id) { all.filter { it.accountId == id || it.toAccountId == id } }
+    // 本帳戶的全部明細（一般交易＋股票交易），所有數字都由這份資料計算
+    val ledger = remember(all, trades, id, lk.fx, cur) { ledgerFor(id, cur, all, trades, lk.fx) }
 
     val (start, end) = when (tab) {
         0 -> Periods.month(month, settings.monthStartDay)
         1 -> LocalDate.of(month.year, 1, 1) to LocalDate.of(month.year, 12, 31)
-        else -> (mine.minOfOrNull { it.date.toLocalDate() } ?: LocalDate.now()) to LocalDate.now().plusYears(1)
+        else -> (ledger.minOfOrNull { it.date.toLocalDate() } ?: LocalDate.now()) to LocalDate.now().plusYears(1)
     }
-    val inRange = mine.filter { val d = it.date.toLocalDate(); !d.isBefore(start) && !d.isAfter(end) }
-    val deposit = inRange.sumOf { maxOf(0, deltaFor(it, id, lk.fx, cur)) }
-    val withdrawal = -inRange.sumOf { minOf(0, deltaFor(it, id, lk.fx, cur)) }
-    val endBalance = balanceBefore(current, id, end.plusDays(1).toMillis(LocalTime.MIDNIGHT), all, trades, lk.fx, cur)
+    fun entriesIn(a: LocalDate, b: LocalDate) = ledger.filter { val d = it.date.toLocalDate(); !d.isBefore(a) && !d.isAfter(b) }
+    val inRange = entriesIn(start, end)
+    val deposit = inRange.sumOf { maxOf(0, it.delta) }
+    val withdrawal = -inRange.sumOf { minOf(0, it.delta) }
+    val endBalance = balanceAt(current, end.plusDays(1).toMillis(LocalTime.MIDNIGHT), ledger)
     var reconcileOpen by remember { mutableStateOf(false) }
     val byBrokerDetail by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
     var cardInfo by remember { mutableStateOf<Map<Long, CardStatus>>(emptyMap()) }
@@ -437,9 +434,9 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 item {
                     val months = (5 downTo 0).map { month.minusMonths(it.toLong()) }
                     val ranges = months.map { Periods.month(it, settings.monthStartDay) }
-                    val ends = ranges.map { balanceBefore(current, id, it.second.plusDays(1).toMillis(LocalTime.MIDNIGHT), all, trades, lk.fx, cur) }
-                    val deps = ranges.map { r -> mine.filter { val d = it.date.toLocalDate(); !d.isBefore(r.first) && !d.isAfter(r.second) }.sumOf { maxOf(0, deltaFor(it, id, lk.fx, cur)) } }
-                    val wds = ranges.map { r -> -mine.filter { val d = it.date.toLocalDate(); !d.isBefore(r.first) && !d.isAfter(r.second) }.sumOf { minOf(0, deltaFor(it, id, lk.fx, cur)) } }
+                    val ends = ranges.map { balanceAt(current, it.second.plusDays(1).toMillis(LocalTime.MIDNIGHT), ledger) }
+                    val deps = ranges.map { r -> entriesIn(r.first, r.second).sumOf { maxOf(0, it.delta) } }
+                    val wds = ranges.map { r -> -entriesIn(r.first, r.second).sumOf { minOf(0, it.delta) } }
                     val labels = months.map { "${it.monthValue}月" }
                     Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(vertical = 8.dp)) {
                         LineChart(ends, labels, MaterialTheme.colorScheme.primary, autoMin = false)
@@ -449,24 +446,25 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 }
             } else when (tab) {
                 0 -> {
-                    // 每筆交易後的帳戶餘額
-                    val sorted = mine.sortedByDescending { it.date }
-                    val after = HashMap<Long, Long>()
-                    var running = current - trades.filter { LocalDate.ofEpochDay(it.date).toMillis(LocalTime.NOON) > (sorted.firstOrNull()?.date ?: 0) }.sumOf { tradeDelta(it, id) }
-                    sorted.forEach { t -> after[t.id] = running; running -= deltaFor(t, id, lk.fx, cur) }
+                    // 每筆（含股票交易）之後的帳戶餘額
+                    val after = runningBalances(current, ledger)
+                    val txnAfter = ledger.mapNotNull { e -> e.txn?.let { it.id to after.getValue(e.key) } }.toMap()
+                    val tradeAfter = ledger.mapNotNull { e -> e.trade?.let { it.id to after.getValue(e.key) } }.toMap()
                     if (inRange.isEmpty()) item { EmptyHint("這段期間沒有交易") }
-                    inRange.groupBy { it.date.toLocalDate() }.toSortedMap(Comparator.reverseOrder()).forEach { (d, txns) ->
-                        item(key = "d$d") { DayBlock(d, txns, lk, nav, after) }
+                    inRange.groupBy { it.date.toLocalDate() }.toSortedMap(Comparator.reverseOrder()).forEach { (d, entries) ->
+                        item(key = "d$d") {
+                            DayBlock(d, entries.mapNotNull { it.txn }, lk, nav, txnAfter, entries.mapNotNull { it.trade }, tradeAfter, id)
+                        }
                     }
                 }
                 1 -> {
                     val months = (12 downTo 1).map { YearMonth.of(month.year, it) }.filter { !it.isAfter(YearMonth.now()) }
                     items(months, key = { "m$it" }) { m ->
                         val r = Periods.month(m, settings.monthStartDay)
-                        val list = mine.filter { val d = it.date.toLocalDate(); !d.isBefore(r.first) && !d.isAfter(r.second) }
+                        val list = entriesIn(r.first, r.second)
                         PeriodRow("${m.monthValue}月", "${r.first.monthValue}/${r.first.dayOfMonth} ~ ${r.second.monthValue}/${r.second.dayOfMonth}",
-                            list.sumOf { maxOf(0, deltaFor(it, id, lk.fx, cur)) }, -list.sumOf { minOf(0, deltaFor(it, id, lk.fx, cur)) },
-                            balanceBefore(current, id, r.second.plusDays(1).toMillis(LocalTime.MIDNIGHT), all, trades, lk.fx, cur)) {
+                            list.sumOf { maxOf(0, it.delta) }, -list.sumOf { minOf(0, it.delta) },
+                            balanceAt(current, r.second.plusDays(1).toMillis(LocalTime.MIDNIGHT), ledger)) {
                             month = m; tab = 0
                         }
                     }
@@ -474,9 +472,9 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 else -> {
                     val years = (LocalDate.now().year downTo start.year).toList()
                     items(years, key = { "y$it" }) { y ->
-                        val list = mine.filter { it.date.toLocalDate().year == y }
-                        PeriodRow("${y}年", "", list.sumOf { maxOf(0, deltaFor(it, id, lk.fx, cur)) }, -list.sumOf { minOf(0, deltaFor(it, id, lk.fx, cur)) },
-                            balanceBefore(current, id, LocalDate.of(y + 1, 1, 1).toMillis(LocalTime.MIDNIGHT), all, trades, lk.fx, cur)) {
+                        val list = ledger.filter { it.date.toLocalDate().year == y }
+                        PeriodRow("${y}年", "", list.sumOf { maxOf(0, it.delta) }, -list.sumOf { minOf(0, it.delta) },
+                            balanceAt(current, LocalDate.of(y + 1, 1, 1).toMillis(LocalTime.MIDNIGHT), ledger)) {
                             month = YearMonth.of(y, 12); tab = 1
                         }
                     }

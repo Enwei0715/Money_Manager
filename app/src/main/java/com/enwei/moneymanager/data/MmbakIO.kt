@@ -7,11 +7,15 @@ import androidx.room.withTransaction
 import com.enwei.moneymanager.core.FxConverter
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.core.NotificationParser
+import com.enwei.moneymanager.core.StockCalc
+import com.enwei.moneymanager.core.StockSide
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
 
@@ -184,6 +188,10 @@ object MmbakIO {
                 val transferIn = txs.filter { it.type == "4" && it.pair != null }.associateBy { it.pair }
                 val assetCurrency = assets.associate { it.uid to it.currency }
                 txs.forEach { t ->
+                    // 帳理匯出的股票交易：App 裡仍有這筆股票紀錄時略過，避免重複計算
+                    if (t.uid.startsWith("TRADE:") && t.uid.removePrefix("TRADE:").toLongOrNull()?.let { db.stocks().getTrade(it) } != null) {
+                        skipped++; return@forEach
+                    }
                     val key = "MM:${t.uid}"
                     // ZMONEY 是帳戶幣別的金額；外幣交易的原幣金額在 IN_ZMONEY，寫進說明保留
                     val amount = Money.toMinor(kotlin.math.abs(t.amount))
@@ -334,6 +342,23 @@ object MmbakIO {
                             insertTx(UUID.randomUUID().toString(), to, asset, null, t, 4, t.toAmount ?: t.amount, pair)
                         }
                     }
+                }
+                // 股票交易：Money Manager 沒有股票，交割帳戶的金額進出以「餘額調整」匯出，帳戶餘額才會一致
+                db.stocks().allTrades().forEach { tr ->
+                    val asset = tr.cashAccountId?.let { accUid[it] } ?: return@forEach
+                    val accCur = accounts.find { it.id == tr.cashAccountId }?.currency ?: tr.currency
+                    val flow = fx.convert(Money.toMinor(StockCalc.cashFlow(tr.toRecord())), tr.currency, accCur)
+                    if (flow == 0L) return@forEach
+                    val side = when (tr.side) {
+                        StockSide.BUY -> "買進"; StockSide.SELL -> "賣出"; StockSide.CASH_DIVIDEND -> "現金股利"; StockSide.STOCK_DIVIDEND -> "股票股利"
+                    }
+                    val t = TxnEntity(
+                        type = if (flow > 0) TxnType.INCOME else TxnType.EXPENSE, amount = kotlin.math.abs(flow), currency = accCur,
+                        merchant = "$side ${tr.symbol} ${tr.name.orEmpty()}".trim(),
+                        note = if (tr.side == StockSide.CASH_DIVIDEND) null else "${tr.shares.toLong()} 股 @ ${tr.price} · 手續費 ${tr.fee.toLong()} · 稅 ${tr.tax.toLong()}",
+                        date = LocalDate.ofEpochDay(tr.date).toMillis(LocalTime.NOON),
+                    )
+                    insertTx("TRADE:${tr.id}", asset, null, "-4", t, if (flow > 0) 7 else 8, kotlin.math.abs(flow), null)
                 }
                 repo.settings.value.memos.forEach { m ->
                     val d = Instant.ofEpochMilli(m.date).atZone(ZoneId.systemDefault()).toLocalDate()
