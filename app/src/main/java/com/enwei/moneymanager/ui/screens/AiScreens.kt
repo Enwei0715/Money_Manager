@@ -60,10 +60,16 @@ fun AiSettingsScreen(nav: NavController) {
             )
             OutlinedTextField(
                 model, { model = it; repo.settings.update { st -> st.copy(aiModel = it.trim()) } },
-                label = { Text("模型") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                label = { Text("一般模型") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            var hardModel by remember(s.aiModelHard) { mutableStateOf(s.aiModelHard) }
+            OutlinedTextField(
+                hardModel, { hardModel = it; repo.settings.update { st -> st.copy(aiModelHard = it.trim()) } },
+                label = { Text("進階模型（整理不明花費）") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
             Text(
-                "建議用 ${GroqAi.DEFAULT_MODEL}（Groq 免費方案可用）。llama-3.1-8b-instant 已於 2026/8/16 停止提供給免費方案，會自動改用建議模型。",
+                "一般模型負責判讀通知、命名與分類，建議用 ${GroqAi.DEFAULT_MODEL}；進階模型推理較深、只用在較難的「不明」推估，建議用 ${GroqAi.HARD_MODEL}，" +
+                    "不能用或超過額度時自動改用一般模型。llama-3.1-8b-instant 已於 2026/8/16 停止提供給免費方案，會自動改用建議模型。",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(enabled = key.isNotBlank() && !testing, onClick = {

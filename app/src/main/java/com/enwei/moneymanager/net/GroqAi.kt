@@ -39,15 +39,23 @@ object GroqAi {
 
     /** 預設模型。llama-3.1-8b-instant 已於 2026/8/16 停止提供給免費與開發者方案。 */
     const val DEFAULT_MODEL = "openai/gpt-oss-20b"
+    /** 較難的推估（整理「不明」花費）用的大模型；失敗時退回 [DEFAULT_MODEL] */
+    const val HARD_MODEL = "openai/gpt-oss-120b"
     /** 已停止提供的模型，自動改用預設模型 */
     val RETIRED_MODELS = setOf("llama-3.1-8b-instant", "llama3-8b-8192", "llama-3.3-70b-versatile")
 
     private enum class Fail { NONE, MODEL_GONE, NO_JSON_MODE }
 
     /** 呼叫模型並取得 JSON 物件回覆；失敗回傳 null。模型下架時自動改用預設模型、不支援 JSON 模式時改用一般模式重試。 */
-    private suspend fun chatJson(system: String, user: String, maxTokens: Int = 200): JsonObject? = withContext(Dispatchers.IO) {
+    private suspend fun chatJson(system: String, user: String, maxTokens: Int = 200, hard: Boolean = false): JsonObject? = withContext(Dispatchers.IO) {
         val s = MoneyApp.repo.settings.value
         if (s.groqKey.isBlank()) return@withContext null
+        // 難題先用大模型（推理強度中等）；大模型不能用或超過額度時改用一般模型
+        if (hard) {
+            val big = s.aiModelHard.trim().ifBlank { HARD_MODEL }
+            val (r, _) = call(s.groqKey.trim(), big, true, system, user, maxTokens, effort = "medium")
+            if (r != null) return@withContext r
+        }
         var model = s.aiModel.trim().ifBlank { DEFAULT_MODEL }.let { if (it in RETIRED_MODELS) DEFAULT_MODEL else it }
         var jsonMode = true
         repeat(3) {
@@ -64,14 +72,14 @@ object GroqAi {
         null
     }
 
-    private fun call(key: String, model: String, jsonMode: Boolean, system: String, user: String, maxTokens: Int): Pair<JsonObject?, Fail> {
+    private fun call(key: String, model: String, jsonMode: Boolean, system: String, user: String, maxTokens: Int, effort: String = "low"): Pair<JsonObject?, Fail> {
         // gpt-oss 等推理模型的思考過程也算在 max_tokens 裡，要多留空間並把推理強度調低
         val reasoning = model.startsWith("openai/gpt-oss") || model.contains("qwen3") || model.contains("deepseek")
         val body = buildJsonObject {
             put("model", model)
             put("temperature", if (reasoning) 0.2 else 0.0)
-            put("max_tokens", if (reasoning) maxOf(1024, maxTokens * 4) else maxTokens)
-            if (reasoning && model.startsWith("openai/gpt-oss")) put("reasoning_effort", "low")
+            put("max_tokens", if (reasoning) maxOf(if (effort == "low") 1024 else 4096, maxTokens * 4) else maxTokens)
+            if (reasoning && model.startsWith("openai/gpt-oss")) put("reasoning_effort", effort)
             if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
             put("messages", buildJsonArray {
                 add(buildJsonObject { put("role", "system"); put("content", system) })
@@ -166,7 +174,7 @@ object GroqAi {
             "理由用繁體中文 15 字以內。只回 JSON：{\"results\": [{\"id\": number, \"category_id\": number|null, \"reason\": string}]}"
         val user = "分類清單（id: 名稱）：\n" + categories.joinToString("\n") { "${it.first}: ${it.second}" } +
             "\n\n交易：\n" + items.joinToString("\n") { "[${it.id}] ${it.desc}｜類似情境常用：${it.hints.ifBlank { "無" }}" }
-        val r = chatJson(system, user, 60 + 50 * items.size) ?: return emptyMap()
+        val r = chatJson(system, user, 60 + 50 * items.size, hard = true) ?: return emptyMap()
         val arr = r["results"] as? kotlinx.serialization.json.JsonArray ?: return emptyMap()
         val valid = categories.map { it.first }.toSet()
         return arr.mapNotNull { e ->
