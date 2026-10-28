@@ -87,6 +87,7 @@ import com.enwei.moneymanager.ui.screens.RecurringEditScreen
 import com.enwei.moneymanager.ui.screens.RecurringScreen
 import com.enwei.moneymanager.ui.screens.SearchScreen
 import com.enwei.moneymanager.ui.screens.SettingsScreen
+import com.enwei.moneymanager.ui.screens.StockFeeScreen
 import com.enwei.moneymanager.ui.screens.StatsTab
 import com.enwei.moneymanager.ui.screens.TotalStatsScreen
 import com.enwei.moneymanager.ui.screens.TradeEditScreen
