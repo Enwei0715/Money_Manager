@@ -130,10 +130,8 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("支出分類設定") { nav.navigate("categories?kind=EXPENSE") }
                 ConfigRow("收入分類設定") { nav.navigate("categories?kind=INCOME") }
                 ConfigRow("預算設定") { nav.navigate("budget") }
-                ConfigRow("週期交易設定") { nav.navigate("recurring") }
-                ConfigRow("書籤") { nav.navigate("bookmarks") }
 
-                SectionHeader("記帳輸入")
+                SectionHeader("記帳")
                 ConfigRow("輸入順序", if (s.inputFromCategory) "從分類" else "從金額") {
                     ask("輸入順序", listOf(false to "從金額", true to "從分類"), s.inputFromCategory, "新增交易時先跳出哪個輸入面板。") { v ->
                         repo.settings.update { it.copy(inputFromCategory = v) }
@@ -142,6 +140,8 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("時間輸入", onOff(s.showTime)) {
                     askOnOff("時間輸入", s.showTime, "記帳時除了日期也可以設定時間。") { v -> repo.settings.update { it.copy(showTime = v) } }
                 }
+                ConfigRow("週期交易", null) { nav.navigate("recurring") }
+                ConfigRow("書籤", null) { nav.navigate("bookmarks") }
                 ConfigRow("自動完成", onOff(s.autocomplete)) {
                     askOnOff("自動完成", s.autocomplete, "輸入內容時依過去紀錄建議，並帶入分類。") { v -> repo.settings.update { it.copy(autocomplete = v) } }
                 }
@@ -212,11 +212,12 @@ fun ConfigScreen(nav: NavController) {
                 SectionHeader("自動記帳")
                 ConfigRow("通知自動記帳") { nav.navigate("notif") }
                 ConfigRow("錢包畫面讀取（街口、悠遊付）") { nav.navigate("walletreader") }
+
+                SectionHeader("AI")
                 ConfigRow("AI 智慧辨識（Groq）", onOff(s.aiEnabled && s.groqKey.isNotBlank())) { nav.navigate("ai") }
 
                 SectionHeader("股票")
-                ConfigRow("股票手續費與月退") { nav.navigate("stockfees") }
-                ConfigRow("證券帳戶") { nav.navigate("invest") }
+                ConfigRow("手續費與月退") { nav.navigate("stockfees") }
 
                 SectionHeader("安全與提醒")
                 ConfigRow("密碼鎖", onOff(s.passcodeOn)) { nav.navigate("passcode") }
@@ -241,8 +242,10 @@ fun ConfigScreen(nav: NavController) {
                     }
                 }
 
-                SectionHeader("資料與更新")
+                SectionHeader("資料")
                 ConfigRow("備份與還原（含 .mmbak）") { nav.navigate("backup") }
+
+                SectionHeader("關於")
                 ConfigRow("App 更新", BuildConfig.VERSION_NAME) { nav.navigate("settings") }
                 Spacer(Modifier.height(32.dp))
             }

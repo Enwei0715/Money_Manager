@@ -341,28 +341,41 @@ object GroqAi {
         }
     }
 
-    /** 收支檢討：依固定格式回覆（總評、做得好、需要改善、行動建議、下期目標）。 */
-    suspend fun review(summary: String, base: String): com.enwei.moneymanager.data.AiReview? {
+    /**
+     * 收支檢討：讀總覽、商家彙總、習慣與逐筆重點交易，回覆固定格式（總評、多角度分析、做得好、需要改善、
+     * 針對特定交易的疑問、行動建議、下期目標）。[txnIds] 為重點交易編號對應的交易 id。
+     */
+    suspend fun review(input: String, base: String, txnIds: List<Long>): com.enwei.moneymanager.data.AiReview? {
         if (!enabled) return null
-        val system = "你是台灣的個人理財教練，口吻直接、具體、友善，不說教。根據使用者這期的收支資料做檢討，所有建議都要引用資料裡的數字，" +
-            "不要編造資料裡沒有的消費。金額單位為 $base 元。只回 JSON：" +
-            "{\"score\": 0到100的整數（量入為出、儲蓄率、是否超支、比上期進步）, \"headline\": 一句話總評（30 字內）, " +
-            "\"good\": [做得好的地方，1-3 點], \"improve\": [需要改善的地方，2-3 點，含數字], " +
-            "\"actions\": [{\"action\": 具體可執行的行動（25 字內）, \"saving\": 預估每月可省的金額（整數，無法估計用 null）}]（3 點）, " +
-            "\"expense_cap\": 建議下期支出上限（整數）, \"savings_target\": 建議下期儲蓄率（百分比數字）, \"goals\": [下期 1-3 個分類上限或習慣目標]}"
-        val r = chatJson(system, summary, 1500, hard = true) ?: return null
-        fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(80) }.orEmpty()
-        val actions = (r["actions"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
-            val o = e as? JsonObject ?: return@mapNotNull null
+        val system = "你是台灣的個人理財教練，口吻直接、具體、友善，不說教。請真正逐筆讀使用者的交易，判斷哪些消費是必要的、哪些可能是衝動或習慣性花費，" +
+            "從多個角度分析（必要性、消費習慣與頻率、時間（深夜／週末）、分類趨勢與上期／去年比較、固定支出），所有結論都要引用資料裡的數字或交易，不可編造。" +
+            "對 3～5 筆（或一組）看起來不必要、異常或重複的交易提出具體疑問，用交易編號；使用者已標記過的交易要尊重他的回答，不要再問同一筆。金額單位為 $base 元。" +
+            "只回 JSON：{\"score\": 0～100 整數, \"headline\": 30 字內總評, " +
+            "\"analysis\": [{\"title\": 角度名稱, \"text\": 60 字內分析}]（4～5 項）, \"good\": [1～3 點], \"improve\": [2～3 點，含數字], " +
+            "\"questions\": [{\"t\": [交易編號], \"q\": 對這筆的疑問（30 字內）, \"why\": 為什麼這樣問（25 字內）}], " +
+            "\"actions\": [{\"action\": 25 字內具體行動, \"saving\": 每月可省金額整數或 null}]（3 點）, " +
+            "\"expense_cap\": 下期支出上限整數, \"savings_target\": 下期儲蓄率數字, \"goals\": [1～3 項]}"
+        val r = chatJson(system, input.take(3800), 1100, hard = true, cap = 4000, effort = "low") ?: return null
+        fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(100) }.orEmpty()
+        fun objs(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
+        val actions = objs("actions").mapNotNull { o ->
             val a = o.str("action") ?: return@mapNotNull null
             com.enwei.moneymanager.data.ReviewAction(a.take(60), o.str("saving")?.toDoubleOrNull()?.toLong()?.takeIf { it > 0 }?.times(100))
-        }.orEmpty()
+        }
+        val questions = objs("questions").mapNotNull { o ->
+            val ids = (o["t"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim('#')?.toDoubleOrNull()?.toInt()?.let { i -> txnIds.getOrNull(i) } }
+                ?: o.str("t")?.trim('#')?.toDoubleOrNull()?.toInt()?.let { i -> listOfNotNull(txnIds.getOrNull(i)) } ?: emptyList()
+            val q = o.str("q") ?: return@mapNotNull null
+            if (ids.isEmpty()) null else com.enwei.moneymanager.data.ReviewQuestion(ids.distinct().take(5), q.take(60), o.str("why")?.take(50).orEmpty())
+        }
         return com.enwei.moneymanager.data.AiReview(
             score = r.str("score")?.toDoubleOrNull()?.toInt()?.coerceIn(0, 100) ?: 0,
             headline = r.str("headline")?.take(60).orEmpty(), good = list("good"), improve = list("improve"), actions = actions,
             expenseCap = r.str("expense_cap")?.toDoubleOrNull()?.toLong()?.takeIf { it > 0 }?.times(100),
             savingsTarget = r.str("savings_target")?.toDoubleOrNull(), goals = list("goals"),
             createdAt = System.currentTimeMillis(),
+            analysis = objs("analysis").mapNotNull { o -> o.str("title")?.let { t -> com.enwei.moneymanager.data.ReviewAngle(t.take(12), o.str("text")?.take(120).orEmpty()) } },
+            questions = questions,
         )
     }
 

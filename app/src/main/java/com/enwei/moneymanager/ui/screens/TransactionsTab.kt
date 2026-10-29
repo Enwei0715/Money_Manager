@@ -141,7 +141,7 @@ fun weekdayColor(d: DayOfWeek, default: Color): Color = when (d) {
 
 private fun inRange(d: LocalDate, r: Pair<LocalDate, LocalDate>) = !d.isBefore(r.first) && !d.isAfter(r.second)
 
-private val subTabs = listOf("每日", "日曆", "每月", "總計", "備註")
+private val subTabs = listOf("每日", "日曆", "每月", "總計", "備註", "檢討")
 private val NavyHighlight = Color(0xFF3F4570)
 
 @Composable
@@ -209,7 +209,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     ) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.EditNote, "新增備註", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp)) } }
                     Spacer(Modifier.width(16.dp))
                 }
-                if (tab != 4) FloatingActionButton(
+                if (tab < 4) FloatingActionButton(
                     onClick = { nav.navigate("txn/0") }, shape = CircleShape, modifier = Modifier.size(64.dp),
                     containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White,
                 ) { Icon(Icons.Filled.Add, "記一筆", modifier = Modifier.size(32.dp)) }
@@ -217,7 +217,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         },
     ) { pad ->
         var dragX by remember { mutableStateOf(0f) }
-        val swipeModifier = if (settings.swipe == 1) Modifier.pointerInput(yearly) {
+        val swipeModifier = if (settings.swipe == 1 && tab < 5) Modifier.pointerInput(yearly) {
             detectHorizontalDragGestures(
                 onDragStart = { dragX = 0f },
                 onDragEnd = {
@@ -233,19 +233,21 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
             ) {
                 // 英文時用短標籤，避免五個分頁被截斷
-                (if (com.enwei.moneymanager.ui.I18n.english) listOf("Daily", "Cal.", "Month", "Total", "Notes") else subTabs).forEachIndexed { i, t ->
-                    Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t, fontSize = 14.sp, maxLines = 1) },
+                (if (com.enwei.moneymanager.ui.I18n.english) listOf("Daily", "Cal.", "Month", "Total", "Notes", "Review") else subTabs).forEachIndexed { i, t ->
+                    Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t, fontSize = 13.sp, maxLines = 1, softWrap = false) },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            if (tab != 4) SummaryBar(if (tab == 3) base else totals, lk.base)
+            if (tab < 4) SummaryBar(if (tab == 3) base else totals, lk.base)
             when (tab) {
                 0 -> DailyView(inPeriod, lk, nav, range, carry, recurring, trades.filter { inRange(LocalDate.ofEpochDay(it.date), range) },
                     memos = settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }
                 1 -> CalendarView(range, all, lk, nav, DayOfWeek.of(settings.weekStartDay), carry, settings.memos) { memoEditing = it }
                 2 -> MonthlyView(month.year, all, lk, startDay, DayOfWeek.of(settings.weekStartDay))
                 3 -> TotalView(inPeriod, all, lk, nav, month, range)
-                else -> MemoView(settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }
+                4 -> MemoView(settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }
+                // 收支檢討（月、季、年；AI 逐筆檢查並提問）
+                else -> ReviewContent(nav)
             }
         }
     }

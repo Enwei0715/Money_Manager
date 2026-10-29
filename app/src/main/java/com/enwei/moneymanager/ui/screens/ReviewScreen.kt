@@ -48,6 +48,11 @@ import com.enwei.moneymanager.data.AiReview
 import com.enwei.moneymanager.data.ReviewData
 import com.enwei.moneymanager.data.ReviewSpan
 import com.enwei.moneymanager.data.spendingReview
+import com.enwei.moneymanager.data.aiInput
+import com.enwei.moneymanager.data.habits
+import com.enwei.moneymanager.data.lateNight
+import com.enwei.moneymanager.data.merchants
+import androidx.compose.foundation.clickable
 import com.enwei.moneymanager.net.GroqAi
 import com.enwei.moneymanager.ui.ExpenseColor
 import com.enwei.moneymanager.ui.IncomeColor
@@ -61,6 +66,14 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun ReviewScreen(nav: NavController) {
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("收支檢討", { nav.popBackStack() }) }) { pad ->
+        androidx.compose.foundation.layout.Box(Modifier.padding(pad)) { ReviewContent(nav) }
+    }
+}
+
+/** 收支檢討內容（交易頁的「檢討」分頁）。 */
+@Composable
+fun ReviewContent(nav: NavController) {
     val lk = rememberLookups()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
@@ -74,8 +87,8 @@ fun ReviewScreen(nav: NavController) {
     val base = lk.base
     fun m(v: Long) = Money.withSymbol(v, base)
 
-    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("收支檢討", { nav.popBackStack() }) }) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    run {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 ReviewSpan.entries.forEach { sp -> FilterChip(span == sp, { span = sp; offset = 0 }, label = { Text("每${sp.label}") }) }
                 Spacer(Modifier.weight(1f))
@@ -129,7 +142,14 @@ fun ReviewScreen(nav: NavController) {
             }
 
             // ③ 重點觀察（規則）
-            val obs = d.observations(base)
+            val obs = d.observations(base) + buildList {
+                d.merchants().take(3).takeIf { it.isNotEmpty() }?.let { ms -> add("花最多的商家：" + ms.joinToString("、") { "${it.name.take(10)} ${it.count} 次 ${m(it.total)}" }) }
+                d.habits().take(3).forEach { add("${it.name.take(10)} 這期 ${it.count} 次、共 ${m(it.total)}，小額但累積起來不少") }
+                d.lateNight().takeIf { it.size >= 3 }?.let { add("深夜（22 點後）消費 ${it.size} 筆、共 ${m(it.sumOf { t -> t.amount })}") }
+                d.lastYearExpense?.let { ly -> add("去年同期支出 ${m(ly)}，今年 ${if (d.expense >= ly) "多" else "少"} ${m(kotlin.math.abs(d.expense - ly))}") }
+                val saved = d.expenses.filter { com.enwei.moneymanager.data.necessityOf(settings.txnNecessity[it.id])?.first == com.enwei.moneymanager.data.Necessity.SAVE }
+                if (saved.isNotEmpty()) add("你標為「可省」的 ${saved.size} 筆共 ${m(saved.sumOf { it.amount })}")
+            }
             if (obs.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("重點觀察", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -146,7 +166,8 @@ fun ReviewScreen(nav: NavController) {
                         if (GroqAi.enabled) OutlinedButton(enabled = !busy && d.txnCount > 0, onClick = {
                             busy = true; err = null
                             scope.launch {
-                                val r = GroqAi.review(d.summary(base), base)
+                                val (input, list) = d.aiInput(base, settings.txnNecessity)
+                                val r = GroqAi.review(input, base, list.map { it.id })
                                 if (r != null) repo.settings.update { it.copy(reviews = (it.reviews + (d.key to r)).entries.toList().takeLast(40).associate { e -> e.key to e.value }) }
                                 else err = "AI 連線失敗：${GroqAi.lastError ?: "沒有回應"}"
                                 busy = false
@@ -157,7 +178,7 @@ fun ReviewScreen(nav: NavController) {
                     err?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
                     val r = settings.reviews[d.key]
                     when {
-                        r != null -> AiReviewBody(r, ::m)
+                        r != null -> AiReviewBody(r, ::m, d, lk, settings.txnNecessity, nav)
                         !GroqAi.enabled -> Text("到「設定 → AI 智慧辨識」填入金鑰後，可以產生 AI 檢討。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         else -> Text("按「產生」，AI 會依這期的資料寫出檢討與下期目標。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -186,7 +207,9 @@ private fun Stat(label: String, value: String, color: androidx.compose.ui.graphi
 
 /** AI 檢討的固定版面：分數＋總評 → 做得好 → 需要改善 → 行動建議 → 下期目標。 */
 @Composable
-private fun AiReviewBody(r: AiReview, m: (Long) -> String) {
+private fun AiReviewBody(
+    r: AiReview, m: (Long) -> String, d: ReviewData, lk: Lookups, necessity: Map<Long, String>, nav: NavController,
+) {
     val gray = MaterialTheme.colorScheme.onSurfaceVariant
     Row(verticalAlignment = Alignment.CenterVertically) {
         val c = when {
@@ -206,7 +229,22 @@ private fun AiReviewBody(r: AiReview, m: (Long) -> String) {
         Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         items.forEach { Text("$mark $it", fontSize = 14.sp) }
     }
+    if (r.analysis.isNotEmpty()) {
+        Text("多角度分析", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        r.analysis.forEach { a ->
+            Column {
+                Text(a.title, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                Text(a.text, fontSize = 14.sp)
+            }
+        }
+    }
     section("做得好", r.good, "✓")
+    if (r.questions.isNotEmpty()) {
+        Text("想問你的幾筆", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text("回答會記住，下次檢討時 AI 會參考（例如「可省」的金額會列入目標）。", fontSize = 12.sp, color = gray)
+        val byId = d.expenses.associateBy { it.id }
+        r.questions.forEach { q -> QuestionCard(q, q.txnIds.mapNotNull { byId[it] }, lk, necessity, m, nav) }
+    }
     section("需要改善", r.improve, "!")
     if (r.actions.isNotEmpty()) {
         Text("行動建議", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -229,4 +267,44 @@ private fun AiReviewBody(r: AiReview, m: (Long) -> String) {
         "產生於 " + java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(r.createdAt)),
         fontSize = 11.sp, color = gray,
     )
+}
+
+
+/** AI 對特定交易的疑問：列出交易、問題，讓使用者標「必要／可省／一次性」並補充說明。 */
+@Composable
+private fun QuestionCard(
+    q: com.enwei.moneymanager.data.ReviewQuestion, txns: List<com.enwei.moneymanager.data.TxnEntity>, lk: Lookups,
+    necessity: Map<Long, String>, m: (Long) -> String, nav: NavController,
+) {
+    if (txns.isEmpty()) return
+    val current = com.enwei.moneymanager.data.necessityOf(necessity[txns.first().id])
+    var note by remember(q) { mutableStateOf(current?.second.orEmpty()) }
+    androidx.compose.material3.Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            txns.forEach { t ->
+                val dt = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault())
+                Row(Modifier.fillMaxWidth().clickable { nav.navigate("txn/${t.id}") }) {
+                    Text("${dt.monthValue}/${dt.dayOfMonth} ${"%02d:%02d".format(dt.hour, dt.minute)}  ${t.merchant ?: lk.catLabel(t.categoryId) ?: "未命名"}",
+                        fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text(m(t.amount), fontSize = 13.sp, color = ExpenseColor)
+                }
+            }
+            Text("？ ${q.question}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            if (q.why.isNotBlank()) Text(q.why, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                com.enwei.moneymanager.data.Necessity.entries.forEach { n ->
+                    FilterChip(current?.first == n, {
+                        repo.settings.update { st -> st.copy(txnNecessity = st.txnNecessity + txns.associate { it.id to "${n.name}|${note.trim()}" }) }
+                    }, label = { Text(n.label) })
+                }
+            }
+            androidx.compose.material3.OutlinedTextField(
+                note, { v -> note = v; if (current != null) repo.settings.update { st -> st.copy(txnNecessity = st.txnNecessity + txns.associate { it.id to "${current.first.name}|${v.trim()}" }) } },
+                placeholder = { Text("補充說明（選填）", fontSize = 13.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
 }

@@ -44,6 +44,12 @@ data class ReviewData(
     val overBudget: List<Triple<String, Long, Long>>,
     val weekendShare: Double,
     val txnCount: Int,
+    /** 本期的支出交易（交易層級分析用） */
+    val expenses: List<TxnEntity> = emptyList(),
+    /** 分類 id → 「大分類／子分類」 */
+    val catNames: Map<Long, String> = emptyMap(),
+    /** 去年同期支出（月、季才有） */
+    val lastYearExpense: Long? = null,
 ) {
     val net: Long get() = income - expense
     val savingsRate: Double get() = if (income > 0) net * 100.0 / income else 0.0
@@ -92,6 +98,43 @@ data class ReviewData(
     }
 }
 
+/** 商家彙總。 */
+data class MerchantStat(val name: String, val count: Int, val total: Long)
+
+/** 交易的必要性標記（使用者回答 AI 的疑問）。 */
+enum class Necessity(val label: String) { NEED("必要"), SAVE("可省"), ONCE("一次性") }
+
+fun necessityOf(raw: String?): Pair<Necessity, String>? = raw?.let { v ->
+    Necessity.entries.find { v.startsWith(it.name) }?.let { it to v.substringAfter('|', "") }
+}
+
+/** 交易層級的多角度分析（不需要 AI）。 */
+fun ReviewData.merchants(): List<MerchantStat> = expenses.groupBy { (it.merchant ?: catNames[it.categoryId ?: -1L] ?: "未命名").trim() }
+    .map { (k, l) -> MerchantStat(k, l.size, l.sumOf { it.amount }) }.sortedByDescending { it.total }
+
+/** 晚上 10 點到清晨 5 點的支出 */
+fun ReviewData.lateNight(): List<TxnEntity> = expenses.filter {
+    val h = java.time.Instant.ofEpochMilli(it.date).atZone(ZoneId.systemDefault()).hour
+    h >= 22 || h < 5
+}
+
+/** 同一商家一期內 4 次以上、平均 300 元以下的小額消費（容易累積的習慣） */
+fun ReviewData.habits(): List<MerchantStat> = merchants().filter { it.count >= 4 && it.total / it.count <= 30_000 }
+
+/**
+ * 交給 AI 檢查的交易：金額最大的、同分類中特別高的、深夜的、小額頻繁的，
+ * 每筆帶編號（AI 用編號提問）。最多 [limit] 筆。
+ */
+fun ReviewData.notable(limit: Int = 28): List<TxnEntity> {
+    val byCat = expenses.groupBy { it.categoryId }
+    val median = byCat.mapValues { (_, l) -> l.map { it.amount }.sorted().let { it[it.size / 2] } }
+    val unusual = expenses.filter { t -> byCat[t.categoryId].orEmpty().size >= 4 && t.amount >= 3 * (median[t.categoryId] ?: Long.MAX_VALUE) }
+    val habitNames = habits().map { it.name }.toSet()
+    val habitTx = expenses.filter { (it.merchant ?: "").trim() in habitNames }.takeLast(6)
+    return (expenses.sortedByDescending { it.amount }.take(12) + unusual + lateNight().take(5) + habitTx)
+        .distinctBy { it.id }.take(limit).sortedBy { it.date }
+}
+
 /** AI 收支檢討（固定格式）。 */
 @Serializable
 data class AiReview(
@@ -104,7 +147,17 @@ data class AiReview(
     val savingsTarget: Double? = null,
     val goals: List<String> = emptyList(),
     val createdAt: Long = 0,
+    /** 多角度分析（必要性、消費習慣、時間、分類趨勢、固定支出…） */
+    val analysis: List<ReviewAngle> = emptyList(),
+    /** AI 對特定交易的疑問 */
+    val questions: List<ReviewQuestion> = emptyList(),
 )
+
+@Serializable
+data class ReviewAngle(val title: String, val text: String)
+
+@Serializable
+data class ReviewQuestion(val txnIds: List<Long>, val question: String, val why: String = "")
 
 @Serializable
 data class ReviewAction(val action: String, val saving: Long? = null)
@@ -183,5 +236,42 @@ suspend fun Repository.spendingReview(span: ReviewSpan, offset: Int): ReviewData
         categories = categories, top = exp.sortedByDescending(::amt).take(8), fixedMonthly = fixed,
         unknownCount = unknown.size, unknownAmount = unknown.sumOf(::amt), overBudget = budgets,
         weekendShare = if (expense > 0) weekend * 100.0 / expense else 0.0, txnCount = cur.size,
+        expenses = exp.sortedBy { it.date },
+        catNames = cats.mapValues { (_, c) -> c.parentId?.let { cats[it]?.name + "／" }.orEmpty() + c.name },
+        lastYearExpense = if (span == ReviewSpan.YEAR) null else reviewPeriod(span, offset - 12 / span.months, s.monthStartDay).first.let { r ->
+            txns.filter { it.type == TxnType.EXPENSE && inRange(it, r) }.sumOf(::amt).takeIf { it > 0 }
+        },
     )
+}
+
+/**
+ * 給 AI 的完整檢討資料：總覽、商家彙總、習慣、深夜消費、去年同期，以及逐筆編號的重點交易
+ * （附使用者先前標過的必要性），讓 AI 能針對特定交易提問。回傳文字與編號對應的交易。
+ */
+fun ReviewData.aiInput(base: String, necessity: Map<Long, String>): Pair<String, List<TxnEntity>> {
+    fun m(v: Long) = Money.format(v, base)
+    val zone = ZoneId.systemDefault()
+    val list = notable()
+    val text = buildString {
+        append(summary(base))
+        lastYearExpense?.let { appendLine("去年同期支出 ${m(it)}") }
+        appendLine("商家彙總（次數｜總額）：" + merchants().take(18).joinToString("、") { "${it.name.take(10)} ${it.count}次 ${m(it.total)}" })
+        habits().takeIf { it.isNotEmpty() }?.let { h -> appendLine("小額頻繁：" + h.joinToString("、") { "${it.name.take(10)} ${it.count}次 平均 ${m(it.total / it.count)}" }) }
+        lateNight().takeIf { it.isNotEmpty() }?.let { l -> appendLine("深夜（22–5 點）消費 ${l.size} 筆共 ${m(l.sumOf { it.amount })}") }
+        // 使用者先前的回答（整體）
+        val answered = expenses.mapNotNull { t -> necessityOf(necessity[t.id])?.let { t to it.first } }
+        if (answered.isNotEmpty()) appendLine(
+            "使用者已標記：" + Necessity.entries.joinToString("、") { n -> "${n.label} ${answered.count { it.second == n }} 筆 ${m(answered.filter { it.second == n }.sumOf { it.first.amount })}" },
+        )
+        appendLine("重點交易（編號｜日期時間｜商家｜分類｜金額｜備註｜使用者標記）：")
+        list.forEachIndexed { i, t ->
+            val dt = java.time.Instant.ofEpochMilli(t.date).atZone(zone)
+            val tag = necessityOf(necessity[t.id])?.let { (n, note) -> n.label + (note.takeIf { it.isNotBlank() }?.let { "：$it" } ?: "") } ?: ""
+            appendLine(
+                "#$i｜${dt.monthValue}/${dt.dayOfMonth} ${"%02d:%02d".format(dt.hour, dt.minute)}｜${(t.merchant ?: "未命名").take(14)}｜" +
+                    "${catNames[t.categoryId ?: -1L] ?: "未分類"}｜${m(t.amount)}｜${t.note?.take(12).orEmpty()}｜$tag",
+            )
+        }
+    }
+    return text to list
 }

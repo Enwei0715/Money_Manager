@@ -112,17 +112,14 @@ private val timeFmt = SimpleDateFormat("M/d HH:mm", Locale.TAIWAN)
 fun MoreScreen(nav: NavController) {
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
     val entries = listOf(
-        Triple("config", "設定", com.enwei.moneymanager.ui.components.LineIcons.Settings),
-        Triple("backup", "備份", com.enwei.moneymanager.ui.components.LineIcons.Backup),
-        Triple("notif", "通知記帳", com.enwei.moneymanager.ui.components.LineIcons.Notification),
-        Triple("walletreader", "錢包讀取", com.enwei.moneymanager.ui.components.LineIcons.Wallet),
+        // 功能入口；各種設定集中在「設定」裡
         Triple("invest", "股票", com.enwei.moneymanager.ui.components.LineIcons.Stocks),
+        Triple("advisor", "股票助理", com.enwei.moneymanager.ui.components.LineIcons.Advisor),
+        Triple("pending", "待確認", com.enwei.moneymanager.ui.components.LineIcons.Inbox),
         Triple("recurring", "週期扣款", com.enwei.moneymanager.ui.components.LineIcons.Recurring),
         Triple("fx", "匯率", com.enwei.moneymanager.ui.components.LineIcons.Exchange),
-        Triple("pending", "待確認", com.enwei.moneymanager.ui.components.LineIcons.Inbox),
-        Triple("review", "收支檢討", com.enwei.moneymanager.ui.components.LineIcons.Review),
-        Triple("advisor", "投資助理", com.enwei.moneymanager.ui.components.LineIcons.Advisor),
-        Triple("settings", "App 更新", com.enwei.moneymanager.ui.components.LineIcons.Update),
+        Triple("backup", "備份", com.enwei.moneymanager.ui.components.LineIcons.Backup),
+        Triple("config", "設定", com.enwei.moneymanager.ui.components.LineIcons.Settings),
     )
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
