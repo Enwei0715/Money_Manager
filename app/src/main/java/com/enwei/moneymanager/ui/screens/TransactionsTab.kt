@@ -233,9 +233,15 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
             ) {
                 // 英文時用短標籤，避免五個分頁被截斷
-                (if (com.enwei.moneymanager.ui.I18n.english) listOf("Daily", "Cal.", "Month", "Total", "Notes", "Review") else subTabs).forEachIndexed { i, t ->
-                    Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t, fontSize = 13.sp, maxLines = 1, softWrap = false) },
-                        selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                (if (com.enwei.moneymanager.ui.I18n.english) listOf("Daily", "Cal", "Month", "Total", "Notes", "Review") else subTabs).forEachIndexed { i, t ->
+                    // 六個分頁：不用 Tab 內建的左右留白，英文標籤才不會被切掉
+                    Tab(
+                        selected = tab == i, onClick = { tab = i },
+                        selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ) {
+                        Text(t, fontSize = if (com.enwei.moneymanager.ui.I18n.english) 13.sp else 14.sp, maxLines = 1, softWrap = false,
+                            modifier = Modifier.padding(vertical = 14.dp))
+                    }
                 }
             }
             if (tab < 4) SummaryBar(if (tab == 3) base else totals, lk.base)
