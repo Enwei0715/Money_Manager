@@ -1,6 +1,7 @@
 package com.enwei.moneymanager.data
 
 import androidx.room.withTransaction
+import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.core.CardCycle
 import com.enwei.moneymanager.core.CategoryGuesser
 import com.enwei.moneymanager.core.CategorySuggester

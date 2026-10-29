@@ -11,6 +11,8 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.data.DailyReport
+import com.enwei.moneymanager.data.buildDailyReport
+import com.enwei.moneymanager.data.refreshNews
 import com.enwei.moneymanager.net.GroqAi
 import com.enwei.moneymanager.ui.tr
 import kotlinx.coroutines.CancellationException

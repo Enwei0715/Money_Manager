@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.enwei.moneymanager.MoneyApp
+import com.enwei.moneymanager.data.refreshNews
 import com.enwei.moneymanager.net.GroqAi
 import kotlinx.coroutines.CancellationException
 import java.time.LocalDate

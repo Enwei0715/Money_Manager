@@ -14,6 +14,7 @@ import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.core.ScreenRecord
 import com.enwei.moneymanager.core.ScreenRecordParser
 import com.enwei.moneymanager.net.GroqAi
+import com.enwei.moneymanager.work.AiBackgroundWork
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
