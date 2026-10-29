@@ -721,7 +721,7 @@ private fun TotalView(list: List<TxnEntity>, all: List<TxnEntity>, lk: Lookups, 
         item {
             Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.AccountBalanceWallet, null, modifier = Modifier.size(28.dp))
-                Text("  帳戶", fontSize = 20.sp, modifier = Modifier.weight(1f))
+                Text("  支出來源", fontSize = 20.sp, modifier = Modifier.weight(1f))
                 Text("${range.first.monthValue}.${range.first.dayOfMonth}.${range.first.year % 100} ~ ${range.second.monthValue}.${range.second.dayOfMonth}.${range.second.year % 100}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -730,10 +730,11 @@ private fun TotalView(list: List<TxnEntity>, all: List<TxnEntity>, lk: Lookups, 
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                KV("與上月支出相比", if (lastExpense > 0) "${expense * 100 / lastExpense}%" else "—")
-                KV("支出（現金、銀行）", Money.withSymbol(cashExpense, lk.base))
-                KV("支出（信用卡、支付）", Money.withSymbol(cardExpense, lk.base) + "(${Money.withSymbol(cardPayable, lk.base)})")
-                KV("轉帳（現金、銀行 →）", Money.withSymbol(transferOut, lk.base))
+                KV("支出是上個月的", if (lastExpense > 0) "${expense * 100 / lastExpense}%" else "—")
+                KV("現金、銀行支出", Money.withSymbol(cashExpense, lk.base))
+                KV("信用卡、支付支出", Money.withSymbol(cardExpense, lk.base))
+                if (cardPayable != 0L) KV("信用卡目前待繳", Money.withSymbol(cardPayable, lk.base))
+                if (transferOut != 0L) KV("從現金、銀行轉出", Money.withSymbol(transferOut, lk.base))
             }
             Row(
                 Modifier.fillMaxWidth().padding(16.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))

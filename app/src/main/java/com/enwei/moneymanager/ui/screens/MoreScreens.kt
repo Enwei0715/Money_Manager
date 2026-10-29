@@ -208,6 +208,8 @@ fun NotificationSettingsScreen(nav: NavController) {
     LaunchedEffect(Unit) { apps = withContext(Dispatchers.Default) { installedApps(ctx) } }
     var filter by remember { mutableStateOf("") }
     var showAllApps by remember { mutableStateOf(false) }
+    var allLog by remember { mutableStateOf(false) }
+    var showTests by remember { mutableStateOf(false) }
     var testText by remember { mutableStateOf("") }
     var testTitle by remember { mutableStateOf("") }
     var testPkg by remember { mutableStateOf<String?>(null) }
@@ -363,41 +365,49 @@ fun NotificationSettingsScreen(nav: NavController) {
                     modifier = Modifier.clickable { toggle(a.pkg, !on) },
                 )
             }
-            item { SectionTitle("測試通知辨識") }
+            // 測試區（讀通知列、貼上通知）預設收起，需要時再展開
             item {
-                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Button(onClick = { loadNotes() }) { Text(if (notes == null) "讀取目前通知" else "重新讀取") }
-                    testMsg?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
+                Row(Modifier.fillMaxWidth().clickable { showTests = !showTests }, verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { SectionTitle("測試通知辨識") }
+                    Text(if (showTests) "▴" else "▾", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 20.dp))
                 }
             }
-            notes?.let { list ->
-                items(list.size, key = { "note$it" }) { i ->
-                    val (ok, desc) = previews.getOrNull(i) ?: (false to "")
-                    NoteCard(list[i], ok, desc)
+            if (showTests) {
+                item {
+                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = { loadNotes() }) { Text(if (notes == null) "讀取目前通知" else "重新讀取") }
+                        testMsg?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
+                    }
                 }
-            }
-            // 貼上一則通知測試：和讀取通知列一樣跑完整流程（股票成交、教過的格式、AI 判讀、轉帳、重複檢查）
-            item { SectionTitle("貼上通知測試") }
-            item {
-                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val choices = (settings.notifPackages + listOf("com.google.android.gm")).distinct()
-                    DropdownField("來源 App", choices, testPkg ?: choices.firstOrNull(), { labelOf[it] ?: it }, { testPkg = it })
-                    OutlinedTextField(testTitle, { testTitle = it }, label = { Text("通知標題（選填）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(testText, { testText = it }, label = { Text("通知內容") }, minLines = 3, modifier = Modifier.fillMaxWidth())
-                    Button(enabled = testText.isNotBlank(), onClick = {
-                        val pkg = testPkg ?: choices.firstOrNull() ?: return@Button
-                        val nn = TxnNotificationListener.ActiveNote(pkg, testTitle.ifBlank { null }, testText, System.currentTimeMillis())
-                        testScope.launch {
-                            pasted = nn
-                            pastedPreview = repo.previewBatch(listOf(Repository.NotePreview(nn.pkg, nn.title, nn.text, nn.postedAt))).first()
-                        }
-                    }) { Text("測試") }
+                notes?.let { list ->
+                    items(list.size, key = { "note$it" }) { i ->
+                        val (ok, desc) = previews.getOrNull(i) ?: (false to "")
+                        NoteCard(list[i], ok, desc)
+                    }
                 }
-            }
-            pasted?.let { nn ->
-                item(key = "pasted") {
-                    NoteCard(nn, pastedPreview?.first == true, pastedPreview?.second.orEmpty())
-                    testMsg?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp)) }
+                // 貼上一則通知測試：和讀取通知列一樣跑完整流程（股票成交、教過的格式、AI 判讀、轉帳、重複檢查）
+                item { SectionTitle("貼上通知測試") }
+                item {
+                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val choices = (settings.notifPackages + listOf("com.google.android.gm")).distinct()
+                        DropdownField("來源 App", choices, testPkg ?: choices.firstOrNull(), { labelOf[it] ?: it }, { testPkg = it })
+                        OutlinedTextField(testTitle, { testTitle = it }, label = { Text("通知標題（選填）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(testText, { testText = it }, label = { Text("通知內容") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+                        Button(enabled = testText.isNotBlank(), onClick = {
+                            val pkg = testPkg ?: choices.firstOrNull() ?: return@Button
+                            val nn = TxnNotificationListener.ActiveNote(pkg, testTitle.ifBlank { null }, testText, System.currentTimeMillis())
+                            testScope.launch {
+                                pasted = nn
+                                pastedPreview = repo.previewBatch(listOf(Repository.NotePreview(nn.pkg, nn.title, nn.text, nn.postedAt))).first()
+                            }
+                        }) { Text("測試") }
+                    }
+                }
+                pasted?.let { nn ->
+                    item(key = "pasted") {
+                        NoteCard(nn, pastedPreview?.first == true, pastedPreview?.second.orEmpty())
+                        testMsg?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp)) }
+                    }
                 }
             }
             if (settings.learnedSources.isNotEmpty()) {
@@ -415,7 +425,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                 }
             }
             item { SectionTitle("最近處理紀錄") }
-            items(log.take(30), key = { "log${it.id}" }) { e ->
+            items(log.take(if (allLog) 50 else 8), key = { "log${it.id}" }) { e ->
                 val label = when (e.result) {
                     "RECORDED" -> "已記帳"; "STOCK" -> "股票成交"; "DUPLICATE" -> "重複略過"; "MERGED" -> "合併為轉帳"; "UNPARSED" -> "無法辨識"; else -> "未啟用來源"
                 }
@@ -427,6 +437,9 @@ fun NotificationSettingsScreen(nav: NavController) {
                         else teach = TxnNotificationListener.ActiveNote(e.packageName, e.title, e.text, e.postedAt)
                     },
                 )
+            }
+            if (log.size > 8) item {
+                TextButton(onClick = { allLog = !allLog }, modifier = Modifier.padding(horizontal = 8.dp)) { Text(if (allLog) "收起" else "顯示更多紀錄") }
             }
             item { Spacer(Modifier.height(32.dp)) }
         }
