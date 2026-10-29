@@ -1001,6 +1001,7 @@ fun WalletReaderScreen(nav: NavController) {
                 Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text("$label · ${timeFmt.format(Date(e.time))} · 讀到 ${e.lines} 行文字", style = MaterialTheme.typography.labelSmall)
+                        e.status?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
                         e.problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         if (e.byAi) Text("版面規則看不懂，由 AI 從畫面整理出 ${e.records.size} 筆", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
                         e.result?.let { r ->

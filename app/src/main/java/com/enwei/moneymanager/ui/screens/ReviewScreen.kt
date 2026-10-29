@@ -27,7 +27,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -36,7 +35,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,7 +50,6 @@ import com.enwei.moneymanager.data.AiReview
 import com.enwei.moneymanager.data.ReviewData
 import com.enwei.moneymanager.data.ReviewSpan
 import com.enwei.moneymanager.data.spendingReview
-import com.enwei.moneymanager.data.aiInput
 import com.enwei.moneymanager.data.habits
 import com.enwei.moneymanager.data.lateNight
 import com.enwei.moneymanager.data.merchants
@@ -62,7 +59,9 @@ import com.enwei.moneymanager.ui.ExpenseColor
 import com.enwei.moneymanager.ui.IncomeColor
 import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.Text
-import kotlinx.coroutines.launch
+import com.enwei.moneymanager.ui.components.AiWorkProgress
+import com.enwei.moneymanager.ui.components.rememberAiWorkStatus
+import com.enwei.moneymanager.work.AiBackgroundWork
 
 /**
  * 收支檢討：選月／季／年，顯示總覽、支出結構、重點觀察（規則），
@@ -83,6 +82,7 @@ fun ReviewContent(
     period: Pair<ReviewSpan, java.time.YearMonth>? = null,
     onSpan: (ReviewSpan) -> Unit = {},
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val lk = rememberLookups()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
@@ -98,9 +98,6 @@ fun ReviewContent(
         }
     } ?: ownOffset
     var data by remember { mutableStateOf<ReviewData?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    var err by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
     LaunchedEffect(span, offset, all) { data = repo.spendingReview(span, offset) }
     val base = lk.base
     fun m(v: Long) = Money.withSymbol(v, base)
@@ -120,6 +117,7 @@ fun ReviewContent(
                 }
             }
             val d = data ?: return@Column
+            val aiWork = rememberAiWorkStatus(AiBackgroundWork.reviewName(d.key))
             // 交易頁上方已顯示期間，避免重複顯示年月或季度。
             if (period == null) Text(d.title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
 
@@ -221,19 +219,12 @@ fun ReviewContent(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("AI 檢討與建議", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         val cached = settings.reviews[d.key]
-                        if (GroqAi.enabled) OutlinedButton(enabled = !busy && d.txnCount > 0, onClick = {
-                            busy = true; err = null
-                            scope.launch {
-                                val (input, list) = d.aiInput(base, settings.txnNecessity, GroqAi.bigContext(GroqAi.AiTask.REVIEW))
-                                val r = GroqAi.review(input, base, list.map { it.id })
-                                if (r != null) repo.settings.update { it.copy(reviews = (it.reviews + (d.key to r)).entries.toList().takeLast(40).associate { e -> e.key to e.value }) }
-                                else err = "AI 連線失敗：${GroqAi.lastError ?: "沒有回應"}"
-                                busy = false
-                            }
-                        }) { Text(if (busy) "產生中…" else if (cached == null) "產生" else "重新產生") }
+                        if (GroqAi.enabled) OutlinedButton(
+                            enabled = aiWork?.running != true && d.txnCount > 0,
+                            onClick = { AiBackgroundWork.review(context, span, offset, d.key) },
+                        ) { Text(if (aiWork?.running == true) "產生中…" else if (cached == null) "產生" else "重新產生") }
                     }
-                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                    err?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+                    AiWorkProgress(aiWork, Modifier.fillMaxWidth())
                     val r = settings.reviews[d.key]
                     when {
                         r != null -> AiReviewBody(r, ::m, d, lk, settings.txnNecessity, nav)

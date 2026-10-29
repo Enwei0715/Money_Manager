@@ -127,6 +127,7 @@ private fun Disclaimer() = Text(
 private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
+    val reportWork = com.enwei.moneymanager.ui.components.rememberAiWorkStatus("report-now")
     // 正在看的歷史報告（建立時間）；null 表示最新一份
     var viewing by rememberSaveable { mutableStateOf<Long?>(null) }
     var showHistory by remember { mutableStateOf(false) }
@@ -150,7 +151,7 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                     } ?: "還沒有報告",
                     fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
                 )
-                if (GroqAi.enabled && !old) OutlinedButton(enabled = job?.running != true, onClick = {
+                if (GroqAi.enabled && !old) OutlinedButton(enabled = job?.running != true && reportWork?.running != true, onClick = {
                     com.enwei.moneymanager.work.ReportJob.start(ctx)
                 }) { Text(if (job?.running == true) "產生中…" else if (r == null) "產生報告" else "重新產生") }
             }
@@ -170,8 +171,8 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                 }) { Text("分享") }
             }
         }
-        // 背景執行中：步驟、預估剩餘時間與進度（離開畫面也會繼續，完成時通知）
-        JobProgress(job)
+        // 背景執行中：實際步驟與耗時（離開畫面或 App 也會繼續）
+        JobProgress(job, reportWork)
         if (!GroqAi.enabled) Row(verticalAlignment = Alignment.CenterVertically) {
             Text("設定 AI 金鑰後即可產生報告。", fontSize = 13.sp, modifier = Modifier.weight(1f))
             TextButton(onClick = { nav.navigate("ai") }) { Text("設定 AI") }
@@ -354,8 +355,9 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     var confirmClear by remember { mutableStateOf(false) }
     // 對話在背景執行：離開畫面也會繼續，回來時看得到回覆；不在畫面上時完成會通知
     val job by com.enwei.moneymanager.work.ChatJob.state.collectAsStateWithLifecycle()
-    val busy = job?.running == true
-    val err = job?.error
+    val chatWork = com.enwei.moneymanager.ui.components.rememberAiWorkStatus("advisor-chat")
+    val busy = job?.running == true || chatWork?.running == true
+    val err = job?.error ?: chatWork?.error
     // 回到對話時停在上次看的位置，不會每次都被捲到最底
     val list = rememberLazyListState(com.enwei.moneymanager.work.ChatJob.scrollIndex, com.enwei.moneymanager.work.ChatJob.scrollOffset)
     androidx.compose.runtime.DisposableEffect(Unit) {
@@ -366,8 +368,6 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
             com.enwei.moneymanager.work.ChatJob.scrollOffset = list.firstVisibleItemScrollOffset
         }
     }
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(busy) { while (busy) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
     // 上萬則新聞的整理在背景執行緒做，畫面不卡
     val newsById by androidx.compose.runtime.produceState(emptyMap<String, com.enwei.moneymanager.data.NewsItem>(), System.identityHashCode(store)) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { store.items.associateBy { it.id } }
@@ -404,15 +404,18 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                     Bubble(m, newsById, nav) { scope.launch { MoneyApp.news.update { st -> st.copy(chat = st.chat.filterNot { it.time == m.time && it.fromUser == m.fromUser }) } } }
                 }
                 if (busy) item {
-                    Text("AI 思考中… ${com.enwei.moneymanager.work.ReportJob.formatDuration(now - (job?.startedAt ?: now))}（離開也會繼續）",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                    com.enwei.moneymanager.ui.components.AiWorkProgress(
+                        chatWork ?: job?.takeIf { it.running }?.let {
+                            com.enwei.moneymanager.work.AiWorkStatus(true, "AI 正在整理你的投資問題…", it.startedAt, null, null)
+                        },
+                    )
                 }
                 err?.let { e ->
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(e, fontSize = 13.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
                             // 失敗或停止後可以用同一個問題再問一次
-                            job?.question?.takeIf { it.isNotBlank() && GroqAi.enabled }?.let { q ->
+                            (job?.question ?: chatWork?.request)?.takeIf { it.isNotBlank() && GroqAi.enabled }?.let { q ->
                                 TextButton(onClick = { com.enwei.moneymanager.work.ChatJob.ask(ctx, q) }) { Text("重試") }
                             }
                         }
@@ -435,7 +438,10 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(input, { input = it }, placeholder = { Text("問股票助理…") }, modifier = Modifier.weight(1f), maxLines = 3)
             // AI 回覆中按鈕變成「停止」
-            if (busy) OutlinedButton(onClick = { com.enwei.moneymanager.work.ChatJob.stop(ctx) }, modifier = Modifier.padding(start = 6.dp)) { Text("停止") }
+            if (busy) OutlinedButton(
+                onClick = { com.enwei.moneymanager.work.ChatJob.stop(ctx, job?.question ?: chatWork?.request) },
+                modifier = Modifier.padding(start = 6.dp),
+            ) { Text("停止") }
             else Button(enabled = input.isNotBlank() && GroqAi.enabled, onClick = { send(input) }, modifier = Modifier.padding(start = 6.dp)) { Text("送出") }
         }
     }
@@ -481,20 +487,39 @@ private fun Bubble(m: ChatMsg, newsById: Map<String, com.enwei.moneymanager.data
     }
 }
 
-/** 背景工作（產生報告或更新資料集）的步驟、預估剩餘時間與進度。 */
+/** 背景工作（產生報告或更新資料集）的實際步驟、批次進度與耗時。 */
 @Composable
-private fun JobProgress(job: com.enwei.moneymanager.work.ReportJob.State?) {
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(job?.running) { while (job?.running == true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
-    val j = job ?: return
-    if (j.running) {
-        val total = (j.etaAt - j.startedAt).coerceAtLeast(1)
-        val elapsed = now - j.startedAt
-        Text("${j.step}　約剩 ${com.enwei.moneymanager.work.ReportJob.formatDuration(j.etaAt - now)}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-        LinearProgressIndicator(progress = { (elapsed.toFloat() / total).coerceIn(0.02f, 0.97f) }, modifier = Modifier.fillMaxWidth())
-        Text("已執行 ${com.enwei.moneymanager.work.ReportJob.formatDuration(elapsed)}，可以離開這個畫面，完成時會通知你。",
-            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    } else j.error?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
+private fun JobProgress(
+    job: com.enwei.moneymanager.work.ReportJob.State?,
+    work: com.enwei.moneymanager.work.AiWorkStatus?,
+) {
+    val running = work?.running ?: (job?.running == true)
+    if (running) {
+        val step = work?.step ?: job?.step ?: "準備中…"
+        val done = work?.done ?: job?.done
+        val total = work?.total ?: job?.total
+        val startedAt = work?.startedAt?.takeIf { it > 0 } ?: job?.startedAt ?: 0
+        var now by remember(startedAt) { mutableStateOf(System.currentTimeMillis()) }
+        LaunchedEffect(running, startedAt) {
+            while (running && startedAt > 0) {
+                now = System.currentTimeMillis()
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+        Text(step, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+        if (done != null && total != null && total > 0) {
+            LinearProgressIndicator(progress = { (done.toFloat() / total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+        } else LinearProgressIndicator(Modifier.fillMaxWidth())
+        Text(
+            if (startedAt > 0) "已執行 ${com.enwei.moneymanager.work.ReportJob.formatDuration(now - startedAt)}；離開畫面或 App 後仍會繼續。"
+            else "等待網路或背景排程。",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    } else {
+        val error = work?.error ?: job?.error
+        error?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
+    }
 }
 
 /** 新聞分頁的統計（背景執行緒算好）。 */
@@ -512,6 +537,9 @@ private data class NewsStats(
 private fun NewsTab(nav: NavController, store: NewsStore) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
+    val reportWork = com.enwei.moneymanager.ui.components.rememberAiWorkStatus("report-now")
+    val newsWork = com.enwei.moneymanager.ui.components.rememberAiWorkStatus("news")
+    val chatWork = com.enwei.moneymanager.ui.components.rememberAiWorkStatus("advisor-chat")
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val aiReady = settings.aiEnabled && (settings.groqKey.isNotBlank() || settings.geminiKey.isNotBlank())
     val holdings by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
@@ -528,7 +556,9 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
         }
     }
     val themes = stats.themes
-    var showHow by remember { mutableStateOf(false) }
+    var confirmClearDatabase by rememberSaveable { mutableStateOf(false) }
+    var clearDatabaseError by remember { mutableStateOf<String?>(null) }
+    var clearingDatabase by remember { mutableStateOf(false) }
     // 篩選條件
     var query by remember { mutableStateOf("") }
     var days by remember { mutableStateOf(0) }       // 0 全部、1 今天、3、7 天
@@ -650,7 +680,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
         }
         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = listState, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (!anyFilter) item {
-                Section("資料集（${store.items.size} 則）", action = (if (showHow) "收起" else "整理方式") to { showHow = !showHow }, collapsible = true, initiallyOpen = false) {
+                Section("資料集（${store.items.size} 則）", collapsible = true, initiallyOpen = false) {
                     Text("共 ${store.items.size} 則（近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天），已標註 ${stats.tagged} 則", fontSize = 14.sp)
                     stats.coverage?.let { c ->
                         val pct = if (c.recent > 0) c.digested * 100 / c.recent else 0
@@ -665,9 +695,21 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                             "，背景每 3 小時更新一次。",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (showHow) HowItWorks()
-                    OutlinedButton(enabled = job?.running != true, onClick = { com.enwei.moneymanager.work.ReportJob.start(ctx, refreshOnly = true) }) { Text("立即更新") }
-                    JobProgress(job)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            enabled = job?.running != true && reportWork?.running != true,
+                            onClick = { com.enwei.moneymanager.work.ReportJob.start(ctx, refreshOnly = true) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("立即更新") }
+                        OutlinedButton(
+                            enabled = store != NewsStore() && job?.running != true && reportWork?.running != true &&
+                                newsWork?.running != true && chatWork?.running != true,
+                            onClick = { clearDatabaseError = null; confirmClearDatabase = true },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("刪除資料庫") }
+                    }
+                    JobProgress(job, reportWork)
+                    com.enwei.moneymanager.ui.components.AiWorkProgress(newsWork, Modifier.fillMaxWidth())
                 }
             }
             if (themes.isNotEmpty() && !anyFilter) item {
@@ -710,6 +752,52 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
+        if (confirmClearDatabase) AlertDialog(
+            onDismissRequest = { if (!clearingDatabase) confirmClearDatabase = false },
+            title = { Text("刪除新聞資料庫？") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("將永久刪除所有新聞、重點摘要、每日與歷史報告、AI 對話及公司說明快取。持股、帳務與 AI 設定不會變更；若新聞自動更新仍啟用，之後會重新蒐集資料。")
+                    clearDatabaseError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = job?.running != true && reportWork?.running != true &&
+                        newsWork?.running != true && chatWork?.running != true && !clearingDatabase,
+                    onClick = {
+                        clearingDatabase = true
+                        scope.launch {
+                            try {
+                                ds.clear()
+                                query = ""
+                                days = 0
+                                sent = 0
+                                onlyImportant = false
+                                onlyMine = false
+                                sort = 0
+                                theme = null
+                                symbol = null
+                                source = null
+                                shown = 100
+                                confirmClearDatabase = false
+                                clearDatabaseError = null
+                                listState.scrollToItem(0)
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                clearDatabaseError = "刪除失敗：${e.message ?: e.javaClass.simpleName}"
+                            } finally {
+                                clearingDatabase = false
+                            }
+                        }
+                    },
+                ) { Text(if (clearingDatabase) "刪除中…" else "永久刪除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(enabled = !clearingDatabase, onClick = { confirmClearDatabase = false }) { Text("取消") }
+            },
+        )
     }
 }
 
@@ -739,19 +827,6 @@ private fun ChipRow(label: String, content: @Composable () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(min = 36.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { content() }
-    }
-}
-
-/** 新聞資料集怎麼蒐集、標註與整理（給使用者看的說明）。 */
-@Composable
-private fun HowItWorks() {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        listOf(
-            "① 蒐集：每 3 小時以一般市場關鍵字及你的持股、觀察標的搜尋新聞，不預設產業題材；合併完全重複內容並保留篇數。只讀 RSS 直接提供的正文或摘要，沒有內文時會標明只有標題。保留 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天、最多 ${com.enwei.moneymanager.data.NewsDataset.MAX_ITEMS} 則。",
-            "② 標註：依內容長度分批，將來源提供的正文／摘要（沒有時只有標題）交給 AI，逐則回傳個股、動態歸納題材、多空與重要性。App 以編號核對回覆；漏標或超出模型預算的新聞會留在待處理清單，不會靜默截斷或直接算成「其他」。",
-            "③ 重點庫：近 3 天依「日期 × AI 歸納題材」分組，逐段讀取來源內容。每段都核對新聞 id 是否完整且只歸類一次；未完整涵蓋的組別不會寫入。新聞增加約 20% 或來源內容更新時重新整理。",
-            "④ 報告與對話：整合標註、完整性狀態、題材與持股統計、重點庫及大盤／資金／持倉紀律。每日報告在近 3 天新聞未完成標註、摘要或來源搜尋失敗時會暫停，不產生可能遺漏資料的報告。",
-        ).forEach { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 

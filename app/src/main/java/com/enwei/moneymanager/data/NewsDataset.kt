@@ -154,7 +154,9 @@ class NewsDataset(context: Context) {
     /** 資料集的最新內容：背景蒐集、標註、產生報告時畫面會即時更新 */
     val flow: kotlinx.coroutines.flow.StateFlow<NewsStore?> = _flow
 
-    suspend fun load(): NewsStore = cache ?: withContext(Dispatchers.IO) {
+    suspend fun load(): NewsStore = lock.withLock { loadUnlocked() }
+
+    private suspend fun loadUnlocked(): NewsStore = cache ?: withContext(Dispatchers.IO) {
         val store = if (file.exists()) {
             runCatching { json.decodeFromString(NewsStore.serializer(), file.readText()) }
                 .getOrElse { throw IllegalStateException("新聞資料集讀取失敗，原始檔案已保留", it) }
@@ -178,7 +180,18 @@ class NewsDataset(context: Context) {
         _flow.value = s
     }
 
-    suspend fun update(f: (NewsStore) -> NewsStore) = lock.withLock { save(f(load())) }
+    suspend fun update(f: (NewsStore) -> NewsStore) = lock.withLock { save(f(loadUnlocked())) }
+
+    suspend fun clear() {
+        lock.withLock {
+            withContext(Dispatchers.IO) {
+                java.nio.file.Files.deleteIfExists(File(file.parentFile, file.name + ".tmp").toPath())
+                java.nio.file.Files.deleteIfExists(file.toPath())
+            }
+            cache = NewsStore()
+            _flow.value = cache
+        }
+    }
 
     companion object {
         const val KEEP_DAYS = 14

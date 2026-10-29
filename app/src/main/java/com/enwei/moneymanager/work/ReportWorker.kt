@@ -4,62 +4,66 @@ import android.content.Context
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.data.DailyReport
-import com.enwei.moneymanager.data.buildDailyReport
-import com.enwei.moneymanager.data.refreshNews
 import com.enwei.moneymanager.net.GroqAi
 import com.enwei.moneymanager.ui.tr
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * 產生每日投資報告：在背景執行（離開畫面或 App 也會繼續），
- * 依目前的步驟估算剩餘時間，畫面與通知列都看得到進度，完成時通知。
+ * 依實際完成的步驟回報進度；不顯示無法可靠推算的剩餘時間。
  */
 object ReportJob {
-    /** [etaAt] 為預估完成的時間點（毫秒）。 */
     data class State(
-        val step: String, val startedAt: Long, val etaAt: Long, val running: Boolean = true, val error: String? = null,
+        val step: String, val startedAt: Long, val running: Boolean = true, val error: String? = null,
         /** 只更新新聞資料集（不產生報告） */
         val refreshOnly: Boolean = false,
+        val done: Int? = null,
+        val total: Int? = null,
     )
 
     val state = MutableStateFlow<State?>(null)
 
     /** 產生報告（[refreshOnly] 為只更新新聞資料集）。 */
-    fun start(context: Context, refreshOnly: Boolean = false) {
-        if (state.value?.running == true) return
-        state.value = State("準備中…", System.currentTimeMillis(), System.currentTimeMillis() + 60_000, refreshOnly = refreshOnly)
+    fun start(context: Context, refreshOnly: Boolean = false, userInitiated: Boolean = true) {
+        state.value = State("等待網路或背景排程…", System.currentTimeMillis(), refreshOnly = refreshOnly)
         WorkManager.getInstance(context).enqueueUniqueWork(
             "report-now", ExistingWorkPolicy.KEEP,
             OneTimeWorkRequestBuilder<ReportWorker>()
-                .setInputData(androidx.work.workDataOf("refreshOnly" to refreshOnly))
+                .setInputData(
+                    androidx.work.workDataOf(
+                        "refreshOnly" to refreshOnly,
+                        "requestedAt" to System.currentTimeMillis(),
+                        "userInitiated" to userInitiated,
+                    ),
+                )
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build(),
         )
     }
 
-    private const val COLLECT_MS = 20_000L
-    private const val SNAPSHOT_MS = 10_000L
-
     /** 執行一次並回報進度；背景每日報告也走這裡。 */
-    suspend fun execute(context: Context, notifyProgress: Boolean, refreshOnly: Boolean = false): DailyReport? {
+    suspend fun execute(
+        context: Context,
+        notifyProgress: Boolean,
+        refreshOnly: Boolean = false,
+        onProgress: (State) -> Unit = {},
+    ): DailyReport? {
         val repo = MoneyApp.repo
         val ds = MoneyApp.news
         val start = System.currentTimeMillis()
-        val big = GroqAi.bigContext(GroqAi.AiTask.NEWS_TAG)
-        val perBatch = if (big) 22_000L else 30_000L
-        val batchSize = if (big) 150 else 40
-        val maxBatches = if (big) 30 else 12
-        val aiMs = repo.settings.value.reportAiMs.coerceIn(15_000, 240_000)
-        fun batchesFor(untagged: Int) = minOf(maxBatches, (untagged + batchSize - 1) / batchSize)
-        fun update(step: String, remaining: Long) {
+        fun update(step: String, done: Int? = null, total: Int? = null) {
             val now = System.currentTimeMillis()
-            state.value = State(step, start, now + remaining, refreshOnly = refreshOnly)
-            if (notifyProgress) progressNotice(context, step, remaining, now - start, now + remaining - start)
+            val next = State(step, start, refreshOnly = refreshOnly, done = done, total = total)
+            state.value = next
+            onProgress(next)
+            if (notifyProgress) progressNotice(context, next, now - start)
         }
         return try {
             var st = ds.load()
@@ -70,79 +74,83 @@ object ReportJob {
                 coverage.pending > 0 ||
                 coverage.digested < coverage.recent
             if (needCollect) {
-                // 還不知道會抓到多少新的：先以 400 則估算，抓完再修正
-                // 新聞重點整理：每組約 [digestMs]，先以 10 組估算
-                val digestMs = if (GroqAi.bigContext(GroqAi.AiTask.DIGEST)) 12_000L else 18_000L
-                update("蒐集新聞…", COLLECT_MS + batchesFor(st.items.count { !it.tagged } + 400) * perBatch + 10 * digestMs + SNAPSHOT_MS + aiMs)
-                repo.refreshNews(ds, onStep = {}, onBatch = { i, n ->
-                    update("AI 標註新聞 ${i + 1}/$n 批…", (n - i) * perBatch + 10 * digestMs + SNAPSHOT_MS + aiMs)
-                }, onDigest = { i, n ->
-                    update("整理新聞重點 ${i + 1}/$n…", (n - i) * digestMs + SNAPSHOT_MS + aiMs)
-                })
+                update("蒐集新聞…")
+                repo.refreshNews(
+                    ds,
+                    onStep = { step -> update(step) },
+                    onBatch = { i, n -> update("AI 標註新聞 ${i + 1}/$n 批…", i + 1, n) },
+                    onDigest = { i, n -> update("整理新聞重點 ${i + 1}/$n…", i + 1, n) },
+                )
                 st = ds.load()
             }
             if (refreshOnly) {
-                state.value = State("資料集已更新：共 ${st.items.size} 則", start, System.currentTimeMillis(), running = false, refreshOnly = true)
+                state.value = State("資料集已更新：共 ${st.items.size} 則", start, running = false, refreshOnly = true)
                 if (notifyProgress) context.getSystemService(android.app.NotificationManager::class.java).cancel(NOTICE_ID)
                 return null
             }
-            val aiStart = System.currentTimeMillis()
             var reportStep = ""
             val r = repo.buildDailyReport(ds) { step ->
                 reportStep = step
-                when {
-                    step.startsWith("讀取大盤") -> update(step, SNAPSHOT_MS + aiMs)
-                    step.startsWith("AI 分析") -> update(step, aiMs)
-                    step.startsWith("確認") -> update(step, 5_000)
-                    else -> update(step, aiMs)
-                }
+                update(step)
             }
-            val took = System.currentTimeMillis() - aiStart
-            // 記住這次 AI 分析花的時間，下次估得更準
-            repo.settings.update { it.copy(reportAiMs = (it.reportAiMs * 0.5 + took * 0.5).toLong()) }
             if (r == null) {
                 val msg = if (reportStep.startsWith("近 3 天新聞") || reportStep.endsWith("暫不產生報告。")) {
                     reportStep
                 } else "產生失敗：${GroqAi.lastError ?: "沒有回應"}"
-                state.value = State(msg, start, System.currentTimeMillis(), running = false, error = msg)
+                state.value = State(msg, start, running = false, error = msg)
                 doneNotice(context, tr("投資報告產生失敗"), msg)
             } else {
-                state.value = State("完成", start, System.currentTimeMillis(), running = false)
+                state.value = State("完成", start, running = false)
                 doneNotice(context, tr("今日投資報告已更新"), r.picks.joinToString("、") { "${it.symbol} ${it.name}" }.ifBlank { r.trend })
             }
             r
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val msg = "${if (refreshOnly) "更新失敗" else "產生失敗"}：${e.message ?: e.javaClass.simpleName}"
-            state.value = State(msg, start, System.currentTimeMillis(), running = false, error = msg)
+            state.value = State(msg, start, running = false, error = msg)
             doneNotice(context, tr(if (refreshOnly) "新聞資料集更新失敗" else "投資報告產生失敗"), msg)
             null
         }
     }
 
     private const val NOTICE_ID = 9321
+    private const val COMPLETION_NOTICE_ID = 9323
 
-    private fun progressNotice(context: Context, step: String, remaining: Long, elapsed: Long, total: Long) {
+    private fun progressNotice(context: Context, state: State, elapsed: Long) {
         val nm = context.getSystemService(android.app.NotificationManager::class.java)
         if (!nm.areNotificationsEnabled()) return
-        nm.notify(
-            NOTICE_ID,
-            androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
-                .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                .setContentTitle(tr("產生投資報告中"))
-                .setContentText(tr(step) + " · " + tr("約剩") + " " + formatDuration(remaining))
-                .setProgress(100, ((elapsed * 100) / total.coerceAtLeast(1)).toInt().coerceIn(1, 95), false)
-                .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .setContentIntent(openIntent(context))
-                .build(),
-        )
+        nm.notify(NOTICE_ID, progressNotification(context, state, elapsed))
+    }
+
+    fun foregroundInfo(context: Context, state: State) =
+        ForegroundInfo(NOTICE_ID, progressNotification(context, state, elapsed = 0))
+
+    fun workProgress(state: State) = AiBackgroundWork.progress(state.step, state.startedAt, state.done, state.total)
+
+    fun notificationId() = NOTICE_ID
+
+    private fun progressNotification(context: Context, state: State, elapsed: Long) =
+        androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
+            .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
+            .setContentTitle(tr(if (state.refreshOnly) "更新新聞中" else "產生投資報告中"))
+            .setContentText(
+                tr(state.step) +
+                    (state.done?.let { done -> state.total?.let { total -> " · $done / $total" } ?: "" } ?: "") +
+                    (if (elapsed > 0) " · 已執行 ${formatDuration(elapsed)}" else ""),
+            )
+            .setProgress(state.total ?: 0, state.done ?: 0, state.total == null || state.total <= 0)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(openIntent(context))
+            .build()
     }
 
     private fun doneNotice(context: Context, title: String, text: String) {
         val nm = context.getSystemService(android.app.NotificationManager::class.java)
         if (!nm.areNotificationsEnabled()) return
         nm.notify(
-            NOTICE_ID,
+            COMPLETION_NOTICE_ID,
             androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
                 .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
                 .setContentTitle(title)
@@ -169,7 +177,30 @@ object ReportJob {
 
 class ReportWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        ReportJob.execute(applicationContext, notifyProgress = true, refreshOnly = inputData.getBoolean("refreshOnly", false))
-        return Result.success()
+        val initial = ReportJob.state.value
+            ?: ReportJob.State("準備中…", System.currentTimeMillis(), refreshOnly = inputData.getBoolean("refreshOnly", false))
+        val running = initial.copy(step = "準備中…", startedAt = System.currentTimeMillis())
+        val userInitiated = inputData.getBoolean("userInitiated", false)
+        ReportJob.state.value = running
+        setProgress(ReportJob.workProgress(running))
+        if (userInitiated) setForeground(ReportJob.foregroundInfo(applicationContext, running))
+        try {
+            ReportJob.execute(
+                applicationContext,
+                notifyProgress = true,
+                refreshOnly = inputData.getBoolean("refreshOnly", false),
+                onProgress = { state ->
+                    setProgressAsync(ReportJob.workProgress(state))
+                    if (userInitiated) setForegroundAsync(ReportJob.foregroundInfo(applicationContext, state))
+                },
+            )
+        } catch (e: CancellationException) {
+            ReportJob.state.value?.let {
+                ReportJob.state.value = it.copy(step = "背景工作已停止", running = false, error = "背景工作已停止。")
+            }
+            throw e
+        }
+        val error = ReportJob.state.value?.error
+        return if (error == null) Result.success() else Result.failure(androidx.work.workDataOf("error" to error))
     }
 }

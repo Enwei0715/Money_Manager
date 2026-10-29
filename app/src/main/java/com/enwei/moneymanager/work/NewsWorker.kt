@@ -8,9 +8,8 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.enwei.moneymanager.MoneyApp
-import com.enwei.moneymanager.data.buildDailyReport
-import com.enwei.moneymanager.data.refreshNews
 import com.enwei.moneymanager.net.GroqAi
 import kotlinx.coroutines.CancellationException
 import java.time.LocalDate
@@ -27,23 +26,33 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val s = repo.settings.value
         if (!s.advisorDaily || !GroqAi.enabled) return Result.success()
         val ds = MoneyApp.news
+        val startedAt = System.currentTimeMillis()
+        var currentStep = "準備蒐集新聞…"
+        fun update(step: String, done: Int? = null, total: Int? = null) {
+            currentStep = step
+            val progress = AiBackgroundWork.progress(step, startedAt, done, total)
+            setProgressAsync(progress)
+        }
         try {
-            repo.refreshNews(ds)
+            update(currentStep)
+            repo.refreshNews(
+                ds,
+                onStep = { step -> update(step) },
+                onBatch = { i, n -> update("AI 標註新聞 ${i + 1}/$n 批…", i + 1, n) },
+                onDigest = { i, n -> update("整理新聞重點 ${i + 1}/$n…", i + 1, n) },
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             android.util.Log.w("NewsWorker", "News refresh failed (${e.javaClass.simpleName}); retrying")
             val msg = "新聞資料集更新失敗：${com.enwei.moneymanager.net.InvestData.lastHeadlineError ?: "網路或資料儲存錯誤"}，將稍後重試。"
-            if (ReportJob.state.value?.running != true) {
-                ReportJob.state.value = ReportJob.State(msg, System.currentTimeMillis(), System.currentTimeMillis(), running = false, error = msg)
-            }
+            update(msg)
             return Result.retry()
         }
         val st = ds.load()
         val today = LocalDate.now().toEpochDay()
         if (LocalTime.now().hour >= 7 && st.report?.day != today && ds.recent(st, 3).size >= 100) {
-            // 同一套流程（完成時會通知）
-            if (ReportJob.state.value?.running != true) ReportJob.execute(applicationContext, notifyProgress = false)
+            ReportJob.start(applicationContext, userInitiated = false)
         }
         return Result.success()
     }
