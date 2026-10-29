@@ -208,6 +208,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
     }
     LaunchedEffect(isCash, panel) { if (isCash && panel == Panel.AMOUNT) panel = Panel.NONE }
     // 自動分類：依內容（商家）、過去紀錄、金額與帳戶建議分類；新交易還沒選分類時直接帶入
+    var memoNew by remember { mutableStateOf(false) }
     var catSuggest by remember { mutableStateOf<com.enwei.moneymanager.core.CategorySuggester.Suggestion?>(null) }
     var catAuto by remember { mutableStateOf(false) }
     LaunchedEffect(merchant, type, amountMinor, accountId) {
@@ -305,6 +306,14 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                             contentAlignment = Alignment.Center,
                         ) { Text(t.label, color = if (sel) c else MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
+                    // 備註也從這裡新增：寫在當天，每日列表與日曆會顯示
+                    if (original == null) Box(
+                        Modifier.weight(1f).height(40.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(6.dp))
+                            .clickable { memoNew = true },
+                        contentAlignment = Alignment.Center,
+                    ) { Text("備註", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 FormRow("日期", color, active = false, onClick = { panel = Panel.NONE; showDate = true }, trailing = {
                     Column(
@@ -488,7 +497,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
         }
     }
 
-    if (showDate) {
+    if (memoNew) MemoDialog(
+        com.enwei.moneymanager.data.Memo(0, date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(), ""),
+        onSaved = { nav.popBackStack() },
+    ) { memoNew = false }
+        if (showDate) {
         val state = rememberDatePickerState(initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
         DatePickerDialog(
             onDismissRequest = { showDate = false },

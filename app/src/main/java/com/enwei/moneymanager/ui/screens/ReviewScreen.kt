@@ -142,6 +142,20 @@ fun ReviewContent(
                 }
             }
 
+            // 預算（每月）：原本在「總計」分頁，移到這裡和檢討一起看
+            if (span == ReviewSpan.MONTH && settings.budgets.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("預算", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { nav.navigate("budget") }) { Text("設定") }
+                    }
+                    settings.budgets.entries.sortedBy { it.key }.forEach { (cid, budget) ->
+                        val used = if (cid == 0L) d.expense else d.categories.find { it.id == cid }?.amount ?: 0L
+                        BudgetBar(if (cid == 0L) "總預算" else lk.category(cid)?.name ?: "已刪除分類", used, budget)
+                    }
+                }
+            }
+
             // ② 支出結構
             if (d.categories.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

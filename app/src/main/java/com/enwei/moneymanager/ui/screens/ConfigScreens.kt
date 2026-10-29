@@ -170,9 +170,6 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("顯示說明", onOff(s.showDescription)) {
                     askOnOff("顯示說明", s.showDescription, "在交易列表中顯示每筆交易的說明文字。") { v -> repo.settings.update { it.copy(showDescription = v) } }
                 }
-                ConfigRow("備註按鈕", onOff(s.noteButton)) {
-                    askOnOff("備註按鈕", s.noteButton, "在交易頁「＋」旁顯示新增備註的按鈕。") { v -> repo.settings.update { it.copy(noteButton = v) } }
-                }
 
                 SectionHeader("幣別")
                 ConfigRow("主幣別", "${s.baseCurrency} (${Money.symbolOf(s.baseCurrency).trim()})") {

@@ -596,6 +596,17 @@ fun BackupScreen(nav: NavController) {
         }
     }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> confirmUri = uri }
+    val csvLk = rememberLookups()
+    val csvExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            status = runCatching {
+                val list = repo.allTxns().filter { it.status == com.enwei.moneymanager.data.TxnStatus.CONFIRMED }
+                withContext(Dispatchers.IO) { ctx.contentResolver.openOutputStream(uri)!!.use { it.write(buildCsv(list, csvLk).toByteArray(Charsets.UTF_8)) } }
+                "已匯出 ${list.size} 筆交易"
+            }.getOrElse { "匯出失敗：${it.message}" }
+        }
+    }
     var mmUri by remember { mutableStateOf<android.net.Uri?>(null) }
     var busy by remember { mutableStateOf(false) }
     val mmImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> mmUri = uri }
@@ -681,6 +692,11 @@ fun BackupScreen(nav: NavController) {
             OutlinedButton(onClick = { importer.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
                 Text("從備份還原（.lgbak 或舊版 JSON）")
             }
+            HorizontalDivider()
+            // 交易明細匯出成 Excel 可開的 CSV（原本在交易頁「總計」分頁）
+            Text("匯出交易明細", style = MaterialTheme.typography.titleMedium)
+            OutlinedButton(onClick = { csvExporter.launch("帳理交易明細-${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.csv") },
+                modifier = Modifier.fillMaxWidth()) { Text("匯出全部交易（CSV，可用 Excel 開啟）") }
             HorizontalDivider()
             Text("Money Manager 備份檔（.mmbak）", style = MaterialTheme.typography.titleMedium)
             Button(enabled = !busy, onClick = { mmImporter.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("從 .mmbak 匯入") }

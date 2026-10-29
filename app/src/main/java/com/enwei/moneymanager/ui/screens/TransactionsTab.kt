@@ -141,14 +141,15 @@ fun weekdayColor(d: DayOfWeek, default: Color): Color = when (d) {
 
 private fun inRange(d: LocalDate, r: Pair<LocalDate, LocalDate>) = !d.isBefore(r.first) && !d.isAfter(r.second)
 
-private val subTabs = listOf("每日", "日曆", "每月", "總計", "備註", "檢討")
+// 「每月」「總計」「備註」分頁已拿掉：備註改從「＋」新增（記一筆的類型選「備註」），預算移到「檢討」
+private val subTabs = listOf("每日", "日曆", "檢討")
 private val NavyHighlight = Color(0xFF3F4570)
 
 @Composable
 fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     val lk = rememberLookups()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    var tab by rememberSaveable { mutableStateOf(initialTab) }
+    var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, 2)) }
     var month by rememberSaveable { mutableStateOf(Periods.monthOf(LocalDate.now(), repo.settings.value.monthStartDay)) }
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
@@ -158,12 +159,12 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     var memoEditing by remember { mutableStateOf<Memo?>(null) }
     // 「檢討」分頁的期間（月／季／年）：上方的期間切換直接控制檢討，不在下方再放一組
     var reviewSpan by rememberSaveable { mutableStateOf(com.enwei.moneymanager.data.ReviewSpan.MONTH) }
-    val yearly = tab == 2
+    val yearly = false
     fun step(n: Long) {
         month = when {
             yearly -> month.plusYears(n)
-            tab == 5 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.QUARTER -> month.plusMonths(3 * n)
-            tab == 5 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> month.plusYears(n)
+            tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.QUARTER -> month.plusMonths(3 * n)
+            tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> month.plusYears(n)
             else -> month.plusMonths(n)
         }
     }
@@ -189,8 +190,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         Text(
                             when {
                                 yearly -> "${month.year}"
-                                tab == 5 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.QUARTER -> "${month.year}年Q${(month.monthValue - 1) / 3 + 1}"
-                                tab == 5 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> "${month.year}年"
+                                tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.QUARTER -> "${month.year}年Q${(month.monthValue - 1) / 3 + 1}"
+                                tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> "${month.year}年"
                                 else -> "${month.year}年${month.monthValue}月"
                             },
                             fontSize = 18.sp, modifier = Modifier.clickable { month = Periods.monthOf(LocalDate.now(), startDay) },
@@ -210,15 +211,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         },
         floatingActionButton = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if ((tab == 0 && settings.noteButton) || tab == 4) {
-                    Surface(
-                        shape = CircleShape, color = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier.size(60.dp).border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                            .clickable { memoEditing = Memo(0, LocalDate.now().toMillis(), "") },
-                    ) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.EditNote, "新增備註", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp)) } }
-                    Spacer(Modifier.width(16.dp))
-                }
-                if (tab < 4) FloatingActionButton(
+                if (tab < 2) FloatingActionButton(
                     onClick = { nav.navigate("txn/0") }, shape = CircleShape, modifier = Modifier.size(64.dp),
                     containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White,
                 ) { Icon(Icons.Filled.Add, "記一筆", modifier = Modifier.size(32.dp)) }
@@ -226,7 +219,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         },
     ) { pad ->
         var dragX by remember { mutableStateOf(0f) }
-        val swipeModifier = if (settings.swipe == 1 && tab < 5) Modifier.pointerInput(yearly) {
+        val swipeModifier = if (settings.swipe == 1 && tab < 2) Modifier.pointerInput(yearly) {
             detectHorizontalDragGestures(
                 onDragStart = { dragX = 0f },
                 onDragEnd = {
@@ -241,9 +234,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface,
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
             ) {
-                // 英文時用短標籤，避免五個分頁被截斷
-                (if (com.enwei.moneymanager.ui.I18n.english) listOf("Daily", "Cal", "Month", "Total", "Notes", "Review") else subTabs).forEachIndexed { i, t ->
-                    // 六個分頁：不用 Tab 內建的左右留白，英文標籤才不會被切掉
+                (if (com.enwei.moneymanager.ui.I18n.english) listOf("Daily", "Calendar", "Review") else subTabs).forEachIndexed { i, t ->
                     Tab(
                         selected = tab == i, onClick = { tab = i },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -253,14 +244,11 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     }
                 }
             }
-            if (tab < 4) SummaryBar(if (tab == 3) base else totals, lk.base)
+            if (tab < 2) SummaryBar(totals, lk.base)
             when (tab) {
                 0 -> DailyView(inPeriod, lk, nav, range, carry, recurring, trades.filter { inRange(LocalDate.ofEpochDay(it.date), range) },
                     memos = settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }
                 1 -> CalendarView(range, all, lk, nav, DayOfWeek.of(settings.weekStartDay), carry, settings.memos) { memoEditing = it }
-                2 -> MonthlyView(month.year, all, lk, startDay, DayOfWeek.of(settings.weekStartDay))
-                3 -> TotalView(inPeriod, all, lk, nav, month, range)
-                4 -> MemoView(settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }
                 // 收支檢討（月、季、年；AI 逐筆檢查並提問）
                 else -> ReviewContent(nav, reviewSpan to month) { reviewSpan = it }
             }
@@ -593,164 +581,8 @@ private fun CalendarView(
     }
 }
 
-// ---------------- 每月 ----------------
-
 @Composable
-private fun MonthlyView(year: Int, all: List<TxnEntity>, lk: Lookups, startDay: Int, weekStart: DayOfWeek) {
-    val now = Periods.monthOf(LocalDate.now(), startDay)
-    var expanded by rememberSaveable(year) { mutableStateOf(if (now.year == year) now.monthValue else null) }
-    val months = (12 downTo 1).map { YearMonth.of(year, it) }.filter { !it.isAfter(now) }
-    val gray = MaterialTheme.colorScheme.onSurfaceVariant
-    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-        if (months.isEmpty()) item { NoData() }
-        items(months, key = { it.monthValue }) { m ->
-            val r = Periods.month(m, startDay)
-            val txns = all.filter { inRange(it.date.toLocalDate(), r) }
-            val t = totalsOf(txns, lk.fx)
-            Column {
-                Row(
-                    Modifier.fillMaxWidth().clickable { expanded = if (expanded == m.monthValue) null else m.monthValue }
-                        .padding(start = 20.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("${m.monthValue}月", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                        if (expanded == m.monthValue) Text(
-                            "%02d.%02d ~ %02d.%02d".format(r.first.monthValue, r.first.dayOfMonth, r.second.monthValue, r.second.dayOfMonth),
-                            fontSize = 13.sp, color = gray,
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Row {
-                            Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = 16.sp, modifier = Modifier.width(124.dp), textAlign = TextAlign.End)
-                            Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = 16.sp, modifier = Modifier.width(124.dp), textAlign = TextAlign.End)
-                        }
-                        Text(Money.withSymbol(t.total, lk.base), fontSize = 13.sp, color = gray)
-                    }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                if (expanded == m.monthValue) {
-                    val today = LocalDate.now()
-                    weeksOf(r, weekStart).forEach { (s, e) ->
-                        val wt = totalsOf(txns.filter { inRange(it.date.toLocalDate(), s to e) }, lk.fx)
-                        val current = inRange(today, s to e)
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .background(if (current) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.background)
-                                .padding(start = 48.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("%02d.%02d ~ %02d.%02d".format(s.monthValue, s.dayOfMonth, e.monthValue, e.dayOfMonth), Modifier.weight(1f), fontSize = 15.sp)
-                            Column(horizontalAlignment = Alignment.End) {
-                                Row {
-                                    Text(Money.withSymbol(wt.income, lk.base), color = IncomeColor, fontSize = 15.sp, modifier = Modifier.width(110.dp), textAlign = TextAlign.End)
-                                    Text(Money.withSymbol(wt.expense, lk.base), color = ExpenseColor, fontSize = 15.sp, modifier = Modifier.width(110.dp), textAlign = TextAlign.End)
-                                }
-                                Text((if (current) "合計 " else "") + Money.withSymbol(wt.total, lk.base), fontSize = 12.sp, color = gray)
-                            }
-                        }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    }
-                }
-            }
-        }
-        item { Spacer(Modifier.height(96.dp)) }
-    }
-}
-
-/** 期間切成週，頭尾截在期間範圍內，新的在前。 */
-private fun weeksOf(range: Pair<LocalDate, LocalDate>, weekStart: DayOfWeek): List<Pair<LocalDate, LocalDate>> {
-    val out = mutableListOf<Pair<LocalDate, LocalDate>>()
-    val weekEnd = weekStart.minus(1)
-    var s = range.first
-    while (!s.isAfter(range.second)) {
-        val e = minOf(s.with(TemporalAdjusters.nextOrSame(weekEnd)), range.second)
-        out += s to e
-        s = e.plusDays(1)
-    }
-    return out.reversed()
-}
-
-// ---------------- 總計 ----------------
-
-@Composable
-private fun TotalView(list: List<TxnEntity>, all: List<TxnEntity>, lk: Lookups, nav: NavController, month: YearMonth, range: Pair<LocalDate, LocalDate>) {
-    val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    var cards by remember { mutableStateOf<Map<Long, CardStatus>>(emptyMap()) }
-    LaunchedEffect(all) { cards = repo.cardStatus() }
-    val confirmed = list.filter { it.status == TxnStatus.CONFIRMED }
-    val expense = totalsOf(confirmed, lk.fx).expense
-    val lastRange = Periods.month(month.minusMonths(1), settings.monthStartDay)
-    val lastExpense = totalsOf(all.filter { inRange(it.date.toLocalDate(), lastRange) }, lk.fx).expense
-    fun isCardLike(id: Long?) = lk.account(id)?.type.let { it == AccountType.CREDIT_CARD || it == AccountType.EWALLET || it == AccountType.TRANSIT_CARD }
-    val cashExpense = confirmed.filter { it.type == TxnType.EXPENSE && !isCardLike(it.accountId) }.sumOf { lk.fx.convert(it.amount, it.currency) }
-    val cardExpense = confirmed.filter { it.type == TxnType.EXPENSE && isCardLike(it.accountId) }.sumOf { lk.fx.convert(it.amount, it.currency) }
-    val cardPayable = cards.values.sumOf { it.payable + it.outstanding }
-    val transferOut = confirmed.filter { it.type == TxnType.TRANSFER && !isCardLike(it.accountId) }.sumOf { lk.fx.convert(it.amount, it.currency) }
-    val byCat = confirmed.filter { it.type == TxnType.EXPENSE }.groupBy { lk.rootId(it.categoryId) ?: 0L }.mapValues { (_, l) -> l.sumOf { lk.fx.convert(it.amount, it.currency) } }
-
-    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            withContext(Dispatchers.IO) {
-                ctx.contentResolver.openOutputStream(uri)!!.use { it.write(buildCsv(list, lk).toByteArray(Charsets.UTF_8)) }
-            }
-        }
-    }
-
-    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-        item {
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Savings, null, modifier = Modifier.size(30.dp))
-                Text("  預算", fontSize = 20.sp, modifier = Modifier.weight(1f))
-                Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.background, modifier = Modifier.clickable { nav.navigate("budget") }) {
-                    Text("預算設定 ›", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
-                }
-            }
-            if (settings.budgets.isNotEmpty()) Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                settings.budgets.entries.sortedBy { it.key }.forEach { (cid, budget) ->
-                    val used = if (cid == 0L) expense else byCat[cid] ?: 0
-                    val name = if (cid == 0L) "總預算" else lk.category(cid)?.name ?: "已刪除分類"
-                    BudgetBar(name, used, budget)
-                }
-            }
-            HorizontalDivider(Modifier.padding(top = 12.dp), thickness = 10.dp, color = MaterialTheme.colorScheme.background)
-        }
-        item {
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.AccountBalanceWallet, null, modifier = Modifier.size(28.dp))
-                Text("  支出來源", fontSize = 20.sp, modifier = Modifier.weight(1f))
-                Text("${range.first.monthValue}.${range.first.dayOfMonth}.${range.first.year % 100} ~ ${range.second.monthValue}.${range.second.dayOfMonth}.${range.second.year % 100}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                KV("支出是上個月的", if (lastExpense > 0) "${expense * 100 / lastExpense}%" else "—")
-                KV("現金、銀行支出", Money.withSymbol(cashExpense, lk.base))
-                KV("信用卡、支付支出", Money.withSymbol(cardExpense, lk.base))
-                if (cardPayable != 0L) KV("信用卡目前待繳", Money.withSymbol(cardPayable, lk.base))
-                if (transferOut != 0L) KV("從現金、銀行轉出", Money.withSymbol(transferOut, lk.base))
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(16.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                    .clickable { exporter.launch("帳理_${month.year}${"%02d".format(month.monthValue)}.csv") }.padding(18.dp),
-                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Outlined.TableChart, null, tint = Color(0xFF21A366))
-                Text("  匯出資料到 Excel", fontSize = 17.sp)
-            }
-            Spacer(Modifier.height(96.dp))
-        }
-    }
-}
-
-@Composable
-private fun BudgetBar(name: String, used: Long, budget: Long) {
+fun BudgetBar(name: String, used: Long, budget: Long) {
     val ratio = if (budget > 0) used.toFloat() / budget else 0f
     Column {
         Row {
@@ -768,7 +600,7 @@ private fun BudgetBar(name: String, used: Long, budget: Long) {
 }
 
 /** Excel 可直接開啟的 CSV（含 BOM 以正確顯示中文）。 */
-private fun buildCsv(list: List<TxnEntity>, lk: Lookups): String {
+fun buildCsv(list: List<TxnEntity>, lk: Lookups): String {
     fun esc(s: String?) = "\"" + (s ?: "").replace("\"", "\"\"") + "\""
     val sb = StringBuilder("﻿日期,時間,類型,分類,帳戶,轉入帳戶,內容,說明,金額,幣別\n")
     list.sortedBy { it.date }.forEach { t ->
@@ -780,14 +612,6 @@ private fun buildCsv(list: List<TxnEntity>, lk: Lookups): String {
         ).joinToString(",")).append('\n')
     }
     return sb.toString()
-}
-
-@Composable
-private fun KV(k: String, v: String, color: Color = Color.Unspecified) {
-    Row(Modifier.fillMaxWidth()) {
-        Text(k, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
-        Text(v, color = color, fontSize = 16.sp)
-    }
 }
 
 // ---------------- 備註 ----------------
@@ -814,40 +638,9 @@ private fun MemoLine(m: Memo, onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun MemoView(memos: List<Memo>, onEdit: (Memo) -> Unit) {
-    if (memos.isEmpty()) { NoData(); return }
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { Spacer(Modifier.height(4.dp)) }
-        // 置頂的排前面，其餘依日期新到舊
-        items(memos.sortedWith(compareByDescending<Memo> { it.pinned }.thenByDescending { it.date }), key = { it.id }) { m ->
-            val d = m.date.toLocalDate()
-            val tint = com.enwei.moneymanager.data.memoColors.getOrElse(m.color) { 0L }
-            val bg = if (tint == 0L) MaterialTheme.colorScheme.surface else Color(tint).copy(alpha = 0.22f)
-            Surface(
-                shape = RoundedCornerShape(10.dp), color = bg,
-                border = if (tint == 0L) null else androidx.compose.foundation.BorderStroke(1.dp, Color(tint).copy(alpha = 0.7f)),
-                modifier = Modifier.fillMaxWidth().clickable { onEdit(m) },
-            ) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${d.monthValue}.${d.dayOfMonth}（${Recurrence.weekdayName(d.dayOfWeek)}）", fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                        if (m.pinned) Icon(Icons.Filled.PushPin, "置頂",
-                            tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                    }
-                    if (m.title.isNotBlank()) Text(m.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    if (m.text.isNotBlank()) Text(m.text, fontSize = 14.sp, maxLines = 6, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-        item { Spacer(Modifier.height(96.dp)) }
-    }
-}
-
 /** 備註：維持小視窗，可設定標題、內容、主題色與置頂。 */
 @Composable
-private fun MemoDialog(memo: Memo, onDismiss: () -> Unit) {
+fun MemoDialog(memo: Memo, onSaved: () -> Unit = {}, onDismiss: () -> Unit) {
     var title by remember(memo) { mutableStateOf(memo.title) }
     var text by remember(memo) { mutableStateOf(memo.text) }
     var color by remember(memo) { mutableStateOf(memo.color) }
@@ -902,6 +695,7 @@ private fun MemoDialog(memo: Memo, onDismiss: () -> Unit) {
                     else s.memos.map { if (it.id == memo.id) edited else it }
                     s.copy(memos = updated)
                 }
+                onSaved()
                 onDismiss()
             }) { Text("儲存") }
         },
