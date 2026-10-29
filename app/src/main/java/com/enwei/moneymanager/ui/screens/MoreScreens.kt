@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -111,15 +112,24 @@ private val timeFmt = SimpleDateFormat("M/d HH:mm", Locale.TAIWAN)
 @Composable
 fun MoreScreen(nav: NavController) {
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
-    val entries = listOf(
-        // 功能入口；各種設定集中在「設定」裡
-        Triple("invest", "股票", com.enwei.moneymanager.ui.components.LineIcons.Stocks),
-        Triple("advisor", "股票助理", com.enwei.moneymanager.ui.components.LineIcons.Advisor),
-        Triple("pending", "待確認", com.enwei.moneymanager.ui.components.LineIcons.Inbox),
-        Triple("recurring", "週期扣款", com.enwei.moneymanager.ui.components.LineIcons.Recurring),
-        Triple("fx", "匯率", com.enwei.moneymanager.ui.components.LineIcons.Exchange),
-        Triple("backup", "備份", com.enwei.moneymanager.ui.components.LineIcons.Backup),
-        Triple("config", "設定", com.enwei.moneymanager.ui.components.LineIcons.Settings),
+    val L = com.enwei.moneymanager.ui.components.LineIcons
+    // 依類別分組的功能入口；細部設定集中在「設定」裡
+    val groups = listOf(
+        "自動記帳" to listOf(
+            Triple("notif", "通知記帳", L.Notification),
+            Triple("walletreader", "錢包讀取", L.Wallet),
+            Triple("pending", "待確認", L.Inbox),
+        ),
+        "投資" to listOf(
+            Triple("invest", "股票", L.Stocks),
+            Triple("advisor", "股票助理", L.Advisor),
+        ),
+        "工具" to listOf(
+            Triple("recurring", "週期扣款", L.Recurring),
+            Triple("fx", "匯率", L.Exchange),
+            Triple("backup", "備份", L.Backup),
+            Triple("config", "設定", L.Settings),
+        ),
     )
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -134,22 +144,26 @@ fun MoreScreen(nav: NavController) {
             )
         },
     ) { pad ->
-        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-            androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
-            Modifier.padding(pad).fillMaxWidth().padding(top = 24.dp),
-        ) {
-            items(entries.size) { i ->
-                val (route, label, icon) = entries[i]
-                // 圖示固定在同一高度：英文標籤較長換成兩行時，圖示不會被往上推而對不齊
-                Column(
-                    Modifier.height(124.dp).clickable { nav.navigate(route) }.padding(top = 24.dp, start = 4.dp, end = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Top,
-                ) {
-                    androidx.compose.material3.BadgedBox(badge = {
-                        if (route == "pending" && pending.isNotEmpty()) Badge { Text("${pending.size}") }
-                    }) { Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(34.dp)) }
-                    Spacer(Modifier.height(10.dp))
-                    Text(label, fontSize = 15.sp, lineHeight = 18.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
+            groups.forEach { (title, entries) ->
+                Text(title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 20.dp, top = 16.dp))
+                entries.chunked(3).forEach { row ->
+                    Row(Modifier.fillMaxWidth()) {
+                        row.forEach { (route, label, icon) ->
+                            // 圖示固定在同一高度：英文標籤較長換成兩行時，圖示不會被往上推而對不齊
+                            Column(
+                                Modifier.weight(1f).height(112.dp).clickable { nav.navigate(route) }.padding(top = 18.dp, start = 4.dp, end = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Top,
+                            ) {
+                                androidx.compose.material3.BadgedBox(badge = {
+                                    if (route == "pending" && pending.isNotEmpty()) Badge { Text("${pending.size}") }
+                                }) { Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(34.dp)) }
+                                Spacer(Modifier.height(10.dp))
+                                Text(label, fontSize = 15.sp, lineHeight = 18.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            }
+                        }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
                 }
             }
         }
