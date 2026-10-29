@@ -215,7 +215,7 @@ fun RecurringEditScreen(nav: NavController, id: Long) {
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("儲存") }
             Text(
-                "提示：新規則若開始日期在過去，會自動補上從開始日到今天的所有交易。",
+                "開始日期在過去時，會補上到今天的交易",
                 style = MaterialTheme.typography.bodySmall,
             )
         }

@@ -397,7 +397,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                 if (cm != null) Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) { Text("拿出", fontSize = 12.sp, modifier = Modifier.width(40.dp)); CashIcons(cm.out, "無") }
                     Row(verticalAlignment = Alignment.CenterVertically) { Text("放回", fontSize = 12.sp, modifier = Modifier.width(40.dp)); CashIcons(cm.inn, "無") }
-                    Text("刪除這筆時，皮夾的張數會自動還原", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 original?.rawText?.takeIf { cm == null }?.let {
                     Text("原始內容：$it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

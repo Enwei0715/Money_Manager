@@ -203,7 +203,7 @@ fun ReviewContent(
                     when {
                         r != null -> AiReviewBody(r, ::m, d, lk, settings.txnNecessity, nav)
                         !GroqAi.enabled -> Text("到「設定 → AI 智慧辨識」填入金鑰後，可以產生 AI 檢討。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        else -> Text("按「產生」，AI 會依這期的資料寫出檢討與下期目標。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else -> Text("按「產生」寫出這期的檢討與下期目標", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -264,7 +264,7 @@ private fun AiReviewBody(
     section("做得好", r.good, "✓")
     if (r.questions.isNotEmpty()) {
         Text("想問你的幾筆", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        Text("回答會記住，下次檢討時 AI 會參考（例如「可省」的金額會列入目標）。", fontSize = 12.sp, color = gray)
+        Text("回答會記住，下次檢討時會參考", fontSize = 12.sp, color = gray)
         val byId = d.expenses.associateBy { it.id }
         r.questions.forEach { q -> QuestionCard(q, q.txnIds.mapNotNull { byId[it] }, lk, necessity, m, nav) }
     }

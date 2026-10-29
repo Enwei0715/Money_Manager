@@ -112,7 +112,7 @@ fun AccountGroupScreen(nav: NavController) {
                 )
             }
             Text(
-                "群組對應固定的帳戶類型（影響信用卡帳單、證券持股等功能），因此只能改名與排序。",
+                "群組對應固定的帳戶類型，只能改名與排序。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(16.dp),
             )

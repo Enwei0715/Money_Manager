@@ -138,7 +138,7 @@ private fun DenomTile(d: Int, n: Int, have: Int?, modifier: Modifier, onChange: 
 fun CashOptions(options: List<Cash.PayOption>, selected: Int, income: Boolean, have: Map<Int, Int>, onSelect: (Int) -> Unit) {
     if (options.isEmpty()) return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(if (income) "怎麼收的（自動分析常見收法，點一下選用）" else "怎麼付的（自動分析常見付法，點一下選用）",
+        Text(if (income) "怎麼收的" else "怎麼付的",
             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         options.forEachIndexed { i, o ->
             val sel = i == selected
@@ -162,7 +162,7 @@ fun CashOptions(options: List<Cash.PayOption>, selected: Int, income: Boolean, h
                         Box(Modifier.weight(1f)) { CashIcons(o.back) }
                         if (o.back.isNotEmpty()) Text("${"%,d".format(Cash.total(o.back))}", fontSize = 13.sp)
                     }
-                    if (short) Text("皮夾裡的數量不夠，選了之後請到點鈔更新", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                    if (short) Text("皮夾裡的數量不夠", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
                 }
             }
         }
