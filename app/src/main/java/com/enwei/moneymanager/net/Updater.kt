@@ -34,7 +34,13 @@ object Updater {
         if (token.isNotBlank()) put("Authorization", "Bearer ${token.trim()}")
     }
 
-    suspend fun latest(token: String): ReleaseInfo? {
+    /**
+     * 最新版。帶 Token 失敗（Token 過期、被撤銷時 GitHub 會回 401，連公開儲存庫也查不到）就改成不帶 Token 再查一次。
+     */
+    suspend fun latest(token: String): ReleaseInfo? =
+        if (token.isBlank()) latestWith("") else runCatching { latestWith(token) }.getOrElse { latestWith("") }
+
+    private suspend fun latestWith(token: String): ReleaseInfo? {
         val root = Http.getJson("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest", authHeaders(token))
         val tag = root.str("tag_name") ?: return null
         val asset = (root.obj("assets") as? JsonArray)?.firstOrNull { it.str("name")?.endsWith(".apk") == true } ?: return null
@@ -51,7 +57,12 @@ object Updater {
 
     fun isNewer(r: ReleaseInfo) = r.versionCode > BuildConfig.VERSION_CODE
 
-    suspend fun download(context: Context, r: ReleaseInfo, token: String, onProgress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
+    /** 下載新版；帶 Token 下載失敗時改用公開下載網址。 */
+    suspend fun download(context: Context, r: ReleaseInfo, token: String, onProgress: (Float) -> Unit): File =
+        if (token.isBlank()) downloadWith(context, r, "", onProgress)
+        else runCatching { downloadWith(context, r, token, onProgress) }.getOrElse { downloadWith(context, r, "", onProgress) }
+
+    private suspend fun downloadWith(context: Context, r: ReleaseInfo, token: String, onProgress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "updates").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
         val target = File(dir, "MoneyManager-${r.tag}.apk")

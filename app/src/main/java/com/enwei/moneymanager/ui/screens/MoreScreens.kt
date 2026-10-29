@@ -768,6 +768,8 @@ fun SettingsScreen(nav: NavController) {
         ) {
             Text("App 更新", style = MaterialTheme.typography.titleMedium)
             Text("目前版本 ${BuildConfig.VERSION_NAME}（build ${BuildConfig.VERSION_CODE}）", style = MaterialTheme.typography.bodySmall)
+            if (settings.updateCheckLog.isNotBlank()) Text("自動檢查：${settings.updateCheckLog}", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(
                 token, { v -> token = v; repo.settings.update { it.copy(githubToken = v.trim()) } }, label = { Text("GitHub Token（私人儲存庫需要）") }, singleLine = true,
                 supportingText = { Text("私人儲存庫才需要（權限 Contents: Read-only）") },

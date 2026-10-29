@@ -41,16 +41,31 @@ fun UpdatePrompt() {
     var release by remember { mutableStateOf<ReleaseInfo?>(null) }
     var progress by remember { mutableStateOf<Float?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
     fun check() {
         val now = System.currentTimeMillis()
-        if (release != null || now - lastCheck < 10 * 60_000) return
-        lastCheck = now
+        if (release != null || checking || now - lastCheck < 10 * 60_000) return
+        checking = true
         scope.launch {
-            val s = repo.settings.value
-            if (!s.notifyUpdates) return@launch
-            val r = runCatching { Updater.latest(s.githubToken) }.getOrNull()
-            if (r == null) { lastCheck = 0; return@launch }   // 沒網路或失敗：下次回到 App 再試
-            if (Updater.isNewer(r) && r.versionCode != s.updateSkipped) release = r
+            try {
+                val s = repo.settings.value
+                if (!s.notifyUpdates) return@launch
+                val time = java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date())
+                val res = runCatching { Updater.latest(s.githubToken) }
+                val r = res.getOrNull()
+                val log = when {
+                    r == null -> "$time 檢查失敗：" + (res.exceptionOrNull()?.message ?: "找不到可下載的版本")
+                    !Updater.isNewer(r) -> "$time 已是最新版本"
+                    r.versionCode == s.updateSkipped -> "$time 有新版本 ${r.tag}（已略過）"
+                    else -> "$time 有新版本 ${r.tag}"
+                }
+                repo.settings.update { it.copy(updateCheckLog = log, updateAvailable = if (r != null && Updater.isNewer(r)) r.versionCode else 0) }
+                // 只有真的查到結果才算檢查過；失敗（沒網路等）下次回到 App 再試
+                if (r != null) lastCheck = System.currentTimeMillis()
+                if (r != null && Updater.isNewer(r) && r.versionCode != s.updateSkipped) release = r
+            } finally {
+                checking = false
+            }
         }
     }
     // App 從背景回到前景（不一定會重新啟動）時也要檢查
