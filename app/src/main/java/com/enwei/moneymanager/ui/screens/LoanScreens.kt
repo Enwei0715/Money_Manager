@@ -6,11 +6,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,52 +47,109 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
     // 0 不顯示、1 收回／還款、2 再借出／再借入
     var dialog by remember { mutableStateOf(0) }
     val gray = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         if (info == null) {
-            Text("還沒有設定借貸細節（對象、本金、到期日、每月還款）。", fontSize = 14.sp, color = gray)
+            Text("設定對象、本金與還款方式，開始追蹤借貸進度。", fontSize = 14.sp, color = gray)
             OutlinedButton(onClick = { nav.navigate("account/${acc.id}") }) { Text("設定借貸") }
         } else {
             val l = Repository.LoanStatus(acc, info, balance)
             val verb = if (info.lent) "收回" else "還款"
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        (info.counterparty.ifBlank { acc.name }) + if (info.lent) " 欠你" else "：你欠",
-                        fontSize = 14.sp, color = gray,
-                    )
-                    Text(Money.withSymbol(l.outstanding, acc.currency), fontSize = 22.sp)
+                    Text(if (info.lent) "借出給" else "向其借入", fontSize = 13.sp, color = gray)
+                    Text(info.counterparty.ifBlank { acc.name }, fontSize = 17.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
-                if (l.outstanding == 0L) Text("已結清", color = MaterialTheme.colorScheme.primary)
+                Surface(
+                    color = if (l.outstanding == 0L) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(20.dp),
+                ) {
+                    Text(
+                        if (l.outstanding == 0L) "已結清" else if (info.lent) "待收回" else "待償還",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        color = if (l.outstanding == 0L) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(if (info.lent) "對方尚欠你" else "你尚欠", fontSize = 13.sp, color = gray)
+                Text(Money.withSymbol(l.outstanding, acc.currency), fontSize = 26.sp)
             }
             if (info.principal > 0) {
-                LinearProgressIndicator(progress = { l.progress }, modifier = Modifier.fillMaxWidth())
-                Text(
-                    "本金 ${Money.withSymbol(info.principal, acc.currency)} · 已$verb ${Money.withSymbol(l.repaid, acc.currency)}（${(l.progress * 100).toInt()}%）",
-                    fontSize = 13.sp, color = gray,
-                )
+                Column(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("本金進度", Modifier.weight(1f), fontSize = 13.sp, color = gray)
+                        Text("${(l.progress * 100).toInt()}%", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                    LinearProgressIndicator(progress = { l.progress }, modifier = Modifier.fillMaxWidth())
+                    LoanDetailLine("本金", Money.withSymbol(info.principal, acc.currency))
+                    LoanDetailLine("已$verb", Money.withSymbol(l.repaid, acc.currency))
+                }
             }
-            val lines = listOfNotNull(
-                "${LocalDate.ofEpochDay(info.startDay)} 開始",
-                l.dueDate?.let { d ->
-                    val left = ChronoUnit.DAYS.between(LocalDate.now(), d)
-                    if (l.overdue) "已逾期 ${-left} 天（到期 $d）" else "$d 到期（剩 $left 天）"
-                },
-                info.installment?.let { inst ->
-                    "每月 ${info.payDay ?: "?"} 日$verb ${Money.withSymbol(inst, acc.currency)}" +
-                        (l.periodsLeft?.let { "，約 $it 期還清" } ?: "") + (l.nextPay?.let { "，下次 ${it.monthValue}/${it.dayOfMonth}" } ?: "")
-                },
-                if (info.annualRate > 0) "年利率 ${info.annualRate}% · 每月利息約 ${Money.withSymbol(l.monthlyInterest, acc.currency)}" else null,
-            )
-            lines.forEach { Text(it, fontSize = 13.sp, color = if (it.startsWith("已逾期")) MaterialTheme.colorScheme.error else gray) }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(enabled = l.outstanding > 0, onClick = { dialog = 1 }) { Text(if (info.lent) "收回款項" else "還款") }
-                TextButton(onClick = { dialog = 2 }) { Text(if (info.lent) "再借出" else "再借入") }
+            Column(
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                LoanDetailLine("開始日", LocalDate.ofEpochDay(info.startDay).toString())
+                LoanDetailLine(
+                    "到期日",
+                    l.dueDate?.let { due ->
+                        val daysLeft = ChronoUnit.DAYS.between(LocalDate.now(), due)
+                        when {
+                            l.overdue -> "逾期 ${-daysLeft} 天 · $due"
+                            else -> "$due · 剩餘 $daysLeft 天"
+                        }
+                    } ?: "未設定",
+                    alert = l.overdue,
+                )
+                info.installment?.let { amount ->
+                    LoanDetailLine("每月$verb", "${Money.withSymbol(amount, acc.currency)} · ${info.payDay?.let { "每月 $it 日" } ?: "未設定日期"}")
+                    l.nextPay?.let { LoanDetailLine("下次收付", "${it.monthValue}/${it.dayOfMonth}") }
+                    l.periodsLeft?.let { LoanDetailLine("預估期數", "$it 期") }
+                }
+                if (info.annualRate > 0) {
+                    LoanDetailLine("年利率", "${info.annualRate}%")
+                    LoanDetailLine("每月利息估算", Money.withSymbol(l.monthlyInterest, acc.currency))
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    enabled = l.outstanding > 0,
+                    onClick = { dialog = 1 },
+                ) { Text(if (info.lent) "收回款項" else "還款") }
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    onClick = { dialog = 2 },
+                ) { Text(if (info.lent) "再借出" else "再借入") }
             }
             if (dialog != 0) LoanMoveDialog(acc, l, repay = dialog == 1, lk = lk) { dialog = 0 }
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+@Composable
+private fun LoanDetailLine(label: String, value: String, alert: Boolean = false) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+        Text(label, Modifier.width(88.dp), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            value,
+            modifier = Modifier.weight(1f),
+            fontSize = 13.sp,
+            color = if (alert) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        )
+    }
 }
 
 @Composable

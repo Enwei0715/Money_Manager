@@ -154,11 +154,28 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
             }
             FormLine("名稱") { FormInput(name, { name = it }) }
             if (type == AccountType.LOAN) {
-                FormLine("類型") {
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        androidx.compose.material3.FilterChip(loanLent, { loanLent = true }, label = { Text("借出（別人欠我）") })
-                        androidx.compose.material3.FilterChip(!loanLent, { loanLent = false }, label = { Text("借入（我欠別人）") })
-                    }
+                Text(
+                    "借貸方向與對象",
+                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 4.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    androidx.compose.material3.FilterChip(
+                        selected = loanLent,
+                        onClick = { loanLent = true },
+                        modifier = Modifier.weight(1f),
+                        label = { Text("借出 · 對方欠我") },
+                    )
+                    androidx.compose.material3.FilterChip(
+                        selected = !loanLent,
+                        onClick = { loanLent = false },
+                        modifier = Modifier.weight(1f),
+                        label = { Text("借入 · 我欠對方") },
+                    )
                 }
             }
             FormLine(
@@ -266,14 +283,32 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
             } else if (type == AccountType.LOAN) {
+                Text(
+                    "借貸對象與金額",
+                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 4.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
                 FormLine("對象") { FormInput(counterparty, { counterparty = it }, "借款人／債權人") }
                 FormLine("本金") { FormInput(principal, { principal = it }, "借出／借入的總額", number = true) }
+                Text(
+                    "利率與期限",
+                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 4.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
                 FormLine("年利率") { FormInput(rate, { rate = it }, "%，無息留空", number = true) }
                 FormLine("開始日") { com.enwei.moneymanager.ui.components.DateField(loanStart, { loanStart = it }, "開始日") }
                 FormLine("到期日", trailing = { if (loanDue != null) androidx.compose.material3.TextButton(onClick = { loanDue = null }) { Text("不設定") } }) {
                     if (loanDue == null) androidx.compose.material3.TextButton(onClick = { loanDue = LocalDate.now().plusMonths(12) }) { Text("設定到期日") }
                     else com.enwei.moneymanager.ui.components.DateField(loanDue!!, { loanDue = it }, "到期日")
                 }
+                Text(
+                    "每月收付款",
+                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 4.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
                 FormLine("每月${if (loanLent) "收款" else "還款"}") { FormInput(installment, { installment = it }, "金額，不分期留空", number = true) }
                 if (installment.isNotBlank()) {
                     FormLine("每月幾號") { FormInput(payDay, { payDay = it.filter(Char::isDigit).take(2) }, "1～31", number = true) }
@@ -281,7 +316,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                         listOf<Pair<Long?, String>>(null to "未設定") + lk.accounts.filter { it.type != AccountType.LOAN && it.type != AccountType.BROKERAGE && !it.archived }
                             .map { it.id to it.name }) { payFrom = it }
                     Text(
-                        "每月到期會產生一筆轉帳放到「待確認」，確認金額後入帳。",
+                        "每月到期會建立待確認的轉帳，確認後才會入帳。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
                     )
