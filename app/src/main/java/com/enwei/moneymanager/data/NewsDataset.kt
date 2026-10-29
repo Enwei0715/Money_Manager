@@ -127,14 +127,19 @@ class NewsDataset(context: Context) {
             "台積電", "AI 伺服器", "CoWoS 先進封裝", "IC 設計", "記憶體 DRAM", "PCB 載板", "散熱 液冷",
             "矽光子 光通訊", "網通 低軌衛星", "機器人", "重電 電網", "電動車 供應鏈", "航運 貨櫃",
             "金融股", "生技 新藥", "營建 房市", "鋼鐵 原物料", "觀光 餐飲 內需",
+            "台股 盤後", "台股 盤前", "台股 漲停", "台股 跌停", "台股 主力", "台股 當沖", "台股 處置股",
+            "櫃買 中小型股", "台股 外資 目標價", "台股 法人 調升", "台股 庫藏股", "台股 增資", "台股 合併 收購",
+            "日股 韓股 亞股", "中國 經濟 刺激", "美元 美債 殖利率", "油價 原油", "黃金 價格", "地緣政治 關稅",
+            "輝達 NVIDIA", "蘋果 供應鏈", "伺服器 ODM", "被動元件", "面板", "太陽能 儲能", "風電", "軍工 無人機",
+            "電信", "食品 民生", "紡織 製鞋", "汽車 零組件", "高股息 ETF", "債券 ETF",
         )
-        const val KEEP_DAYS = 10
-        const val MAX_ITEMS = 1500
+        const val KEEP_DAYS = 14
+        const val MAX_ITEMS = 6000
     }
 
     /** 抓新聞：基本題材＋持股與觀察中的代號，去除重複，保留近 [KEEP_DAYS] 天。回傳新增則數。 */
     suspend fun collect(extraQueries: List<String>): Int {
-        val heads = InvestData.headlines(BASE_QUERIES + extraQueries, perQuery = 20, max = 800)
+        val heads = InvestData.headlines(BASE_QUERIES + extraQueries, perQuery = 40, max = 3000)
         val now = System.currentTimeMillis() / 1000
         var added = 0
         update { st ->
@@ -152,10 +157,12 @@ class NewsDataset(context: Context) {
     }
 
     /** 請 AI 標註還沒標過的新聞（每批 40 則，批次之間稍等以免超過每分鐘額度）。回傳標註則數。 */
-    suspend fun tag(maxBatches: Int = 12, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
+    suspend fun tag(onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
         var done = 0
+        // Gemini 一次可以標 150 則、請求之間只要稍等；Groq 每分鐘 token 少，一次 40 則、等久一點
+        val big = GroqAi.bigContext(GroqAi.AiTask.NEWS_TAG)
         val pending = load().items.filter { !it.tagged }
-        val batches = pending.chunked(40).take(maxBatches)
+        val batches = pending.chunked(if (big) 150 else 40).take(if (big) 20 else 12)
         batches.forEachIndexed { i, batch ->
             onProgress(i, batches.size)
             val tags = GroqAi.tagNews(batch.map { it.id to it.title }) ?: return done
@@ -166,7 +173,7 @@ class NewsDataset(context: Context) {
                 })
             }
             done += batch.size
-            if (i < batches.lastIndex) delay(15_000)
+            if (i < batches.lastIndex) delay(if (big) 6_000 else 15_000)
         }
         return done
     }

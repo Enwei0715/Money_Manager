@@ -299,7 +299,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val choices = catsAll.filter { it.kind == type && !it.archived && it.name != "不明" && it.name != "對帳調整" && catsAll.none { c -> c.parentId == it.id } }
                 .map { it.id to path(it.id) }
             if (choices.isEmpty()) continue
-            for (chunk in targets.filter { it.type == type }.chunked(8)) {
+            val big = com.enwei.moneymanager.net.GroqAi.bigContext(com.enwei.moneymanager.net.GroqAi.AiTask.UNKNOWN)
+            for (chunk in targets.filter { it.type == type }.chunked(if (big) 60 else 8)) {
                 val items = chunk.map { t ->
                     val time = at(t)
                     val similar = known.filter { k ->
@@ -323,8 +324,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 created += add.size
                 done += chunk.size
                 onProgress(done, targets.size)
-                // Groq 免費方案每分鐘約 30 次請求
-                kotlinx.coroutines.delay(2500)
+                // 免費方案每分鐘有請求次數上限
+                kotlinx.coroutines.delay(if (big) 6000 else 2500)
             }
         }
         return created

@@ -136,7 +136,7 @@ private fun Repository.situation(snap: AdvisorSnapshot): String {
 }
 
 /** 資料集摘要：題材熱度、個股統計（附最新一則標題）、重點新聞（編號 → 新聞 id）。 */
-private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: Int, important: Int): Pair<String, List<NewsItem>> {
+private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: Int, important: Int, full: Boolean = false): Pair<String, List<NewsItem>> {
     val recent = ds.recent(st, 3)
     val imp = ds.important(st, 2, important)
     val text = buildString {
@@ -145,11 +145,19 @@ private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: 
         ds.themes(st).take(themes).forEach { appendLine("- ${it.key}｜${it.count}｜${"%+.1f".format(it.avgSentiment)}｜${it.important}") }
         appendLine("被提到最多的個股（代號｜則數｜多空｜最新標題）：")
         ds.symbols(st).take(symbols).forEach { t ->
-            val latest = recent.firstOrNull { t.key in it.symbols }?.title?.take(24).orEmpty()
-            appendLine("- ${t.key}｜${t.count}｜${"%+.1f".format(t.avgSentiment)}｜$latest")
+            val heads = recent.filter { t.key in it.symbols }.take(if (full) 3 else 1).joinToString(" / ") { it.title.take(if (full) 40 else 24) }
+            appendLine("- ${t.key}｜${t.count}｜${"%+.1f".format(t.avgSentiment)}｜$heads")
         }
         appendLine("重點新聞：")
         imp.forEachIndexed { i, n -> appendLine("[$i] ${n.title.take(45)}" + (n.note.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: "")) }
+        // 讀得下大量資料時（Gemini）：附上近 3 天所有新聞標題，依題材分組
+        if (full) {
+            appendLine("近 3 天所有新聞（依題材；括號為多空 -2~2）：")
+            recent.groupBy { it.theme.ifBlank { "其他" } }.entries.sortedByDescending { it.value.size }.forEach { (theme, list) ->
+                appendLine("【$theme】")
+                list.take(120).forEach { n -> appendLine("- ${n.title.take(60)}（${n.sentiment}）" + if (n.symbols.isNotEmpty()) " ${n.symbols.joinToString(",")}" else "") }
+            }
+        }
     }
     return text to imp
 }
@@ -171,13 +179,15 @@ suspend fun Repository.refreshNews(ds: NewsDataset, onStep: (String) -> Unit = {
  */
 suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Unit): DailyReport? {
     var st = ds.load()
-    if (System.currentTimeMillis() - st.lastCollect > 3 * 3600_000L || ds.recent(st, 3).size < 150) {
+    if (System.currentTimeMillis() - st.lastCollect > 3 * 3600_000L || ds.recent(st, 3).size < 300) {
         refreshNews(ds, onStep)
         st = ds.load()
     }
     onStep("讀取大盤與持股走勢…")
     val snap = advisorSnapshot(fetch = true)
-    val (digest, imp) = datasetDigest(ds, st, themes = 10, symbols = 18, important = 15)
+    val big = com.enwei.moneymanager.net.GroqAi.bigContext(com.enwei.moneymanager.net.GroqAi.AiTask.REPORT)
+    val (digest, imp) = if (big) datasetDigest(ds, st, themes = 30, symbols = 60, important = 60, full = true)
+    else datasetDigest(ds, st, themes = 10, symbols = 18, important = 15)
     onStep("AI 分析資料集（${ds.recent(st, 3).size} 則新聞）…")
     val r = com.enwei.moneymanager.net.GroqAi.dailyReport(situation(snap) + "\n" + digest) ?: return null
     onStep("確認推薦的代號與價格…")
@@ -198,7 +208,9 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
     val st = ds.load()
     ds.update { it.copy(chat = (it.chat + ChatMsg(true, question)).takeLast(40)) }
     val snap = advisorSnapshot(fetch = true)
-    val (digest, imp) = datasetDigest(ds, st, themes = 8, symbols = 12, important = 10)
+    val big = com.enwei.moneymanager.net.GroqAi.bigContext(com.enwei.moneymanager.net.GroqAi.AiTask.CHAT)
+    val (digest, imp) = if (big) datasetDigest(ds, st, themes = 30, symbols = 50, important = 40, full = true)
+    else datasetDigest(ds, st, themes = 8, symbols = 12, important = 10)
     val today = st.report?.let { r -> "今日報告：${r.trend}；推薦 " + r.picks.joinToString("、") { "${it.symbol}${it.name}（${it.style}）" } } ?: ""
     val history = st.chat.takeLast(6).map { it.fromUser to it.text }
     val reply = com.enwei.moneymanager.net.GroqAi.advisorChat(situation(snap) + "\n" + today + "\n" + digest, history, question) ?: return null

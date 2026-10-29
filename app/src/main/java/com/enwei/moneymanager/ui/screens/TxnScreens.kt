@@ -227,7 +227,7 @@ private fun AiSuggestionSection(lk: Lookups) {
     LaunchedEffect(all, settings.aiSuggestions) { unknown = repo.unknownCount() }
     val open = settings.aiSuggestions.filter { !it.rejected }
     val byId = all.associateBy { it.id }
-    val aiOn = settings.aiEnabled && settings.groqKey.isNotBlank()
+    val aiOn = settings.aiEnabled && (settings.groqKey.isNotBlank() || settings.geminiKey.isNotBlank())
     if (!aiOn && open.isEmpty()) return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -282,7 +282,7 @@ private fun DuplicateSection(lk: Lookups) {
     var running by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
     var showLog by remember { mutableStateOf(false) }
-    val aiOn = settings.aiEnabled && settings.groqKey.isNotBlank()
+    val aiOn = settings.aiEnabled && (settings.groqKey.isNotBlank() || settings.geminiKey.isNotBlank())
     LaunchedEffect(all, settings.dupDismissed) { pairs = repo.findDuplicates() }
     // 打開待確認頁時，順便請 AI 整理還沒判斷過的重複
     LaunchedEffect(Unit) { if (aiOn && settings.aiAutoTidy) runCatching { repo.aiAutoTidy() } }

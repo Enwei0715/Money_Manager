@@ -3,14 +3,16 @@ package com.enwei.moneymanager.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -22,87 +24,140 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.net.GroqAi
+import com.enwei.moneymanager.net.GroqAi.AiTask
+import com.enwei.moneymanager.net.GroqAi.Provider
 import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.Text
 import kotlinx.coroutines.launch
 
-/** AI 智慧辨識（Groq）設定：API 金鑰、模型、開關與連線測試。 */
+/** AI 設定：Groq 與 Gemini 兩家的金鑰、模型、用量與測試，以及每項工作交給哪一家。 */
 @Composable
 fun AiSettingsScreen(nav: NavController) {
     val s by repo.settings.flow.collectAsStateWithLifecycle()
-    var key by remember { mutableStateOf(s.groqKey) }
-    var model by remember(s.aiModel) { mutableStateOf(s.aiModel) }
-    var result by remember { mutableStateOf<String?>(null) }
-    var testing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    Scaffold(containerColor = MaterialTheme.colorScheme.surface, topBar = { BackTopBar("AI 智慧辨識", { nav.popBackStack() }) }) { pad ->
+    val today = java.time.LocalDate.now().toEpochDay()
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("AI 智慧辨識", { nav.popBackStack() }) }) { pad ->
         Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("啟用 AI 智慧辨識", fontSize = 17.sp)
-                    Text("判讀通知、整理商家名稱與分類", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SwitchRow("啟用 AI", "判讀通知、整理名稱與分類、檢討與股票分析", s.aiEnabled, s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()) { v ->
+                        repo.settings.update { it.copy(aiEnabled = v) }
+                    }
+                    SwitchRow("AI 自動整理", "自動合併重複記的同一筆；確認 AI 判讀的通知後自動學會格式", s.aiAutoTidy, s.aiEnabled) { v ->
+                        repo.settings.update { it.copy(aiAutoTidy = v) }
+                    }
                 }
-                Switch(s.aiEnabled, { v -> repo.settings.update { it.copy(aiEnabled = v) } }, enabled = s.groqKey.isNotBlank())
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("AI 自動整理", fontSize = 17.sp)
-                    Text(
-                        "自動合併通知與錢包畫面重複記的同一筆；確認 AI 判讀的通知後自動學會格式",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+
+            // Groq
+            ProviderCard(
+                Provider.GROQ, "速度快，適合頻繁的小工作；免費方案每分鐘約 8,000 tokens、每天約 20 萬 tokens",
+                s.groqKey, { k -> repo.settings.update { it.copy(groqKey = k.trim()) } },
+                usage = if (s.aiUsageDay == today) "今天 ${s.aiUsageRequests} 次、${"%,d".format(s.aiUsageTokens)} tokens" else "今天還沒用",
+            ) {
+                ModelField("一般模型", s.aiModel) { v -> repo.settings.update { it.copy(aiModel = v) } }
+                ModelField("進階模型", s.aiModelHard) { v -> repo.settings.update { it.copy(aiModelHard = v) } }
+                ModelField("看圖模型", s.aiModelVision) { v -> repo.settings.update { it.copy(aiModelVision = v) } }
+            }
+
+            // Gemini
+            ProviderCard(
+                Provider.GEMINI, "一次可以讀大量資料（上千則新聞、整期交易、圖片）；免費方案每天請求次數有限，到 aistudio.google.com 申請金鑰",
+                s.geminiKey, { k -> repo.settings.update { it.copy(geminiKey = k.trim()) } },
+                usage = if (s.geminiUsageDay == today) "今天 ${s.geminiUsageRequests} 次、${"%,d".format(s.geminiUsageTokens)} tokens" else "今天還沒用",
+            ) {
+                ModelField("主要模型（報告、檢討、對話、看圖）", s.geminiModel) { v -> repo.settings.update { it.copy(geminiModel = v) } }
+                ModelField("輕量模型（新聞標註、錢包畫面）", s.geminiLiteModel) { v -> repo.settings.update { it.copy(geminiLiteModel = v) } }
+            }
+
+            // 工作分配
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("工作分配", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("某一家額度用完或連不上時，會自動改用另一家。", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    AiTask.entries.forEach { t ->
+                        val want = s.aiRoutes[t.name]?.let { r -> Provider.entries.find { it.name == r } } ?: t.default
+                        val actual = GroqAi.providerFor(t)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(t.label, fontSize = 14.sp)
+                                Text(
+                                    t.desc + if (actual != null && actual != want) "（沒有 ${want.label} 金鑰，改用 ${actual.label}）" else "",
+                                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Provider.entries.forEach { p ->
+                                FilterChip(want == p, { repo.settings.update { it.copy(aiRoutes = it.aiRoutes + (t.name to p.name)) } },
+                                    label = { Text(p.label, fontSize = 12.sp) }, modifier = Modifier.padding(start = 4.dp))
+                            }
+                        }
+                        HorizontalDivider()
+                    }
+                    OutlinedButton(onClick = { repo.settings.update { it.copy(aiRoutes = emptyMap()) } }) { Text("恢復建議分配") }
                 }
-                Switch(s.aiAutoTidy, { v -> repo.settings.update { it.copy(aiAutoTidy = v) } }, enabled = s.aiEnabled)
             }
-            OutlinedTextField(
-                key, { key = it; repo.settings.update { st -> st.copy(groqKey = it.trim()) } },
-                label = { Text("Groq API 金鑰") }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                model, { model = it; repo.settings.update { st -> st.copy(aiModel = it.trim()) } },
-                label = { Text("一般模型") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-            )
-            var hardModel by remember(s.aiModelHard) { mutableStateOf(s.aiModelHard) }
-            OutlinedTextField(
-                hardModel, { hardModel = it; repo.settings.update { st -> st.copy(aiModelHard = it.trim()) } },
-                label = { Text("進階模型（整理不明花費）") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-            )
-            var visionModel by remember(s.aiModelVision) { mutableStateOf(s.aiModelVision) }
-            OutlinedTextField(
-                visionModel, { visionModel = it; repo.settings.update { st -> st.copy(aiModelVision = it.trim()) } },
-                label = { Text("看圖模型（截圖對帳）") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-            )
-            val today = java.time.LocalDate.now().toEpochDay()
+
             Text(
-                "今天已用：${if (s.aiUsageDay == today) s.aiUsageRequests else 0} 次請求、${"%,d".format(if (s.aiUsageDay == today) s.aiUsageTokens else 0L)} tokens",
-                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(enabled = key.isNotBlank() && !testing, onClick = {
-                testing = true; result = null
-                scope.launch {
-                    result = GroqAi.test()?.let { "連線失敗：$it" } ?: "連線成功，可以使用"
-                    testing = false
-                }
-            }) { Text(if (testing) "測試中…" else "測試連線") }
-            result?.let { Text(it, color = if (it.startsWith("連線成功")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) }
-            GroqAi.lastError?.takeIf { result == null }?.let {
-                Text("上次錯誤：$it", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
-            }
-            Spacer(Modifier.padding(4.dp))
-            Text(
-                "只會送出已啟用 App 的通知文字、商家名稱、分類名稱，以及對帳時選的截圖到 Groq 處理；金鑰只存在這支手機。超過免費額度時改用一般規則，不影響記帳。",
-                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "只會送出已啟用 App 的通知文字、商家與分類名稱、檢討時的交易明細、股票分析用的新聞與持股，以及對帳時選的截圖。" +
+                    "金鑰只存在這支手機、不放進備份。Gemini 免費方案可能會用送出的內容改進模型；不想讓交易明細送到 Gemini，可以把「收支檢討」「整理不明花費」改成 Groq。",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
+}
+
+@Composable
+private fun SwitchRow(title: String, desc: String, on: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 16.sp)
+            Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(on, onChange, enabled = enabled)
+    }
+}
+
+@Composable
+private fun ProviderCard(
+    p: Provider, desc: String, key: String, onKey: (String) -> Unit, usage: String, models: @Composable () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var k by remember { mutableStateOf(key) }
+    var result by remember { mutableStateOf<String?>(null) }
+    var testing by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(p.label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(
+                k, { k = it; onKey(it) }, label = { Text("${p.label} API 金鑰") }, singleLine = true,
+                visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(),
+            )
+            models()
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(usage, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                OutlinedButton(enabled = k.isNotBlank() && !testing, onClick = {
+                    testing = true; result = null
+                    scope.launch { result = GroqAi.testProvider(p)?.let { "連線失敗：$it" } ?: "連線成功"; testing = false }
+                }) { Text(if (testing) "測試中…" else "測試連線") }
+            }
+            result?.let { Text(it, fontSize = 13.sp, color = if (it == "連線成功") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) }
+        }
+    }
+}
+
+@Composable
+private fun ModelField(label: String, value: String, onChange: (String) -> Unit) {
+    var v by remember(value) { mutableStateOf(value) }
+    OutlinedTextField(v, { v = it; onChange(it.trim()) }, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth())
 }

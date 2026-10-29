@@ -166,7 +166,7 @@ fun ReviewContent(nav: NavController) {
                         if (GroqAi.enabled) OutlinedButton(enabled = !busy && d.txnCount > 0, onClick = {
                             busy = true; err = null
                             scope.launch {
-                                val (input, list) = d.aiInput(base, settings.txnNecessity)
+                                val (input, list) = d.aiInput(base, settings.txnNecessity, GroqAi.bigContext(GroqAi.AiTask.REVIEW))
                                 val r = GroqAi.review(input, base, list.map { it.id })
                                 if (r != null) repo.settings.update { it.copy(reviews = (it.reviews + (d.key to r)).entries.toList().takeLast(40).associate { e -> e.key to e.value }) }
                                 else err = "AI 連線失敗：${GroqAi.lastError ?: "沒有回應"}"

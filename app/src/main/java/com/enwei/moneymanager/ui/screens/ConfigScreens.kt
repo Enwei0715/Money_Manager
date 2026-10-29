@@ -214,7 +214,7 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("錢包畫面讀取（街口、悠遊付）") { nav.navigate("walletreader") }
 
                 SectionHeader("AI")
-                ConfigRow("AI 智慧辨識（Groq）", onOff(s.aiEnabled && s.groqKey.isNotBlank())) { nav.navigate("ai") }
+                ConfigRow("AI 智慧辨識（Groq／Gemini）", onOff(s.aiEnabled && (s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()))) { nav.navigate("ai") }
 
                 SectionHeader("股票")
                 ConfigRow("手續費與月退") { nav.navigate("stockfees") }

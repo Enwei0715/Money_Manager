@@ -248,10 +248,11 @@ suspend fun Repository.spendingReview(span: ReviewSpan, offset: Int): ReviewData
  * 給 AI 的完整檢討資料：總覽、商家彙總、習慣、深夜消費、去年同期，以及逐筆編號的重點交易
  * （附使用者先前標過的必要性），讓 AI 能針對特定交易提問。回傳文字與編號對應的交易。
  */
-fun ReviewData.aiInput(base: String, necessity: Map<Long, String>): Pair<String, List<TxnEntity>> {
+fun ReviewData.aiInput(base: String, necessity: Map<Long, String>, full: Boolean = false): Pair<String, List<TxnEntity>> {
     fun m(v: Long) = Money.format(v, base)
     val zone = ZoneId.systemDefault()
-    val list = notable()
+    // 讀得下大量資料時（Gemini）送整期每一筆，否則只送重點交易
+    val list = if (full) expenses.takeLast(1500) else notable()
     val text = buildString {
         append(summary(base))
         lastYearExpense?.let { appendLine("去年同期支出 ${m(it)}") }
@@ -263,7 +264,7 @@ fun ReviewData.aiInput(base: String, necessity: Map<Long, String>): Pair<String,
         if (answered.isNotEmpty()) appendLine(
             "使用者已標記：" + Necessity.entries.joinToString("、") { n -> "${n.label} ${answered.count { it.second == n }} 筆 ${m(answered.filter { it.second == n }.sumOf { it.first.amount })}" },
         )
-        appendLine("重點交易（編號｜日期時間｜商家｜分類｜金額｜備註｜使用者標記）：")
+        appendLine((if (full) "本期全部支出" else "重點交易") + "（編號｜日期時間｜商家｜分類｜金額｜備註｜使用者標記）：")
         list.forEachIndexed { i, t ->
             val dt = java.time.Instant.ofEpochMilli(t.date).atZone(zone)
             val tag = necessityOf(necessity[t.id])?.let { (n, note) -> n.label + (note.takeIf { it.isNotBlank() }?.let { "：$it" } ?: "") } ?: ""

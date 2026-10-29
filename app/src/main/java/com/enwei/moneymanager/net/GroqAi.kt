@@ -35,7 +35,39 @@ object GroqAi {
     private val nameCache = ConcurrentHashMap<String, Pair<String?, Long?>>()
 
     val enabled: Boolean
-        get() = MoneyApp.repo.settings.value.let { it.aiEnabled && it.groqKey.isNotBlank() }
+        get() = MoneyApp.repo.settings.value.let { it.aiEnabled && (it.groqKey.isNotBlank() || it.geminiKey.isNotBlank()) }
+
+    enum class Provider(val label: String) { GROQ("Groq"), GEMINI("Gemini") }
+
+    /**
+     * App 裡所有用到 AI 的工作與預設分配：頻繁、小量、要快的交給 Groq；
+     * 要一次讀大量資料（新聞、整期交易、圖片）的交給 Gemini。[lite] 為用較輕量的模型即可。
+     */
+    enum class AiTask(val label: String, val desc: String, val default: Provider, val lite: Boolean) {
+        NOTIFY("通知判讀", "規則看不懂的銀行／支付通知", Provider.GROQ, true),
+        NAMING("商家命名與分類", "代碼商家換成好讀名稱、挑分類", Provider.GROQ, true),
+        TEACH("教它辨識", "先幫你判斷通知的類型與帳戶", Provider.GROQ, true),
+        DUPLICATE("重複交易判斷", "通知、錢包、手動重複記的同一筆", Provider.GROQ, true),
+        COMPANY("公司說明", "股票資訊頁的公司業務", Provider.GROQ, true),
+        WALLET("錢包畫面整理", "版面規則看不懂的交易紀錄畫面", Provider.GEMINI, true),
+        NEWS_TAG("新聞標註", "每則新聞的相關個股、題材、多空、重要性", Provider.GEMINI, true),
+        UNKNOWN("整理不明花費", "依習慣推測不明交易的分類", Provider.GEMINI, false),
+        VISION("截圖對帳", "看銀行畫面找餘額", Provider.GEMINI, false),
+        REVIEW("收支檢討", "逐筆讀整期交易、分析與提問", Provider.GEMINI, false),
+        REPORT("每日投資報告", "讀整個新聞資料集產生報告", Provider.GEMINI, false),
+        CHAT("問 AI（股票）", "對話時讀資料集與你的狀況", Provider.GEMINI, false),
+    }
+
+    /** 這項工作實際會用哪一家：照設定，沒有那家的金鑰時改用另一家。 */
+    fun providerFor(task: AiTask): Provider? {
+        val s = MoneyApp.repo.settings.value
+        val want = s.aiRoutes[task.name]?.let { r -> Provider.entries.find { it.name == r } } ?: task.default
+        val has = { p: Provider -> if (p == Provider.GROQ) s.groqKey.isNotBlank() else s.geminiKey.isNotBlank() }
+        return if (has(want)) want else Provider.entries.firstOrNull(has)
+    }
+
+    /** 這項工作會用 Gemini（可以一次送大量資料）。 */
+    fun bigContext(task: AiTask) = providerFor(task) == Provider.GEMINI
 
     /** 預設模型。llama-3.1-8b-instant 已於 2026/8/16 停止提供給免費與開發者方案。 */
     const val DEFAULT_MODEL = "openai/gpt-oss-20b"
@@ -53,29 +85,132 @@ object GroqAi {
         system: String, user: String, maxTokens: Int = 200, hard: Boolean = false,
         /** 回覆（含推理）的 token 上限；免費方案每分鐘上限約 8,000，輸入加回覆不能超過 */
         cap: Int = 6000, effort: String = "medium",
+        task: AiTask = AiTask.NAMING,
     ): JsonObject? = withContext(Dispatchers.IO) {
         val s = MoneyApp.repo.settings.value
-        if (s.groqKey.isBlank()) return@withContext null
+        val first = providerFor(task) ?: return@withContext null
+        // 先用分配的那家，失敗（額度用完、連不上）再改用另一家；Groq 一次能送的量較小，只送前段
+        for (p in listOf(first) + Provider.entries.filter { it != first }) {
+            val r = when (p) {
+                Provider.GEMINI -> if (s.geminiKey.isBlank()) null
+                else callGemini(s.geminiKey.trim(), if (task.lite) s.geminiLiteModel.trim().ifBlank { "gemini-flash-lite-latest" } else s.geminiModel.trim().ifBlank { "gemini-flash-latest" },
+                    // Gemini 的思考也算在輸出長度裡：讀大量資料的工作多留空間
+                    system, user, maxOf(2048, maxTokens * 4).let { if (task.lite) it else maxOf(it, 12_000) })
+                Provider.GROQ -> if (s.groqKey.isBlank()) null
+                else groqJson(s, system, if (p == first) user else user.take(6000), maxTokens, hard || !task.lite, cap, effort)
+            }
+            if (r != null) return@withContext r
+        }
+        null
+    }
+
+    private fun groqJson(
+        s: com.enwei.moneymanager.data.AppSettings, system: String, userIn: String, maxTokens: Int, hard: Boolean, cap: Int, effort: String,
+    ): JsonObject? {
+        // Groq 每分鐘約 8,000 tokens：輸入過長時截短（中文約一字一 token）
+        val reserve = minOf(cap, maxOf(if (hard) 4096 else 1024, maxTokens * 4))
+        val user = userIn.take(maxOf(800, 7600 - reserve - system.length))
         // 難題先用大模型（推理強度中等）；大模型不能用或超過額度時改用一般模型
         if (hard) {
             val big = s.aiModelHard.trim().ifBlank { HARD_MODEL }
             val (r, _) = call(s.groqKey.trim(), big, true, system, user, maxTokens, effort = effort, cap = cap)
-            if (r != null) return@withContext r
+            if (r != null) return r
         }
         var model = s.aiModel.trim().ifBlank { DEFAULT_MODEL }.let { if (it in RETIRED_MODELS) DEFAULT_MODEL else it }
         var jsonMode = true
         repeat(3) {
             val (result, fail) = call(s.groqKey.trim(), model, jsonMode, system, user, maxTokens, cap = cap)
             when (fail) {
-                Fail.NONE -> return@withContext result
+                Fail.NONE -> return result
                 Fail.MODEL_GONE -> if (model != DEFAULT_MODEL) {
                     model = DEFAULT_MODEL
                     MoneyApp.repo.settings.update { it.copy(aiModel = DEFAULT_MODEL) }
-                } else return@withContext null
-                Fail.NO_JSON_MODE -> if (jsonMode) jsonMode = false else return@withContext null
+                } else return null
+                Fail.NO_JSON_MODE -> if (jsonMode) jsonMode = false else return null
             }
         }
-        null
+        return null
+    }
+
+    /** AI 呼叫可能要讀大量資料，等久一點。 */
+    private val aiClient by lazy { Http.client.newBuilder().readTimeout(150, java.util.concurrent.TimeUnit.SECONDS).build() }
+
+    /**
+     * Google Gemini（generateContent，JSON 模式）。可附一張 JPEG（base64）。失敗回傳 null 並記下原因。
+     */
+    private fun callGemini(key: String, model: String, system: String, user: String, maxOut: Int, imageB64: String? = null): JsonObject? {
+        val body = buildJsonObject {
+            put("systemInstruction", buildJsonObject { put("parts", buildJsonArray { add(buildJsonObject { put("text", system) }) }) })
+            put("contents", buildJsonArray {
+                add(buildJsonObject {
+                    put("role", "user")
+                    put("parts", buildJsonArray {
+                        add(buildJsonObject { put("text", user) })
+                        if (imageB64 != null) add(buildJsonObject {
+                            put("inlineData", buildJsonObject { put("mimeType", "image/jpeg"); put("data", imageB64) })
+                        })
+                    })
+                })
+            })
+            put("generationConfig", buildJsonObject {
+                put("responseMimeType", "application/json")
+                put("temperature", 0.2)
+                put("maxOutputTokens", minOf(maxOut, 16384))
+            })
+        }.toString()
+        val req = Request.Builder().url("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
+            .header("x-goog-api-key", key)
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        return runCatching {
+            aiClient.newCall(req).execute().use { resp ->
+                val text = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) {
+                    lastError = when (resp.code) {
+                        400 -> if (text.contains("API_KEY") || text.contains("API key")) "Gemini 金鑰無效" else "Gemini 請求錯誤：${text.take(140)}"
+                        401, 403 -> "Gemini 金鑰無效或沒有權限（${resp.code}）"
+                        404 -> "Gemini 模型「$model」無法使用（404）"
+                        429 -> "超過 Gemini 的免費額度（429），改用 Groq"
+                        else -> "Gemini HTTP ${resp.code}：${text.take(140)}"
+                    }
+                    return@use null
+                }
+                val root = Http.json.parseToJsonElement(text).jsonObject
+                val usage = (root["usageMetadata"] as? JsonObject)?.get("totalTokenCount")?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0
+                recordGeminiUsage(usage)
+                val parts = ((root["candidates"] as? kotlinx.serialization.json.JsonArray)?.firstOrNull() as? JsonObject)
+                    ?.get("content")?.let { it as? JsonObject }?.get("parts") as? kotlinx.serialization.json.JsonArray
+                val content = parts?.mapNotNull { p ->
+                    val o = p as? JsonObject ?: return@mapNotNull null
+                    if ((o["thought"] as? JsonPrimitive)?.contentOrNull == "true") null else (o["text"] as? JsonPrimitive)?.contentOrNull
+                }?.joinToString("")
+                if (content.isNullOrBlank()) { lastError = "Gemini 沒有回覆內容（可能被安全過濾或長度不足）"; return@use null }
+                val a = content.indexOf('{'); val b = content.lastIndexOf('}')
+                if (a < 0 || b <= a) { lastError = "Gemini 回覆不是 JSON"; return@use null }
+                lastError = null
+                Http.json.parseToJsonElement(content.substring(a, b + 1)).jsonObject
+            }
+        }.getOrElse { lastError = "Gemini：" + (it.message ?: it.javaClass.simpleName); null }
+    }
+
+    private fun recordGeminiUsage(tokens: Long) {
+        val today = java.time.LocalDate.now().toEpochDay()
+        MoneyApp.repo.settings.update { s ->
+            if (s.geminiUsageDay != today) s.copy(geminiUsageDay = today, geminiUsageRequests = 1, geminiUsageTokens = tokens)
+            else s.copy(geminiUsageRequests = s.geminiUsageRequests + 1, geminiUsageTokens = s.geminiUsageTokens + tokens)
+        }
+    }
+
+    /** 設定頁：分別測試兩家的連線。回傳 null 表示成功。 */
+    suspend fun testProvider(p: Provider): String? = withContext(Dispatchers.IO) {
+        val s = MoneyApp.repo.settings.value
+        val r = when (p) {
+            Provider.GROQ -> if (s.groqKey.isBlank()) return@withContext "還沒填 Groq 金鑰"
+            else groqJson(s, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 20, false, 6000, "low")
+            Provider.GEMINI -> if (s.geminiKey.isBlank()) return@withContext "還沒填 Gemini 金鑰"
+            else callGemini(s.geminiKey.trim(), s.geminiLiteModel.trim().ifBlank { "gemini-flash-lite-latest" }, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 256)
+        }
+        if (r != null) null else lastError ?: "沒有回應"
     }
 
     private fun call(
@@ -161,8 +296,15 @@ object GroqAi {
             val system = "你是記帳 App 的助理。看這張銀行或錢包 App 的畫面，找出帳戶「$accountName」目前的餘額（優先：可用餘額、帳戶餘額）。" +
                 "交易金額、額度、帳號、日期都不是餘額。只回 JSON：{\"balance\": number|null}"
             val model = s.aiModelVision.trim().ifBlank { VISION_MODEL }
-            var (r, fail) = call(s.groqKey.trim(), model, true, system, "找出餘額", 300, imageDataUrl = dataUrl)
-            if (r == null && fail == Fail.NO_JSON_MODE) r = call(s.groqKey.trim(), model, false, system, "找出餘額", 300, imageDataUrl = dataUrl).first
+            fun groq(): JsonObject? {
+                if (s.groqKey.isBlank()) return null
+                var (r, fail) = call(s.groqKey.trim(), model, true, system, "找出餘額", 300, imageDataUrl = dataUrl)
+                if (r == null && fail == Fail.NO_JSON_MODE) r = call(s.groqKey.trim(), model, false, system, "找出餘額", 300, imageDataUrl = dataUrl).first
+                return r
+            }
+            fun gemini(): JsonObject? = if (s.geminiKey.isBlank()) null
+            else callGemini(s.geminiKey.trim(), s.geminiModel.trim().ifBlank { "gemini-flash-latest" }, system, "找出餘額", 2048, dataUrl.substringAfter(","))
+            val r = if (providerFor(AiTask.VISION) == Provider.GEMINI) gemini() ?: groq() else groq() ?: gemini()
             val v = r?.str("balance")?.replace(",", "")?.toDoubleOrNull() ?: return@withContext null
             val minor = Math.round(v * 100)
             minor.takeIf { ocrAmounts.isEmpty() || it in ocrAmounts || -it in ocrAmounts }
@@ -212,7 +354,7 @@ object GroqAi {
         if (seen.isEmpty()) return null
         val system = "你是記帳 App 的助理。以下是銀行或錢包 App 畫面的文字（由上到下）。找出帳戶「$accountName」目前的餘額" +
             "（優先：可用餘額、帳戶餘額）。不是餘額的數字（交易金額、額度、帳號、日期）不要選。只回 JSON：{\"balance\": number|null}。"
-        val r = chatJson(system, lines.joinToString("\n").take(1500), 40) ?: return null
+        val r = chatJson(system, lines.joinToString("\n").take(3000), 40, task = AiTask.VISION) ?: return null
         val v = r.str("balance")?.replace(",", "")?.toDoubleOrNull() ?: return null
         return Math.round(v * 100).takeIf { it in seen || -it in seen }
     }
@@ -225,7 +367,7 @@ object GroqAi {
             "理由 15 字以內。只回 JSON：{\"results\": [{\"id\": string, \"same\": boolean, \"name\": string|null, \"category_id\": number|null, \"reason\": string}]}"
         val user = "分類清單（id: 名稱）：\n" + categories.joinToString("\n") { "${it.first}: ${it.second}" } +
             "\n\n" + items.joinToString("\n") { "[${it.first}] ${it.second}" }
-        val r = chatJson(system, user, 80 + 60 * items.size) ?: return emptyMap()
+        val r = chatJson(system, user, 80 + 60 * items.size, task = AiTask.DUPLICATE) ?: return emptyMap()
         val arr = r["results"] as? kotlinx.serialization.json.JsonArray ?: return emptyMap()
         val valid = categories.map { it.first }.toSet()
         return arr.mapNotNull { e ->
@@ -253,7 +395,7 @@ object GroqAi {
             "理由用繁體中文 15 字以內。只回 JSON：{\"results\": [{\"id\": number, \"category_id\": number|null, \"reason\": string}]}"
         val user = "分類清單（id: 名稱）：\n" + categories.joinToString("\n") { "${it.first}: ${it.second}" } +
             "\n\n交易：\n" + items.joinToString("\n") { "[${it.id}] ${it.desc}｜類似情境常用：${it.hints.ifBlank { "無" }}" }
-        val r = chatJson(system, user, 60 + 50 * items.size, hard = true) ?: return emptyMap()
+        val r = chatJson(system, user, 60 + 50 * items.size, hard = true, task = AiTask.UNKNOWN) ?: return emptyMap()
         val arr = r["results"] as? kotlinx.serialization.json.JsonArray ?: return emptyMap()
         val valid = categories.map { it.first }.toSet()
         return arr.mapNotNull { e ->
@@ -275,7 +417,7 @@ object GroqAi {
             "{\"is_transaction\": boolean, \"type\": \"expense\"|\"income\"|\"transfer_out\"|\"transfer_in\", " +
             "\"amount\": number, \"currency\": \"TWD\"等三碼代碼, \"merchant\": string|null, \"datetime\": \"yyyy-MM-dd HH:mm\"|null}。" +
             "轉出到別的帳戶用 transfer_out，從別的帳戶轉入用 transfer_in。今天是 ${now.toLocalDate()}。"
-        val r = chatJson(system, full) ?: return null
+        val r = chatJson(system, full, task = AiTask.NOTIFY) ?: return null
         if (r.str("is_transaction") != "true") return null
         val amount = r.str("amount")?.replace(",", "")?.toDoubleOrNull()?.takeIf { it > 0 && it < 1e9 } ?: return null
         val (type, kind) = when (r.str("type")) {
@@ -303,7 +445,7 @@ object GroqAi {
             "轉帳時若看得出另一端是清單裡的哪個帳戶也一併挑出。理由 20 字以內。只回 JSON：" +
             "{\"type\": \"expense\"|\"income\"|\"transfer_out\"|\"transfer_in\", \"account_id\": number|null, \"other_account_id\": number|null, \"reason\": string}"
         val user = "帳戶清單（id: 名稱｜類型｜說明）：\n" + accounts.joinToString("\n") { "${it.first}: ${it.second}" } + "\n\n通知：\n$full"
-        val r = chatJson(system, user, 160) ?: return null
+        val r = chatJson(system, user, 160, task = AiTask.TEACH) ?: return null
         val ids = accounts.map { it.first }.toSet()
         val mode = when (r.str("type")) { "income" -> 1; "transfer_out" -> 2; "transfer_in" -> 3; else -> 0 }
         return TeachHint(
@@ -325,7 +467,7 @@ object GroqAi {
         val system = "你是台灣記帳 App 的助理。以下是電子錢包 App「交易紀錄」畫面依順序讀到的文字。整理出畫面上每一筆已完成的交易；" +
             "沒有交易紀錄（例如首頁、設定頁、廣告）就回空陣列。儲值、加值算 income 並把 label 設為「儲值」。年份沒寫時依今天推斷（今天是 $today），不可晚於今天。" +
             "只回 JSON：{\"records\": [{\"date\": \"yyyy-MM-dd\", \"time\": \"HH:mm\"|null, \"merchant\": string|null, \"amount\": number, \"income\": boolean, \"label\": string|null}]}"
-        val r = chatJson(system, body, 900) ?: return emptyList()
+        val r = chatJson(system, body, 900, task = AiTask.WALLET) ?: return emptyList()
         val arr = r["records"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
         return arr.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
@@ -355,7 +497,7 @@ object GroqAi {
             "\"questions\": [{\"t\": [交易編號], \"q\": 對這筆的疑問（30 字內）, \"why\": 為什麼這樣問（25 字內）}], " +
             "\"actions\": [{\"action\": 25 字內具體行動, \"saving\": 每月可省金額整數或 null}]（3 點）, " +
             "\"expense_cap\": 下期支出上限整數, \"savings_target\": 下期儲蓄率數字, \"goals\": [1～3 項]}"
-        val r = chatJson(system, input.take(3800), 1100, hard = true, cap = 4000, effort = "low") ?: return null
+        val r = chatJson(system, input, 1500, hard = true, cap = 4000, effort = "low", task = AiTask.REVIEW) ?: return null
         fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(100) }.orEmpty()
         fun objs(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
         val actions = objs("actions").mapNotNull { o ->
@@ -395,7 +537,7 @@ object GroqAi {
             "\"holdings\": [{\"symbol\": 代號, \"action\": 動作, \"stop\": 停損價數字或 null, \"reason\": 30 字內}], " +
             "\"ideas\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\", \"reason\": 40 字內, \"entry\": 進場條件, \"stop\": 停損條件}], " +
             "\"allocation\": 資金建議 80 字內, \"checklist\": [交易前檢查 3-5 項], \"warnings\": [依紀律的提醒 1-3 項]}"
-        val r = chatJson(system, user.take(4500), 1000, hard = true) ?: return null
+        val r = chatJson(system, user, 1000, hard = true, task = AiTask.REPORT) ?: return null
         fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(120) }.orEmpty()
         fun objs(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
         val sym = Regex("[0-9]{4,6}[A-Z]?")
@@ -433,7 +575,7 @@ object GroqAi {
             "重要性 p（1～5，5 是會影響大盤或主流題材的重大消息，一般個股新聞 2～3，業配與無關新聞 1）；p 為 4 以上時用 n 寫 20 字內重點。" +
             "只回 JSON：{\"r\": [{\"i\": 編號, \"s\": [代號], \"t\": 題材, \"m\": 數字, \"p\": 數字, \"n\": 字串或空}]}"
         val user = items.mapIndexed { i, it -> "$i. ${it.second.take(70)}" }.joinToString("\n")
-        val r = chatJson(system, user, 1100) ?: return null
+        val r = chatJson(system, user, 25 * items.size + 200, task = AiTask.NEWS_TAG) ?: return null
         val arr = r["r"] as? kotlinx.serialization.json.JsonArray ?: return null
         val code = Regex("^[0-9]{4,6}[A-Z]?$")
         return arr.mapNotNull { e ->
@@ -475,7 +617,7 @@ object GroqAi {
             "\"reason\": 50 字內, \"entry\": 進場條件, \"stop\": 停損條件, \"amount\": 建議投入元}], " +
             "\"holdings\": [{\"symbol\": 代號, \"action\": 動作, \"stop\": 數字或 null, \"reason\": 30 字內}], " +
             "\"news\": [{\"n\": 新聞編號, \"why\": 30 字內}], \"allocation\": 80 字內, \"checklist\": [3～5 項], \"warnings\": [1～3 項]}"
-        val r = chatJson(system, user.take(3500), 1200, hard = true, cap = 3800, effort = "low") ?: return null
+        val r = chatJson(system, user, 2000, hard = true, cap = 3800, effort = "low", task = AiTask.REPORT) ?: return null
         fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(120) }.orEmpty()
         fun objs(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
         val sym = Regex("[0-9]{4,6}[A-Z]?")
@@ -498,9 +640,9 @@ object GroqAi {
         if (!enabled) return null
         val system = ADVISOR_ROLE + "以下是資料與使用者狀況，請回答他的問題，口吻簡潔直接，300 字內。提到具體股票時放進 cards；引用新聞時放新聞編號。" +
             "只回 JSON：{\"reply\": 回答, \"cards\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\"或空, \"business\": 公司做什麼, \"strength\": 強勢/中性/弱勢, \"reason\": 40 字內}], \"news\": [編號]}\n\n" +
-            context.take(2500)
+            context.take(if (bigContext(AiTask.CHAT)) 80_000 else 2500)
         val convo = history.takeLast(6).joinToString("\n") { (u, t) -> (if (u) "使用者：" else "助理：") + t.take(300) }
-        val r = chatJson(system, (if (convo.isNotBlank()) "先前對話：\n$convo\n\n" else "") + "問題：$question", 900, hard = true, cap = 3000, effort = "low") ?: return null
+        val r = chatJson(system, (if (convo.isNotBlank()) "先前對話：\n$convo\n\n" else "") + "問題：$question", 1200, hard = true, cap = 3000, effort = "low", task = AiTask.CHAT) ?: return null
         val sym = Regex("[0-9]{4,6}[A-Z]?")
         val cards = (r["cards"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonObject)?.let { o -> parsePick(o, sym) } }.orEmpty().take(5)
         val news = (r["news"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt()?.toString() }.orEmpty()
@@ -512,7 +654,7 @@ object GroqAi {
         if (!enabled) return null
         val r = chatJson(
             "你是台股資料助理。用繁體中文 40 字內說明這家台灣上市櫃公司的主要業務、產品與所屬產業；不知道就回空字串。只回 JSON：{\"d\": 說明}",
-            "$symbol $name", 200,
+            "$symbol $name", 200, task = AiTask.COMPANY,
         ) ?: return null
         return r.str("d")?.take(80)
     }

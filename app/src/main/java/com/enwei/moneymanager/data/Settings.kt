@@ -254,6 +254,15 @@ data class AppSettings(
     val typhoonDays: String = "",
     /** Groq API 金鑰（憑證，不放進備份檔） */
     val groqKey: String = "",
+    /** Google Gemini（AI Studio）金鑰：讀大量資料的工作用 */
+    val geminiKey: String = "",
+    val geminiModel: String = "gemini-flash-latest",
+    val geminiLiteModel: String = "gemini-flash-lite-latest",
+    /** AI 工作分配：工作名稱 → GROQ／GEMINI（沒設定時用預設） */
+    val aiRoutes: Map<String, String> = emptyMap(),
+    val geminiUsageDay: Long = 0,
+    val geminiUsageRequests: Int = 0,
+    val geminiUsageTokens: Long = 0,
     /** AI 智慧辨識：規則判斷不出來時用 AI 判讀通知、命名商家、挑分類 */
     val aiEnabled: Boolean = false,
     val aiModel: String = "openai/gpt-oss-20b",
@@ -372,6 +381,13 @@ class SettingsStore(context: Context) {
         holidayCache = prefs.getString("holidayCache", "")!!,
         typhoonDays = prefs.getString("typhoonDays", "")!!,
         groqKey = prefs.getString("groqKey", "")!!,
+        geminiKey = prefs.getString("geminiKey", "")!!,
+        geminiModel = prefs.getString("geminiModel", "gemini-flash-latest")!!,
+        geminiLiteModel = prefs.getString("geminiLiteModel", "gemini-flash-lite-latest")!!,
+        aiRoutes = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("aiRoutes", "{}")!!) }.getOrDefault(emptyMap()),
+        geminiUsageDay = prefs.getLong("geminiUsageDay", 0),
+        geminiUsageRequests = prefs.getInt("geminiUsageRequests", 0),
+        geminiUsageTokens = prefs.getLong("geminiUsageTokens", 0),
         aiEnabled = prefs.getBoolean("aiEnabled", false),
         // llama-3.1-8b-instant 已停止提供給免費方案，舊設定自動換成新的預設模型
         aiModel = prefs.getString("aiModel", "openai/gpt-oss-20b")!!.let { if (it == "llama-3.1-8b-instant") "openai/gpt-oss-20b" else it },
@@ -406,7 +422,7 @@ class SettingsStore(context: Context) {
     @Synchronized
     /** 匯出所有設定（完整備份用）；GitHub Token 屬於憑證，不放進備份檔。 */
     fun exportRaw(): Map<String, kotlinx.serialization.json.JsonElement> = prefs.all.filterKeys {
-        it !in setOf("githubToken", "groqKey", "autoBackupUri", "lastAutoBackup", "lastAutoBackupError")
+        it !in setOf("githubToken", "groqKey", "geminiKey", "autoBackupUri", "lastAutoBackup", "lastAutoBackupError")
     }.mapNotNull { (k, v) ->
         val e: kotlinx.serialization.json.JsonElement = when (v) {
             is Boolean -> kotlinx.serialization.json.buildJsonObject { put("t", "b"); put("v", v) }
@@ -427,6 +443,7 @@ class SettingsStore(context: Context) {
     fun importRaw(map: Map<String, kotlinx.serialization.json.JsonElement>) {
         val token = prefs.getString("githubToken", "")
         val groq = prefs.getString("groqKey", "")
+        val gemini = prefs.getString("geminiKey", "")
         val keepUri = prefs.getString("autoBackupUri", "")
         val ed = prefs.edit().clear()
         map.forEach { (k, e) ->
@@ -443,7 +460,7 @@ class SettingsStore(context: Context) {
                 "ss" -> (v as? kotlinx.serialization.json.JsonArray)?.let { arr -> ed.putStringSet(k, arr.map { (it as kotlinx.serialization.json.JsonPrimitive).content }.toSet()) }
             }
         }
-        ed.putString("githubToken", token).putString("groqKey", groq).putString("autoBackupUri", keepUri).commit()
+        ed.putString("githubToken", token).putString("groqKey", groq).putString("geminiKey", gemini).putString("autoBackupUri", keepUri).commit()
         state.value = read()
     }
 
@@ -513,6 +530,13 @@ class SettingsStore(context: Context) {
             .putString("holidayCache", s.holidayCache)
             .putString("typhoonDays", s.typhoonDays)
             .putString("groqKey", s.groqKey)
+            .putString("geminiKey", s.geminiKey)
+            .putString("geminiModel", s.geminiModel)
+            .putString("geminiLiteModel", s.geminiLiteModel)
+            .putString("aiRoutes", json.encodeToString(strMapSerializer, s.aiRoutes))
+            .putLong("geminiUsageDay", s.geminiUsageDay)
+            .putInt("geminiUsageRequests", s.geminiUsageRequests)
+            .putLong("geminiUsageTokens", s.geminiUsageTokens)
             .putBoolean("aiEnabled", s.aiEnabled)
             .putString("aiModel", s.aiModel)
             .putString("fundingWarnKey", s.fundingWarnKey)
