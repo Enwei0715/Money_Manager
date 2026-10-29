@@ -232,6 +232,7 @@ private fun Repository.situation(snap: AdvisorSnapshot): String {
                     "${h.gainPct?.let { "%+.1f".format(it) } ?: "?"}｜" + (h.advice?.let { "${it.action}，停損 ${"%.2f".format(it.stop)}" } ?: "?"),
             )
         }
+        if (s.watchlist.isNotEmpty()) appendLine("觀察清單（使用者想留意、還沒買的）：" + s.watchlist.joinToString("、"))
         if (s.investPlan.guardOn) {
             appendLine("保本＋移動停利（App 依紀律算好的，請以此為準給建議）：")
             snap.holdings.forEach { h ->
@@ -294,7 +295,9 @@ suspend fun Repository.refreshNews(
 ): Int {
     val holdings = holdingsByBroker.first().values.flatten().filter { it.market == Market.TW && it.shares > 0.0001 }
     val watch = ds.load().report?.picks.orEmpty().map { "${it.symbol} ${it.name}" }
-    val extra = (holdings.map { "${it.symbol} ${it.name.orEmpty()}".trim() } + watch).distinct().take(15)
+    // 持股、觀察清單、報告推薦的個股都另外查新聞
+    val watched = settings.value.watchlist
+    val extra = (holdings.map { "${it.symbol} ${it.name.orEmpty()}".trim() } + watched + watch).distinct().take(25)
     onStep("蒐集新聞…")
     val added = ds.collect(extra)
     if (com.enwei.moneymanager.net.GroqAi.enabled) {
@@ -338,7 +341,8 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
 /** 投資助理對話：帶入使用者狀況與資料集摘要，回覆可附股票卡片與新聞。 */
 suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
     val st = ds.load()
-    ds.update { it.copy(chat = (it.chat + ChatMsg(true, question)).takeLast(40)) }
+    // 重試同一個問題時不重複加進對話
+    ds.update { st -> if (st.chat.lastOrNull()?.let { it.fromUser && it.text == question } == true) st else st.copy(chat = (st.chat + ChatMsg(true, question)).takeLast(40)) }
     val snap = advisorSnapshot(fetch = true)
     val big = com.enwei.moneymanager.net.GroqAi.bigContext(com.enwei.moneymanager.net.GroqAi.AiTask.CHAT)
     val (digest, imp) = if (big) datasetDigest(ds, st, themes = 30, symbols = 50, important = 40, full = true)

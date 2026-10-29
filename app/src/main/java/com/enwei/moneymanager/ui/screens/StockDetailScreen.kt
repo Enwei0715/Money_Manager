@@ -2,10 +2,13 @@ package com.enwei.moneymanager.ui.screens
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -75,6 +78,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     var count by remember { mutableStateOf(120f) }
     var back by remember { mutableStateOf(0f) }
     var mas by remember { mutableStateOf(setOf(5, 20, 72)) }
+    var picked by remember(hourly) { mutableStateOf<Int?>(null) }
     var business by remember { mutableStateOf<String?>(null) }
     var news by remember { mutableStateOf<List<NewsItem>>(emptyList()) }
     var divs by remember { mutableStateOf<List<com.enwei.moneymanager.core.DividendEvent>>(emptyList()) }
@@ -93,8 +97,37 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     }
     val held = holdings.values.flatten().filter { it.market == Market.TW && it.symbol == symbol && it.shares > 0.0001 }
     val name = held.firstNotNullOfOrNull { it.name } ?: bars?.name
+    // K 線上的參考線：均價、停利價、減碼價、提醒的目標價與停損價
+    val levels = buildList {
+        if (held.isNotEmpty()) {
+            val sh = held.sumOf { it.shares }
+            add(Triple(held.sumOf { it.avgCost * it.shares } / sh, Color(0xFF607D8B), "均價"))
+        }
+        settings.investPlan.guards[symbol]?.let { g ->
+            g.takeProfit?.let { add(Triple(it, Color(0xFFE53935), "停利")) }
+            g.reduceAt?.let { add(Triple(it, Color(0xFFFB8C00), "減碼")) }
+        }
+        settings.priceAlerts[symbol]?.let { a ->
+            a.target?.let { add(Triple(it, Color(0xFF8E24AA), "目標")) }
+            a.stop?.let { add(Triple(it, Color(0xFF43A047), "停損")) }
+        }
+    }
 
-    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("$symbol ${name.orEmpty()}", { nav.popBackStack() }) }) { pad ->
+    val watched = symbol in settings.watchlist
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
+        BackTopBar("$symbol ${name.orEmpty()}", { nav.popBackStack() }) {
+            // ☆ 加入／移出觀察清單（沒持有也能在股票頁看報價）
+            androidx.compose.material3.IconButton(onClick = {
+                repo.settings.update { it.copy(watchlist = if (watched) it.watchlist - symbol else (it.watchlist + symbol).distinct()) }
+            }) {
+                androidx.compose.material3.Icon(
+                    if (watched) androidx.compose.material.icons.Icons.Filled.Star else androidx.compose.material.icons.Icons.Outlined.StarBorder,
+                    if (watched) "移出觀察清單" else "加入觀察清單",
+                    tint = if (watched) Color(0xFFFFA000) else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             val b = bars
@@ -144,9 +177,26 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             val total = kb.close.size
                             val n = count.toInt().coerceIn(minOf(10, total), total)
                             val from = (total - n - back.toInt()).coerceIn(0, total - n)
+                            // 點一下 K 棒看當天的開高低收與量
+                            val sel = picked?.takeIf { it in from until from + n }
+                            if (sel != null) {
+                                val dd = java.time.LocalDate.ofEpochDay(kb.days[sel])
+                                val chg = if (sel > 0) (kb.close[sel] / kb.close[sel - 1] - 1) * 100 else null
+                                Text(
+                                    "${dd.monthValue}/${dd.dayOfMonth}　開 ${"%.2f".format(kb.open[sel])}　高 ${"%.2f".format(kb.high[sel])}　低 ${"%.2f".format(kb.low[sel])}　收 ${"%.2f".format(kb.close[sel])}" +
+                                        (chg?.let { "（${"%+.2f".format(it)}%）" } ?: "") + (kb.volume.getOrNull(sel)?.let { "　量 ${"%,.0f".format(it / 1000)} 張" } ?: ""),
+                                    fontSize = 12.sp, color = if ((chg ?: 0.0) >= 0) StockUp else StockDown, modifier = Modifier.padding(top = 6.dp),
+                                )
+                            }
                             CandleChart(kb, from, n, showBB, mas.sorted(),
                                 onZoom = { z -> count = (count / z).coerceIn(10f, total.toFloat()); back = back.coerceIn(0f, (total - count).coerceAtLeast(0f)) },
                                 onPan = { bars -> back = (back + bars).coerceIn(0f, (total - count).coerceAtLeast(0f)) },
+                                levels = levels.map { it.first to it.second }, selected = sel,
+                                onTap = { f -> val j = from + (f * n).toInt().coerceIn(0, n - 1); picked = if (picked == j) null else j },
+                            )
+                            if (levels.isNotEmpty()) Text(
+                                levels.joinToString("　") { "┄ ${it.third} ${"%.2f".format(it.first)}" }, fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             fun d(i: Int) = java.time.LocalDate.ofEpochDay(kb.days[i]).let { "${it.monthValue}/${it.dayOfMonth}" }
                             Text("${d(from)} – ${d(from + n - 1)}　雙指縮放、左右拖曳看更早的 K 棒", fontSize = 11.sp,
@@ -333,7 +383,10 @@ private fun maColor(len: Int): Color = when (len) {
  * 雙指縮放改變根數（[onZoom] 傳縮放倍率），單指左右拖曳往回看（[onPan] 傳移動的根數，正數為往過去）。
  */
 @Composable
-private fun CandleChart(b: DailyBars, from: Int, n: Int, showBB: Boolean, mas: List<Int>, onZoom: (Float) -> Unit, onPan: (Float) -> Unit) {
+private fun CandleChart(
+    b: DailyBars, from: Int, n: Int, showBB: Boolean, mas: List<Int>, onZoom: (Float) -> Unit, onPan: (Float) -> Unit,
+    levels: List<Pair<Double, Color>> = emptyList(), selected: Int? = null, onTap: (Float) -> Unit = {},
+) {
     val bb = remember(System.identityHashCode(b)) { Technicals.bollinger(b.close) }
     val maSeries = remember(System.identityHashCode(b), mas) { mas.associateWith { len -> b.close.indices.map { i -> Technicals.sma(b.close, len, i + 1) } } }
     val up = StockUp
@@ -342,6 +395,7 @@ private fun CandleChart(b: DailyBars, from: Int, n: Int, showBB: Boolean, mas: L
     val zoom by androidx.compose.runtime.rememberUpdatedState(onZoom)
     val pan by androidx.compose.runtime.rememberUpdatedState(onPan)
     val nNow by androidx.compose.runtime.rememberUpdatedState(n)
+    val tap by androidx.compose.runtime.rememberUpdatedState(onTap)
     Canvas(
         Modifier.fillMaxWidth().height(260.dp).padding(top = 8.dp)
             // 兩指才算縮放，單指上下滑仍可捲動頁面
@@ -358,6 +412,7 @@ private fun CandleChart(b: DailyBars, from: Int, n: Int, showBB: Boolean, mas: L
                     } while (e.changes.any { it.pressed })
                 }
             }
+            .pointerInput(Unit) { detectTapGestures { o -> tap(o.x / size.width) } }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures { change, dx ->
                     change.consume()
@@ -399,6 +454,14 @@ private fun CandleChart(b: DailyBars, from: Int, n: Int, showBB: Boolean, mas: L
         }
         if (showBB) listOf(bb.first, bb.third).forEach { series(it, Color(0xFF90A4AE), 1.5f) }
         maSeries.forEach { (len, v) -> series(v, maColor(len), 2f) }
+        // 均價、停利價、減碼價、提醒價：虛線（在畫面價格範圍內才畫）
+        val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
+        levels.forEach { (v, col) -> if (v in lo..hi) drawLine(col, Offset(0f, y(v)), Offset(size.width, y(v)), 2f, pathEffect = dash) }
+        // 點選的 K 棒：直線標示
+        selected?.takeIf { it in from until to }?.let { j ->
+            val x = (j - from) * cw + cw / 2
+            drawLine(grid.copy(alpha = 1f), Offset(x, 0f), Offset(x, size.height), 1.5f)
+        }
     }
 }
 

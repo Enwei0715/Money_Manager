@@ -47,4 +47,10 @@ class CashTest {
         val o = Cash.payOptions(4, mapOf(10 to 2))
         assertEquals(mapOf(10 to 1), o.first().give)
     }
+
+    @Test fun moveRoundTrip() {
+        val m = Cash.Move(3, mapOf(500 to 1), mapOf(100 to 3, 10 to 2))
+        assertEquals(m, Cash.decode(Cash.encode(m)))
+        assertNull(Cash.decode("刷卡通知"))
+    }
 }

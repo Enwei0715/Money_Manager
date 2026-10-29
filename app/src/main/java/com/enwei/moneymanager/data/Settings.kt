@@ -322,6 +322,10 @@ data class AppSettings(
     val investPlan: InvestPlanSettings = InvestPlanSettings(),
     /** 股價提醒：代號 → 目標價／停損價 */
     val priceAlerts: Map<String, PriceAlert> = emptyMap(),
+    /** 觀察清單（台股代號），股票頁顯示報價，新聞與 AI 分析也會一起看 */
+    val watchlist: List<String> = emptyList(),
+    /** 現金帳戶用紙鈔硬幣記帳（關閉時用數字鍵盤） */
+    val cashByDenom: Boolean = true,
     /** 盤中依紀律（動態停損、分批停利）自動通知 */
     val stockAlertsOn: Boolean = true,
     /** 已通知過的提醒（「代號:種類」→ 日期 epochDay），同一天不重複 */
@@ -457,6 +461,8 @@ class SettingsStore(context: Context) {
         advisorDaily = prefs.getBoolean("advisorDaily", true),
         reportAiMs = prefs.getLong("reportAiMs", 50_000),
         priceAlerts = runCatching { json.decodeFromString(MapSerializer(String.serializer(), PriceAlert.serializer()), prefs.getString("priceAlerts", "{}")!!) }.getOrDefault(emptyMap()),
+        watchlist = runCatching { json.decodeFromString(ListSerializer(String.serializer()), prefs.getString("watchlist", "[]")!!) }.getOrDefault(emptyList()),
+        cashByDenom = prefs.getBoolean("cashByDenom", true),
         stockAlertsOn = prefs.getBoolean("stockAlertsOn", true),
         alertsFired = runCatching { json.decodeFromString(MapSerializer(String.serializer(), Long.serializer()), prefs.getString("alertsFired", "{}")!!) }.getOrDefault(emptyMap()),
         notifyUpdates = prefs.getBoolean("notifyUpdates", true),
@@ -615,6 +621,8 @@ class SettingsStore(context: Context) {
             .putBoolean("advisorDaily", s.advisorDaily)
             .putLong("reportAiMs", s.reportAiMs)
             .putString("priceAlerts", json.encodeToString(MapSerializer(String.serializer(), PriceAlert.serializer()), s.priceAlerts))
+            .putString("watchlist", json.encodeToString(ListSerializer(String.serializer()), s.watchlist))
+            .putBoolean("cashByDenom", s.cashByDenom)
             .putBoolean("stockAlertsOn", s.stockAlertsOn)
             .putString("alertsFired", json.encodeToString(MapSerializer(String.serializer(), Long.serializer()), s.alertsFired))
             .putBoolean("notifyUpdates", s.notifyUpdates)

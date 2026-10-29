@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - uses: actions/setup-java@v4
         with:
@@ -89,7 +91,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # 更新說明：有 RELEASE_NOTES.md 就用它（給使用者看的中文說明），否則用 commit 訊息
-          if [ -f RELEASE_NOTES.md ]; then notes="$(cat RELEASE_NOTES.md)"; else notes="$(git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):')"; fi
+          # 只有這次 commit 改過 RELEASE_NOTES.md 才用它，避免舊說明沿用到之後的版本
+          if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -qx RELEASE_NOTES.md; then notes="$(cat RELEASE_NOTES.md)"; else notes="$(git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):')"; fi
           gh release create "v1.1.${{ github.run_number }}" dist/*.apk \
             --title "帳理 Ledgerly 1.1.${{ github.run_number }}" \
             --target "${{ github.sha }}" \

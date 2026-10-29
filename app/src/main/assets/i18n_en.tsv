@@ -1484,3 +1484,111 @@ K 線	Chart
 重新選截圖	Pick again
 選擇帳戶	Choose account
 截圖上的餘額	Balance on screenshot
+歷史報告 ·	Past report ·
+分享	Share
+還沒有報告：按右上「產生報告」，App 會讀完新聞資料集、你的持股與紀律後寫出今天的報告（之後每天早上自動產生）。	No report yet: tap "Generate report". The app reads the news dataset, your holdings and rules, then writes today's report (generated automatically every morning after that).
+股票助理報告	Stock assistant report
+AI 分析僅供參考，不是投資建議。	AI analysis is for reference only, not investment advice.
+會刪除	Will delete
+份過去的報告，保留最新一份。	 past reports, keeping the latest.
+★ 觀察中	★ Watching
+☆ 加入觀察	☆ Watch
+對話	Chat
+則 · 長按訊息可複製或刪除	 messages · long-press to copy or delete
+可以問今天該買什麼、某檔股票能不能買、持股怎麼處理、資金怎麼分配。AI 會讀新聞資料集、你的持股、資金計畫與紀律再回答。長按訊息可以複製或刪除。	Ask what to buy today, whether a stock is worth buying, what to do with holdings or how to split your money. The AI reads the news dataset, your holdings, plan and rules first. Long-press a message to copy or delete it.
+，可以離開，回覆好會通知；按「停止」取消）	; you can leave, you'll be notified; tap Stop to cancel)
+重試	Retry
+停止	Stop
+會刪除全部	Will delete all 
+則對話紀錄，AI 之後回答不會再參考這些內容。	 messages; the AI won't refer to them afterwards.
+符合	Matching
+跳到新聞列表	Jump to news
+近 3 天	Last 3 days
+則，已整理進重點庫	 items, digested 
+；待標註	; pending 
+；AI 連續漏標 3 次歸入「其他」	; filed under Other after 3 misses 
+，背景每 3 小時更新一次。	, refreshed every 3 hours in the background.
+① 蒐集：每 3 小時用	① Collect: every 3 hours, search 
+個主題關鍵字加上你的持股代號查新聞，每個查詢最多約 100 則；標題去掉空白後相同的視為同一則，只留一份。保留	 topic keywords plus your holdings, up to ~100 items each; identical titles are kept once. Kept for 
+天、最多	 days, up to 
+② 標註：一批 150 則（Gemini）或 40 則（Groq）編號後送給 AI，回傳每則的相關台股代號、題材（固定清單）、多空與重要性。App 用編號逐則核對，AI 漏掉的會留著、下一批優先重送；連續 3 次都沒結果才歸入「其他」，所以每一則都會被算進統計。	② Tag: batches of 150 (Gemini) or 40 (Groq) numbered headlines go to the AI, which returns symbols, theme, sentiment and importance. The app checks every number; missed items are re-sent first next batch, and only after 3 misses are they filed under Other, so every item is counted.
+③ 重點庫：近 3 天依「日期 × 題材」分組，整組標題交給 AI 合併成不重複的重點，同一件事只寫一次並記下有幾則在講。一組太多時分段送（Gemini 每段 250 則、Groq 60 則），各段重點再合併，不會因為輸入上限漏讀；只有 1～2 則的小組直接用標題當重點。新聞增加 20% 以上就重新整理。	③ Digest: the last 3 days are grouped by date × theme and each whole group is merged by the AI into unique points with counts. Large groups are split (250 per call on Gemini, 60 on Groq) and merged, so nothing is dropped; groups of 1–2 use their titles directly. Re-digested when news grows by 20%.
+④ 報告與對話：讀題材熱度、個股統計、整個重點庫與重要新聞，再加上大盤、持股與你的紀律，不是只看幾十則標題。	④ Reports and chat read theme heat, stock stats, the whole digest and key news, plus the market, your holdings and rules — not just a few dozen headlines.
+成本留在場內，只賣多賺的股數；跌破停利價才賣、續漲停利價跟著上移。下跌看 60 分 K 20MA／50MA 減碼。點一檔可以改保本金額、停利價與減碼價。	Keep your cost in the market and only sell the extra shares; sell when the take-profit price breaks, and raise it as the price climbs. On the way down, reduce by the 60-min 20MA/50MA. Tap a stock to edit principal, take-profit and reduce prices.
+每 3 小時抓新聞、標註並整理重點，早上 7 點後產生當天報告並通知；需要網路且電量不低。	Collects, tags and digests news every 3 hours and writes the daily report after 7 AM with a notification; needs network and battery not low.
+讀不到現價	No price
+多賺	Extra
+（跌破）	 (below)
+（之上）	 (above)
+· 減碼價	· Reduce at
+：賣	: sell 
+保本金額（空白＝自動：這一輪買進總成本）	Principal (blank = auto: total buy cost this round)
+減碼賣一半後，保本金額也要跟著調整（例如改成目前市值），之後才會從新的成本開始算多賺的股數。	After selling half to reduce, adjust the principal too (e.g. to the current value) so extra shares are counted from the new cost.
+手動停利價（和自動移動停利取較高者）	Manual take-profit (higher of this and the trailing price)
+減碼價（跌破賣一半，比現價低）	Reduce price (sell half below it, under current price)
+移動停利：從最高價回落	Trailing take-profit: drop from peak
+兩條 60 分 K 均線都跌破時留下的基本股	Base shares kept when both 60-min MAs break
+暫停到	Paused until
+（剛才額度用完或沒有回應，先用下一個模型）	 (quota used or no response; using the next model)
+依工作難度與資料量挑模型：簡單短的用 Groq 20b，要推理的用 Groq 120b，資料量大的用 Gemini；用完額度自動換下一個	Picks the model by difficulty and size: Groq 20b for short simple tasks, Groq 120b for reasoning, Gemini for large inputs; switches automatically when a quota runs out
+張：找不到餘額	: no balance found
+一次選好幾張銀行、信用卡、電子支付 App 的餘額截圖，App 會判斷每張是哪個帳戶、讀出餘額；確認後一次對帳，差額記成調整。	Pick several balance screenshots from bank, card or e-wallet apps. The app works out which account each one is and reads the balance; confirm and reconcile them all at once.
+沒開 AI 時只能用畫面上的帳戶名稱或卡號末四碼辨認，認不出來的請自己選帳戶。	Without AI, accounts are matched only by name or last 4 digits; pick the account yourself if it isn't recognised.
+全部相符，不需要調整	Everything matches; nothing to adjust
+已對帳	Reconciled 
+個帳戶，調整了	 accounts, adjusted 
+對帳勾選的	Reconcile 
+· 畫面上是「	· shown as "
+· 請確認帳戶	· please check the account
+帳理目前	Ledgerly now
+記一筆支出	record an expense
+記一筆收入	record income
+讀第	Reading 
+怎麼收的（自動分析常見收法，點一下選用）	How you received it (common ways, tap to pick)
+怎麼付的（自動分析常見付法，點一下選用）	How you paid (common ways, tap to pick)
+找出	Change out
+找回	Change
+皮夾裡的數量不夠，選了之後請到點鈔更新	Not enough in your wallet; update the count after picking this
+不用找	No change
+紙鈔硬幣記帳	Bills & coins entry
+現金帳戶記帳時不用數字鍵盤，直接增減千元、五百元、百元鈔與硬幣的數量，並推薦常見的付法與找零；皮夾裡的張數會自動增減。	For cash accounts, enter amounts by adding 1000, 500, 100 notes and coins instead of a keypad, with suggested ways to pay and the change; your wallet count updates automatically.
+現金點鈔（皮夾張數、拍照點鈔）	Cash count (wallet, photo count)
+股票助理（報告、紀律、資金控管）	Stock assistant (reports, rules, money plan)
+股價提醒（保本停利、減碼、目標價）	Price alerts (take-profit, reduce, targets)
+股價提醒	Price alerts
+台股交易時間每 15 分鐘檢查：跌破停利價或減碼價、跌破 60 分 K 均線、多賺的股數增加、達到目標價或停損價、持股即將除權息時通知。	Checks every 15 minutes during TW trading hours: take-profit or reduce price broken, 60-min MA broken, more extra shares, target or stop reached, upcoming ex-dividend.
+觀察清單	Watchlist
+開啟時檢查新版本	Check for updates on launch
+開啟 App 時有新版本會跳出更新視窗（可略過這一版），背景也會通知。	Shows an update dialog on launch when a new version exists (you can skip it), and notifies in the background.
+觀察清單（	Watchlist (
+＋ 加入	+ Add
+在個股頁按☆，或在 AI 推薦卡片按「加入觀察」，就會出現在這裡並每 30 秒更新報價。	Tap ☆ on a stock page or "Watch" on an AI pick to list it here with quotes every 30 seconds.
+移出觀察	Remove
+台股代號，例如 2330	TW symbol, e.g. 2330
+加入	Add
+保本紀律：以這個價格多賺	Principal guard: at this price you have extra 
+股可以賣	 shares to sell
+；超過的	; the other 
+股算減碼，存檔後保本金額會依比例調降	 shares count as a reduction, and the principal is lowered proportionally
+點鈔中…	Counting…
+AI 數到：	AI counted: 
+已套用，請再核對一次數量	Applied — please double-check the counts
+已加到目前的數量	Added to current counts
+張數會記住；用「現金付款」「收到現金」或記帳時選「紙鈔硬幣」，付出、收到與找零會自動增減這裡的張數。「以點鈔金額對帳」會把差額記成一筆調整。	Counts are remembered; paying or receiving cash with bills and coins updates them automatically. "Reconcile to count" records the difference as an adjustment.
+現金點鈔	Cash count
+減碼	Reduce
+目標	Target
+移出觀察清單	Remove from watchlist
+加入觀察清單	Add to watchlist
+1 個月	1 month
+雙指縮放、左右拖曳看更早的 K 棒	Pinch to zoom, drag for earlier bars
+保本	Principal
+· 多賺	· extra
+拿出	Out
+放回	In
+刪除這筆時，皮夾的張數會自動還原	Deleting this restores your wallet count
+已停止這次回覆	Reply stopped
+AI 分析	AI analysis
+，建議賣	, suggest selling 
+：多賺	: extra 
+股；續漲停利價會跟著上移	 shares; the take-profit rises as the price climbs

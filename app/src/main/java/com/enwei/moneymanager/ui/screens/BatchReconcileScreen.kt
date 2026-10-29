@@ -1,6 +1,10 @@
 package com.enwei.moneymanager.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,7 +56,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** 一張截圖讀出的一個帳戶餘額（使用者可以改帳戶與金額、決定要不要對帳）。 */
-private class ShotRow(val image: Int, accountId: Long?, amount: String, val label: String, val sure: Boolean) {
+private class ShotRow(val image: Int, val uri: android.net.Uri, accountId: Long?, amount: String, val label: String, val sure: Boolean) {
     var accountId by mutableStateOf(accountId)
     var amount by mutableStateOf(amount)
     var checked by mutableStateOf(accountId != null)
@@ -95,10 +99,10 @@ fun BatchReconcileScreen(nav: NavController) {
                 val seen = lines.flatMap { BalanceExtractor.amounts(it) }.toSet()
                 val ai = if (GroqAi.enabled) GroqAi.identifyBalances(ctx, uri, accounts.map { it.id to describe(it) }, seen) else null
                 if (!ai.isNullOrEmpty()) ai.forEach { r ->
-                    rows += ShotRow(i + 1, r.accountId, plain(r.balanceMinor), r.label, r.confidence >= 0.7 && r.accountId != null)
+                    rows += ShotRow(i + 1, uri, r.accountId, plain(r.balanceMinor), r.label, r.confidence >= 0.7 && r.accountId != null)
                 } else {
                     val (acc, bal) = guess(lines)
-                    if (bal != null) rows += ShotRow(i + 1, acc, plain(bal), "", false)
+                    if (bal != null) rows += ShotRow(i + 1, uri, acc, plain(bal), "", false)
                     else msgs += "第 ${i + 1} 張：找不到餘額"
                 }
             }
@@ -160,6 +164,7 @@ private fun ShotCard(r: ShotRow, accounts: List<AccountEntity>, current: Map<Lon
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(r.checked, { r.checked = it }, enabled = r.accountId != null)
+                Thumb(r.uri)
                 Column(Modifier.weight(1f)) {
                     Box {
                         Text((acc?.name ?: "選擇帳戶") + " ▾", fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
@@ -187,6 +192,29 @@ private fun ShotCard(r: ShotRow, accounts: List<AccountEntity>, current: Map<Lon
                     fontSize = 13.sp, color = if (diff < 0) ExpenseColor else if (diff > 0) IncomeColor else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+/** 截圖縮圖（看得出是哪一張）。 */
+@Composable
+private fun Thumb(uri: android.net.Uri) {
+    val ctx = LocalContext.current
+    val bmp by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, uri) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                ctx.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, o) }
+                val opt = android.graphics.BitmapFactory.Options().apply { inSampleSize = maxOf(1, maxOf(o.outWidth, o.outHeight) / 240) }
+                ctx.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, opt) }
+            }.getOrNull()
+        }
+    }
+    Box(Modifier.padding(end = 10.dp).size(width = 44.dp, height = 72.dp)
+        .background(MaterialTheme.colorScheme.surfaceVariant, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))) {
+        bmp?.let {
+            androidx.compose.foundation.Image(it.asImageBitmap(), null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp)))
         }
     }
 }

@@ -68,7 +68,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         }
 
         suspend fun refreshQuotes(repo: Repository) {
-            val symbols = repo.allTrades().map { it.market to it.symbol.uppercase() }.distinct()
+            // 持有過的股票＋觀察清單
+            val symbols = (repo.allTrades().map { it.market to it.symbol.uppercase() } +
+                repo.settings.value.watchlist.map { com.enwei.moneymanager.core.Market.TW to it.uppercase() }).distinct()
             if (symbols.isEmpty()) return
             repo.saveQuotes(QuoteService.fetch(symbols))
             repo.settings.update { it.copy(lastQuoteUpdate = System.currentTimeMillis()) }

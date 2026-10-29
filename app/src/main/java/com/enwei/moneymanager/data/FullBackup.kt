@@ -11,7 +11,7 @@ import java.util.zip.GZIPOutputStream
 
 /**
  * 帳理專屬完整備份（.lgbak）：gzip 壓縮的 JSON，包含所有資料表與所有設定。
- * 不含：GitHub Token（憑證）、股價與匯率快取（開啟後會自動重新抓取）。
+ * 不含：GitHub Token（憑證）、股價與匯率快取、新聞資料集（開啟後會自動重新抓取）。
  */
 @Serializable
 data class FullBackup(
@@ -29,6 +29,8 @@ data class FullBackup(
     val notificationLog: List<NotificationLogEntity>,
     /** 所有設定（SharedPreferences 原樣） */
     val settings: Map<String, JsonElement>,
+    /** 股票助理：報告（含歷史）、對話、公司說明（新聞資料集本身不備份，會自動重新蒐集） */
+    val advisor: NewsStore? = null,
 ) {
     companion object {
         const val FORMAT = "ledgerly-backup"
@@ -53,6 +55,7 @@ object FullBackupIO {
             rules = db.rules().all(),
             notificationLog = db.notificationLog().all(),
             settings = repo.settings.exportRaw(),
+            advisor = com.enwei.moneymanager.MoneyApp.news.load().let { NewsStore(report = it.report, history = it.history, chat = it.chat, business = it.business, historyKeepDays = it.historyKeepDays) },
         )
         GZIPOutputStream(out).bufferedWriter().use { it.write(json.encodeToString(FullBackup.serializer(), b)) }
     }
@@ -80,5 +83,10 @@ object FullBackupIO {
             db.notificationLog().insertAll(b.notificationLog)
         }
         repo.settings.importRaw(b.settings)
+        b.advisor?.let { a ->
+            com.enwei.moneymanager.MoneyApp.news.update {
+                it.copy(report = a.report, history = a.history, chat = a.chat, business = it.business + a.business, historyKeepDays = a.historyKeepDays)
+            }
+        }
     }
 }

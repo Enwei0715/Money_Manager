@@ -190,7 +190,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
         }
     }
     // 新的現金交易不用數字鍵盤：直接增減鈔票硬幣組出金額，再從推薦的付法（收法）選一種
-    val isCash = cashSide != null && id == 0L
+    val isCash = cashSide != null && id == 0L && settings.cashByDenom
     var cashCompose by remember { mutableStateOf(emptyMap<Int, Int>()) }
     var cashOpt by remember { mutableStateOf(0) }
     val cashTotal = com.enwei.moneymanager.core.Cash.total(cashCompose)
@@ -225,8 +225,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
         val t = build() ?: return
         val plan = cashPlan?.takeIf { isCash }
         val cashAcc = cashSide?.first
+        // 記下這筆對皮夾的增減，刪除交易時可以還原
+        val tx = if (plan != null && cashAcc != null) t.copy(rawText = com.enwei.moneymanager.core.Cash.encode(com.enwei.moneymanager.core.Cash.Move(cashAcc, plan.first, plan.second))) else t
         scope.launch {
-            repo.saveTxn(t)
+            repo.saveTxn(tx)
             if (plan != null && cashAcc != null) {
                 repo.settings.update { st -> st.copy(cashCounts = st.cashCounts + (cashAcc to cashAfter(st.cashCounts[cashAcc].orEmpty(), plan.first, plan.second))) }
                 cashCompose = emptyMap(); cashOpt = 0
@@ -391,7 +393,13 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                 FormRow("說明", color, false, onClick = {}) {
                     UnderlineField(note, { note = it }, "", Modifier.onFocusChanged { if (it.isFocused) panel = Panel.NONE }, singleLine = false)
                 }
-                original?.rawText?.let {
+                val cm = com.enwei.moneymanager.core.Cash.decode(original?.rawText)
+                if (cm != null) Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) { Text("拿出", fontSize = 12.sp, modifier = Modifier.width(40.dp)); CashIcons(cm.out, "無") }
+                    Row(verticalAlignment = Alignment.CenterVertically) { Text("放回", fontSize = 12.sp, modifier = Modifier.width(40.dp)); CashIcons(cm.inn, "無") }
+                    Text("刪除這筆時，皮夾的張數會自動還原", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                original?.rawText?.takeIf { cm == null }?.let {
                     Text("原始內容：$it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }

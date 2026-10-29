@@ -126,4 +126,21 @@ object Cash {
         fun fits(g: Map<Int, Int>) = have.isEmpty() || g.all { (d, n) -> (have[d] ?: 0) >= n }
         return out.sortedWith(compareBy<PayOption>({ !fits(it.give) }, { it.back.isNotEmpty() }, { it.pieces })).take(limit)
     }
+
+    /** 一筆現金交易對皮夾的增減（記在交易上，刪除交易時用來還原）。 */
+    data class Move(val accountId: Long, val out: Map<Int, Int>, val inn: Map<Int, Int>)
+
+    private fun enc(m: Map<Int, Int>) = m.entries.filter { it.value > 0 }.joinToString(",") { "${it.key}:${it.value}" }
+    private fun dec(s: String): Map<Int, Int> = s.split(',').mapNotNull { p ->
+        val (d, n) = p.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
+        (d.toIntOrNull() ?: return@mapNotNull null) to (n.toIntOrNull() ?: return@mapNotNull null)
+    }.toMap()
+
+    fun encode(m: Move) = "cash|${m.accountId}|${enc(m.out)}|${enc(m.inn)}"
+
+    fun decode(s: String?): Move? {
+        val p = s?.takeIf { it.startsWith("cash|") }?.split('|') ?: return null
+        if (p.size != 4) return null
+        return Move(p[1].toLongOrNull() ?: return null, dec(p[2]), dec(p[3]))
+    }
 }

@@ -206,7 +206,17 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return if (t.id == 0L) r else t.id
     }
 
-    suspend fun deleteTxn(id: Long) = db.txns().delete(id)
+    suspend fun deleteTxn(id: Long) {
+        val t = db.txns().get(id)
+        db.txns().delete(id)
+        // 用紙鈔硬幣記的現金交易：刪除時把皮夾的張數還原
+        com.enwei.moneymanager.core.Cash.decode(t?.rawText)?.let { m ->
+            settings.update { st ->
+                val after = com.enwei.moneymanager.core.Cash.apply(st.cashCounts[m.accountId].orEmpty(), m.inn, m.out).filterValues { it > 0 }
+                st.copy(cashCounts = st.cashCounts + (m.accountId to after))
+            }
+        }
+    }
 
     /** 最近 90 天最常用的分類（通知上的一鍵分類按鈕用）。 */
     suspend fun frequentCategories(type: TxnType, limit: Int, exclude: Long?): List<CategoryEntity> {

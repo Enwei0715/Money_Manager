@@ -157,16 +157,43 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                 val count = store.history.size + if (store.report != null) 1 else 0
                 if (count > 0) TextButton(onClick = { showHistory = true }) { Text("報告歷史（$count）") }
                 if (old) TextButton(onClick = { viewing = null }) { Text("回到最新報告") }
+                // 分享報告（純文字，可以傳到 LINE 或存進筆記）
+                if (r != null) TextButton(onClick = {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(android.content.Intent.EXTRA_TEXT, reportText(r))
+                    ctx.startActivity(android.content.Intent.createChooser(send, null))
+                }) { Text("分享") }
             }
         }
         // 背景執行中：步驟、預估剩餘時間與進度（離開畫面也會繼續，完成時通知）
         JobProgress(job)
         if (!GroqAi.enabled) Text("到「設定 → AI 智慧辨識」填入金鑰後，App 會每天在背景讀新聞、整理資料集並產生報告。", fontSize = 13.sp)
+        else if (r == null && job?.running != true) Text("還沒有報告：按右上「產生報告」，App 會讀完新聞資料集、你的持股與紀律後寫出今天的報告（之後每天早上自動產生）。",
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (r != null) ReportBody(r, newsById, nav)
         Disclaimer()
         Spacer(Modifier.height(24.dp))
     }
     if (showHistory) HistoryDialog(store, { viewing = if (it == store.report?.createdAt) null else it; showHistory = false }) { showHistory = false }
+}
+
+/** 報告的純文字版本（分享用）。 */
+private fun reportText(r: DailyReport): String = buildString {
+    appendLine("股票助理報告 " + java.text.SimpleDateFormat("yyyy/M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(r.createdAt)))
+    appendLine()
+    appendLine("【大盤】${r.stage}　${r.trend}")
+    if (r.themes.isNotEmpty()) appendLine(r.themes.joinToString(" ") { "#$it" })
+    if (r.summary.isNotBlank()) appendLine(com.enwei.moneymanager.data.stripCites(r.summary))
+    if (r.picks.isNotEmpty()) {
+        appendLine(); appendLine("【今天可以考慮】")
+        r.picks.forEach { p -> appendLine("・${p.symbol} ${p.name}（${p.style}${if (p.strength.isNotBlank()) "／${p.strength}" else ""}）${com.enwei.moneymanager.data.stripCites(p.reason)}") }
+    }
+    if (r.holdings.isNotEmpty()) {
+        appendLine(); appendLine("【持股動作】")
+        r.holdings.forEach { h -> appendLine("・${h.symbol} ${h.action}：${com.enwei.moneymanager.data.stripCites(h.reason)}") }
+    }
+    if (r.allocation.isNotBlank()) { appendLine(); appendLine("【資金分配】"); appendLine(com.enwei.moneymanager.data.stripCites(r.allocation)) }
+    appendLine(); append("AI 分析僅供參考，不是投資建議。")
 }
 
 @Composable
@@ -291,7 +318,14 @@ fun PickCard(p: StockPick, onClick: () -> Unit) {
             if (p.entry.isNotBlank()) Text("進場：${p.entry}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (p.stop.isNotBlank()) Text("停損：${p.stop}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             p.amount?.let { Text("建議投入約 ${Money.withSymbol(it * 100, "TWD")}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) }
-            Text("看 K 線與資訊 ›", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("看 K 線與資訊 ›", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                val settings by repo.settings.flow.collectAsStateWithLifecycle()
+                val inList = p.symbol in settings.watchlist
+                TextButton(onClick = {
+                    repo.settings.update { it.copy(watchlist = if (inList) it.watchlist - p.symbol else (it.watchlist + p.symbol).distinct()) }
+                }) { Text(if (inList) "★ 觀察中" else "☆ 加入觀察", fontSize = 12.sp) }
+            }
         }
     }
 }
@@ -365,7 +399,17 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                     Text("AI 思考中…（${com.enwei.moneymanager.work.ReportJob.formatDuration(now - (job?.startedAt ?: now))}，可以離開，回覆好會通知；按「停止」取消）",
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                 }
-                err?.let { e -> item { Text(e, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) } }
+                err?.let { e ->
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(e, fontSize = 13.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+                            // 失敗或停止後可以用同一個問題再問一次
+                            job?.question?.takeIf { it.isNotBlank() && GroqAi.enabled }?.let { q ->
+                                TextButton(onClick = { com.enwei.moneymanager.work.ChatJob.ask(ctx, q) }) { Text("重試") }
+                            }
+                        }
+                    }
+                }
                 item { Spacer(Modifier.height(8.dp)) }
             }
             // 往上捲時出現「到最新」按鈕
@@ -486,7 +530,7 @@ private fun NewsTab(store: NewsStore) {
     var source by remember { mutableStateOf<String?>(null) }
     var shown by remember { mutableStateOf(100) }
     val anyFilter = query.isNotBlank() || days != 0 || sent != 0 || onlyImportant || onlyMine || theme != null || symbol != null || source != null
-    val filtered by androidx.compose.runtime.produceState(emptyList<com.enwei.moneymanager.data.NewsItem>(),
+    val filteredOrNull by androidx.compose.runtime.produceState<List<com.enwei.moneymanager.data.NewsItem>?>(null,
         System.identityHashCode(store), query, days, sent, onlyImportant, onlyMine, sort, theme, symbol, source, mine) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             val zone = java.time.ZoneId.of("Asia/Taipei")
@@ -510,6 +554,8 @@ private fun NewsTab(store: NewsStore) {
             }
         }
     }
+    // 第一次篩選還在背景計算時顯示「整理中」，不要誤顯示 0 則
+    val filtered = filteredOrNull.orEmpty()
     val scope = rememberCoroutineScope()
     val digestsAll = store.digests.values.groupBy { it.theme }.mapValues { (_, l) -> l.maxBy { it.day } }
     // 沒篩選時列表前面有幾個整理區塊（「跳到新聞列表」用）
@@ -552,7 +598,7 @@ private fun NewsTab(store: NewsStore) {
             }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("符合 ${filtered.size} 則" + (theme?.let { "　題材：$it" } ?: "") + (symbol?.let { "　個股：$it" } ?: "") + (source?.let { "　來源：$it" } ?: ""),
+                Text((if (filteredOrNull == null) "整理中…" else "符合 ${filtered.size} 則") + (theme?.let { "　題材：$it" } ?: "") + (symbol?.let { "　個股：$it" } ?: "") + (source?.let { "　來源：$it" } ?: ""),
                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                 if (anyFilter || sort != 0) TextButton(onClick = {
                     query = ""; days = 0; sent = 0; onlyImportant = false; onlyMine = false; sort = 0; theme = null; symbol = null; source = null; shown = 100
@@ -620,7 +666,8 @@ private fun NewsTab(store: NewsStore) {
             }
             if (stats.important.isNotEmpty() && !anyFilter) item { Section("重點新聞") { stats.important.forEach { NewsLine(it) } } }
             if (!anyFilter) item { Text("全部新聞", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
-            if (filtered.isEmpty()) item { Text("沒有符合條件的新聞", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (filteredOrNull == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            else if (filtered.isEmpty()) item { Text("沒有符合條件的新聞", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(filtered.take(shown), key = { "n" + it.id }) { n ->
                 Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) { Box(Modifier.padding(horizontal = 10.dp)) { NewsLine(n) } }
             }

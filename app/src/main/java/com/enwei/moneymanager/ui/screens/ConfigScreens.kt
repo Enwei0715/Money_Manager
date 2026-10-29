@@ -216,12 +216,25 @@ fun ConfigScreen(nav: NavController) {
                 SectionHeader("AI")
                 ConfigRow("AI 智慧辨識（Groq／Gemini）", onOff(s.aiEnabled && (s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()))) { nav.navigate("ai") }
 
+                SectionHeader("現金")
+                ConfigRow("紙鈔硬幣記帳", onOff(s.cashByDenom)) {
+                    askOnOff("紙鈔硬幣記帳", s.cashByDenom, "現金帳戶記帳時不用數字鍵盤，直接增減千元、五百元、百元鈔與硬幣的數量，並推薦常見的付法與找零；皮夾裡的張數會自動增減。") { v ->
+                        repo.settings.update { it.copy(cashByDenom = v) }
+                    }
+                }
+                ConfigRow("現金點鈔（皮夾張數、拍照點鈔）") { nav.navigate("cashcount/0") }
+
                 SectionHeader("股票")
                 ConfigRow("手續費與月退") { nav.navigate("stockfees") }
+                ConfigRow("股票助理（報告、紀律、資金控管）") { nav.navigate("advisor") }
+                ConfigRow("股價提醒（保本停利、減碼、目標價）", onOff(s.stockAlertsOn)) {
+                    askOnOff("股價提醒", s.stockAlertsOn, "台股交易時間每 15 分鐘檢查：跌破停利價或減碼價、跌破 60 分 K 均線、多賺的股數增加、達到目標價或停損價、持股即將除權息時通知。") { v ->
+                        repo.settings.update { it.copy(stockAlertsOn = v) }
+                    }
+                }
+                ConfigRow("觀察清單", "${s.watchlist.size} 檔") { nav.navigate("invest") }
 
                 SectionHeader("安全與提醒")
-                ConfigRow("股價提醒（停損、停利、目標價）", onOff(s.stockAlertsOn)) { repo.settings.update { it.copy(stockAlertsOn = !it.stockAlertsOn) } }
-                ConfigRow("新版本通知", onOff(s.notifyUpdates)) { repo.settings.update { it.copy(notifyUpdates = !it.notifyUpdates) } }
                 ConfigRow("密碼鎖", onOff(s.passcodeOn)) { nav.navigate("passcode") }
                 ConfigRow("每日提醒", if (s.reminderEnabled) "%02d:%02d".format(s.reminderMinutes / 60, s.reminderMinutes % 60) else "OFF") {
                     if (s.reminderEnabled) {
@@ -249,6 +262,11 @@ fun ConfigScreen(nav: NavController) {
 
                 SectionHeader("關於")
                 ConfigRow("App 更新", BuildConfig.VERSION_NAME) { nav.navigate("settings") }
+                ConfigRow("開啟時檢查新版本", onOff(s.notifyUpdates)) {
+                    askOnOff("開啟時檢查新版本", s.notifyUpdates, "開啟 App 時有新版本會跳出更新視窗（可略過這一版），背景也會通知。") { v ->
+                        repo.settings.update { it.copy(notifyUpdates = v, updateSkipped = 0) }
+                    }
+                }
                 Spacer(Modifier.height(32.dp))
             }
         }

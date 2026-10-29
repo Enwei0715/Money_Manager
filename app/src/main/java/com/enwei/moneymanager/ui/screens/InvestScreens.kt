@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -111,8 +113,10 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
         .sortedWith(compareBy({ it.account.sortOrder }, { it.account.id }))
 
     // 畫面開著時每 30 秒更新一次報價；手動按更新時 refreshTick 會變動
-    LaunchedEffect(refreshTick, holdings.isNotEmpty()) {
-        if (holdings.isEmpty()) return@LaunchedEffect
+    val quotes by repo.quotes.collectAsStateWithLifecycle(emptyList())
+    var addWatch by remember { mutableStateOf(false) }
+    LaunchedEffect(refreshTick, holdings.isNotEmpty(), settings.watchlist) {
+        if (holdings.isEmpty() && settings.watchlist.isEmpty()) return@LaunchedEffect
         var first = true
         while (true) {
             val r = runCatching { SyncWorker.refreshQuotes(repo) }
@@ -205,6 +209,36 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
             }
             items(open, key = { "${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
         }
+        // 觀察清單：還沒買、想留意的股票（AI 推薦卡片或個股頁的☆加入）
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("觀察清單（${settings.watchlist.size}）", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
+                TextButton(onClick = { addWatch = true }) { Text("＋ 加入") }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            if (settings.watchlist.isEmpty()) Text("在個股頁按☆，或在 AI 推薦卡片按「加入觀察」，就會出現在這裡並每 30 秒更新報價。",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+        }
+        items(settings.watchlist, key = { "w$it" }) { sym ->
+            val q = quotes.find { it.key == com.enwei.moneymanager.data.quoteKey(com.enwei.moneymanager.core.Market.TW, sym) }
+            val pct = q?.previousClose?.takeIf { it > 0 }?.let { (q.price - it) / it * 100 }
+            Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("stock/$sym") }) {
+                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 4.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("$sym  ${q?.name.orEmpty()}", fontSize = 16.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(q?.let { formatNum(it.price) } ?: "—", fontSize = 16.sp)
+                        if (pct != null) Text((if (pct >= 0) "▲" else "▼") + formatPct(pct), fontSize = 13.sp, color = pnlColor(pct))
+                    }
+                    IconButton(onClick = { repo.settings.update { it.copy(watchlist = it.watchlist - sym) } }) {
+                        Icon(Icons.Filled.Close, "移出觀察", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
         if (closed.isNotEmpty()) {
             item { StockHeader("已出清", "") }
             items(closed, key = { "c${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
@@ -213,6 +247,23 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
             StockHeader("已實現損益＋股利", Money.withSymbol(realized, lk.base), pnlColor(realized.toDouble()))
         }
         item { Spacer(Modifier.height(32.dp)) }
+    }
+    if (addWatch) {
+        var code by remember { mutableStateOf("") }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { addWatch = false },
+            title = { Text("加入觀察清單") },
+            text = {
+                androidx.compose.material3.OutlinedTextField(code, { code = it.trim().uppercase().take(8) }, label = { Text("台股代號，例如 2330") }, singleLine = true)
+            },
+            confirmButton = {
+                TextButton(enabled = code.matches(Regex("[0-9A-Z]{4,6}")), onClick = {
+                    repo.settings.update { it.copy(watchlist = (it.watchlist + code).distinct()) }
+                    addWatch = false
+                }) { Text("加入") }
+            },
+            dismissButton = { TextButton(onClick = { addWatch = false }) { Text("取消") } },
+        )
     }
 }
 
