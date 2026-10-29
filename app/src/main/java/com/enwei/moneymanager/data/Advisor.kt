@@ -289,7 +289,7 @@ private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: 
             (if (full) byTheme else byTheme.take(8)).forEach { (theme, days) ->
                 appendLine("【$theme】")
                 (if (full) days else days.sortedByDescending { it.day }.take(1)).forEach { d ->
-                    d.points.take(if (full) 8 else 3).forEach { p ->
+                    (if (full) d.points else d.points.take(3)).forEach { p ->
                         appendLine("- ${d.day.substring(5)} ${p.text}" + (if (p.symbols.isNotEmpty()) "｜${p.symbols.joinToString(",")}" else "") + "｜${p.sentiment}｜${p.count}則")
                     }
                 }

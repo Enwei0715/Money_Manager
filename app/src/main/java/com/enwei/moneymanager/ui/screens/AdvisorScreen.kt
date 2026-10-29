@@ -172,7 +172,10 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
         }
         // 背景執行中：步驟、預估剩餘時間與進度（離開畫面也會繼續，完成時通知）
         JobProgress(job)
-        if (!GroqAi.enabled) Text("到「設定 → AI 智慧辨識」填入金鑰後才能產生報告。", fontSize = 13.sp)
+        if (!GroqAi.enabled) Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("設定 AI 金鑰後即可產生報告。", fontSize = 13.sp, modifier = Modifier.weight(1f))
+            TextButton(onClick = { nav.navigate("ai") }) { Text("設定 AI") }
+        }
         if (r != null) ReportBody(r, newsById, nav)
         Disclaimer()
         Spacer(Modifier.height(24.dp))

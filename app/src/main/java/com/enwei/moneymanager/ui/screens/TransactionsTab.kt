@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -264,10 +266,22 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
 @Composable
 fun SummaryBar(t: Totals, base: String) {
     Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-            SummaryCell("收入", Money.full(t.income), IncomeColor, Modifier.weight(1f))
-            SummaryCell("支出", Money.full(t.expense), ExpenseColor, Modifier.weight(1f))
-            SummaryCell("合計", Money.full(t.total), MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+            if (maxWidth < 360.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth()) {
+                        SummaryCell("收入", Money.full(t.income), IncomeColor, Modifier.weight(1f))
+                        SummaryCell("支出", Money.full(t.expense), ExpenseColor, Modifier.weight(1f))
+                    }
+                    SummaryCell("合計", Money.full(t.total), MaterialTheme.colorScheme.onSurface, Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(Modifier.fillMaxWidth()) {
+                    SummaryCell("收入", Money.full(t.income), IncomeColor, Modifier.weight(1f))
+                    SummaryCell("支出", Money.full(t.expense), ExpenseColor, Modifier.weight(1f))
+                    SummaryCell("合計", Money.full(t.total), MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+                }
+            }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
@@ -277,7 +291,7 @@ fun SummaryBar(t: Totals, base: String) {
 private fun SummaryCell(label: String, value: String, color: Color, modifier: Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
-        Text(value, color = color, fontSize = 17.sp, maxLines = 1)
+        Text(value, color = color, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -307,9 +321,9 @@ private fun DailyView(
             Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("recurring") }) {
                 upcoming.forEach { (r, d, signed) ->
                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                        Text("週期", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp))
+                        Text("週期", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(max = 72.dp))
                         Text("${d.monthValue}/${d.dayOfMonth}  ${r.name}", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                        Text(Money.withSymbol(signed, r.currency))
+                        Text(Money.withSymbol(signed, r.currency), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -320,9 +334,10 @@ private fun DailyView(
         if (carry != 0L) item {
             Column(Modifier.padding(top = 8.dp).background(MaterialTheme.colorScheme.surface)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                    Text("${range.first.monthValue}/${range.first.dayOfMonth}", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp))
+                    Text("${range.first.monthValue}/${range.first.dayOfMonth}", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(max = 72.dp))
                     Text("上期結轉", Modifier.weight(1f))
-                    Text(Money.withSymbol(carry, lk.base), color = if (carry >= 0) IncomeColor else ExpenseColor)
+                    Text(Money.withSymbol(carry, lk.base), color = if (carry >= 0) IncomeColor else ExpenseColor,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -354,18 +369,35 @@ fun DayBlock(
     val t = if (ledger != null) Totals(ledger.sumOf { maxOf(0, it.delta) }, -ledger.sumOf { minOf(0, it.delta) }) else totalsOf(txns, lk.fx)
     Column(Modifier.padding(top = 10.dp).background(MaterialTheme.colorScheme.surface)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("${day.dayOfMonth}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(6.dp))
-            val chip = when (day.dayOfWeek) { DayOfWeek.SUNDAY -> SundayColor; DayOfWeek.SATURDAY -> SaturdayColor; else -> Color(0xFF8C8C8C) }
-            Surface(color = chip, shape = RoundedCornerShape(3.dp)) {
-                Text("週${Recurrence.weekdayName(day.dayOfWeek)}", color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
+            val compact = maxWidth < 400.dp
+            Column(verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 0.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${day.dayOfMonth}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(6.dp))
+                    val chip = when (day.dayOfWeek) { DayOfWeek.SUNDAY -> SundayColor; DayOfWeek.SATURDAY -> SaturdayColor; else -> Color(0xFF8C8C8C) }
+                    Surface(color = chip, shape = RoundedCornerShape(3.dp)) {
+                        Text("週${Recurrence.weekdayName(day.dayOfWeek)}", color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text("${"%02d".format(day.monthValue)}.${day.year}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!compact) {
+                        Spacer(Modifier.weight(1f))
+                        Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = 14.sp,
+                            modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = 14.sp,
+                            modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                if (compact) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = 14.sp,
+                            modifier = Modifier.weight(1f), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = 14.sp,
+                            modifier = Modifier.weight(1f), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
             }
-            Spacer(Modifier.width(8.dp))
-            Text("${"%02d".format(day.monthValue)}.${day.year}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.weight(1f))
-            Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = 15.sp, modifier = Modifier.width(112.dp), textAlign = TextAlign.End)
-            Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = 15.sp, modifier = Modifier.width(112.dp), textAlign = TextAlign.End)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         if (memos.isNotEmpty()) {

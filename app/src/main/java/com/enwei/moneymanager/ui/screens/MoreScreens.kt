@@ -127,8 +127,6 @@ fun MoreScreen(nav: NavController) {
                 actions = {
                     TextButton(onClick = { nav.navigate("tool-order") }) { Text("排序") }
                     IconButton(onClick = { nav.navigate("config") }) { Icon(Icons.Outlined.Settings, "設定") }
-                    Text("Ledgerly " + BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp,
-                        modifier = Modifier.padding(end = 16.dp))
                 },
             )
         },

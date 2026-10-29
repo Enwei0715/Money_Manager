@@ -2,9 +2,12 @@ package com.enwei.moneymanager.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -104,7 +108,7 @@ fun balanceBefore(
 ): Long = balanceAt(current, millis, ledgerFor(accountId, accountCurrency, txns, trades, fx))
 
 @Composable
-private fun GrayHeader(title: String, right: @Composable () -> Unit = {}) {
+private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {}) {
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 20.dp, end = 16.dp, top = 24.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Bottom,
@@ -230,27 +234,78 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     item(key = "g${type.name}") {
                         val payable = list.sumOf { cards[it.account.id]?.payable ?: 0 }
                         val outst = list.sumOf { cards[it.account.id]?.outstanding ?: 0 }
-                        GrayHeader(st.groupLabel(type)) {
-                            Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(120.dp)) {
-                                Text("應繳餘額", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(Money.withSymbol(payable, lk.base), color = ExpenseColor)
-                            }
-                            Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(120.dp)) {
-                                Text("未出帳", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(Money.withSymbol(outst, lk.base), color = ExpenseColor)
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            if (maxWidth < 420.dp) {
+                                Column(
+                                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
+                                        .padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
+                                ) {
+                                    Text(st.groupLabel(type), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                            Text("應繳餘額", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(Money.withSymbol(payable, lk.base), color = ExpenseColor, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                            Text("未出帳", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(Money.withSymbol(outst, lk.base), color = ExpenseColor, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                    }
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            } else {
+                                GrayHeader(st.groupLabel(type)) {
+                                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+                                        Text("應繳餘額", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(Money.withSymbol(payable, lk.base), color = ExpenseColor, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+                                        Text("未出帳", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(Money.withSymbol(outst, lk.base), color = ExpenseColor, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
                             }
                         }
                     }
                     items(list, key = { "a${it.account.id}" }) { b ->
                         val st = cards[b.account.id]
-                        AccountLine(b.account.name + if (b.account.archived) "（隱藏）" else "", { nav.navigate("acct/${b.account.id}") }) {
-                            Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(120.dp)) {
-                                Text(Money.withSymbol(st?.payable ?: 0, b.account.currency), color = ExpenseColor)
-                                Text(Money.withSymbol(b.balance, b.account.currency), style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val name = b.account.name + if (b.account.archived) "（隱藏）" else ""
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            if (maxWidth < 420.dp) {
+                                Column(
+                                    Modifier.fillMaxWidth().clickable { nav.navigate("acct/${b.account.id}") }
+                                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("應繳餘額", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(Money.withSymbol(st?.payable ?: 0, b.account.currency), color = ExpenseColor, fontSize = 14.sp,
+                                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text("帳戶餘額", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(Money.withSymbol(b.balance, b.account.currency), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("未出帳", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(Money.withSymbol(st?.outstanding ?: 0, b.account.currency), color = ExpenseColor, fontSize = 14.sp,
+                                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                    }
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            } else AccountLine(name, { nav.navigate("acct/${b.account.id}") }) {
+                                Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f).padding(start = 4.dp)) {
+                                    Text(Money.withSymbol(st?.payable ?: 0, b.account.currency), color = ExpenseColor, fontSize = 14.sp,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(Money.withSymbol(b.balance, b.account.currency), style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                Text(Money.withSymbol(st?.outstanding ?: 0, b.account.currency), color = ExpenseColor,
+                                    modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End,
+                                    fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
-                            Text(Money.withSymbol(st?.outstanding ?: 0, b.account.currency), color = ExpenseColor,
-                                modifier = Modifier.width(120.dp), textAlign = TextAlign.End)
                         }
                     }
                 } else {
@@ -309,7 +364,7 @@ private fun AccountLine(
     name: String, onClick: () -> Unit, sub: String? = null,
     /** 第二行的小字（例如股票損益，可自訂顏色） */
     note: Pair<String, Color>? = null,
-    right: @Composable () -> Unit,
+    right: @Composable RowScope.() -> Unit,
 ) {
     Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = if (sub != null || note != null) 12.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -327,11 +382,23 @@ private fun AccountLine(
 @Composable
 fun SummaryBarCustom(cells: List<Pair<String, Pair<String, Color>>>) {
     Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-            cells.forEach { (label, v) ->
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                    Text(v.first, color = v.second, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+            val columns = when {
+                cells.size >= 4 && maxWidth < 480.dp -> 2
+                maxWidth < 360.dp && cells.size > 2 -> 2
+                else -> cells.size.coerceAtLeast(1)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                cells.chunked(columns).forEach { row ->
+                    Row(Modifier.fillMaxWidth()) {
+                        row.forEach { (label, value) ->
+                            Column(Modifier.weight(if (row.size == 1) columns.toFloat() else 1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                                Text(value.first, color = value.second, style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -626,10 +693,13 @@ private fun PeriodRow(title: String, sub: String, deposit: Long, withdrawal: Lon
             }
             Column(horizontalAlignment = Alignment.End) {
                 Row {
-                    Text(Money.full(deposit), color = IncomeColor, modifier = Modifier.width(96.dp), textAlign = TextAlign.End)
-                    Text(Money.full(withdrawal), color = ExpenseColor, modifier = Modifier.width(96.dp), textAlign = TextAlign.End)
+                    Text(Money.full(deposit), color = IncomeColor, modifier = Modifier.width(96.dp), textAlign = TextAlign.End,
+                        fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(Money.full(withdrawal), color = ExpenseColor, modifier = Modifier.width(96.dp), textAlign = TextAlign.End,
+                        fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Text("餘額 ${Money.full(balance)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("餘額 ${Money.full(balance)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

@@ -739,9 +739,14 @@ object GroqAi {
     /** 投資助理對話：依資料集與使用者狀況回答，需要時附股票卡片與新聞編號。 */
     suspend fun advisorChat(context: String, history: List<Pair<Boolean, String>>, question: String): com.enwei.moneymanager.data.ChatMsg? {
         if (!enabled) return null
+        val contextLimit = if (bigContext(AiTask.CHAT)) 80_000 else 2500
+        if (context.length > contextLimit) {
+            lastError = "AI 對話資料超過安全上下文上限（${context.length}/$contextLimit 字元），未截斷或送出；請稍後重試"
+            return null
+        }
         val system = ADVISOR_ROLE + "以下是資料與使用者狀況，請回答他的問題，口吻簡潔直接，300 字內。提到具體股票時放進 cards；引用新聞時在句子後面用 [編號] 標出，並把編號放進 news。" +
             "只回 JSON：{\"reply\": 回答, \"cards\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\"或空, \"business\": 公司做什麼, \"strength\": 強勢/中性/弱勢, \"reason\": 40 字內}], \"news\": [編號]}\n\n" +
-            context.take(if (bigContext(AiTask.CHAT)) 80_000 else 2500)
+            context
         val convo = history.takeLast(6).joinToString("\n") { (u, t) -> (if (u) "使用者：" else "助理：") + t.take(300) }
         val r = chatJson(system, (if (convo.isNotBlank()) "先前對話：\n$convo\n\n" else "") + "問題：$question", 1200, hard = true, cap = 3000, effort = "low", task = AiTask.CHAT) ?: return null
         val sym = Regex("[0-9]{4,6}[A-Z]?")

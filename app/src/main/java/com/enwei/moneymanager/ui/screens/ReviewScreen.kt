@@ -3,6 +3,7 @@ package com.enwei.moneymanager.ui.screens
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -124,10 +126,23 @@ fun ReviewContent(
             // ① 總覽
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row {
-                        Stat("收入", m(d.income), IncomeColor, Modifier.weight(1f))
-                        Stat("支出", m(d.expense), ExpenseColor, Modifier.weight(1f))
-                        Stat("結餘", m(d.net), if (d.net >= 0) IncomeColor else ExpenseColor, Modifier.weight(1f))
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val netColor = if (d.net >= 0) IncomeColor else ExpenseColor
+                        if (maxWidth < 340.dp) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row {
+                                    Stat("收入", m(d.income), IncomeColor, Modifier.weight(1f))
+                                    Stat("支出", m(d.expense), ExpenseColor, Modifier.weight(1f))
+                                }
+                                Stat("結餘", m(d.net), netColor, Modifier.fillMaxWidth())
+                            }
+                        } else {
+                            Row {
+                                Stat("收入", m(d.income), IncomeColor, Modifier.weight(1f))
+                                Stat("支出", m(d.expense), ExpenseColor, Modifier.weight(1f))
+                                Stat("結餘", m(d.net), netColor, Modifier.weight(1f))
+                            }
+                        }
                     }
                     Text(
                         listOfNotNull(
@@ -222,7 +237,10 @@ fun ReviewContent(
                     val r = settings.reviews[d.key]
                     when {
                         r != null -> AiReviewBody(r, ::m, d, lk, settings.txnNecessity, nav)
-                        !GroqAi.enabled -> Text("到「設定 → AI 智慧辨識」填入金鑰後，可以產生 AI 檢討。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        !GroqAi.enabled -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("設定 AI 金鑰後即可產生檢討。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { nav.navigate("ai") }) { Text("設定 AI") }
+                        }
                         else -> Text("按「產生」寫出這期的檢討與下期目標", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -244,7 +262,7 @@ fun ReviewContent(
 private fun Stat(label: String, value: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
     Column(modifier) {
         Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontSize = 16.sp, color = color, maxLines = 1)
+        Text(value, fontSize = 16.sp, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
