@@ -144,7 +144,6 @@ object ReportJob {
             .setOnlyAlertOnce(true)
             .setContentIntent(openIntent(context))
             .build()
-    }
 
     private fun doneNotice(context: Context, title: String, text: String) {
         val nm = context.getSystemService(android.app.NotificationManager::class.java)
