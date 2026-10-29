@@ -33,6 +33,14 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     }
 
     companion object {
+        /** 颱風停班公告多在前一晚發布、隔天就撤下：每小時檢查一次才不會漏掉。 */
+        fun scheduleTyphoon(context: Context) {
+            val req = PeriodicWorkRequestBuilder<TyphoonWorker>(1, TimeUnit.HOURS)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork("typhoon", ExistingPeriodicWorkPolicy.KEEP, req)
+        }
+
         fun schedule(context: Context) {
             val req = PeriodicWorkRequestBuilder<SyncWorker>(4, TimeUnit.HOURS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -122,7 +130,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             val notice = com.enwei.moneymanager.core.TyphoonNotice.parse(html, today)
             val old = com.enwei.moneymanager.data.TyphoonDays.decode(repo.settings.value.typhoonDays)
             val merged = old.toMutableMap()
-            notice.forEach { (d, stop) -> if (stop) merged[d] = "颱風假" else merged.remove(d) }
+            // 官方公告為準：停止上班就標記，照常上班就取消（使用者手動取消的「上班」也保留）
+            notice.forEach { (d, stop) -> if (stop) merged[d] = "颱風假" else if (merged[d] == "颱風假") merged.remove(d) }
             merged.keys.removeAll { it.isBefore(today.minusYears(2)) }
             com.enwei.moneymanager.core.TaiwanHolidays.setExtra(merged)
             if (merged != old) repo.settings.update { it.copy(typhoonDays = com.enwei.moneymanager.data.TyphoonDays.encode(merged)) }
@@ -192,5 +201,13 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             runCatching { refreshHolidays(repo) }
             fx.getOrThrow(); q.getOrThrow()
         }
+    }
+}
+
+/** 每小時檢查人事行政總處的停班停課公告。 */
+class TyphoonWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        runCatching { SyncWorker.refreshTyphoon(MoneyApp.repo) }
+        return Result.success()
     }
 }

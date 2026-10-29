@@ -1409,3 +1409,6 @@ AI 判斷	AI judged
 帳戶（不另外記帳）	 account (not recorded separately)
 自動除權：每股配	Auto stock dividend: per share
 內容被 Android 隱藏：Android 15 起，系統判斷含驗證碼（OTP）的通知會對第三方 App 隱藏內容，App 收不到金額。一般的消費通知不含驗證碼，通常不會被隱藏。若一定要讀取，可在電腦用 adb 執行下方指令開放。	Hidden by Android: since Android 15, notifications the system thinks contain a one-time code are hidden from other apps, so the amount can't be read. Normal purchase notifications usually aren't hidden. To allow it, run the adb command below on a computer.
+取消颱風假	Unmark typhoon day
+標記為颱風假（停止上班）	Mark as typhoon day off
+颱風假	Typhoon day

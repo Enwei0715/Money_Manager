@@ -1453,6 +1453,20 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 檢查 [days] 天內的信用卡自動扣繳：同一個扣款帳戶的應繳金額加總後，若大於帳戶目前餘額就警告。
      * 只看有設定自動扣繳的卡（手動繳費的卡不知道會從哪個帳戶付）。
      */
+    /**
+     * 手動標記或取消颱風假（臺北市停止上班，銀行也不營業）。會影響信用卡結帳日、繳款截止日與自動扣繳的順延。
+     */
+    fun setTyphoonDay(day: LocalDate, on: Boolean) {
+        settings.update { st ->
+            val map = TyphoonDays.decode(st.typhoonDays).toMutableMap()
+            if (on) map[day] = "颱風假"
+            else if (day in com.enwei.moneymanager.core.TaiwanHolidays.KNOWN_TYPHOON) map[day] = com.enwei.moneymanager.core.TaiwanHolidays.WORKING
+            else map.remove(day)
+            com.enwei.moneymanager.core.TaiwanHolidays.setExtra(map)
+            st.copy(typhoonDays = TyphoonDays.encode(map))
+        }
+    }
+
     // ---------- 借貸 ----------
 
     /** 一筆借貸的現況：[outstanding] 為尚未還清的金額，[repaid] 為已還（以本金計）。 */

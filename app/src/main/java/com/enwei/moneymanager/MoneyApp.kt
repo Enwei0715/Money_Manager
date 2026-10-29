@@ -42,6 +42,9 @@ class MoneyApp : Application() {
             repo.runFeeRebates()
         }
         SyncWorker.schedule(this)
+        SyncWorker.scheduleTyphoon(this)
+        // 打開 App 時也檢查一次颱風停班公告
+        appScope.launch { runCatching { SyncWorker.refreshTyphoon(repo) } }
         com.enwei.moneymanager.work.NewsWorker.schedule(this)
         com.enwei.moneymanager.work.StockAlertWorker.schedule(this)
         com.enwei.moneymanager.work.BackupWorker.schedule(this)

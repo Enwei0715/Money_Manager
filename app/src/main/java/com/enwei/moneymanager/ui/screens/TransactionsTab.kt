@@ -564,8 +564,18 @@ private fun CalendarView(
             val dayMemos = memoDays[day].orEmpty()
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 dayMemos.forEach { m -> MemoLine(m) { sheetDay = null; onMemo(m) } }
-                TextButton(onClick = { sheetDay = null; onMemo(Memo(0, day.toMillis(), "")) }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                    Text("＋ 備註")
+                Row {
+                    TextButton(onClick = { sheetDay = null; onMemo(Memo(0, day.toMillis(), "")) }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                        Text("＋ 備註")
+                    }
+                    // 平日才需要：颱風等天然災害臺北市停止上班時，銀行也停止營業，信用卡結帳、繳款與扣繳會順延
+                    if (day.dayOfWeek != DayOfWeek.SATURDAY && day.dayOfWeek != DayOfWeek.SUNDAY) {
+                        val typhoon = com.enwei.moneymanager.core.TaiwanHolidays.holidayName(day) == "颱風假"
+                        val holiday = !com.enwei.moneymanager.core.TaiwanHolidays.isBusinessDay(day)
+                        if (typhoon || !holiday) TextButton(onClick = { repo.setTyphoonDay(day, !typhoon) }) {
+                            Text(if (typhoon) "取消颱風假" else "標記為颱風假（停止上班）")
+                        }
+                    }
                 }
                 if (dayMemos.isNotEmpty() || txns.isNotEmpty()) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 if (txns.isEmpty()) Text("沒有交易", color = gray, modifier = Modifier.padding(20.dp))

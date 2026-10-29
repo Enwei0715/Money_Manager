@@ -51,7 +51,13 @@ object TaiwanHolidays {
         }
     }
 
-    fun setExtra(days: Map<LocalDate, String>) { extra = days }
+    /** 已知、但公告頁已撤下而抓不到的臺北市停止上班日（使用者回報）。 */
+    val KNOWN_TYPHOON: Map<LocalDate, String> = mapOf(LocalDate.of(2026, 10, 23) to "颱風假")
+
+    /** 標為「上班」表示使用者取消了這天的停班（例如已知清單有誤）。 */
+    const val WORKING = "上班"
+
+    fun setExtra(days: Map<LocalDate, String>) { extra = (KNOWN_TYPHOON + days).filterValues { it != WORKING } }
 
     fun knownYears(): Set<Int> = builtIn.keys + downloaded.keys
 
