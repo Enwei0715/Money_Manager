@@ -41,7 +41,6 @@ import androidx.compose.material.icons.outlined.Pets
 import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.TableChart
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -211,7 +210,6 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         BadgedBox(badge = { Badge { Text("${pending.size}") } }) { Icon(Icons.Filled.NotificationsActive, "待確認") }
                     }
                     IconButton(onClick = { nav.navigate("search") }) { Icon(Icons.Outlined.Search, "搜尋") }
-                    IconButton(onClick = { nav.navigate("search?filter=true") }) { Icon(Icons.Outlined.Tune, "篩選") }
                 },
             )
         },
@@ -371,32 +369,18 @@ fun DayBlock(
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
             val compact = maxWidth < 400.dp
-            Column(verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 0.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("${day.dayOfMonth}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(6.dp))
-                    val chip = when (day.dayOfWeek) { DayOfWeek.SUNDAY -> SundayColor; DayOfWeek.SATURDAY -> SaturdayColor; else -> Color(0xFF8C8C8C) }
-                    Surface(color = chip, shape = RoundedCornerShape(3.dp)) {
-                        Text("週${Recurrence.weekdayName(day.dayOfWeek)}", color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text("${"%02d".format(day.monthValue)}.${day.year}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (!compact) {
-                        Spacer(Modifier.weight(1f))
-                        Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = 14.sp,
-                            modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = 14.sp,
-                            modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("${day.dayOfMonth}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(6.dp))
+                val chip = when (day.dayOfWeek) { DayOfWeek.SUNDAY -> SundayColor; DayOfWeek.SATURDAY -> SaturdayColor; else -> Color(0xFF8C8C8C) }
+                Surface(color = chip, shape = RoundedCornerShape(3.dp)) {
+                    Text("週${Recurrence.weekdayName(day.dayOfWeek)}", color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
                 }
-                if (compact) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = 14.sp,
-                            modifier = Modifier.weight(1f), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = 14.sp,
-                            modifier = Modifier.weight(1f), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
+                Spacer(Modifier.weight(1f))
+                Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = if (compact) 12.sp else 14.sp,
+                    modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = if (compact) 12.sp else 14.sp,
+                    modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -560,7 +544,7 @@ private fun CalendarView(
             }
         }
         for (w in 0 until weeks) {
-            Row(Modifier.fillMaxWidth().height(104.dp)) {
+            Row(Modifier.fillMaxWidth().height(88.dp)) {
                 for (d in 0 until 7) {
                     val date = start.plusDays((w * 7 + d).toLong())
                     val inMonth = inRange(date, range)
@@ -603,8 +587,8 @@ private fun CalendarView(
                                 }
                             }
                             Row(
-                                Modifier.fillMaxWidth().height(14.dp).padding(horizontal = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                Modifier.fillMaxWidth().height(14.dp).padding(horizontal = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(1.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 if (holiday != null) CalendarDayMarker("休", SundayColor.copy(alpha = alpha))

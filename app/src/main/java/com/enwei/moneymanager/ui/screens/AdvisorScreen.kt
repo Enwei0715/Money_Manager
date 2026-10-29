@@ -37,10 +37,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -101,9 +101,9 @@ fun AdvisorContent(nav: NavController) {
     LaunchedEffect(Unit) { MoneyApp.news.load() }
     val store = live ?: NewsStore()
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ScrollableTabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface, edgePadding = 8.dp) {
+        TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
             listOf("今日", "問 AI", "新聞", "資金與紀律").forEachIndexed { i, t ->
-                Tab(tab == i, { tab = i }, text = { Text(t, fontSize = 15.sp, maxLines = 1, softWrap = false) },
+                Tab(tab == i, { tab = i }, text = { Text(t, fontSize = 12.sp, maxLines = 1, softWrap = false) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
