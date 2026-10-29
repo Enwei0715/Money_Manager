@@ -291,6 +291,8 @@ data class AppSettings(
     val notifyUpdates: Boolean = true,
     /** 已通知過的版本代碼 */
     val updateNotified: Int = 0,
+    /** 上次產生報告時 AI 分析花的時間（毫秒），用來估算 */
+    val reportAiMs: Long = 50_000,
     /** 背景蒐集新聞並每天產生投資報告 */
     val advisorDaily: Boolean = true,
     /** 交易的必要性（交易 id → NEED／SAVE／ONCE＋備註），收支檢討時讓 AI 參考 */
@@ -411,6 +413,7 @@ class SettingsStore(context: Context) {
         loans = runCatching { json.decodeFromString(loanSerializer, prefs.getString("loans", "{}")!!) }.getOrDefault(emptyMap()),
         loanWarnKey = prefs.getString("loanWarnKey", "")!!,
         advisorDaily = prefs.getBoolean("advisorDaily", true),
+        reportAiMs = prefs.getLong("reportAiMs", 50_000),
         priceAlerts = runCatching { json.decodeFromString(MapSerializer(String.serializer(), PriceAlert.serializer()), prefs.getString("priceAlerts", "{}")!!) }.getOrDefault(emptyMap()),
         stockAlertsOn = prefs.getBoolean("stockAlertsOn", true),
         alertsFired = runCatching { json.decodeFromString(MapSerializer(String.serializer(), Long.serializer()), prefs.getString("alertsFired", "{}")!!) }.getOrDefault(emptyMap()),
@@ -565,6 +568,7 @@ class SettingsStore(context: Context) {
             .putString("loanWarnKey", s.loanWarnKey)
             .putString("reviews", json.encodeToString(reviewSerializer, s.reviews))
             .putBoolean("advisorDaily", s.advisorDaily)
+            .putLong("reportAiMs", s.reportAiMs)
             .putString("priceAlerts", json.encodeToString(MapSerializer(String.serializer(), PriceAlert.serializer()), s.priceAlerts))
             .putBoolean("stockAlertsOn", s.stockAlertsOn)
             .putString("alertsFired", json.encodeToString(MapSerializer(String.serializer(), Long.serializer()), s.alertsFired))

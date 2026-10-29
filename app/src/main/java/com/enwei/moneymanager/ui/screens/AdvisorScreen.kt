@@ -115,9 +115,13 @@ private fun Disclaimer() = Text(
 /** 今日報告：大盤、題材、推薦卡片、重點新聞、持股動作、資金建議、檢查清單。 */
 @Composable
 private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var step by remember { mutableStateOf<String?>(null) }
-    var err by remember { mutableStateOf<String?>(null) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
+    // 每秒更新剩餘時間
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(job?.running) { while (job?.running == true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
+    // 完成後重新讀取報告
+    LaunchedEffect(job?.running) { if (job?.running == false) reload() }
     val r = store.report
     val newsById = remember(store.lastCollect, store.items.size, store.items.count { it.tagged }) { store.items.associateBy { it.id } }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -132,18 +136,21 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (GroqAi.enabled) OutlinedButton(enabled = step == null, onClick = {
-                err = null
-                scope.launch {
-                    val res = runCatching { repo.buildDailyReport(MoneyApp.news) { step = it } }
-                    if (res.getOrNull() == null) err = "產生失敗：${res.exceptionOrNull()?.message ?: GroqAi.lastError ?: "沒有回應"}"
-                    step = null
-                    reload()
-                }
-            }) { Text(if (r == null) "產生報告" else "重新產生") }
+            if (GroqAi.enabled) OutlinedButton(enabled = job?.running != true, onClick = {
+                com.enwei.moneymanager.work.ReportJob.start(ctx)
+            }) { Text(if (job?.running == true) "產生中…" else if (r == null) "產生報告" else "重新產生") }
         }
-        step?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary); LinearProgressIndicator(Modifier.fillMaxWidth()) }
-        err?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
+        // 背景執行中：步驟、預估剩餘時間與進度（離開畫面也會繼續，完成時通知）
+        job?.let { j ->
+            if (j.running) {
+                val total = (j.etaAt - j.startedAt).coerceAtLeast(1)
+                val elapsed = now - j.startedAt
+                Text("${j.step}　約剩 ${com.enwei.moneymanager.work.ReportJob.formatDuration(j.etaAt - now)}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                LinearProgressIndicator(progress = { (elapsed.toFloat() / total).coerceIn(0.02f, 0.97f) }, modifier = Modifier.fillMaxWidth())
+                Text("已執行 ${com.enwei.moneymanager.work.ReportJob.formatDuration(elapsed)}，可以離開這個畫面，完成時會通知你。",
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else j.error?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
+        }
         if (!GroqAi.enabled) Text("到「設定 → AI 智慧辨識」填入金鑰後，App 會每天在背景讀新聞、整理資料集並產生報告。", fontSize = 13.sp)
         if (r != null) {
             Section("大盤") {

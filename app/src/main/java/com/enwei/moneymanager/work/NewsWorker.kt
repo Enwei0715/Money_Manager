@@ -30,8 +30,8 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val st = ds.load()
         val today = LocalDate.now().toEpochDay()
         if (LocalTime.now().hour >= 7 && st.report?.day != today && ds.recent(st, 3).size >= 100) {
-            val r = runCatching { repo.buildDailyReport(ds) {} }.getOrNull()
-            if (r != null) notifyReport(applicationContext, r.picks.joinToString("、") { "${it.symbol} ${it.name}" }, r.trend)
+            // 同一套流程（完成時會通知）
+            if (ReportJob.state.value?.running != true) ReportJob.execute(applicationContext, notifyProgress = false)
         }
         return Result.success()
     }

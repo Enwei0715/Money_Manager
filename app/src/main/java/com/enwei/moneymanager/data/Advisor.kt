@@ -163,13 +163,13 @@ private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: 
 }
 
 /** 背景蒐集與標註新聞（每天數次）；回傳新增則數。 */
-suspend fun Repository.refreshNews(ds: NewsDataset, onStep: (String) -> Unit = {}): Int {
+suspend fun Repository.refreshNews(ds: NewsDataset, onStep: (String) -> Unit = {}, onBatch: (Int, Int) -> Unit = { _, _ -> }): Int {
     val holdings = holdingsByBroker.first().values.flatten().filter { it.market == Market.TW && it.shares > 0.0001 }
     val watch = ds.load().report?.picks.orEmpty().map { "${it.symbol} ${it.name}" }
     val extra = (holdings.map { "${it.symbol} ${it.name.orEmpty()}".trim() } + watch).distinct().take(15)
     onStep("蒐集新聞…")
     val added = ds.collect(extra)
-    if (com.enwei.moneymanager.net.GroqAi.enabled) ds.tag { i, n -> onStep("AI 標註新聞 ${i + 1}/$n 批…") }
+    if (com.enwei.moneymanager.net.GroqAi.enabled) ds.tag { i, n -> onBatch(i, n); onStep("AI 標註新聞 ${i + 1}/$n 批…") }
     return added
 }
 
