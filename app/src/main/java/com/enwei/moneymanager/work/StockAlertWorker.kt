@@ -82,7 +82,7 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
             // 持股即將除權息（3 天內）：提醒一次
             snap.holdings.forEach { h ->
                 val key = Market.TW to h.symbol.uppercase()
-                if (key !in repo.dividendCache) runCatching { QuoteService.fetchDividends(Market.TW, h.symbol) }.getOrNull()?.let { repo.dividendCache[key] = it }
+                if (!repo.dividendCache.containsKey(key)) runCatching { QuoteService.fetchDividends(Market.TW, h.symbol) }.getOrNull()?.let { repo.dividendCache[key] = it }
                 repo.dividendCache[key]?.firstOrNull { it.exEpochDay in today..(today + 3) }?.let { e ->
                     fire(h.symbol, "exdiv-${e.exEpochDay}", "${h.symbol} ${h.name.orEmpty()} 即將除權息",
                         "${LocalDate.ofEpochDay(e.exEpochDay)} 除權息" + (e.perShare.takeIf { it > 0 }?.let { "，每股現金 ${"%.2f".format(it)} 元，約可領 ${"%,.0f".format(it * h.shares)} 元" } ?: ""))
