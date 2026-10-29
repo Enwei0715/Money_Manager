@@ -22,16 +22,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
  */
 object ReportJob {
     /** [etaAt] 為預估完成的時間點（毫秒）。 */
-    data class State(val step: String, val startedAt: Long, val etaAt: Long, val running: Boolean = true, val error: String? = null)
+    data class State(
+        val step: String, val startedAt: Long, val etaAt: Long, val running: Boolean = true, val error: String? = null,
+        /** 只更新新聞資料集（不產生報告） */
+        val refreshOnly: Boolean = false,
+    )
 
     val state = MutableStateFlow<State?>(null)
 
-    fun start(context: Context) {
+    /** 產生報告（[refreshOnly] 為只更新新聞資料集）。 */
+    fun start(context: Context, refreshOnly: Boolean = false) {
         if (state.value?.running == true) return
-        state.value = State("準備中…", System.currentTimeMillis(), System.currentTimeMillis() + 60_000)
+        state.value = State("準備中…", System.currentTimeMillis(), System.currentTimeMillis() + 60_000, refreshOnly = refreshOnly)
         WorkManager.getInstance(context).enqueueUniqueWork(
             "report-now", ExistingWorkPolicy.KEEP,
-            OneTimeWorkRequestBuilder<ReportWorker>().setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build(),
+            OneTimeWorkRequestBuilder<ReportWorker>()
+                .setInputData(androidx.work.workDataOf("refreshOnly" to refreshOnly))
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build(),
         )
     }
 
@@ -39,24 +46,24 @@ object ReportJob {
     private const val SNAPSHOT_MS = 10_000L
 
     /** 執行一次並回報進度；背景每日報告也走這裡。 */
-    suspend fun execute(context: Context, notifyProgress: Boolean): DailyReport? {
+    suspend fun execute(context: Context, notifyProgress: Boolean, refreshOnly: Boolean = false): DailyReport? {
         val repo = MoneyApp.repo
         val ds = MoneyApp.news
         val start = System.currentTimeMillis()
         val big = GroqAi.bigContext(GroqAi.AiTask.NEWS_TAG)
         val perBatch = if (big) 22_000L else 30_000L
         val batchSize = if (big) 150 else 40
-        val maxBatches = if (big) 20 else 12
+        val maxBatches = if (big) 30 else 12
         val aiMs = repo.settings.value.reportAiMs.coerceIn(15_000, 240_000)
         fun batchesFor(untagged: Int) = minOf(maxBatches, (untagged + batchSize - 1) / batchSize)
         fun update(step: String, remaining: Long) {
             val now = System.currentTimeMillis()
-            state.value = State(step, start, now + remaining)
+            state.value = State(step, start, now + remaining, refreshOnly = refreshOnly)
             if (notifyProgress) progressNotice(context, step, remaining, now - start, now + remaining - start)
         }
         return try {
             var st = ds.load()
-            val needCollect = System.currentTimeMillis() - st.lastCollect > 3 * 3600_000L || ds.recent(st, 3).size < 300
+            val needCollect = refreshOnly || System.currentTimeMillis() - st.lastCollect > 3 * 3600_000L || ds.recent(st, 3).size < 300
             if (needCollect) {
                 // 還不知道會抓到多少新的：先以 400 則估算，抓完再修正
                 update("蒐集新聞…", COLLECT_MS + batchesFor(st.items.count { !it.tagged } + 400) * perBatch + SNAPSHOT_MS + aiMs)
@@ -64,6 +71,11 @@ object ReportJob {
                     update("AI 標註新聞 ${i + 1}/$n 批…", (n - i) * perBatch + SNAPSHOT_MS + aiMs)
                 })
                 st = ds.load()
+            }
+            if (refreshOnly) {
+                state.value = State("資料集已更新：共 ${st.items.size} 則", start, System.currentTimeMillis(), running = false, refreshOnly = true)
+                if (notifyProgress) context.getSystemService(android.app.NotificationManager::class.java).cancel(NOTICE_ID)
+                return null
             }
             val aiStart = System.currentTimeMillis()
             val r = repo.buildDailyReport(ds) { step ->
@@ -143,7 +155,7 @@ object ReportJob {
 
 class ReportWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        ReportJob.execute(applicationContext, notifyProgress = true)
+        ReportJob.execute(applicationContext, notifyProgress = true, refreshOnly = inputData.getBoolean("refreshOnly", false))
         return Result.success()
     }
 }

@@ -106,13 +106,17 @@ class NewsDataset(context: Context) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
     private val lock = Mutex()
     @Volatile private var cache: NewsStore? = null
+    private val _flow = kotlinx.coroutines.flow.MutableStateFlow<NewsStore?>(null)
+    /** 資料集的最新內容：背景蒐集、標註、產生報告時畫面會即時更新 */
+    val flow: kotlinx.coroutines.flow.StateFlow<NewsStore?> = _flow
 
     suspend fun load(): NewsStore = cache ?: withContext(Dispatchers.IO) {
-        runCatching { json.decodeFromString(NewsStore.serializer(), file.readText()) }.getOrDefault(NewsStore()).also { cache = it }
+        runCatching { json.decodeFromString(NewsStore.serializer(), file.readText()) }.getOrDefault(NewsStore()).also { cache = it; _flow.value = it }
     }
 
     private suspend fun save(s: NewsStore) = withContext(Dispatchers.IO) {
         cache = s
+        _flow.value = s
         val tmp = File(file.parentFile, file.name + ".tmp")
         tmp.writeText(json.encodeToString(NewsStore.serializer(), s))
         tmp.renameTo(file)
@@ -134,14 +138,21 @@ class NewsDataset(context: Context) {
             "日股 韓股 亞股", "中國 經濟 刺激", "美元 美債 殖利率", "油價 原油", "黃金 價格", "地緣政治 關稅",
             "輝達 NVIDIA", "蘋果 供應鏈", "伺服器 ODM", "被動元件", "面板", "太陽能 儲能", "風電", "軍工 無人機",
             "電信", "食品 民生", "紡織 製鞋", "汽車 零組件", "高股息 ETF", "債券 ETF",
+            "鉅亨 台股", "經濟日報 台股", "工商時報 台股", "MoneyDJ 台股", "Yahoo股市 台股", "財訊 台股", "商周 台股",
+            "台股 法說會 展望", "台股 毛利率", "台股 接單", "台股 出貨", "台股 擴產", "台股 新廠", "台股 訂單",
+            "半導體 設備", "晶圓代工", "成熟製程", "矽晶圓", "IC 封測", "ASIC", "HBM", "GPU", "邊緣 AI", "AI PC 手機",
+            "車用電子", "工業電腦", "低軌衛星 供應鏈", "5G 6G", "光學鏡頭", "連接器", "電源供應器", "機殼 滑軌",
+            "營建 股", "銀行 金控 獲利", "壽險", "航空", "鋼鐵 報價", "塑化", "水泥", "造紙", "百貨 零售", "電商",
+            "生技 臨床", "醫材", "CDMO", "台股 ETF 成分股", "台股 季報", "台股 年報 股利", "台股 現金增資", "台股 除息 填息",
         )
         const val KEEP_DAYS = 14
-        const val MAX_ITEMS = 6000
+        const val MAX_ITEMS = 12000
     }
 
     /** 抓新聞：基本題材＋持股與觀察中的代號，去除重複，保留近 [KEEP_DAYS] 天。回傳新增則數。 */
     suspend fun collect(extraQueries: List<String>): Int {
-        val heads = InvestData.headlines(BASE_QUERIES + extraQueries, perQuery = 40, max = 3000)
+        // Google 新聞每個查詢最多約 100 則：查詢數 × 100，去重後可達數千則
+        val heads = InvestData.headlines(BASE_QUERIES + extraQueries, perQuery = 100, max = 6000)
         val now = System.currentTimeMillis() / 1000
         var added = 0
         update { st ->
@@ -164,7 +175,7 @@ class NewsDataset(context: Context) {
         // Gemini 一次可以標 150 則、請求之間只要稍等；Groq 每分鐘 token 少，一次 40 則、等久一點
         val big = GroqAi.bigContext(GroqAi.AiTask.NEWS_TAG)
         val pending = load().items.filter { !it.tagged }
-        val batches = pending.chunked(if (big) 150 else 40).take(if (big) 20 else 12)
+        val batches = pending.chunked(if (big) 150 else 40).take(if (big) 30 else 12)
         batches.forEachIndexed { i, batch ->
             onProgress(i, batches.size)
             val tags = GroqAi.tagNews(batch.map { it.id to it.title }) ?: return done

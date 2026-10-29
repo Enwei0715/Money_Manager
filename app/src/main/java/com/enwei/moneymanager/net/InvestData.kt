@@ -79,7 +79,7 @@ object InvestData {
         val out = ArrayList<Headline>()
         var i = 0
         while (out.size < max && lists.any { it.size > i }) {
-            lists.forEach { l -> l.getOrNull(i)?.let { h -> if (out.size < max && seen.add(h.title.take(18))) out += h } }
+            lists.forEach { l -> l.getOrNull(i)?.let { h -> if (out.size < max && seen.add(h.title.replace(" ", "").take(30))) out += h } }
             i++
         }
         out

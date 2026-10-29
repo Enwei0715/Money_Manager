@@ -87,9 +87,11 @@ fun AdvisorScreen(nav: NavController) {
 @Composable
 fun AdvisorContent(nav: NavController) {
     var tab by rememberSaveable { mutableStateOf(0) }
-    var store by remember { mutableStateOf(NewsStore()) }
-    var tick by remember { mutableStateOf(0) }
-    LaunchedEffect(tick) { store = MoneyApp.news.load() }
+    // 直接訂閱資料集：背景蒐集、標註、產生報告時畫面即時更新
+    val live by MoneyApp.news.flow.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { MoneyApp.news.load() }
+    val store = live ?: NewsStore()
+    val tick = 0
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScrollableTabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface, edgePadding = 8.dp) {
             listOf("今日", "問 AI", "新聞", "資金與紀律").forEachIndexed { i, t ->
@@ -98,9 +100,9 @@ fun AdvisorContent(nav: NavController) {
             }
         }
         when (tab) {
-            0 -> TodayTab(nav, store) { tick++ }
-            1 -> ChatTab(nav, store) { tick++ }
-            2 -> NewsTab(store) { tick++ }
+            0 -> TodayTab(nav, store) {}
+            1 -> ChatTab(nav, store) {}
+            2 -> NewsTab(store)
             else -> PlanTab(nav)
         }
     }
@@ -117,13 +119,8 @@ private fun Disclaimer() = Text(
 private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
-    // 每秒更新剩餘時間
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(job?.running) { while (job?.running == true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
-    // 完成後重新讀取報告
-    LaunchedEffect(job?.running) { if (job?.running == false) reload() }
     val r = store.report
-    val newsById = remember(store.lastCollect, store.items.size, store.items.count { it.tagged }) { store.items.associateBy { it.id } }
+    val newsById = remember(System.identityHashCode(store)) { store.items.associateBy { it.id } }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -141,16 +138,7 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
             }) { Text(if (job?.running == true) "產生中…" else if (r == null) "產生報告" else "重新產生") }
         }
         // 背景執行中：步驟、預估剩餘時間與進度（離開畫面也會繼續，完成時通知）
-        job?.let { j ->
-            if (j.running) {
-                val total = (j.etaAt - j.startedAt).coerceAtLeast(1)
-                val elapsed = now - j.startedAt
-                Text("${j.step}　約剩 ${com.enwei.moneymanager.work.ReportJob.formatDuration(j.etaAt - now)}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-                LinearProgressIndicator(progress = { (elapsed.toFloat() / total).coerceIn(0.02f, 0.97f) }, modifier = Modifier.fillMaxWidth())
-                Text("已執行 ${com.enwei.moneymanager.work.ReportJob.formatDuration(elapsed)}，可以離開這個畫面，完成時會通知你。",
-                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else j.error?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
-        }
+        JobProgress(job)
         if (!GroqAi.enabled) Text("到「設定 → AI 智慧辨識」填入金鑰後，App 會每天在背景讀新聞、整理資料集並產生報告。", fontSize = 13.sp)
         if (r != null) {
             Section("大盤") {
@@ -236,7 +224,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var err by remember { mutableStateOf<String?>(null) }
     val list = rememberLazyListState()
-    val newsById = remember(store.lastCollect, store.items.size, store.items.count { it.tagged }) { store.items.associateBy { it.id } }
+    val newsById = remember(System.identityHashCode(store)) { store.items.associateBy { it.id } }
     fun send(q: String) {
         if (q.isBlank() || busy) return
         busy = true; err = null; input = ""
@@ -283,48 +271,91 @@ private fun Bubble(m: ChatMsg, newsById: Map<String, com.enwei.moneymanager.data
     }
 }
 
-/** 新聞資料集：蒐集狀態、題材熱度、重點新聞與最新新聞。 */
+/** 背景工作（產生報告或更新資料集）的步驟、預估剩餘時間與進度。 */
 @Composable
-private fun NewsTab(store: NewsStore, reload: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var step by remember { mutableStateOf<String?>(null) }
+private fun JobProgress(job: com.enwei.moneymanager.work.ReportJob.State?) {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(job?.running) { while (job?.running == true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
+    val j = job ?: return
+    if (j.running) {
+        val total = (j.etaAt - j.startedAt).coerceAtLeast(1)
+        val elapsed = now - j.startedAt
+        Text("${j.step}　約剩 ${com.enwei.moneymanager.work.ReportJob.formatDuration(j.etaAt - now)}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+        LinearProgressIndicator(progress = { (elapsed.toFloat() / total).coerceIn(0.02f, 0.97f) }, modifier = Modifier.fillMaxWidth())
+        Text("已執行 ${com.enwei.moneymanager.work.ReportJob.formatDuration(elapsed)}，可以離開這個畫面，完成時會通知你。",
+            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else Text(j.error ?: j.step, fontSize = 13.sp, color = if (j.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/** 新聞資料集：蒐集狀態、題材熱度、重點新聞，以及可搜尋、篩選的全部新聞（清單會即時更新）。 */
+@Composable
+private fun NewsTab(store: NewsStore) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
     val ds = MoneyApp.news
-    val key = store.items.count { it.tagged }
-    val themes = remember(store.lastCollect, key) { ds.themes(store) }
-    val important = remember(store.lastCollect, key) { ds.important(store, 3, 30) }
-    val tagged = store.items.count { it.tagged }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Section("資料集") {
-            Text("共 ${store.items.size} 則（近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天），已標註 $tagged 則", fontSize = 14.sp)
-            Text(
-                "上次蒐集：" + (if (store.lastCollect > 0) java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(store.lastCollect)) else "還沒有") +
-                    "。背景每 6 小時從 ${com.enwei.moneymanager.data.NewsDataset.BASE_QUERIES.size} 個主題與你的持股抓新聞，AI 逐則標註題材、相關個股、多空與重要性。",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedButton(enabled = step == null, onClick = {
-                scope.launch { runCatching { repo.refreshNews(ds) { step = it } }; step = null; reload() }
-            }) { Text("立即更新") }
-            step?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary); LinearProgressIndicator(Modifier.fillMaxWidth()) }
+    val tagged = remember(System.identityHashCode(store)) { store.items.count { it.tagged } }
+    val themes = remember(System.identityHashCode(store)) { ds.themes(store) }
+    val important = remember(System.identityHashCode(store)) { ds.important(store, 3, 30) }
+    var query by remember { mutableStateOf("") }
+    // 0 全部、1 利多、2 利空、3 重要
+    var filter by remember { mutableStateOf(0) }
+    var theme by remember { mutableStateOf<String?>(null) }
+    var shown by remember { mutableStateOf(100) }
+    val filtered = remember(System.identityHashCode(store), query, filter, theme) {
+        store.items.filter { n ->
+            (query.isBlank() || n.title.contains(query, true) || query in n.symbols) &&
+                (theme == null || n.theme == theme) &&
+                when (filter) { 1 -> n.sentiment > 0; 2 -> n.sentiment < 0; 3 -> n.importance >= 4; else -> true }
         }
-        if (themes.isNotEmpty()) Section("題材熱度（近 3 天）") {
-            val max = themes.maxOf { it.count }.coerceAtLeast(1)
-            themes.take(12).forEach { t ->
-                Column {
-                    Row {
-                        Text(t.key, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                        Text("${t.count} 則 · " + (if (t.avgSentiment > 0.2) "偏多" else if (t.avgSentiment < -0.2) "偏空" else "中性"), fontSize = 13.sp,
-                            color = if (t.avgSentiment > 0.2) StockUp else if (t.avgSentiment < -0.2) StockDown else MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Box(Modifier.fillMaxWidth().height(5.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
-                        Box(Modifier.fillMaxWidth(t.count.toFloat() / max).height(5.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)))
+    }
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Spacer(Modifier.height(4.dp))
+            Section("資料集") {
+                Text("共 ${store.items.size} 則（近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天），已標註 $tagged 則", fontSize = 14.sp)
+                Text(
+                    "上次蒐集：" + (if (store.lastCollect > 0) java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(store.lastCollect)) else "還沒有") +
+                        "。背景每 3 小時從 ${com.enwei.moneymanager.data.NewsDataset.BASE_QUERIES.size} 個主題與你的持股抓新聞（每個主題最多約 100 則），AI 逐則標註題材、相關個股、多空與重要性。",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(enabled = job?.running != true, onClick = { com.enwei.moneymanager.work.ReportJob.start(ctx, refreshOnly = true) }) { Text("立即更新") }
+                JobProgress(job)
+            }
+        }
+        if (themes.isNotEmpty()) item {
+            Section("題材熱度（近 3 天，點選篩選）") {
+                val max = themes.maxOf { it.count }.coerceAtLeast(1)
+                themes.take(15).forEach { t ->
+                    Column(Modifier.clickable { theme = if (theme == t.key) null else t.key; shown = 100 }) {
+                        Row {
+                            Text((if (theme == t.key) "● " else "") + t.key, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                            Text("${t.count} 則 · " + (if (t.avgSentiment > 0.2) "偏多" else if (t.avgSentiment < -0.2) "偏空" else "中性"), fontSize = 13.sp,
+                                color = if (t.avgSentiment > 0.2) StockUp else if (t.avgSentiment < -0.2) StockDown else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Box(Modifier.fillMaxWidth().height(5.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
+                            Box(Modifier.fillMaxWidth(t.count.toFloat() / max).height(5.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)))
+                        }
                     }
                 }
             }
         }
-        if (important.isNotEmpty()) Section("重點新聞") { important.forEach { NewsLine(it) } }
-        val latest = store.items.take(40)
-        if (latest.isNotEmpty()) Section("最新新聞") { latest.forEach { NewsLine(it) } }
-        Spacer(Modifier.height(24.dp))
+        if (important.isNotEmpty() && theme == null && query.isBlank()) item { Section("重點新聞") { important.forEach { NewsLine(it) } } }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("全部新聞（${filtered.size}）" + (theme?.let { "　題材：$it" } ?: ""), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(query, { query = it; shown = 100 }, placeholder = { Text("搜尋標題或代號") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("全部", "利多", "利空", "重要").forEachIndexed { i, l -> FilterChip(filter == i, { filter = i; shown = 100 }, label = { Text(l) }) }
+                }
+            }
+        }
+        items(filtered.take(shown), key = { "n" + it.id }) { n ->
+            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) { Box(Modifier.padding(horizontal = 10.dp)) { NewsLine(n) } }
+        }
+        if (filtered.size > shown) item {
+            TextButton(onClick = { shown += 100 }, modifier = Modifier.fillMaxWidth()) { Text("顯示更多（還有 ${filtered.size - shown} 則）") }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 

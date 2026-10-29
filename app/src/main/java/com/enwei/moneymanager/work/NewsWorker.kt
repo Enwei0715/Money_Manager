@@ -38,7 +38,7 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
     companion object {
         fun schedule(context: Context) {
-            val req = PeriodicWorkRequestBuilder<NewsWorker>(6, TimeUnit.HOURS)
+            val req = PeriodicWorkRequestBuilder<NewsWorker>(3, TimeUnit.HOURS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).setRequiresBatteryNotLow(true).build())
                 .build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork("news", ExistingPeriodicWorkPolicy.KEEP, req)
