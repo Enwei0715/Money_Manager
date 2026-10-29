@@ -43,16 +43,16 @@ object GroqAi {
      * App 裡所有用到 AI 的工作與預設分配：頻繁、小量、要快的交給 Groq；
      * 要一次讀大量資料（新聞、整期交易、圖片）的交給 Gemini。[lite] 為用較輕量的模型即可。
      */
-    enum class AiTask(val label: String, val desc: String, val default: Provider, val lite: Boolean) {
-        NOTIFY("通知判讀", "規則看不懂的銀行／支付通知", Provider.GROQ, true),
+    enum class AiTask(val label: String, val desc: String, val default: Provider, val lite: Boolean, val userText: Boolean = true) {
+        NOTIFY("通知判讀", "規則看不懂的銀行／支付通知", Provider.GROQ, true, userText = false),
         NAMING("商家命名與分類", "代碼商家換成好讀名稱、挑分類", Provider.GROQ, true),
         TEACH("教它辨識", "先幫你判斷通知的類型與帳戶", Provider.GROQ, true),
         DUPLICATE("重複交易判斷", "通知、錢包、手動重複記的同一筆", Provider.GROQ, true),
         COMPANY("公司說明", "股票資訊頁的公司業務", Provider.GROQ, true),
-        WALLET("錢包畫面整理", "版面規則看不懂的交易紀錄畫面", Provider.GEMINI, true),
+        WALLET("錢包畫面整理", "版面規則看不懂的交易紀錄畫面", Provider.GEMINI, true, userText = false),
         NEWS_TAG("新聞標註", "每則新聞的相關個股、題材、多空、重要性", Provider.GEMINI, true),
         UNKNOWN("整理不明花費", "依習慣推測不明交易的分類", Provider.GEMINI, false),
-        VISION("截圖對帳", "看銀行畫面找餘額", Provider.GEMINI, false),
+        VISION("截圖對帳", "看銀行畫面找餘額", Provider.GEMINI, false, userText = false),
         REVIEW("收支檢討", "逐筆讀整期交易、分析與提問", Provider.GEMINI, false),
         REPORT("每日投資報告", "讀整個新聞資料集產生報告", Provider.GEMINI, false),
         CHAT("問 AI（股票）", "對話時讀資料集與你的狀況", Provider.GEMINI, false),
@@ -89,6 +89,10 @@ object GroqAi {
     ): JsonObject? = withContext(Dispatchers.IO) {
         val s = MoneyApp.repo.settings.value
         val first = providerFor(task) ?: return@withContext null
+        // 回覆語言跟隨 App 介面語言（JSON 的鍵、清單裡指定的選項值、代號與商家原名不翻）
+        val system = if (com.enwei.moneymanager.ui.I18n.english && task.userText)
+            system + " Write every human-readable text value in English (keep JSON keys, values chosen from given lists, stock codes and original names unchanged)."
+        else system
         // 先用分配的那家，失敗（額度用完、連不上）再改用另一家；Groq 一次能送的量較小，只送前段
         for (p in listOf(first) + Provider.entries.filter { it != first }) {
             val r = when (p) {

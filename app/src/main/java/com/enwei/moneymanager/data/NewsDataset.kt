@@ -31,6 +31,8 @@ data class NewsItem(
     val note: String = "",
     /** 新聞連結 */
     val url: String = "",
+    /** 送去標註但 AI 沒有回覆的次數（兩次後放棄，避免一直重送） */
+    val tries: Int = 0,
 )
 
 /** 每日 AI 選股的一檔。 */
@@ -182,7 +184,8 @@ class NewsDataset(context: Context) {
             update { st ->
                 st.copy(items = st.items.map { n ->
                     tags[n.id]?.let { t -> n.copy(tagged = true, symbols = t.symbols, theme = t.theme, sentiment = t.sentiment, importance = t.importance, note = t.note) }
-                        ?: if (batch.any { it.id == n.id }) n.copy(tagged = true) else n
+                        // 沒被標到的（例如改用 Groq 時輸入被截短）下次再送，兩次都沒有才放棄
+                        ?: if (batch.any { it.id == n.id }) (if (n.tries >= 1) n.copy(tagged = true) else n.copy(tries = n.tries + 1)) else n
                 })
             }
             done += batch.size

@@ -66,14 +66,17 @@ object InvestData {
      * 只取標題與來源，不讀內文。
      */
     suspend fun headlines(queries: List<String>, perQuery: Int = 12, max: Int = 45): List<Headline> = coroutineScope {
-        val lists = queries.map { q ->
-            async {
-                runCatching {
-                    val url = "https://news.google.com/rss/search?q=${URLEncoder.encode("$q when:2d", "UTF-8")}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
-                    parseRss(Http.getText(url)).take(perQuery)
-                }.getOrDefault(emptyList())
-            }
-        }.awaitAll()
+        // 一次最多 8 個查詢同時進行，避免被新聞服務限流
+        val lists = queries.chunked(8).flatMap { group ->
+            group.map { q ->
+                async {
+                    runCatching {
+                        val url = "https://news.google.com/rss/search?q=${URLEncoder.encode("$q when:2d", "UTF-8")}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
+                        parseRss(Http.getText(url)).take(perQuery)
+                    }.getOrDefault(emptyList())
+                }
+            }.awaitAll()
+        }
         val seen = HashSet<String>()
         // 各查詢輪流取，避免某一類新聞占滿
         val out = ArrayList<Headline>()
