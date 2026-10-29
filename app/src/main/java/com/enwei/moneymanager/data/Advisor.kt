@@ -157,6 +157,16 @@ fun citeNumbers(text: String): List<Int> = citeRe.findAll(text).flatMap { m -> R
 /** 拿掉 AI 文字裡的新聞編號引用。 */
 fun stripCites(text: String): String = text.replace(citeRe, "")
 
+/**
+ * 把 AI 文字裡的資料集新聞編號（例如「[19, 35]」）換成這段內容自己的編號「[1][2]」，
+ * 對應 [ids] 的順序（新聞 id 依第一次出現加進去），畫面上點編號就能開那則新聞。
+ */
+fun renumberCites(text: String, imp: List<NewsItem>, ids: MutableList<String>): String =
+    text.replace(citeRe) { m ->
+        Regex("\\d{1,3}").findAll(m.value).mapNotNull { n -> imp.getOrNull(n.value.toInt())?.id }.toList().distinct()
+            .joinToString("") { id -> if (id !in ids) ids += id; "[${ids.indexOf(id) + 1}]" }
+    }
+
 /** 目前持股依保本紀律算出的建議（記賣出時提示用）；沒持有時為 null。 */
 suspend fun Repository.guardFor(symbol: String, price: Double): com.enwei.moneymanager.core.GuardAdvice? {
     val plan = settings.value.investPlan
@@ -333,8 +343,15 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
         p.copy(price = q?.price, name = p.name.ifBlank { q?.name.orEmpty() })
     }
     val keyNews = r.keyNews.mapNotNull { k -> k.id.toIntOrNull()?.let { imp.getOrNull(it) }?.let { KeyNews(it.id, k.why) } }
-    val report = r.copy(picks = picks, keyNews = keyNews, createdAt = System.currentTimeMillis(), day = LocalDate.now().toEpochDay(), newsCount = ds.recent(st, 3).size)
-    ds.update { it.copy(report = report, history = (listOfNotNull(it.report) + it.history).take(400), business = it.business + picks.filter { p -> p.business.isNotBlank() }.associate { p -> p.symbol to p.business }).prunedHistory() }
+    // 報告文字裡的新聞編號換成報告自己的 [1][2]…，重點新聞也編進同一組編號
+    val ids = ArrayList<String>()
+    fun rn(t: String) = renumberCites(t, imp, ids)
+    val trend = rn(r.trend); val summary = rn(r.summary); val allocation = rn(r.allocation)
+    val picks2 = picks.map { it.copy(reason = rn(it.reason)) }
+    val holdings2 = r.holdings.map { it.copy(reason = rn(it.reason)) }
+    keyNews.forEach { if (it.id !in ids) ids += it.id }
+    val report = r.copy(trend = trend, summary = summary, allocation = allocation, picks = picks2, holdings = holdings2, cites = ids, keyNews = keyNews, createdAt = System.currentTimeMillis(), day = LocalDate.now().toEpochDay(), newsCount = ds.recent(st, 3).size)
+    ds.update { it.copy(report = report, history = (listOfNotNull(it.report) + it.history).take(400), business = it.business + picks2.filter { p -> p.business.isNotBlank() }.associate { p -> p.symbol to p.business }).prunedHistory() }
     return report
 }
 
@@ -350,12 +367,11 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
     val today = st.report?.let { r -> "今日報告：${r.trend}；推薦 " + r.picks.joinToString("、") { "${it.symbol}${it.name}（${it.style}）" } } ?: ""
     val history = st.chat.takeLast(6).map { it.fromUser to it.text }
     val reply = com.enwei.moneymanager.net.GroqAi.advisorChat(situation(snap) + "\n" + today + "\n" + digest, history, question) ?: return null
-    // 回覆裡的 [19, 35] 是新聞編號：拿掉，改成附在回覆下方的新聞
-    val cited = citeNumbers(reply.text)
-    val fixed = reply.copy(
-        text = stripCites(reply.text),
-        newsIds = (reply.newsIds.mapNotNull { it.toIntOrNull() } + cited).distinct().mapNotNull { i -> imp.getOrNull(i)?.id },
-    )
+    // 回覆裡的 [19, 35] 是資料集的新聞編號：換成 [1][2]，對應附在回覆下方的新聞
+    val ids = ArrayList<String>()
+    val text = renumberCites(reply.text, imp, ids)
+    reply.newsIds.mapNotNull { it.toIntOrNull() }.mapNotNull { imp.getOrNull(it)?.id }.forEach { if (it !in ids) ids += it }
+    val fixed = reply.copy(text = text, newsIds = ids)
     // 使用者按了停止：不把回覆加進對話
     kotlinx.coroutines.yield()
     ds.update { it.copy(chat = (it.chat + fixed).takeLast(40), business = it.business + fixed.cards.filter { c -> c.business.isNotBlank() }.associate { c -> c.symbol to c.business }) }

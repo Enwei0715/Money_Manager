@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -175,8 +176,10 @@ fun ReviewContent(
             }
             if (obs.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    var allObs by rememberSaveable { mutableStateOf(false) }
                     Text("重點觀察", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    obs.forEach { Text("• $it", fontSize = 14.sp) }
+                    obs.take(if (allObs) obs.size else 3).forEach { Text("• $it", fontSize = 14.sp) }
+                    if (obs.size > 3) TextButton(onClick = { allObs = !allObs }) { Text(if (allObs) "收起" else "還有 ${obs.size - 3} 項") }
                 }
             }
 
@@ -246,14 +249,21 @@ private fun AiReviewBody(
         Spacer(Modifier.width(12.dp))
         Text(r.headline, fontSize = 15.sp, modifier = Modifier.weight(1f))
     }
+    // 每一段像資料夾：點標題展開／收起（預設展開「想問你的幾筆」與「行動建議」，其他收起）
     @Composable
-    fun section(title: String, items: List<String>, mark: String) {
-        if (items.isEmpty()) return
-        Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        items.forEach { Text("$mark $it", fontSize = 14.sp) }
+    fun fold(title: String, count: Int, initiallyOpen: Boolean, body: @Composable () -> Unit) {
+        if (count == 0) return
+        var open by rememberSaveable(title, r.createdAt) { mutableStateOf(initiallyOpen) }
+        Row(Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(if (open) "▴" else "▾ $count", fontSize = 12.sp, color = gray)
+        }
+        if (open) body()
     }
-    if (r.analysis.isNotEmpty()) {
-        Text("多角度分析", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    @Composable
+    fun section(title: String, items: List<String>, mark: String) =
+        fold(title, items.size, false) { items.forEach { Text("$mark $it", fontSize = 14.sp) } }
+    fold("多角度分析", r.analysis.size, false) {
         r.analysis.forEach { a ->
             Column {
                 Text(a.title, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
@@ -262,15 +272,12 @@ private fun AiReviewBody(
         }
     }
     section("做得好", r.good, "✓")
-    if (r.questions.isNotEmpty()) {
-        Text("想問你的幾筆", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        Text("回答會記住，下次檢討時會參考", fontSize = 12.sp, color = gray)
+    fold("想問你的幾筆", r.questions.size, true) {
         val byId = d.expenses.associateBy { it.id }
         r.questions.forEach { q -> QuestionCard(q, q.txnIds.mapNotNull { byId[it] }, lk, necessity, m, nav) }
     }
     section("需要改善", r.improve, "!")
-    if (r.actions.isNotEmpty()) {
-        Text("行動建議", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    fold("行動建議", r.actions.size, true) {
         r.actions.forEachIndexed { i, a ->
             Row {
                 Text("${i + 1}. ${a.action}", fontSize = 14.sp, modifier = Modifier.weight(1f))

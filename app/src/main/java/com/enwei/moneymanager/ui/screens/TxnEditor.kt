@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -206,6 +207,16 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
         else -> cashOptions.getOrNull(cashOpt)?.let { o -> if (type == TxnType.INCOME) o.back to o.give else o.give to o.back }
     }
     LaunchedEffect(isCash, panel) { if (isCash && panel == Panel.AMOUNT) panel = Panel.NONE }
+    // 自動分類：依內容（商家）、過去紀錄、金額與帳戶建議分類；新交易還沒選分類時直接帶入
+    var catSuggest by remember { mutableStateOf<com.enwei.moneymanager.core.CategorySuggester.Suggestion?>(null) }
+    var catAuto by remember { mutableStateOf(false) }
+    LaunchedEffect(merchant, type, amountMinor, accountId) {
+        if (type == TxnType.TRANSFER) { catSuggest = null; return@LaunchedEffect }
+        kotlinx.coroutines.delay(300)
+        val sg = repo.suggestCategory(merchant.ifBlank { null }, type, System.currentTimeMillis(), amountMinor ?: 0, accountId)
+        catSuggest = sg
+        if (sg != null && id == 0L && (categoryId == null || catAuto)) { categoryId = sg.categoryId; catAuto = true }
+    }
 
     fun build(): TxnEntity? {
         val minor = amountMinor ?: return null
@@ -457,8 +468,9 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                         if (panel == Panel.FEE) feeExpr = Calculator.format(it) else expr = Calculator.format(it)
                     } else if (panel == Panel.FEE) panel = Panel.NONE else nextAfterAmount()
                 },
+                suggestion = catSuggest?.takeIf { lk.category(it.categoryId) != null }?.let { it.categoryId to it.reason },
                 onCategory = {
-                    categoryId = it
+                    categoryId = it; catAuto = false
                     panel = when {
                         amountMinor == null -> Panel.AMOUNT
                         accountId == null -> Panel.ACCOUNT
@@ -560,6 +572,8 @@ private fun BottomPanel(
     calcMode: Boolean, selectedCategory: Long?, selectedAccount: Long?, excludeAccount: Long?,
     onExpr: (String) -> Unit, onCurrency: (String) -> Unit, onToggleCalc: () -> Unit, onDoneAmount: () -> Unit,
     onCategory: (Long) -> Unit, onAccount: (AccountEntity) -> Unit,
+    /** 自動分類建議：(分類 id, 原因) */
+    suggestion: Pair<Long, String>? = null,
     onEditCategories: () -> Unit, onEditAccounts: () -> Unit, onClose: () -> Unit,
 ) {
     var currencyMenu by remember { mutableStateOf(false) }
@@ -597,10 +611,51 @@ private fun BottomPanel(
                 Keypad(expr, calcMode, onExpr, onToggleCalc, onDoneAmount)
             }
             Panel.CATEGORY -> {
-                // 左欄大分類、右欄子分類（子分類關閉時只顯示大分類格狀清單）
+                // 上方：搜尋分類與自動分類建議；下方：左欄大分類、右欄子分類（子分類關閉時只顯示大分類格狀清單）
                 val subOn = repo.settings.flow.collectAsStateWithLifecycle().value.subcategoryOn
                 val roots = lk.categories.filter { it.kind == type && !it.archived && it.parentId == null }.sortedBy { it.sortOrder }
-                if (!subOn) {
+                var query by remember(type) { mutableStateOf("") }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    BasicTextField(
+                        query, { query = it }, singleLine = true,
+                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { inner ->
+                            Row(
+                                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(18.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Outlined.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Box { if (query.isEmpty()) Text("搜尋分類", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp); inner() }
+                            }
+                        },
+                    )
+                    suggestion?.let { (cid, _) ->
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.clickable { onCategory(cid) },
+                        ) { Text("建議：" + (lk.catLabel(cid) ?: ""), fontSize = 14.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
+                    }
+                }
+                val q = query.trim()
+                if (q.isNotEmpty()) {
+                    // 搜尋：大分類與子分類一起找，顯示「大分類 / 子分類」
+                    val hits = lk.categories.filter { it.kind == type && !it.archived && (it.name.contains(q, true) || lk.catLabel(it.id)?.contains(q, true) == true) }
+                    LazyColumn(Modifier.fillMaxWidth().height(280.dp)) {
+                        if (hits.isEmpty()) item { Text("找不到「$q」", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp)) }
+                        items(hits, key = { "q${it.id}" }) { c ->
+                            Row(Modifier.fillMaxWidth().height(50.dp).clickable { onCategory(c.id) }.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(lk.catLabel(c.id) ?: c.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    color = if (c.id == selectedCategory) MaterialTheme.colorScheme.primary else Color.Unspecified)
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        }
+                    }
+                } else if (!subOn) {
                     LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(280.dp)) {
                         items(roots, key = { it.id }) { c ->
                             val sel = c.id == lk.rootId(selectedCategory)

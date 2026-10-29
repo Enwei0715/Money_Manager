@@ -82,6 +82,8 @@ data class DailyReport(
     val allocation: String = "",
     val checklist: List<String> = emptyList(),
     val warnings: List<String> = emptyList(),
+    /** 報告文字裡 [1][2]… 對應的新聞 id */
+    val cites: List<String> = emptyList(),
 )
 
 /** 投資助理對話的一則訊息；AI 的回覆可附帶股票卡片與新聞。 */

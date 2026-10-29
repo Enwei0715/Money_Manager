@@ -278,7 +278,10 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     divs.filter { it.exEpochDay > today }.forEach { e ->
                         Text("即將除權息：${java.time.LocalDate.ofEpochDay(e.exEpochDay)}（${e.exEpochDay - today} 天後）", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                     }
-                    divs.sortedByDescending { it.exEpochDay }.take(10).forEach { e ->
+                    // 歷年除權息：先看最近 3 次，點開看更多
+                    var allDivs by remember { mutableStateOf(false) }
+                    val divList = divs.sortedByDescending { it.exEpochDay }
+                    divList.take(if (allDivs) 20 else 3).forEach { e ->
                         Row {
                             Text(java.time.LocalDate.ofEpochDay(e.exEpochDay).toString(), fontSize = 13.sp, modifier = Modifier.weight(1f))
                             Text(listOfNotNull(
@@ -287,6 +290,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             ).joinToString("、"), fontSize = 13.sp)
                         }
                     }
+                    if (divList.size > 3) TextButton(onClick = { allDivs = !allDivs }) { Text(if (allDivs) "收起" else "歷年除權息（${minOf(divList.size, 20)} 次）") }
                     val mine = trades.filter { it.market == Market.TW && it.symbol.equals(symbol, true) && it.side == com.enwei.moneymanager.core.StockSide.CASH_DIVIDEND }
                     if (mine.isNotEmpty()) Text("我已領現金股利 ${"%,.0f".format(mine.sumOf { it.cashAmount })} 元（${mine.map { it.date }.distinct().size} 次）", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                 }
@@ -312,8 +316,10 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             // 相關新聞
             if (news.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("相關新聞（資料集）", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    news.forEach { NewsLine(it) }
+                    var allNews by remember { mutableStateOf(false) }
+                    Text("相關新聞（${news.size}）", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    news.take(if (allNews) news.size else 3).forEach { NewsLine(it) }
+                    if (news.size > 3) TextButton(onClick = { allNews = !allNews }) { Text(if (allNews) "收起" else "顯示全部 ${news.size} 則") }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -342,7 +348,7 @@ private fun InfoGrid(items: List<Pair<String, String>>) {
 
 /** 一則新聞：多空色點＋標題、來源與時間。 */
 @Composable
-fun NewsLine(n: NewsItem) {
+fun NewsLine(n: NewsItem, num: Int? = null) {
     val c = when {
         n.sentiment > 0 -> StockUp
         n.sentiment < 0 -> StockDown
@@ -352,7 +358,7 @@ fun NewsLine(n: NewsItem) {
     // 點新聞開啟原文；舊資料沒有連結時改用搜尋
     val link = n.url.ifBlank { "https://www.google.com/search?tbm=nws&q=" + java.net.URLEncoder.encode(n.title, "UTF-8") }
     Column(Modifier.fillMaxWidth().clickable { runCatching { uri.openUri(link) } }.padding(vertical = 4.dp)) {
-        Text((if (n.sentiment > 0) "▲ " else if (n.sentiment < 0) "▼ " else "• ") + n.title, fontSize = 13.sp, color = c)
+        Text((num?.let { "[$it] " } ?: "") + (if (n.sentiment > 0) "▲ " else if (n.sentiment < 0) "▼ " else "• ") + n.title, fontSize = 13.sp, color = c)
         Text(
             listOfNotNull(
                 n.source.takeIf { it.isNotBlank() },
