@@ -51,6 +51,7 @@ object GroqAi {
         COMPANY("公司說明", "股票資訊頁的公司業務", Provider.GROQ, true),
         WALLET("錢包畫面整理", "版面規則看不懂的交易紀錄畫面", Provider.GEMINI, true, userText = false),
         NEWS_TAG("新聞標註", "每則新聞的相關個股、題材、多空、重要性", Provider.GEMINI, true),
+        DIGEST("新聞重點整理", "把每天每個題材的所有新聞整理成重點", Provider.GEMINI, true),
         UNKNOWN("整理不明花費", "依習慣推測不明交易的分類", Provider.GEMINI, false),
         VISION("截圖對帳", "看銀行畫面找餘額", Provider.GEMINI, false, userText = false),
         REVIEW("收支檢討", "逐筆讀整期交易、分析與提問", Provider.GEMINI, false),
@@ -66,8 +67,6 @@ object GroqAi {
         return if (has(want)) want else Provider.entries.firstOrNull(has)
     }
 
-    /** 這項工作會用 Gemini（可以一次送大量資料）。 */
-    fun bigContext(task: AiTask) = providerFor(task) == Provider.GEMINI
 
     /** 預設模型。llama-3.1-8b-instant 已於 2026/8/16 停止提供給免費與開發者方案。 */
     const val DEFAULT_MODEL = "openai/gpt-oss-20b"
@@ -81,6 +80,48 @@ object GroqAi {
     private enum class Fail { NONE, MODEL_GONE, NO_JSON_MODE }
 
     /** 呼叫模型並取得 JSON 物件回覆；失敗回傳 null。模型下架時自動改用預設模型、不支援 JSON 模式時改用一般模式重試。 */
+    /** 一個可用的模型（哪一家、哪個模型、是否為推理較深的大模型）。 */
+    data class Route(val provider: Provider, val model: String, val big: Boolean)
+
+    /** 需要推理、整合大量資料的工作 */
+    private val HEAVY = setOf(AiTask.UNKNOWN, AiTask.REVIEW, AiTask.REPORT, AiTask.CHAT, AiTask.VISION)
+
+    /**
+     * 自動選模型：依工作的難度與這次要送的資料量排出候選順序，前一個失敗或被限流就換下一個。
+     * - 簡單又短（通知、命名、重複判斷…）：Groq 20b（最快）→ Gemini Lite
+     * - 簡單但很長（新聞標註、錢包畫面、新聞重點）：Gemini Lite → Gemini Flash → Groq 20b（截短）
+     * - 複雜但放得進 Groq：Groq 120b（推理）→ Gemini Flash → Gemini Lite
+     * - 複雜又很長（報告、檢討、對話）：Gemini Flash → Gemini Lite → Groq 120b（截短）
+     * 手動模式則依設定的分配。額度用完的模型會暫停一陣子，直接跳過。
+     */
+    fun routes(task: AiTask, inputLen: Int): List<Route> {
+        val s = MoneyApp.repo.settings.value
+        val g20 = Route(Provider.GROQ, s.aiModel.trim().ifBlank { DEFAULT_MODEL }.let { if (it in RETIRED_MODELS) DEFAULT_MODEL else it }, false)
+        val g120 = Route(Provider.GROQ, s.aiModelHard.trim().ifBlank { HARD_MODEL }, true)
+        val lite = Route(Provider.GEMINI, s.geminiLiteModel.trim().ifBlank { "gemini-flash-lite-latest" }, false)
+        val flash = Route(Provider.GEMINI, s.geminiModel.trim().ifBlank { "gemini-flash-latest" }, true)
+        val heavy = task in HEAVY
+        val fitsGroq = inputLen <= 5000
+        val order = if (!s.aiAutoRoute) {
+            val want = s.aiRoutes[task.name]?.let { r -> Provider.entries.find { it.name == r } } ?: task.default
+            val groq = if (heavy || !task.lite) g120 else g20
+            val gem = if (task.lite) lite else flash
+            if (want == Provider.GROQ) listOf(groq, gem) else listOf(gem, groq)
+        } else when {
+            !heavy && fitsGroq -> listOf(g20, lite, g120)
+            !heavy -> listOf(lite, flash, g20)
+            fitsGroq -> listOf(g120, flash, lite, g20)
+            else -> listOf(flash, lite, g120)
+        }
+        return order.filter { if (it.provider == Provider.GROQ) s.groqKey.isNotBlank() else s.geminiKey.isNotBlank() }
+    }
+
+    /** 這項工作會先送到 Gemini（可以一次送大量資料），用來決定要送完整資料還是精簡版。 */
+    fun bigContext(task: AiTask): Boolean {
+        val now = System.currentTimeMillis()
+        return routes(task, Int.MAX_VALUE).firstOrNull { (cooldownUntil[it.model] ?: 0) <= now }?.provider == Provider.GEMINI
+    }
+
     private suspend fun chatJson(
         system: String, user: String, maxTokens: Int = 200, hard: Boolean = false,
         /** 回覆（含推理）的 token 上限；免費方案每分鐘上限約 8,000，輸入加回覆不能超過 */
@@ -88,36 +129,30 @@ object GroqAi {
         task: AiTask = AiTask.NAMING,
     ): JsonObject? = withContext(Dispatchers.IO) {
         val s = MoneyApp.repo.settings.value
-        val first = providerFor(task) ?: return@withContext null
         // 回覆語言跟隨 App 介面語言（JSON 的鍵、清單裡指定的選項值、代號與商家原名不翻）
         val system = if (com.enwei.moneymanager.ui.I18n.english && task.userText)
             system + " Write every human-readable text value in English (keep JSON keys, values chosen from given lists, stock codes and original names unchanged)."
         else system
-        // 先用分配的那家，失敗（額度用完、連不上）再改用另一家；剛被限流的那家先跳過一陣子
-        val order = (listOf(first) + Provider.entries.filter { it != first }).filter { p ->
-            if (p == Provider.GROQ) s.groqKey.isNotBlank() else s.geminiKey.isNotBlank()
-        }
+        val all = routes(task, system.length + user.length)
+        if (all.isEmpty()) return@withContext null
         val now = System.currentTimeMillis()
-        val ready = order.filter { (cooldownUntil[it] ?: 0) <= now }.ifEmpty { order }
-        for (p in ready) {
-            val model = when (p) {
-                Provider.GEMINI -> if (task.lite) s.geminiLiteModel.trim().ifBlank { "gemini-flash-lite-latest" } else s.geminiModel.trim().ifBlank { "gemini-flash-latest" }
-                Provider.GROQ -> if (hard || !task.lite) s.aiModelHard.trim().ifBlank { HARD_MODEL } else s.aiModel.trim().ifBlank { DEFAULT_MODEL }
-            }
+        // 剛被限流或沒回應的模型先跳過；全部都在暫停就照原順序再試
+        val ready = all.filter { (cooldownUntil[it.model] ?: 0) <= now }.ifEmpty { all }
+        for (r in ready) {
             val t0 = System.currentTimeMillis()
             lastError = null
-            val r = when (p) {
-                Provider.GEMINI -> callGemini(s.geminiKey.trim(), model, system, user,
-                    // Gemini 的思考也算在輸出長度裡：讀大量資料的工作多留空間
-                    maxOf(2048, maxTokens * 4).let { if (task.lite) it else maxOf(it, 12_000) }, timeoutSec = if (task.lite) 45 else 90)
-                Provider.GROQ -> groqJson(s, system, user, maxTokens, hard || !task.lite, cap, effort)
+            val out = when (r.provider) {
+                Provider.GEMINI -> callGemini(s.geminiKey.trim(), r.model, system, user,
+                    // Gemini 的思考也算在輸出長度裡：大模型多留空間
+                    maxOf(2048, maxTokens * 4).let { if (r.big) maxOf(it, 12_000) else it }, timeoutSec = if (r.big) 90 else 45)
+                Provider.GROQ -> groqJson(s, system, user, maxTokens, r.big || hard, cap, if (r.big) effort else "low", forceModel = r.model)
             }
-            logCall(task, p, model, System.currentTimeMillis() - t0, r != null, lastError)
-            if (r != null) return@withContext r
-            // 額度用完或伺服器忙：這家先休息，之後的呼叫直接用另一家
+            logCall(task, r.provider, r.model, System.currentTimeMillis() - t0, out != null, lastError)
+            if (out != null) return@withContext out
+            // 額度用完或沒回應：這個模型先暫停，之後的呼叫直接用下一個
             val err = lastError.orEmpty()
-            if ("429" in err || "額度" in err) cooldownUntil[p] = System.currentTimeMillis() + if (p == Provider.GEMINI) 15 * 60_000L else 2 * 60_000L
-            else if ("逾時" in err || "timeout" in err.lowercase() || "503" in err) cooldownUntil[p] = System.currentTimeMillis() + 5 * 60_000L
+            if ("429" in err || "額度" in err) cooldownUntil[r.model] = System.currentTimeMillis() + if (r.provider == Provider.GEMINI) 15 * 60_000L else 2 * 60_000L
+            else if ("逾時" in err || "timeout" in err.lowercase() || "503" in err || "404" in err) cooldownUntil[r.model] = System.currentTimeMillis() + 5 * 60_000L
         }
         null
     }
@@ -126,17 +161,19 @@ object GroqAi {
     data class CallLog(val time: Long, val task: AiTask, val provider: Provider, val model: String, val ms: Long, val ok: Boolean, val error: String?)
 
     val callLog = kotlinx.coroutines.flow.MutableStateFlow<List<CallLog>>(emptyList())
-    private val cooldownUntil = ConcurrentHashMap<Provider, Long>()
+    /** 模型 → 暫停到的時間（各模型的額度分開計算） */
+    private val cooldownUntil = ConcurrentHashMap<String, Long>()
 
     private fun logCall(task: AiTask, p: Provider, model: String, ms: Long, ok: Boolean, error: String?) {
         callLog.value = (listOf(CallLog(System.currentTimeMillis(), task, p, model, ms, ok, if (ok) null else error)) + callLog.value).take(30)
     }
 
-    /** 某家是否因限流或逾時暫停中（設定頁顯示）。 */
-    fun pausedUntil(p: Provider): Long? = cooldownUntil[p]?.takeIf { it > System.currentTimeMillis() }
+    /** 目前暫停中的模型與恢復時間（設定頁顯示）。 */
+    fun paused(): Map<String, Long> = cooldownUntil.filterValues { it > System.currentTimeMillis() }
 
     private fun groqJson(
         s: com.enwei.moneymanager.data.AppSettings, systemIn: String, userIn: String, maxTokens: Int, hard: Boolean, cap: Int, effort: String,
+        forceModel: String? = null,
     ): JsonObject? {
         // Groq 每分鐘約 8,000 tokens：輸入過長時截短（中文約一字一 token）
         val reserve = minOf(cap, maxOf(if (hard) 4096 else 1024, maxTokens * 4))
@@ -144,19 +181,19 @@ object GroqAi {
         val budget = 7600 - reserve
         val system = if (systemIn.length > budget - 800) systemIn.take(budget - 800) else systemIn
         val user = userIn.take(maxOf(400, budget - system.length))
-        // 難題先用大模型（推理強度中等）；大模型不能用或超過額度時改用一般模型
-        if (hard) {
+        // 指定模型時只用那個（自動選模型會自己排下一個）；否則難題先用大模型，不行再用一般模型
+        if (forceModel == null && hard) {
             val big = s.aiModelHard.trim().ifBlank { HARD_MODEL }
             val (r, _) = call(s.groqKey.trim(), big, true, system, user, maxTokens, effort = effort, cap = cap)
             if (r != null) return r
         }
-        var model = s.aiModel.trim().ifBlank { DEFAULT_MODEL }.let { if (it in RETIRED_MODELS) DEFAULT_MODEL else it }
+        var model = forceModel ?: s.aiModel.trim().ifBlank { DEFAULT_MODEL }.let { if (it in RETIRED_MODELS) DEFAULT_MODEL else it }
         var jsonMode = true
         repeat(3) {
-            val (result, fail) = call(s.groqKey.trim(), model, jsonMode, system, user, maxTokens, cap = cap)
+            val (result, fail) = call(s.groqKey.trim(), model, jsonMode, system, user, maxTokens, effort = effort, cap = cap)
             when (fail) {
                 Fail.NONE -> return result
-                Fail.MODEL_GONE -> if (model != DEFAULT_MODEL) {
+                Fail.MODEL_GONE -> if (forceModel == null && model != DEFAULT_MODEL) {
                     model = DEFAULT_MODEL
                     MoneyApp.repo.settings.update { it.copy(aiModel = DEFAULT_MODEL) }
                 } else return null
@@ -344,7 +381,7 @@ object GroqAi {
             }
             fun gemini(): JsonObject? = if (s.geminiKey.isBlank()) null
             else callGemini(s.geminiKey.trim(), s.geminiModel.trim().ifBlank { "gemini-flash-latest" }, system, "找出餘額", 2048, dataUrl.substringAfter(","))
-            val r = if (providerFor(AiTask.VISION) == Provider.GEMINI) gemini() ?: groq() else groq() ?: gemini()
+            val r = if (routes(AiTask.VISION, 0).firstOrNull()?.provider != Provider.GROQ) gemini() ?: groq() else groq() ?: gemini()
             val v = r?.str("balance")?.replace(",", "")?.toDoubleOrNull() ?: return@withContext null
             val minor = Math.round(v * 100)
             minor.takeIf { ocrAmounts.isEmpty() || it in ocrAmounts || -it in ocrAmounts }
@@ -697,5 +734,28 @@ object GroqAi {
             "$symbol $name", 200, task = AiTask.COMPANY,
         ) ?: return null
         return r.str("d")?.take(80)
+    }
+
+    /**
+     * 新聞重點整理：同一天、同一題材的所有標題整理成不重複的重點（同一事件只寫一次，附相關代號、多空與幾則新聞提到）。
+     */
+    suspend fun digestTheme(theme: String, day: String, headlines: List<String>): List<com.enwei.moneymanager.data.DigestPoint>? {
+        if (!enabled || headlines.isEmpty()) return emptyList()
+        val system = "你是台股新聞編輯。以下是 $day「$theme」題材的所有新聞標題。把它們整理成 3～8 個不重複的重點（同一件事只寫一次，合併相同事件），" +
+            "每點 40 字內、具體（公司、數字、事件），標出相關台股代號（確定的才填）、對相關個股的多空（-2～2）、有幾則標題在講這件事。重要的排前面。" +
+            "只回 JSON：{\"p\": [{\"t\": 重點, \"s\": [代號], \"m\": 數字, \"n\": 則數}]}"
+        val user = headlines.take(300).mapIndexed { i, h -> "$i. ${h.take(60)}" }.joinToString("\n")
+        val r = chatJson(system, user, 900, task = AiTask.DIGEST) ?: return null
+        val code = Regex("^[0-9]{4,6}[A-Z]?$")
+        return (r["p"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val t = o.str("t") ?: return@mapNotNull null
+            com.enwei.moneymanager.data.DigestPoint(
+                t.take(80),
+                (o["s"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { c -> code.matches(c) } }.orEmpty().distinct().take(5),
+                o.str("m")?.toDoubleOrNull()?.toInt()?.coerceIn(-2, 2) ?: 0,
+                o.str("n")?.toDoubleOrNull()?.toInt()?.coerceAtLeast(1) ?: 1,
+            )
+        }?.take(8)
     }
 }

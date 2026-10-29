@@ -148,6 +148,19 @@ private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: 
             val heads = recent.filter { t.key in it.symbols }.take(if (full) 3 else 1).joinToString(" / ") { it.title.take(if (full) 40 else 24) }
             appendLine("- ${t.key}｜${t.count}｜${"%+.1f".format(t.avgSentiment)}｜$heads")
         }
+        // 新聞重點庫：所有新聞依題材整理後的重點（同一事件只寫一次）
+        val byTheme = st.digests.values.groupBy { it.theme }.entries.sortedByDescending { e -> e.value.sumOf { it.count } }
+        if (byTheme.isNotEmpty()) {
+            appendLine("新聞重點庫（依題材；每點後為相關代號、多空 -2~2、幾則新聞提到）：")
+            byTheme.take(if (full) 30 else 8).forEach { (theme, days) ->
+                appendLine("【$theme】")
+                days.sortedByDescending { it.day }.take(if (full) 3 else 1).forEach { d ->
+                    d.points.take(if (full) 8 else 3).forEach { p ->
+                        appendLine("- ${d.day.substring(5)} ${p.text}" + (if (p.symbols.isNotEmpty()) "｜${p.symbols.joinToString(",")}" else "") + "｜${p.sentiment}｜${p.count}則")
+                    }
+                }
+            }
+        }
         appendLine("重點新聞：")
         imp.forEachIndexed { i, n -> appendLine("[$i] ${n.title.take(45)}" + (n.note.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: "")) }
         // 讀得下大量資料時（Gemini）：附上近 3 天所有新聞標題，依題材分組
@@ -155,7 +168,7 @@ private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: 
             appendLine("近 3 天所有新聞（依題材；括號為多空 -2~2）：")
             recent.groupBy { it.theme.ifBlank { "其他" } }.entries.sortedByDescending { it.value.size }.forEach { (theme, list) ->
                 appendLine("【$theme】")
-                list.take(120).forEach { n -> appendLine("- ${n.title.take(60)}（${n.sentiment}）" + if (n.symbols.isNotEmpty()) " ${n.symbols.joinToString(",")}" else "") }
+                list.take(40).forEach { n -> appendLine("- ${n.title.take(60)}（${n.sentiment}）" + if (n.symbols.isNotEmpty()) " ${n.symbols.joinToString(",")}" else "") }
             }
         }
     }
@@ -163,13 +176,19 @@ private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: 
 }
 
 /** 背景蒐集與標註新聞（每天數次）；回傳新增則數。 */
-suspend fun Repository.refreshNews(ds: NewsDataset, onStep: (String) -> Unit = {}, onBatch: (Int, Int) -> Unit = { _, _ -> }): Int {
+suspend fun Repository.refreshNews(
+    ds: NewsDataset, onStep: (String) -> Unit = {}, onBatch: (Int, Int) -> Unit = { _, _ -> }, onDigest: (Int, Int) -> Unit = { _, _ -> },
+): Int {
     val holdings = holdingsByBroker.first().values.flatten().filter { it.market == Market.TW && it.shares > 0.0001 }
     val watch = ds.load().report?.picks.orEmpty().map { "${it.symbol} ${it.name}" }
     val extra = (holdings.map { "${it.symbol} ${it.name.orEmpty()}".trim() } + watch).distinct().take(15)
     onStep("蒐集新聞…")
     val added = ds.collect(extra)
-    if (com.enwei.moneymanager.net.GroqAi.enabled) ds.tag { i, n -> onBatch(i, n); onStep("AI 標註新聞 ${i + 1}/$n 批…") }
+    if (com.enwei.moneymanager.net.GroqAi.enabled) {
+        ds.tag { i, n -> onBatch(i, n); onStep("AI 標註新聞 ${i + 1}/$n 批…") }
+        // 把全部新聞整理成每天、每個題材的重點
+        ds.digest { i, n -> onDigest(i, n); onStep("整理新聞重點 ${i + 1}/$n…") }
+    }
     return added
 }
 

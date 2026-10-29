@@ -262,6 +262,8 @@ data class AppSettings(
     val geminiKey: String = "",
     val geminiModel: String = "gemini-flash-latest",
     val geminiLiteModel: String = "gemini-flash-lite-latest",
+    /** 自動依工作難度與資料量選模型（關閉時用下面的手動分配） */
+    val aiAutoRoute: Boolean = true,
     /** AI 工作分配：工作名稱 → GROQ／GEMINI（沒設定時用預設） */
     val aiRoutes: Map<String, String> = emptyMap(),
     val geminiUsageDay: Long = 0,
@@ -398,6 +400,7 @@ class SettingsStore(context: Context) {
         typhoonDays = prefs.getString("typhoonDays", "")!!,
         groqKey = prefs.getString("groqKey", "")!!,
         geminiKey = prefs.getString("geminiKey", "")!!,
+        aiAutoRoute = prefs.getBoolean("aiAutoRoute", true),
         geminiModel = prefs.getString("geminiModel", "gemini-flash-latest")!!,
         geminiLiteModel = prefs.getString("geminiLiteModel", "gemini-flash-lite-latest")!!,
         aiRoutes = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("aiRoutes", "{}")!!) }.getOrDefault(emptyMap()),
@@ -553,6 +556,7 @@ class SettingsStore(context: Context) {
             .putString("typhoonDays", s.typhoonDays)
             .putString("groqKey", s.groqKey)
             .putString("geminiKey", s.geminiKey)
+            .putBoolean("aiAutoRoute", s.aiAutoRoute)
             .putString("geminiModel", s.geminiModel)
             .putString("geminiLiteModel", s.geminiLiteModel)
             .putString("aiRoutes", json.encodeToString(strMapSerializer, s.aiRoutes))

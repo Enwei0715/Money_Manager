@@ -66,9 +66,13 @@ object ReportJob {
             val needCollect = refreshOnly || System.currentTimeMillis() - st.lastCollect > 3 * 3600_000L || ds.recent(st, 3).size < 300
             if (needCollect) {
                 // 還不知道會抓到多少新的：先以 400 則估算，抓完再修正
-                update("蒐集新聞…", COLLECT_MS + batchesFor(st.items.count { !it.tagged } + 400) * perBatch + SNAPSHOT_MS + aiMs)
+                // 新聞重點整理：每組約 [digestMs]，先以 10 組估算
+                val digestMs = if (GroqAi.bigContext(GroqAi.AiTask.DIGEST)) 12_000L else 18_000L
+                update("蒐集新聞…", COLLECT_MS + batchesFor(st.items.count { !it.tagged } + 400) * perBatch + 10 * digestMs + SNAPSHOT_MS + aiMs)
                 repo.refreshNews(ds, onStep = {}, onBatch = { i, n ->
-                    update("AI 標註新聞 ${i + 1}/$n 批…", (n - i) * perBatch + SNAPSHOT_MS + aiMs)
+                    update("AI 標註新聞 ${i + 1}/$n 批…", (n - i) * perBatch + 10 * digestMs + SNAPSHOT_MS + aiMs)
+                }, onDigest = { i, n ->
+                    update("整理新聞重點 ${i + 1}/$n…", (n - i) * digestMs + SNAPSHOT_MS + aiMs)
                 })
                 st = ds.load()
             }

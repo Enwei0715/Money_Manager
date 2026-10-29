@@ -1417,3 +1417,11 @@ AI 判斷	AI judged
 成功	OK
 失敗：	Failed: 
 秒	s
+股票助理回覆了	Stock assistant replied
+新聞重點（AI 整理全部新聞）	News highlights (AI summary of all news)
+整理新聞重點	Summarizing news
+模型選擇	Model choice
+自動選擇（建議）	Automatic (recommended)
+資料少：	Small input: 
+資料多：	Large input: 
+新聞重點整理	News summaries

@@ -219,21 +219,24 @@ private fun Tag(text: String, bg: Color) {
 /** 問 AI：對話泡泡，AI 回覆附股票卡片與新聞。 */
 @Composable
 private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
-    val scope = rememberCoroutineScope()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     var input by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var err by remember { mutableStateOf<String?>(null) }
+    // 對話在背景執行：離開畫面也會繼續，回來時看得到回覆；不在畫面上時完成會通知
+    val job by com.enwei.moneymanager.work.ChatJob.state.collectAsStateWithLifecycle()
+    val busy = job?.running == true
+    val err = job?.error
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        com.enwei.moneymanager.work.ChatJob.visible = true
+        onDispose { com.enwei.moneymanager.work.ChatJob.visible = false }
+    }
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(busy) { while (busy) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
     val list = rememberLazyListState()
     val newsById = remember(System.identityHashCode(store)) { store.items.associateBy { it.id } }
     fun send(q: String) {
         if (q.isBlank() || busy) return
-        busy = true; err = null; input = ""
-        scope.launch {
-            val r = runCatching { repo.askAdvisor(MoneyApp.news, q) }.getOrNull()
-            if (r == null) err = "AI 沒有回應：${GroqAi.lastError ?: ""}"
-            busy = false
-            reload()
-        }
+        input = ""
+        com.enwei.moneymanager.work.ChatJob.ask(ctx, q)
     }
     LaunchedEffect(store.chat.size) { if (store.chat.isNotEmpty()) list.animateScrollToItem(store.chat.size) }
     Column(Modifier.fillMaxSize().imePadding()) {
@@ -243,7 +246,10 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
             }
             items(store.chat) { m -> Bubble(m, newsById, nav) }
-            if (busy) item { Text("AI 思考中…", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
+            if (busy) item {
+                Text("AI 思考中…（${com.enwei.moneymanager.work.ReportJob.formatDuration(now - (job?.startedAt ?: now))}，可以離開，回覆好會通知）",
+                    fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+            }
             err?.let { e -> item { Text(e, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) } }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -335,6 +341,24 @@ private fun NewsTab(store: NewsStore) {
                         Box(Modifier.fillMaxWidth().height(5.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
                             Box(Modifier.fillMaxWidth(t.count.toFloat() / max).height(5.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)))
                         }
+                    }
+                }
+            }
+        }
+        // 新聞重點庫：每個題材最新一天整理好的重點（同一事件只列一次）
+        val digests = store.digests.values.groupBy { it.theme }.mapValues { (_, l) -> l.maxBy { it.day } }
+            .values.sortedByDescending { it.count }.filter { theme == null || it.theme == theme }
+        if (digests.isNotEmpty() && query.isBlank()) item {
+            Section("新聞重點（AI 整理全部新聞）") {
+                digests.take(if (theme == null) 10 else 1).forEach { d ->
+                    Text("${d.theme}　${d.day.substring(5)} · ${d.count} 則", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    d.points.take(if (theme == null) 4 else 8).forEach { p ->
+                        Text(
+                            (if (p.sentiment > 0) "▲ " else if (p.sentiment < 0) "▼ " else "• ") + p.text +
+                                (if (p.symbols.isNotEmpty()) "（${p.symbols.joinToString(",")}）" else "") + if (p.count > 1) " ×${p.count}" else "",
+                            fontSize = 13.sp,
+                            color = if (p.sentiment > 0) StockUp else if (p.sentiment < 0) StockDown else MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 }
             }

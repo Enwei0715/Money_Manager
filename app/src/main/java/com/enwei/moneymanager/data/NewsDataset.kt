@@ -35,6 +35,14 @@ data class NewsItem(
     val tries: Int = 0,
 )
 
+/** 新聞重點：同一事件只算一次。 */
+@Serializable
+data class DigestPoint(val text: String, val symbols: List<String> = emptyList(), val sentiment: Int = 0, val count: Int = 1)
+
+/** 某一天、某個題材的新聞重點（整理了 [count] 則標題）。 */
+@Serializable
+data class ThemeDigest(val day: String, val theme: String, val count: Int, val points: List<DigestPoint>, val updatedAt: Long = 0)
+
 /** 每日 AI 選股的一檔。 */
 @Serializable
 data class StockPick(
@@ -94,6 +102,8 @@ data class NewsStore(
     val chat: List<ChatMsg> = emptyList(),
     /** 代號 → 公司在做什麼（AI 說明，快取） */
     val business: Map<String, String> = emptyMap(),
+    /** 新聞重點庫：「日期|題材」→ 重點（所有新聞都整理進來） */
+    val digests: Map<String, ThemeDigest> = emptyMap(),
 )
 
 /** 題材或個股在資料集中的統計。 */
@@ -190,6 +200,32 @@ class NewsDataset(context: Context) {
             }
             done += batch.size
             if (i < batches.lastIndex) delay(if (big) 6_000 else 15_000)
+        }
+        return done
+    }
+
+    /**
+     * 新聞重點庫：近 3 天每天、每個題材的全部新聞交給 AI 整理成不重複的重點。
+     * 已整理過的只在新聞增加不少時才重整；先整理則數多的。回傳整理了幾組。
+     */
+    suspend fun digest(maxCalls: Int = 30, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
+        val st = load()
+        val zone = java.time.ZoneId.of("Asia/Taipei")
+        fun dayOf(n: NewsItem) = java.time.Instant.ofEpochSecond(n.epochSec).atZone(zone).toLocalDate().toString()
+        val groups = recent(st, 3).filter { it.theme.isNotBlank() }.groupBy { dayOf(it) to it.theme }
+            .filter { (k, l) ->
+                val old = st.digests["${k.first}|${k.second}"]
+                l.size >= 3 && (old == null || l.size >= old.count + maxOf(5, old.count / 5))
+            }.entries.sortedByDescending { it.value.size }.take(maxCalls)
+        val big = GroqAi.bigContext(GroqAi.AiTask.DIGEST)
+        var done = 0
+        groups.forEachIndexed { i, (k, list) ->
+            onProgress(i, groups.size)
+            val points = GroqAi.digestTheme(k.second, k.first, list.sortedByDescending { it.importance }.map { it.title }) ?: return done
+            update { s -> s.copy(digests = (s.digests + ("${k.first}|${k.second}" to ThemeDigest(k.first, k.second, list.size, points, System.currentTimeMillis())))
+                .filterValues { d -> runCatching { java.time.LocalDate.parse(d.day) }.getOrNull()?.isAfter(java.time.LocalDate.now().minusDays(KEEP_DAYS.toLong())) == true }) }
+            done++
+            if (i < groups.lastIndex) delay(if (big) 5_000 else 12_000)
         }
         return done
     }

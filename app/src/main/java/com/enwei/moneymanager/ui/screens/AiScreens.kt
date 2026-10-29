@@ -83,27 +83,32 @@ fun AiSettingsScreen(nav: NavController) {
             // 工作分配
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("工作分配", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Text("某一家額度用完或連不上時，會自動改用另一家。", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("模型選擇", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    SwitchRow("自動選擇（建議）", "依工作難度與資料量挑模型：簡單短的用 Groq 20b，要推理的用 Groq 120b，資料量大的用 Gemini；用完額度自動換下一個",
+                        s.aiAutoRoute, true) { v -> repo.settings.update { it.copy(aiAutoRoute = v) } }
                     AiTask.entries.forEach { t ->
-                        val want = s.aiRoutes[t.name]?.let { r -> Provider.entries.find { it.name == r } } ?: t.default
-                        val actual = GroqAi.providerFor(t)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(t.label, fontSize = 14.sp)
+                                // 自動時顯示這項工作的候選順序（資料量小／大兩種情況）
+                                val small = GroqAi.routes(t, 1000).joinToString(" → ") { it.model.substringAfterLast('/') }
+                                val large = GroqAi.routes(t, 50_000).joinToString(" → ") { it.model.substringAfterLast('/') }
                                 Text(
-                                    t.desc + if (actual != null && actual != want) "（沒有 ${want.label} 金鑰，改用 ${actual.label}）" else "",
+                                    t.desc + "\n" + if (small == large) small else "資料少：$small\n資料多：$large",
                                     fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Provider.entries.forEach { p ->
-                                FilterChip(want == p, { repo.settings.update { it.copy(aiRoutes = it.aiRoutes + (t.name to p.name)) } },
-                                    label = { Text(p.label, fontSize = 12.sp) }, modifier = Modifier.padding(start = 4.dp))
+                            if (!s.aiAutoRoute) {
+                                val want = s.aiRoutes[t.name]?.let { r -> Provider.entries.find { it.name == r } } ?: t.default
+                                Provider.entries.forEach { p ->
+                                    FilterChip(want == p, { repo.settings.update { it.copy(aiRoutes = it.aiRoutes + (t.name to p.name)) } },
+                                        label = { Text(p.label, fontSize = 12.sp) }, modifier = Modifier.padding(start = 4.dp))
+                                }
                             }
                         }
                         HorizontalDivider()
                     }
-                    OutlinedButton(onClick = { repo.settings.update { it.copy(aiRoutes = emptyMap()) } }) { Text("恢復建議分配") }
+                    if (!s.aiAutoRoute) OutlinedButton(onClick = { repo.settings.update { it.copy(aiRoutes = emptyMap()) } }) { Text("恢復建議分配") }
                 }
             }
 
@@ -112,11 +117,9 @@ fun AiSettingsScreen(nav: NavController) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("最近的 AI 呼叫", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Provider.entries.forEach { p ->
-                        GroqAi.pausedUntil(p)?.let { t ->
-                            Text("${p.label} 暫停到 " + java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(t)) + "（剛才額度用完或沒有回應，先改用另一家）",
-                                fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-                        }
+                    GroqAi.paused().forEach { (m, t) ->
+                        Text("$m 暫停到 " + java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(t)) + "（剛才額度用完或沒有回應，先用下一個模型）",
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                     }
                     if (log.isEmpty()) Text("這次開啟 App 後還沒有呼叫", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     log.forEach { c ->
