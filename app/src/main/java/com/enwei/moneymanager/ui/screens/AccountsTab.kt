@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -147,13 +148,15 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
-                title = { Text(if (section == 0) "帳戶" else "股票") },
+                title = { Text(listOf("帳戶", "股票", "股票助理")[section]) },
                 navigationIcon = {
                     if (showBack) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
                 },
                 actions = {
-                  if (section == 1) {
+                  if (section == 2) Unit
+                  else if (section == 1) {
                     IconButton(onClick = { refreshTick++ }) { Icon(Icons.Filled.Refresh, "更新股價") }
+                    IconButton(onClick = { nav.navigate("stockfees") }) { Icon(Icons.Outlined.Settings, "手續費與月退") }
                     IconButton(onClick = { nav.navigate("trade/0") }) { Icon(Icons.Filled.Add, "新增股票交易") }
                   } else {
                     IconButton(onClick = { nav.navigate("totalstats") }) { Icon(Icons.Outlined.BarChart, "總資產統計") }
@@ -176,12 +179,13 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
             selectedTabIndex = section, containerColor = MaterialTheme.colorScheme.surface,
             indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[section]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
         ) {
-            listOf("帳戶", "股票").forEachIndexed { i, t ->
+            listOf("帳戶", "股票", "助理").forEachIndexed { i, t ->
                 Tab(section == i, { section = i }, text = { Text(t, fontSize = 16.sp) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        if (section == 1) StockContent(nav, refreshTick) { msg -> scope.launch { snack.showSnackbar(com.enwei.moneymanager.ui.tr(msg)) } }
+        if (section == 2) AdvisorContent(nav)
+        else if (section == 1) StockContent(nav, refreshTick) { msg -> scope.launch { snack.showSnackbar(com.enwei.moneymanager.ui.tr(msg)) } }
         else LazyColumn(Modifier.fillMaxSize()) {
             item {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

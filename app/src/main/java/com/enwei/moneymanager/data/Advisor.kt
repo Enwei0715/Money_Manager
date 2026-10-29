@@ -113,56 +113,96 @@ private fun describe(name: String, b: DailyBars?, stage: MarketStage): String {
         "月線 ${f(Technicals.sma(c, 20))}、季線 ${f(Technicals.sma(c, 60))}、RSI ${f(Technicals.rsi(c))}；規則判斷：${stage.label}"
 }
 
-/**
- * 讀取大盤、新聞並請 AI 依使用者的紀律與資金計畫做分析。[onStep] 回報目前進度。
- * AI 推薦的代號會再查一次報價，查不到的標示為未確認。
- */
-suspend fun Repository.runAdvisor(onStep: (String) -> Unit): AdvisorReport? {
+/** 給 AI 的使用者狀況：大盤、資金計畫、持股與紀律（每日報告與對話共用）。 */
+private fun Repository.situation(snap: AdvisorSnapshot): String {
     val s = settings.value
-    onStep("讀取大盤與持股走勢…")
-    val snap = advisorSnapshot(fetch = true)
-    onStep("讀取新聞…")
-    val queries = listOf("台股 大盤", "台股 外資 買超", "美股 費半 科技股", "台股 產業 題材") +
-        snap.holdings.take(5).map { "${it.symbol} ${it.name.orEmpty()}".trim() }
-    val news = runCatching { InvestData.headlines(queries, perQuery = 8, max = 35) }.getOrDefault(emptyList())
-    onStep("AI 分析中（讀了 ${news.size} 則新聞）…")
     val a = snap.alloc
     fun m(v: Long) = Money.format(v, "TWD")
-    val user = buildString {
+    return buildString {
         appendLine("今天：${LocalDate.now()}")
         appendLine(describe("加權指數", snap.index, snap.indexStage))
         appendLine(describe("費城半導體", snap.sox, snap.soxStage))
-        appendLine()
-        appendLine("資金計畫：現金 ${m(a.cash)}，保留生活費 ${m(a.reserve)}，可投資 ${m(a.investable)}（長線 ${"%.0f".format(s.investPlan.longRatio * 100)}%）")
-        appendLine("長線：目標 ${m(a.longTarget)}，已投入 ${m(a.longValue)}，可再投入 ${m(a.longRoom)}")
-        appendLine("短線：目標 ${m(a.shortTarget)}，已投入 ${m(a.shortValue)}，可再投入 ${m(a.shortRoom)}" + if (a.shortOver > 0) "（超出 ${m(a.shortOver)}）" else "")
-        appendLine()
-        appendLine("持股（代號 名稱｜股性｜股數｜均價｜現價｜損益%｜買進後最高｜規則建議）：")
+        appendLine("資金計畫：現金 ${m(a.cash)}，保留生活費 ${m(a.reserve)}，可投資 ${m(a.investable)}（長線 ${"%.0f".format(s.investPlan.longRatio * 100)}%）；" +
+            "長線已投入 ${m(a.longValue)}／目標 ${m(a.longTarget)}，可再投入 ${m(a.longRoom)}；短線已投入 ${m(a.shortValue)}／目標 ${m(a.shortTarget)}，可再投入 ${m(a.shortRoom)}")
+        appendLine("持股（代號 名稱｜股性｜股數｜均價｜現價｜損益%｜規則建議）：" + if (snap.holdings.isEmpty()) "無" else "")
         snap.holdings.forEach { h ->
             appendLine(
                 "- ${h.symbol} ${h.name.orEmpty()}｜${h.style.label}｜${"%.0f".format(h.shares)}｜${"%.2f".format(h.avgCost)}｜${h.price ?: "?"}｜" +
-                    "${h.gainPct?.let { "%+.1f".format(it) } ?: "?"}｜${h.peak?.let { "%.2f".format(it) } ?: "?"}｜" +
-                    (h.advice?.let { "${it.action}，停損 ${"%.2f".format(it.stop)}" } ?: "?"),
+                    "${h.gainPct?.let { "%+.1f".format(it) } ?: "?"}｜" + (h.advice?.let { "${it.action}，停損 ${"%.2f".format(it.stop)}" } ?: "?"),
             )
         }
-        if (snap.holdings.isEmpty()) appendLine("（目前沒有持股）")
-        appendLine()
-        appendLine("使用者的交易紀律：")
-        s.investPlan.rules.forEach { appendLine("- $it") }
-        appendLine()
-        appendLine("近兩天新聞標題：")
-        news.forEachIndexed { i, h -> appendLine("${i + 1}. ${h.title.take(40)}") }
+        appendLine("紀律：" + s.investPlan.rules.joinToString("；"))
     }
-    val report = com.enwei.moneymanager.net.GroqAi.advise(user) ?: return null
-    onStep("確認推薦的代號…")
-    val ideaQuotes = runCatching {
-        com.enwei.moneymanager.net.QuoteService.fetch(report.ideas.map { Market.TW to it.symbol })
-    }.getOrDefault(emptyList()).associateBy { it.key }
-    val verified = report.ideas.map { idea ->
-        val q = ideaQuotes[com.enwei.moneymanager.data.quoteKey(Market.TW, idea.symbol)]
-        idea.copy(price = q?.price, name = idea.name.ifBlank { q?.name.orEmpty() })
+}
+
+/** 資料集摘要：題材熱度、個股統計（附最新一則標題）、重點新聞（編號 → 新聞 id）。 */
+private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: Int, important: Int): Pair<String, List<NewsItem>> {
+    val recent = ds.recent(st, 3)
+    val imp = ds.important(st, 2, important)
+    val text = buildString {
+        appendLine("新聞資料集：近 3 天已標註 ${recent.size} 則（共收 ${st.items.size} 則）")
+        appendLine("題材熱度（則數｜平均多空 -2~2｜重大則數）：")
+        ds.themes(st).take(themes).forEach { appendLine("- ${it.key}｜${it.count}｜${"%+.1f".format(it.avgSentiment)}｜${it.important}") }
+        appendLine("被提到最多的個股（代號｜則數｜多空｜最新標題）：")
+        ds.symbols(st).take(symbols).forEach { t ->
+            val latest = recent.firstOrNull { t.key in it.symbols }?.title?.take(24).orEmpty()
+            appendLine("- ${t.key}｜${t.count}｜${"%+.1f".format(t.avgSentiment)}｜$latest")
+        }
+        appendLine("重點新聞：")
+        imp.forEachIndexed { i, n -> appendLine("[$i] ${n.title.take(45)}" + (n.note.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: "")) }
     }
-    val final = report.copy(ideas = verified, news = news.map { "${it.title}（${it.source}）" }, createdAt = System.currentTimeMillis())
-    settings.update { it.copy(advisorReport = final) }
-    return final
+    return text to imp
+}
+
+/** 背景蒐集與標註新聞（每天數次）；回傳新增則數。 */
+suspend fun Repository.refreshNews(ds: NewsDataset, onStep: (String) -> Unit = {}): Int {
+    val holdings = holdingsByBroker.first().values.flatten().filter { it.market == Market.TW && it.shares > 0.0001 }
+    val watch = ds.load().report?.picks.orEmpty().map { "${it.symbol} ${it.name}" }
+    val extra = (holdings.map { "${it.symbol} ${it.name.orEmpty()}".trim() } + watch).distinct().take(15)
+    onStep("蒐集新聞…")
+    val added = ds.collect(extra)
+    if (com.enwei.moneymanager.net.GroqAi.enabled) ds.tag { i, n -> onStep("AI 標註新聞 ${i + 1}/$n 批…") }
+    return added
+}
+
+/**
+ * 每日投資報告：先確保資料集夠完整（不夠就先蒐集、標註），再把整理過的題材、個股與重點新聞
+ * 加上大盤、資金計畫、持股與紀律交給進階模型。推薦的代號會再查報價確認。
+ */
+suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Unit): DailyReport? {
+    var st = ds.load()
+    if (System.currentTimeMillis() - st.lastCollect > 3 * 3600_000L || ds.recent(st, 3).size < 150) {
+        refreshNews(ds, onStep)
+        st = ds.load()
+    }
+    onStep("讀取大盤與持股走勢…")
+    val snap = advisorSnapshot(fetch = true)
+    val (digest, imp) = datasetDigest(ds, st, themes = 10, symbols = 18, important = 15)
+    onStep("AI 分析資料集（${ds.recent(st, 3).size} 則新聞）…")
+    val r = com.enwei.moneymanager.net.GroqAi.dailyReport(situation(snap) + "\n" + digest) ?: return null
+    onStep("確認推薦的代號與價格…")
+    val quotes = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(r.picks.map { Market.TW to it.symbol }) }
+        .getOrDefault(emptyList()).associateBy { it.key }
+    val picks = r.picks.map { p ->
+        val q = quotes[quoteKey(Market.TW, p.symbol)]
+        p.copy(price = q?.price, name = p.name.ifBlank { q?.name.orEmpty() })
+    }
+    val keyNews = r.keyNews.mapNotNull { k -> k.id.toIntOrNull()?.let { imp.getOrNull(it) }?.let { KeyNews(it.id, k.why) } }
+    val report = r.copy(picks = picks, keyNews = keyNews, createdAt = System.currentTimeMillis(), day = LocalDate.now().toEpochDay(), newsCount = ds.recent(st, 3).size)
+    ds.update { it.copy(report = report, business = it.business + picks.filter { p -> p.business.isNotBlank() }.associate { p -> p.symbol to p.business }) }
+    return report
+}
+
+/** 投資助理對話：帶入使用者狀況與資料集摘要，回覆可附股票卡片與新聞。 */
+suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
+    val st = ds.load()
+    ds.update { it.copy(chat = (it.chat + ChatMsg(true, question)).takeLast(40)) }
+    val snap = advisorSnapshot(fetch = true)
+    val (digest, imp) = datasetDigest(ds, st, themes = 8, symbols = 12, important = 10)
+    val today = st.report?.let { r -> "今日報告：${r.trend}；推薦 " + r.picks.joinToString("、") { "${it.symbol}${it.name}（${it.style}）" } } ?: ""
+    val history = st.chat.takeLast(6).map { it.fromUser to it.text }
+    val reply = com.enwei.moneymanager.net.GroqAi.advisorChat(situation(snap) + "\n" + today + "\n" + digest, history, question) ?: return null
+    val fixed = reply.copy(newsIds = reply.newsIds.mapNotNull { it.toIntOrNull()?.let { i -> imp.getOrNull(i)?.id } })
+    ds.update { it.copy(chat = (it.chat + fixed).takeLast(40), business = it.business + fixed.cards.filter { c -> c.business.isNotBlank() }.associate { c -> c.symbol to c.business }) }
+    return fixed
 }

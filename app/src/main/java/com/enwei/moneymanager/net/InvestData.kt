@@ -10,7 +10,10 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.net.URLEncoder
 
 /** 日 K 線（收盤、最高）與日期（epochDay），由舊到新。 */
-data class DailyBars(val days: List<Long>, val close: List<Double>, val high: List<Double>, val name: String?) {
+data class DailyBars(
+    val days: List<Long>, val close: List<Double>, val high: List<Double>, val name: String?,
+    val open: List<Double> = close, val low: List<Double> = close, val volume: List<Double> = emptyList(),
+) {
     /** [fromDay] 之後（含）的最高價 */
     fun peakSince(fromDay: Long): Double? = days.indices.filter { days[it] >= fromDay }.maxOfOrNull { high[it] }
 }
@@ -32,19 +35,26 @@ object InvestData {
             val q = ((r["indicators"] as? JsonObject)?.get("quote") as? JsonArray)?.firstOrNull() as? JsonObject ?: continue
             val closes = q["close"] as? JsonArray ?: continue
             val highs = q["high"] as? JsonArray ?: closes
+            val opens = q["open"] as? JsonArray ?: closes
+            val lows = q["low"] as? JsonArray ?: closes
+            val vols = q["volume"] as? JsonArray
             val zone = java.time.ZoneId.of("Asia/Taipei")
             val d = ArrayList<Long>(); val c = ArrayList<Double>(); val h = ArrayList<Double>()
+            val o = ArrayList<Double>(); val l = ArrayList<Double>(); val v = ArrayList<Double>()
             ts.forEachIndexed { i, t ->
                 val sec = (t as? JsonPrimitive)?.content?.toLongOrNull() ?: return@forEachIndexed
                 val cv = num(closes.getOrNull(i)) ?: return@forEachIndexed
                 d += java.time.Instant.ofEpochSecond(sec).atZone(zone).toLocalDate().toEpochDay()
                 c += cv
                 h += num(highs.getOrNull(i)) ?: cv
+                o += num(opens.getOrNull(i)) ?: cv
+                l += num(lows.getOrNull(i)) ?: cv
+                v += num(vols?.getOrNull(i)) ?: 0.0
             }
             if (c.isEmpty()) continue
             val meta = r["meta"] as? JsonObject
             val name = (meta?.get("shortName") as? JsonPrimitive)?.content ?: (meta?.get("longName") as? JsonPrimitive)?.content
-            return DailyBars(d, c, h, name)
+            return DailyBars(d, c, h, name, o, l, v)
         }
         return null
     }

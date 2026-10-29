@@ -268,6 +268,10 @@ data class AppSettings(
     /** 使用者標記「不是重複」的交易組合（"小id-大id"） */
     val dupDismissed: Set<String> = emptySet(),
     val investPlan: InvestPlanSettings = InvestPlanSettings(),
+    /** 背景蒐集新聞並每天產生投資報告 */
+    val advisorDaily: Boolean = true,
+    /** 交易的必要性（交易 id → NEED／SAVE／ONCE＋備註），收支檢討時讓 AI 參考 */
+    val txnNecessity: Map<Long, String> = emptyMap(),
     /** 股票代號 → 股性（LONG／SHORT），沒設定時 ETF 視為長線、其他視為短線 */
     val stockStyle: Map<String, String> = emptyMap(),
     val advisorReport: AdvisorReport? = null,
@@ -376,6 +380,8 @@ class SettingsStore(context: Context) {
         dupDismissed = prefs.getStringSet("dupDismissed", emptySet())!!.toSet(),
         loans = runCatching { json.decodeFromString(loanSerializer, prefs.getString("loans", "{}")!!) }.getOrDefault(emptyMap()),
         loanWarnKey = prefs.getString("loanWarnKey", "")!!,
+        advisorDaily = prefs.getBoolean("advisorDaily", true),
+        txnNecessity = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("txnNecessity", "{}")!!) }.getOrDefault(emptyMap()),
         investPlan = runCatching { json.decodeFromString(InvestPlanSettings.serializer(), prefs.getString("investPlan", "")!!) }.getOrDefault(InvestPlanSettings()),
         stockStyle = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("stockStyle", "{}")!!) }.getOrDefault(emptyMap()),
         advisorReport = runCatching { json.decodeFromString(AdvisorReport.serializer(), prefs.getString("advisorReport", "")!!) }.getOrNull(),
@@ -515,6 +521,8 @@ class SettingsStore(context: Context) {
             .putString("loans", json.encodeToString(loanSerializer, s.loans))
             .putString("loanWarnKey", s.loanWarnKey)
             .putString("reviews", json.encodeToString(reviewSerializer, s.reviews))
+            .putBoolean("advisorDaily", s.advisorDaily)
+            .putString("txnNecessity", json.encodeToString(longStrSerializer, s.txnNecessity))
             .putString("investPlan", json.encodeToString(InvestPlanSettings.serializer(), s.investPlan))
             .putString("stockStyle", json.encodeToString(strMapSerializer, s.stockStyle))
             .putString("advisorReport", s.advisorReport?.let { json.encodeToString(AdvisorReport.serializer(), it) } ?: "")

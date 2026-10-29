@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
@@ -262,6 +263,7 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
     Scaffold(
         topBar = {
             BackTopBar("$symbol ${h?.name.orEmpty()}", { nav.popBackStack() }) {
+                if (market == "TW") IconButton(onClick = { nav.navigate("stock/$symbol") }) { Icon(Icons.AutoMirrored.Filled.ShowChart, "K 線與資訊") }
                 if (list.isNotEmpty()) IconButton(onClick = { deleteAll = true }) { Icon(Icons.Filled.Delete, "刪除整檔持股") }
             }
         },

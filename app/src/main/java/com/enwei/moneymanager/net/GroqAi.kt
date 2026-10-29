@@ -49,19 +49,23 @@ object GroqAi {
     private enum class Fail { NONE, MODEL_GONE, NO_JSON_MODE }
 
     /** 呼叫模型並取得 JSON 物件回覆；失敗回傳 null。模型下架時自動改用預設模型、不支援 JSON 模式時改用一般模式重試。 */
-    private suspend fun chatJson(system: String, user: String, maxTokens: Int = 200, hard: Boolean = false): JsonObject? = withContext(Dispatchers.IO) {
+    private suspend fun chatJson(
+        system: String, user: String, maxTokens: Int = 200, hard: Boolean = false,
+        /** 回覆（含推理）的 token 上限；免費方案每分鐘上限約 8,000，輸入加回覆不能超過 */
+        cap: Int = 6000, effort: String = "medium",
+    ): JsonObject? = withContext(Dispatchers.IO) {
         val s = MoneyApp.repo.settings.value
         if (s.groqKey.isBlank()) return@withContext null
         // 難題先用大模型（推理強度中等）；大模型不能用或超過額度時改用一般模型
         if (hard) {
             val big = s.aiModelHard.trim().ifBlank { HARD_MODEL }
-            val (r, _) = call(s.groqKey.trim(), big, true, system, user, maxTokens, effort = "medium")
+            val (r, _) = call(s.groqKey.trim(), big, true, system, user, maxTokens, effort = effort, cap = cap)
             if (r != null) return@withContext r
         }
         var model = s.aiModel.trim().ifBlank { DEFAULT_MODEL }.let { if (it in RETIRED_MODELS) DEFAULT_MODEL else it }
         var jsonMode = true
         repeat(3) {
-            val (result, fail) = call(s.groqKey.trim(), model, jsonMode, system, user, maxTokens)
+            val (result, fail) = call(s.groqKey.trim(), model, jsonMode, system, user, maxTokens, cap = cap)
             when (fail) {
                 Fail.NONE -> return@withContext result
                 Fail.MODEL_GONE -> if (model != DEFAULT_MODEL) {
@@ -76,7 +80,7 @@ object GroqAi {
 
     private fun call(
         key: String, model: String, jsonMode: Boolean, system: String, user: String, maxTokens: Int, effort: String = "low",
-        imageDataUrl: String? = null,
+        imageDataUrl: String? = null, cap: Int = 6000,
     ): Pair<JsonObject?, Fail> {
         // gpt-oss 等推理模型的思考過程也算在 max_tokens 裡，要多留空間並把推理強度調低
         val reasoning = model.startsWith("openai/gpt-oss") || model.contains("qwen3") || model.contains("deepseek")
@@ -84,7 +88,7 @@ object GroqAi {
             put("model", model)
             put("temperature", if (reasoning) 0.2 else 0.0)
             // 免費方案每分鐘 token 上限約 8,000（含輸入），回覆上限不超過 6,000
-            put("max_tokens", minOf(6000, if (reasoning) maxOf(if (effort == "low") 1024 else 4096, maxTokens * 4) else maxTokens))
+            put("max_tokens", minOf(cap, if (reasoning) maxOf(if (effort == "low") 1024 else 4096, maxTokens * 4) else maxTokens))
             if (reasoning && model.startsWith("openai/gpt-oss")) put("reasoning_effort", effort)
             if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
             put("messages", buildJsonArray {
@@ -398,5 +402,105 @@ object GroqAi {
             }.take(4),
             allocation = r.str("allocation")?.take(200).orEmpty(), checklist = list("checklist"), warnings = list("warnings"),
         )
+    }
+
+    /** 新聞標註結果。 */
+    data class NewsTag(val symbols: List<String>, val theme: String, val sentiment: Int, val importance: Int, val note: String)
+
+    val THEMES = listOf(
+        "大盤資金", "總經利率", "美股國際", "半導體", "AI伺服器", "IC設計", "記憶體", "先進封裝", "PCB載板", "散熱", "光通訊",
+        "網通衛星", "機器人", "電動車", "重電綠能", "航運", "金融", "生技", "營建", "傳產原物料", "內需觀光", "ETF存股", "其他",
+    )
+
+    /** 逐則標註新聞：相關台股代號、題材、多空與重要性。[items] 為 (id, 標題)。 */
+    suspend fun tagNews(items: List<Pair<String, String>>): Map<String, NewsTag>? {
+        if (!enabled || items.isEmpty()) return emptyMap()
+        val system = "你是台股新聞標註員。逐則判斷：相關的台股代號（4～6 碼，只填你確定的，例如台積電 2330；不確定就空陣列）、" +
+            "題材（只能從這些挑一個：${THEMES.joinToString("、")}）、對相關台股的多空 m（-2 大利空、-1 利空、0 中性、1 利多、2 大利多）、" +
+            "重要性 p（1～5，5 是會影響大盤或主流題材的重大消息，一般個股新聞 2～3，業配與無關新聞 1）；p 為 4 以上時用 n 寫 20 字內重點。" +
+            "只回 JSON：{\"r\": [{\"i\": 編號, \"s\": [代號], \"t\": 題材, \"m\": 數字, \"p\": 數字, \"n\": 字串或空}]}"
+        val user = items.mapIndexed { i, it -> "$i. ${it.second.take(70)}" }.joinToString("\n")
+        val r = chatJson(system, user, 1100) ?: return null
+        val arr = r["r"] as? kotlinx.serialization.json.JsonArray ?: return null
+        val code = Regex("^[0-9]{4,6}[A-Z]?$")
+        return arr.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val idx = o.str("i")?.toDoubleOrNull()?.toInt() ?: return@mapNotNull null
+            val id = items.getOrNull(idx)?.first ?: return@mapNotNull null
+            val syms = (o["s"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { s -> code.matches(s) } }.orEmpty()
+            id to NewsTag(
+                syms.distinct().take(5), o.str("t")?.takeIf { it in THEMES } ?: "其他",
+                o.str("m")?.toDoubleOrNull()?.toInt()?.coerceIn(-2, 2) ?: 0, o.str("p")?.toDoubleOrNull()?.toInt()?.coerceIn(1, 5) ?: 1,
+                o.str("n")?.take(40).orEmpty(),
+            )
+        }.toMap()
+    }
+
+    private fun parsePick(o: JsonObject, sym: Regex): com.enwei.moneymanager.data.StockPick? {
+        val code = o.str("symbol")?.let { sym.find(it)?.value } ?: return null
+        return com.enwei.moneymanager.data.StockPick(
+            code, o.str("name")?.take(20).orEmpty(), o.str("style")?.take(4).orEmpty(), o.str("business")?.take(80).orEmpty(),
+            o.str("strength")?.take(6).orEmpty(), o.str("reason")?.take(120).orEmpty(), o.str("entry")?.take(80).orEmpty(),
+            o.str("stop")?.take(80).orEmpty(), o.str("amount")?.toDoubleOrNull()?.toLong()?.takeIf { it > 0 },
+        )
+    }
+
+    const val ADVISOR_ROLE = "你是台灣股市的投資教練兼分析師，任務是幫使用者遵守他自己的交易紀律與資金計畫，而不是鼓勵頻繁交易。" +
+        "使用者過去常犯的錯：1. 想實現獲利就整檔賣光，隔天繼續漲而賣飛；2. 短線看到新聞就衝動買；3. 賣完一有資金就立刻買別檔；4. 資金控管差。" +
+        "所有建議都要符合他的資金計畫（短線可動用金額不可超過計畫）與紀律，長線部位不可因短期波動建議全賣，獲利了結一律建議分批。" +
+        "只能根據提供的資料集、價格數據與新聞說話，不可編造；推薦的股票必須在資料集的個股統計或新聞中出現，附正確的台股代號；不保證獲利。"
+
+    /** 每日投資報告：讀整理過的新聞資料集（題材熱度、個股統計、重點新聞）＋大盤與持股，用進階模型產生。 */
+    suspend fun dailyReport(user: String): com.enwei.moneymanager.data.DailyReport? {
+        if (!enabled) return null
+        val system = ADVISOR_ROLE + "請產生今天的投資報告：大盤趨勢與階段、目前市場資金追逐的題材（依資料集熱度與多空）、整體看法；" +
+            "今天可以考慮的 2～4 檔股票（標明長線或短線、這家公司在做什麼、目前強勢／中性／弱勢、理由、進場條件、停損條件、依資金計畫建議投入金額）；" +
+            "逐檔持股動作（只能是「續抱」「長抱」「分批停利 1/3」「減碼 1/3」「停損出場」「觀察」，參考提供的規則停損價）；" +
+            "挑 3～6 則使用者一定要看的重點新聞（用新聞編號）並說明為什麼重要；資金分配建議；交易前檢查清單；依他過去錯誤的提醒。" +
+            "只回 JSON：{\"trend\": 一句話, \"stage\": 階段, \"themes\": [題材 2～4 項], \"summary\": 100 字內, " +
+            "\"picks\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\", \"business\": 公司做什麼 30 字內, \"strength\": \"強勢\"或\"中性\"或\"弱勢\", " +
+            "\"reason\": 50 字內, \"entry\": 進場條件, \"stop\": 停損條件, \"amount\": 建議投入元}], " +
+            "\"holdings\": [{\"symbol\": 代號, \"action\": 動作, \"stop\": 數字或 null, \"reason\": 30 字內}], " +
+            "\"news\": [{\"n\": 新聞編號, \"why\": 30 字內}], \"allocation\": 80 字內, \"checklist\": [3～5 項], \"warnings\": [1～3 項]}"
+        val r = chatJson(system, user.take(3500), 1200, hard = true, cap = 3800, effort = "low") ?: return null
+        fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(120) }.orEmpty()
+        fun objs(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
+        val sym = Regex("[0-9]{4,6}[A-Z]?")
+        return com.enwei.moneymanager.data.DailyReport(
+            trend = r.str("trend")?.take(120).orEmpty(), stage = r.str("stage")?.take(20).orEmpty(), themes = list("themes"),
+            summary = r.str("summary")?.take(240).orEmpty(),
+            picks = objs("picks").mapNotNull { parsePick(it, sym) }.take(4),
+            holdings = objs("holdings").mapNotNull { o ->
+                val code = o.str("symbol")?.let { sym.find(it)?.value } ?: return@mapNotNull null
+                com.enwei.moneymanager.data.AdvisorHolding(code, o.str("action")?.take(12).orEmpty(), o.str("stop")?.toDoubleOrNull(), o.str("reason")?.take(80).orEmpty())
+            },
+            // 新聞編號先放在 id，呼叫端換成真正的新聞 id
+            keyNews = objs("news").mapNotNull { o -> o.str("n")?.toDoubleOrNull()?.toInt()?.let { com.enwei.moneymanager.data.KeyNews(it.toString(), o.str("why")?.take(60).orEmpty()) } },
+            allocation = r.str("allocation")?.take(200).orEmpty(), checklist = list("checklist"), warnings = list("warnings"),
+        )
+    }
+
+    /** 投資助理對話：依資料集與使用者狀況回答，需要時附股票卡片與新聞編號。 */
+    suspend fun advisorChat(context: String, history: List<Pair<Boolean, String>>, question: String): com.enwei.moneymanager.data.ChatMsg? {
+        if (!enabled) return null
+        val system = ADVISOR_ROLE + "以下是資料與使用者狀況，請回答他的問題，口吻簡潔直接，300 字內。提到具體股票時放進 cards；引用新聞時放新聞編號。" +
+            "只回 JSON：{\"reply\": 回答, \"cards\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\"或空, \"business\": 公司做什麼, \"strength\": 強勢/中性/弱勢, \"reason\": 40 字內}], \"news\": [編號]}\n\n" +
+            context.take(2500)
+        val convo = history.takeLast(6).joinToString("\n") { (u, t) -> (if (u) "使用者：" else "助理：") + t.take(300) }
+        val r = chatJson(system, (if (convo.isNotBlank()) "先前對話：\n$convo\n\n" else "") + "問題：$question", 900, hard = true, cap = 3000, effort = "low") ?: return null
+        val sym = Regex("[0-9]{4,6}[A-Z]?")
+        val cards = (r["cards"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonObject)?.let { o -> parsePick(o, sym) } }.orEmpty().take(5)
+        val news = (r["news"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt()?.toString() }.orEmpty()
+        return com.enwei.moneymanager.data.ChatMsg(false, r.str("reply")?.take(1200) ?: return null, cards = cards, newsIds = news)
+    }
+
+    /** 一句話說明這家公司在做什麼（股票資訊頁用，結果會快取）。 */
+    suspend fun describeCompany(symbol: String, name: String): String? {
+        if (!enabled) return null
+        val r = chatJson(
+            "你是台股資料助理。用繁體中文 40 字內說明這家台灣上市櫃公司的主要業務、產品與所屬產業；不知道就回空字串。只回 JSON：{\"d\": 說明}",
+            "$symbol $name", 200,
+        ) ?: return null
+        return r.str("d")?.take(80)
     }
 }

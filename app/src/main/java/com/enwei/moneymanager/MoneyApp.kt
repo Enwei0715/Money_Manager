@@ -17,12 +17,16 @@ import kotlinx.coroutines.launch
 class MoneyApp : Application() {
     lateinit var repo: Repository
         private set
+    /** 投資助理的新聞資料集 */
+    lateinit var news: com.enwei.moneymanager.data.NewsDataset
+        private set
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         repo = Repository(AppDatabase.build(this), SettingsStore(this))
+        news = com.enwei.moneymanager.data.NewsDataset(this)
         com.enwei.moneymanager.ui.I18n.init(this, repo.settings.value.language)
         com.enwei.moneymanager.core.TaiwanHolidays.update(com.enwei.moneymanager.data.HolidayCache.decode(repo.settings.value.holidayCache))
         com.enwei.moneymanager.core.TaiwanHolidays.setExtra(com.enwei.moneymanager.data.TyphoonDays.decode(repo.settings.value.typhoonDays))
@@ -38,6 +42,7 @@ class MoneyApp : Application() {
             repo.runFeeRebates()
         }
         SyncWorker.schedule(this)
+        com.enwei.moneymanager.work.NewsWorker.schedule(this)
         com.enwei.moneymanager.work.BackupWorker.schedule(this)
         // 資料有變動就更新桌面小工具
         appScope.launch {
@@ -52,5 +57,6 @@ class MoneyApp : Application() {
         lateinit var instance: MoneyApp
             private set
         val repo get() = instance.repo
+        val news get() = instance.news
     }
 }
