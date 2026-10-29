@@ -192,6 +192,10 @@ fun NotificationSettingsScreen(nav: NavController) {
     LaunchedEffect(Unit) { apps = withContext(Dispatchers.Default) { installedApps(ctx) } }
     var filter by remember { mutableStateOf("") }
     var testText by remember { mutableStateOf("") }
+    var testTitle by remember { mutableStateOf("") }
+    var testPkg by remember { mutableStateOf<String?>(null) }
+    var pasted by remember { mutableStateOf<TxnNotificationListener.ActiveNote?>(null) }
+    var pastedPreview by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     val labelOf = remember(apps) { apps.associate { it.pkg to it.label } }
     val candidates = log.filter { it.result == "CANDIDATE" && it.packageName !in settings.notifPackages }.map { it.packageName }.distinct()
     val testScope = rememberCoroutineScope()
@@ -212,6 +216,46 @@ fun NotificationSettingsScreen(nav: NavController) {
 
     fun toggle(pkg: String, on: Boolean) = repo.settings.update {
         it.copy(notifPackages = if (on) it.notifPackages + pkg else it.notifPackages - pkg)
+    }
+
+    @Composable
+    fun NoteCard(nn: TxnNotificationListener.ActiveNote, ok: Boolean, desc: String) {
+        val redacted = repo.isRedacted(nn.text)
+        val parsedOk = !redacted && !desc.startsWith("看不出") && !desc.startsWith("LINE 聊天")
+        Card(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (ok) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+            ),
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("${labelOf[nn.pkg] ?: nn.pkg} · ${timeFmt.format(Date(nn.postedAt))}", style = MaterialTheme.typography.labelSmall)
+                Text(listOfNotNull(nn.title, nn.text).joinToString("\n"), maxLines = 4, style = MaterialTheme.typography.bodySmall)
+                com.enwei.moneymanager.ui.components.StatusLine(ok, if (ok) "會自動記帳" else if (parsedOk) "辨識得出，但不會自動記帳" else "不會記帳")
+                Text(desc, style = MaterialTheme.typography.bodySmall)
+                if (redacted) {
+                    val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        androidx.compose.material3.Text(
+                            repo.SENSITIVE_ADB, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    TextButton(onClick = {
+                        clip.setText(androidx.compose.ui.text.AnnotatedString(repo.SENSITIVE_ADB))
+                        testMsg = "已複製指令"
+                    }) { Text("複製指令") }
+                } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (parsedOk) OutlinedButton(onClick = {
+                        testScope.launch {
+                            val r = repo.ingestNotification(nn.pkg, nn.title, nn.text, nn.postedAt, force = true)
+                            testMsg = r?.let { "已記下：${it.message}" } ?: "沒有記下（可能已經記過了）"
+                        }
+                    }) { Text("記下這筆") }
+                    if (!desc.startsWith("LINE 聊天")) TextButton(onClick = { teach = nn }) { Text("教它辨識") }
+                }
+            }
+        }
     }
 
     Scaffold(topBar = { BackTopBar("通知自動記帳", { nav.popBackStack() }) }) { pad ->
@@ -273,44 +317,32 @@ fun NotificationSettingsScreen(nav: NavController) {
             }
             notes?.let { list ->
                 items(list.size, key = { "note$it" }) { i ->
-                    val nn = list[i]
                     val (ok, desc) = previews.getOrNull(i) ?: (false to "")
-                    val redacted = repo.isRedacted(nn.text)
-                    val parsedOk = !redacted && !desc.startsWith("看不出") && !desc.startsWith("LINE 聊天")
-                    Card(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (ok) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                        ),
-                    ) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("${labelOf[nn.pkg] ?: nn.pkg} · ${timeFmt.format(Date(nn.postedAt))}", style = MaterialTheme.typography.labelSmall)
-                            Text(listOfNotNull(nn.title, nn.text).joinToString("\n"), maxLines = 4, style = MaterialTheme.typography.bodySmall)
-                            com.enwei.moneymanager.ui.components.StatusLine(ok, if (ok) "會自動記帳" else if (parsedOk) "辨識得出，但不會自動記帳" else "不會記帳")
-                            Text(desc, style = MaterialTheme.typography.bodySmall)
-                            if (redacted) {
-                                val clip = androidx.compose.ui.platform.LocalClipboardManager.current
-                                androidx.compose.foundation.text.selection.SelectionContainer {
-                                    androidx.compose.material3.Text(
-                                        repo.SENSITIVE_ADB, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                                TextButton(onClick = {
-                                    clip.setText(androidx.compose.ui.text.AnnotatedString(repo.SENSITIVE_ADB))
-                                    testMsg = "已複製指令"
-                                }) { Text("複製指令") }
-                            } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (parsedOk) OutlinedButton(onClick = {
-                                    testScope.launch {
-                                        val r = repo.ingestNotification(nn.pkg, nn.title, nn.text, nn.postedAt, force = true)
-                                        testMsg = r?.let { "已記下：${it.message}" } ?: "沒有記下（可能已經記過了）"
-                                    }
-                                }) { Text("記下這筆") }
-                                if (!desc.startsWith("LINE 聊天")) TextButton(onClick = { teach = nn }) { Text("教它辨識") }
-                            }
+                    NoteCard(list[i], ok, desc)
+                }
+            }
+            // 貼上一則通知測試：和讀取通知列一樣跑完整流程（股票成交、教過的格式、AI 判讀、轉帳、重複檢查）
+            item { SectionTitle("貼上通知測試") }
+            item {
+                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val choices = (settings.notifPackages + listOf("com.google.android.gm")).distinct()
+                    DropdownField("來源 App", choices, testPkg ?: choices.firstOrNull(), { labelOf[it] ?: it }, { testPkg = it })
+                    OutlinedTextField(testTitle, { testTitle = it }, label = { Text("通知標題（選填）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(testText, { testText = it }, label = { Text("通知內容") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+                    Button(enabled = testText.isNotBlank(), onClick = {
+                        val pkg = testPkg ?: choices.firstOrNull() ?: return@Button
+                        val nn = TxnNotificationListener.ActiveNote(pkg, testTitle.ifBlank { null }, testText, System.currentTimeMillis())
+                        testScope.launch {
+                            pasted = nn
+                            pastedPreview = repo.previewBatch(listOf(Repository.NotePreview(nn.pkg, nn.title, nn.text, nn.postedAt))).first()
                         }
-                    }
+                    }) { Text("測試") }
+                }
+            }
+            pasted?.let { nn ->
+                item(key = "pasted") {
+                    NoteCard(nn, pastedPreview?.first == true, pastedPreview?.second.orEmpty())
+                    testMsg?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp)) }
                 }
             }
             if (settings.learnedSources.isNotEmpty()) {
@@ -325,32 +357,6 @@ fun NotificationSettingsScreen(nav: NavController) {
                         },
                         modifier = Modifier.clickable { repo.settings.update { it.copy(learnedSources = it.learnedSources - l) } },
                     )
-                }
-            }
-            item { SectionTitle("測試辨識") }
-            item {
-                Column(Modifier.padding(horizontal = 16.dp)) {
-                    OutlinedTextField(testText, { testText = it }, label = { Text("貼上一則通知內容") }, modifier = Modifier.fillMaxWidth())
-                    if (testText.isNotBlank()) {
-                        val fill = NotificationParser.parseStockFill(null, testText)
-                        val p = NotificationParser.parse(null, testText)
-                        Text(
-                            when {
-                                fill != null -> "股票成交：${fill.side} ${fill.symbol} ${fill.name.orEmpty()} ${fill.shares} 股 @ ${fill.price}"
-                                p != null -> when (p.kind) {
-                                    com.enwei.moneymanager.core.ParsedKind.WITHDRAWAL -> "提款（轉帳到現金）"
-                                    com.enwei.moneymanager.core.ParsedKind.TOPUP_OUT -> "電支儲值扣款（轉帳到錢包${p.walletHint?.let { "：$it" } ?: ""}）"
-                                    com.enwei.moneymanager.core.ParsedKind.TOPUP_IN -> "錢包儲值入帳${p.walletHint?.let { "：$it" } ?: ""}"
-                                    com.enwei.moneymanager.core.ParsedKind.TRANSFER_OUT -> "轉出（若有對應轉入會合併為轉帳）"
-                                    com.enwei.moneymanager.core.ParsedKind.TRANSFER_IN -> "轉入（若有對應轉出會合併為轉帳）"
-                                    else -> if (p.type.name == "INCOME") "收入" else "支出"
-                                } + " ${Money.format(p.amountMinor, p.currency)}" + (p.occurredAt?.let { " · 交易時間 $it" } ?: "") +
-                                    (p.merchant?.let { " · 商家：$it" } ?: "") + (p.cardLast4?.let { " · 末四碼 $it" } ?: "")
-                                else -> "無法辨識為交易"
-                            },
-                            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 8.dp),
-                        )
-                    }
                 }
             }
             item { SectionTitle("要監聽的 App（已選 ${settings.notifPackages.size}）") }

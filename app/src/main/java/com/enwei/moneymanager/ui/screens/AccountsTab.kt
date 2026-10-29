@@ -130,7 +130,8 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
     var menu by remember { mutableStateOf(false) }
     var showHidden by rememberSaveable { mutableStateOf(false) }
     var funding by remember { mutableStateOf<List<com.enwei.moneymanager.data.Repository.FundingWarning>>(emptyList()) }
-    LaunchedEffect(all, balances) { cards = repo.cardStatus(); funding = repo.fundingWarnings() }
+    var loanNotes by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(all, balances) { cards = repo.cardStatus(); funding = repo.fundingWarnings(); loanNotes = repo.loanReminders(days = 7) }
     val st by repo.settings.flow.collectAsStateWithLifecycle()
     val groupRank = st.groupOrder()
 
@@ -188,6 +189,18 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     listOf("資產" to (Money.full(assets) to IncomeColor), "負債" to (Money.full(debts) to ExpenseColor),
                         "合計" to (Money.full(assets - debts) to MaterialTheme.colorScheme.onSurface)),
                 )
+            }
+            // 借貸：7 天內要收付款、快到期或已逾期
+            if (loanNotes.isNotEmpty()) item(key = "loanNotes") {
+                androidx.compose.material3.Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer, shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text("借貸提醒", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        loanNotes.forEach { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSecondaryContainer) }
+                    }
+                }
             }
             // 扣款帳戶餘額不夠付接下來的卡費
             items(funding.size, key = { "fund${funding[it].from.id}" }) { i ->
@@ -252,7 +265,15 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                                 listOfNotNull("持股 $n 檔", lk.account(a.linkedAccountId)?.let { "交割：${it.name}" }).joinToString(" · ")
                             }
                             AccountType.EWALLET, AccountType.TRANSIT_CARD -> lk.account(a.linkedAccountId)?.let { "儲值來源：${it.name}" }
-                            AccountType.LOAN -> if (b.balance > 0) "別人欠你" else if (b.balance < 0) "你欠別人" else null
+                            AccountType.LOAN -> {
+                                val info = st.loans[a.id]
+                                val due = info?.dueDay?.let(LocalDate::ofEpochDay)
+                                listOfNotNull(
+                                    info?.counterparty?.takeIf { it.isNotBlank() },
+                                    if (b.balance > 0) "別人欠你" else if (b.balance < 0) "你欠別人" else "已結清",
+                                    due?.takeIf { b.balance != 0L }?.let { if (it.isBefore(LocalDate.now())) "已逾期" else "${it.monthValue}/${it.dayOfMonth} 到期" },
+                                ).joinToString(" · ")
+                            }
                             else -> null
                         }
                         // 證券帳戶：小字標示持股損益（同券商預估損益算法）
@@ -451,6 +472,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
+            if (acc?.type == AccountType.LOAN) item { LoanCard(acc, current, lk, nav) }
             if (acc?.type == AccountType.EWALLET) item {
                 Text(
                     "錢包沒有消費通知時，用「對帳」輸入實際餘額，差額會記成一筆支出。",

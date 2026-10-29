@@ -507,6 +507,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             db.recurring().detachAccount(a.id)
             db.accounts().delete(a)
         }
+        settings.value.loans[a.id]?.recurringId?.let { db.recurring().delete(it) }
         settings.update { s ->
             s.copy(
                 defaultAccountId = s.defaultAccountId.takeIf { it != a.id },
@@ -516,6 +517,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 cardBank = s.cardBank - a.id,
                 cardDueOffset = s.cardDueOffset - a.id,
                 brokerRebates = s.brokerRebates - a.id,
+                loans = s.loans - a.id,
                 learnedSources = s.learnedSources.map { if (it.accountId == a.id) it.copy(accountId = null) else it },
             )
         }
@@ -1450,6 +1452,110 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 檢查 [days] 天內的信用卡自動扣繳：同一個扣款帳戶的應繳金額加總後，若大於帳戶目前餘額就警告。
      * 只看有設定自動扣繳的卡（手動繳費的卡不知道會從哪個帳戶付）。
      */
+    // ---------- 借貸 ----------
+
+    /** 一筆借貸的現況：[outstanding] 為尚未還清的金額，[repaid] 為已還（以本金計）。 */
+    data class LoanStatus(val account: AccountEntity, val info: LoanInfo, val balance: Long, val today: LocalDate = LocalDate.now()) {
+        val outstanding: Long get() = kotlin.math.abs(balance)
+        val repaid: Long get() = (info.principal - outstanding).coerceAtLeast(0)
+        val progress: Float get() = if (info.principal > 0) (repaid.toFloat() / info.principal).coerceIn(0f, 1f) else 0f
+        val dueDate: LocalDate? get() = info.dueDay?.let(LocalDate::ofEpochDay)
+        val overdue: Boolean get() = outstanding > 0 && dueDate?.isBefore(today) == true
+        /** 下一次每月還款日 */
+        val nextPay: LocalDate? get() = info.payDay?.takeIf { outstanding > 0 }?.let { d ->
+            val m = java.time.YearMonth.from(today)
+            val thisMonth = m.atDay(minOf(d, m.lengthOfMonth()))
+            if (!thisMonth.isBefore(today)) thisMonth else m.plusMonths(1).let { n -> n.atDay(minOf(d, n.lengthOfMonth())) }
+        }
+        /** 依年利率估算的每月利息 */
+        val monthlyInterest: Long get() = Math.round(outstanding * info.annualRate / 100.0 / 12.0)
+        /** 照每月還款金額，還要幾期還清 */
+        val periodsLeft: Int? get() = info.installment?.takeIf { it > 0 }?.let { ((outstanding + it - 1) / it).toInt() }
+    }
+
+    suspend fun loanStatuses(today: LocalDate = LocalDate.now()): List<LoanStatus> {
+        val loans = settings.value.loans
+        if (loans.isEmpty()) return emptyList()
+        return balances.first().filter { it.account.type == AccountType.LOAN && !it.account.archived }
+            .mapNotNull { b -> loans[b.account.id]?.let { LoanStatus(b.account, it, b.balance, today) } }
+    }
+
+    /** 儲存借貸細節；設定每月還款時建立（或更新）週期轉帳，到期先放「待確認」。 */
+    suspend fun saveLoan(accountId: Long, info: LoanInfo) {
+        val acc = db.accounts().get(accountId) ?: return
+        var rid = info.recurringId
+        val inst = info.installment?.takeIf { it > 0 }
+        if (inst != null && info.payDay != null && info.payAccountId != null) {
+            val old = rid?.let { db.recurring().get(it) }
+            val r = RecurringEntity(
+                id = old?.id ?: 0, name = "${info.counterparty.ifBlank { acc.name }} 每月${if (info.lent) "收款" else "還款"}",
+                type = TxnType.TRANSFER, amount = inst, currency = acc.currency,
+                // 借出：從借貸帳戶轉回收款帳戶；借入：從還款帳戶轉到借貸帳戶
+                accountId = if (info.lent) accountId else info.payAccountId,
+                toAccountId = if (info.lent) info.payAccountId else accountId,
+                frequency = com.enwei.moneymanager.core.Frequency.MONTHLY, dayOfMonth = info.payDay,
+                anchorDate = old?.anchorDate ?: LocalDate.now().toEpochDay(), lastRunDate = old?.lastRunDate,
+                endDate = info.dueDay, autoConfirm = false,
+            )
+            rid = saveRecurring(r)
+        } else if (rid != null) {
+            db.recurring().delete(rid)
+            rid = null
+        }
+        settings.update { it.copy(loans = it.loans + (accountId to info.copy(recurringId = rid))) }
+    }
+
+    suspend fun removeLoan(accountId: Long) {
+        settings.value.loans[accountId]?.recurringId?.let { db.recurring().delete(it) }
+        settings.update { it.copy(loans = it.loans - accountId) }
+    }
+
+    /**
+     * 記一筆借貸往來：[repay] 為還款／收回（欠款減少），否則為再借出／再借入（欠款增加）。
+     * [interest] 另外記成利息收入（借出）或利息支出（借入）。
+     */
+    suspend fun recordLoanMove(loanId: Long, otherId: Long, amount: Long, interest: Long, date: LocalDate, repay: Boolean) {
+        val acc = db.accounts().get(loanId) ?: return
+        val info = settings.value.loans[loanId] ?: LoanInfo()
+        val who = info.counterparty.ifBlank { acc.name }
+        val millis = date.toMillis(LocalTime.now())
+        // 借出時錢流向借貸帳戶、收回時流回；借入相反
+        val toLoan = if (info.lent) !repay else repay
+        if (amount > 0) db.txns().insert(
+            TxnEntity(
+                type = TxnType.TRANSFER, amount = amount, currency = acc.currency,
+                accountId = if (toLoan) otherId else loanId, toAccountId = if (toLoan) loanId else otherId,
+                merchant = "$who ${if (repay) (if (info.lent) "還款" else "我還款") else (if (info.lent) "借出" else "借入")}",
+                date = millis, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
+            ),
+        )
+        if (interest > 0) {
+            val kind = if (info.lent) TxnType.INCOME else TxnType.EXPENSE
+            val cat = db.categories().all().firstOrNull { it.kind == kind && !it.archived && it.name.contains("利息") }?.id
+            db.txns().insert(
+                TxnEntity(
+                    type = kind, amount = interest, currency = acc.currency, accountId = otherId, categoryId = cat,
+                    merchant = "$who 利息", date = millis, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
+                ),
+            )
+        }
+    }
+
+    /** 借貸提醒：[days] 天內的每月還款、14 天內到期與已逾期。 */
+    suspend fun loanReminders(today: LocalDate = LocalDate.now(), days: Long = 3): List<String> = loanStatuses(today).flatMap { l ->
+        val who = l.info.counterparty.ifBlank { l.account.name }
+        val verb = if (l.info.lent) "收款" else "還款"
+        listOfNotNull(
+            l.nextPay?.takeIf { l.info.installment != null && !it.isAfter(today.plusDays(days)) }?.let {
+                "${it.monthValue}/${it.dayOfMonth} 每月$verb：$who ${Money.withSymbol(minOf(l.info.installment ?: 0, l.outstanding), l.account.currency)}"
+            },
+            if (l.overdue) "$who 已逾期（到期 ${l.dueDate}），尚欠 ${Money.withSymbol(l.outstanding, l.account.currency)}"
+            else l.dueDate?.takeIf { l.outstanding > 0 && !it.isAfter(today.plusDays(14)) }?.let {
+                "$who ${it.monthValue}/${it.dayOfMonth} 到期，尚欠 ${Money.withSymbol(l.outstanding, l.account.currency)}"
+            },
+        )
+    }
+
     suspend fun fundingWarnings(today: LocalDate = LocalDate.now(), days: Long = 45): List<FundingWarning> {
         val status = cardStatus(today)
         val accounts = db.accounts().all().filter { !it.archived }

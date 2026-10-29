@@ -32,6 +32,29 @@ data class Bookmark(
 @Serializable
 data class AiSuggestion(val txnId: Long, val categoryId: Long, val reason: String = "", val rejected: Boolean = false)
 
+/**
+ * 借貸帳戶的細節：[lent] 為借出（別人欠你）或借入（你欠別人）；金額皆為最小單位。
+ * 設定每月還款時會建立一個週期轉帳（[recurringId]），到期產生的轉帳先放「待確認」。
+ */
+@Serializable
+data class LoanInfo(
+    val counterparty: String = "",
+    val lent: Boolean = true,
+    val principal: Long = 0,
+    /** 年利率（%） */
+    val annualRate: Double = 0.0,
+    val startDay: Long = java.time.LocalDate.now().toEpochDay(),
+    /** 到期日（epochDay） */
+    val dueDay: Long? = null,
+    /** 每月還款金額 */
+    val installment: Long? = null,
+    /** 每月幾號還款 */
+    val payDay: Int? = null,
+    /** 還款／收款的帳戶 */
+    val payAccountId: Long? = null,
+    val recurringId: Long? = null,
+)
+
 /** AI 對一組可能重複交易的判斷（[same] 為同一筆；同一筆時附上較精確的名稱與分類）。 */
 @Serializable
 data class DupJudgement(val same: Boolean, val name: String? = null, val categoryId: Long? = null, val reason: String = "")
@@ -197,6 +220,10 @@ data class AppSettings(
     val aiUsageTokens: Long = 0,
     /** 使用者標記「不是重複」的交易組合（"小id-大id"） */
     val dupDismissed: Set<String> = emptySet(),
+    /** 借貸帳戶 id → 借貸細節 */
+    val loans: Map<Long, LoanInfo> = emptyMap(),
+    /** 上次通知的借貸提醒（避免重複通知） */
+    val loanWarnKey: String = "",
     /** AI 判斷過的重複組合（"小id-大id" → 判斷），不再重複詢問 */
     val dupVerdicts: Map<String, DupJudgement> = emptyMap(),
     /** AI 自動整理：背景判斷重複並合併兩筆都是自動記帳的同一筆、確認 AI 判讀的通知後自動學會格式 */
@@ -227,6 +254,7 @@ class SettingsStore(context: Context) {
     private val longStrSerializer = MapSerializer(Long.serializer(), String.serializer())
     private val learnedSerializer = ListSerializer(LearnedSource.serializer())
     private val aiSuggestionSerializer = ListSerializer(AiSuggestion.serializer())
+    private val loanSerializer = MapSerializer(Long.serializer(), LoanInfo.serializer())
     private val dupVerdictSerializer = MapSerializer(String.serializer(), DupJudgement.serializer())
     private val strMapSerializer = MapSerializer(String.serializer(), String.serializer())
     private val cashSerializer = MapSerializer(Long.serializer(), MapSerializer(Int.serializer(), Int.serializer()))
@@ -292,6 +320,8 @@ class SettingsStore(context: Context) {
         fundingWarnKey = prefs.getString("fundingWarnKey", "")!!,
         aiModelHard = prefs.getString("aiModelHard", "openai/gpt-oss-120b")!!,
         dupDismissed = prefs.getStringSet("dupDismissed", emptySet())!!.toSet(),
+        loans = runCatching { json.decodeFromString(loanSerializer, prefs.getString("loans", "{}")!!) }.getOrDefault(emptyMap()),
+        loanWarnKey = prefs.getString("loanWarnKey", "")!!,
         dupVerdicts = runCatching { json.decodeFromString(dupVerdictSerializer, prefs.getString("dupVerdicts", "{}")!!) }.getOrDefault(emptyMap()),
         aiAutoTidy = prefs.getBoolean("aiAutoTidy", true),
         aiTidyLog = runCatching { json.decodeFromString(ListSerializer(String.serializer()), prefs.getString("aiTidyLog", "[]")!!) }.getOrDefault(emptyList()),
@@ -424,6 +454,8 @@ class SettingsStore(context: Context) {
             .putString("fundingWarnKey", s.fundingWarnKey)
             .putString("aiModelHard", s.aiModelHard)
             .putStringSet("dupDismissed", s.dupDismissed)
+            .putString("loans", json.encodeToString(loanSerializer, s.loans))
+            .putString("loanWarnKey", s.loanWarnKey)
             .putString("dupVerdicts", json.encodeToString(dupVerdictSerializer, s.dupVerdicts))
             .putBoolean("aiAutoTidy", s.aiAutoTidy)
             .putString("aiTidyLog", json.encodeToString(ListSerializer(String.serializer()), s.aiTidyLog))

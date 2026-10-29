@@ -26,6 +26,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         // AI 自動整理重複的交易（沒開 AI 時不做事）
         runCatching { repo.aiAutoTidy() }
         runCatching { warnFunding(applicationContext, repo) }
+        runCatching { warnLoans(applicationContext, repo) }
         val ok = runCatching { refreshMarket(repo) }.isSuccess
         return if (ok || runAttemptCount > 2) Result.success() else Result.retry()
     }
@@ -150,6 +151,33 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                         "${w.date.monthValue}/${w.date.dayOfMonth} " + com.enwei.moneymanager.ui.tr("自動扣繳") + " ${com.enwei.moneymanager.core.Money.withSymbol(w.needed, w.from.currency)}，" +
                             com.enwei.moneymanager.ui.tr("還差") + " ${com.enwei.moneymanager.core.Money.withSymbol(w.shortBy, w.from.currency)}",
                     )
+                    .setContentIntent(open)
+                    .setAutoCancel(true)
+                    .build(),
+            )
+        }
+
+        /** 3 天內要收付的借貸款項、14 天內到期或已逾期的借貸（同樣的內容只通知一次）。 */
+        suspend fun warnLoans(context: Context, repo: Repository) {
+            val list = repo.loanReminders(days = 3)
+            val key = list.joinToString(";")
+            if (key == repo.settings.value.loanWarnKey) return
+            repo.settings.update { it.copy(loanWarnKey = key) }
+            val nm = context.getSystemService(android.app.NotificationManager::class.java)
+            if (list.isEmpty() || !nm.areNotificationsEnabled()) return
+            val open = android.app.PendingIntent.getActivity(
+                context, 9310,
+                android.content.Intent(context, com.enwei.moneymanager.ui.MainActivity::class.java)
+                    .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "accounts"),
+                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            nm.notify(
+                9310,
+                androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
+                    .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
+                    .setContentTitle(com.enwei.moneymanager.ui.tr("借貸提醒"))
+                    .setContentText(list.first())
+                    .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(list.joinToString("\n")))
                     .setContentIntent(open)
                     .setAutoCancel(true)
                     .build(),

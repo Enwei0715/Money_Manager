@@ -89,6 +89,16 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
     var shift by remember { mutableStateOf(com.enwei.moneymanager.core.StatementShift.NONE) }
     var bankQuery by remember { mutableStateOf("") }
     var dueOffset by remember { mutableStateOf<Int?>(null) }
+    // 借貸
+    var loanLent by remember { mutableStateOf(true) }
+    var counterparty by remember { mutableStateOf("") }
+    var principal by remember { mutableStateOf("") }
+    var rate by remember { mutableStateOf("") }
+    var loanStart by remember { mutableStateOf(LocalDate.now()) }
+    var loanDue by remember { mutableStateOf<LocalDate?>(null) }
+    var installment by remember { mutableStateOf("") }
+    var payDay by remember { mutableStateOf("") }
+    var payFrom by remember { mutableStateOf<Long?>(null) }
     val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
     // 「金額」欄位以目前餘額表示；儲存時換算回期初餘額
     val currentBalance = balances.find { it.account.id == id }?.balance
@@ -99,7 +109,16 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
         original = a
         name = a.name; type = a.type; currency = a.currency
         val cur = repo.balances.first().find { it.account.id == id }?.balance ?: a.initialBalance
-        initial = Money.fromMinor(if (a.type == AccountType.CREDIT_CARD) -cur else cur).stripTrailingZeros().toPlainString()
+        val loan = repo.settings.value.loans[a.id]
+        initial = Money.fromMinor(if (a.type == AccountType.CREDIT_CARD || (loan != null && !loan.lent)) -cur else cur).stripTrailingZeros().toPlainString()
+        if (loan != null) {
+            loanLent = loan.lent; counterparty = loan.counterparty
+            principal = if (loan.principal > 0) Money.fromMinor(loan.principal).stripTrailingZeros().toPlainString() else ""
+            rate = if (loan.annualRate > 0) loan.annualRate.toString() else ""
+            loanStart = LocalDate.ofEpochDay(loan.startDay); loanDue = loan.dueDay?.let(LocalDate::ofEpochDay)
+            installment = loan.installment?.let { Money.fromMinor(it).stripTrailingZeros().toPlainString() }.orEmpty()
+            payDay = loan.payDay?.toString().orEmpty(); payFrom = loan.payAccountId
+        } else if (a.type == AccountType.LOAN) loanLent = cur >= 0
         linkedId = a.linkedAccountId
         shift = repo.settings.value.shiftFor(a.id)
         bankQuery = repo.settings.value.cardBank[a.id].orEmpty()
@@ -134,7 +153,18 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 }
             }
             FormLine("名稱") { FormInput(name, { name = it }) }
-            FormLine(if (isCard) "目前欠款" else if (type == AccountType.BROKERAGE) "證券戶現金" else "目前餘額", trailing = {
+            if (type == AccountType.LOAN) {
+                FormLine("類型") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        androidx.compose.material3.FilterChip(loanLent, { loanLent = true }, label = { Text("借出（別人欠我）") })
+                        androidx.compose.material3.FilterChip(!loanLent, { loanLent = false }, label = { Text("借入（我欠別人）") })
+                    }
+                }
+            }
+            FormLine(
+                if (isCard) "目前欠款" else if (type == AccountType.BROKERAGE) "證券戶現金"
+                else if (type == AccountType.LOAN) (if (loanLent) "對方尚欠" else "我尚欠") else "目前餘額",
+                trailing = {
                 Box {
                     Box(
                         Modifier.size(44.dp).border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp)).clickable { currencyMenu = true },
@@ -235,6 +265,27 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
+            } else if (type == AccountType.LOAN) {
+                FormLine("對象") { FormInput(counterparty, { counterparty = it }, "借款人／債權人") }
+                FormLine("本金") { FormInput(principal, { principal = it }, "借出／借入的總額", number = true) }
+                FormLine("年利率") { FormInput(rate, { rate = it }, "%，無息留空", number = true) }
+                FormLine("開始日") { com.enwei.moneymanager.ui.components.DateField(loanStart, { loanStart = it }, "開始日") }
+                FormLine("到期日", trailing = { if (loanDue != null) androidx.compose.material3.TextButton(onClick = { loanDue = null }) { Text("不設定") } }) {
+                    if (loanDue == null) androidx.compose.material3.TextButton(onClick = { loanDue = LocalDate.now().plusMonths(12) }) { Text("設定到期日") }
+                    else com.enwei.moneymanager.ui.components.DateField(loanDue!!, { loanDue = it }, "到期日")
+                }
+                FormLine("每月${if (loanLent) "收款" else "還款"}") { FormInput(installment, { installment = it }, "金額，不分期留空", number = true) }
+                if (installment.isNotBlank()) {
+                    FormLine("每月幾號") { FormInput(payDay, { payDay = it.filter(Char::isDigit).take(2) }, "1～31", number = true) }
+                    DropdownLine(if (loanLent) "收款帳戶" else "還款帳戶", lk.account(payFrom)?.name ?: "未設定",
+                        listOf<Pair<Long?, String>>(null to "未設定") + lk.accounts.filter { it.type != AccountType.LOAN && it.type != AccountType.BROKERAGE && !it.archived }
+                            .map { it.id to it.name }) { payFrom = it }
+                    Text(
+                        "每月到期會產生一筆轉帳放到「待確認」，確認金額後入帳。",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                    )
+                }
             } else if (type == AccountType.BANK) {
                 FormLine("末四碼") { FormInput(last4, { s -> last4 = s.filter(Char::isDigit).take(4) }, "帳號末四碼，用於辨識通知", number = true) }
             }
@@ -253,7 +304,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
             HorizontalDivider(thickness = 10.dp, color = MaterialTheme.colorScheme.background)
             Button(
                 onClick = {
-                    val entered = (Money.parseMinor(initial) ?: 0).let { if (isCard) -it else it }
+                    val entered = (Money.parseMinor(initial) ?: 0).let { if (isCard || (type == AccountType.LOAN && !loanLent)) -kotlin.math.abs(it) else it }
                     val o = original
                     // 新帳戶：輸入值就是期初餘額；既有帳戶：調整期初餘額讓目前餘額等於輸入值
                     val newInitial = if (o == null || currentBalance == null) entered else o.initialBalance + (entered - currentBalance)
@@ -281,6 +332,16 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                             )
                         }
                         if (type != AccountType.BROKERAGE) repo.settings.update { st -> st.copy(brokerRebates = st.brokerRebates - savedId) }
+                        if (type == AccountType.LOAN) repo.saveLoan(
+                            savedId,
+                            (repo.settings.value.loans[savedId] ?: com.enwei.moneymanager.data.LoanInfo()).copy(
+                                counterparty = counterparty.trim(), lent = loanLent,
+                                principal = Money.parseMinor(principal)?.let { kotlin.math.abs(it) } ?: kotlin.math.abs(entered),
+                                annualRate = rate.toDoubleOrNull() ?: 0.0, startDay = loanStart.toEpochDay(), dueDay = loanDue?.toEpochDay(),
+                                installment = Money.parseMinor(installment)?.takeIf { it > 0 },
+                                payDay = payDay.toIntOrNull()?.takeIf { it in 1..31 }, payAccountId = payFrom,
+                            ),
+                        ) else if (repo.settings.value.loans.containsKey(savedId)) repo.removeLoan(savedId)
                         nav.popBackStack()
                     }
                 },
