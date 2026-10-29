@@ -93,27 +93,57 @@ object GroqAi {
         val system = if (com.enwei.moneymanager.ui.I18n.english && task.userText)
             system + " Write every human-readable text value in English (keep JSON keys, values chosen from given lists, stock codes and original names unchanged)."
         else system
-        // 先用分配的那家，失敗（額度用完、連不上）再改用另一家；Groq 一次能送的量較小，只送前段
-        for (p in listOf(first) + Provider.entries.filter { it != first }) {
-            val r = when (p) {
-                Provider.GEMINI -> if (s.geminiKey.isBlank()) null
-                else callGemini(s.geminiKey.trim(), if (task.lite) s.geminiLiteModel.trim().ifBlank { "gemini-flash-lite-latest" } else s.geminiModel.trim().ifBlank { "gemini-flash-latest" },
-                    // Gemini 的思考也算在輸出長度裡：讀大量資料的工作多留空間
-                    system, user, maxOf(2048, maxTokens * 4).let { if (task.lite) it else maxOf(it, 12_000) })
-                Provider.GROQ -> if (s.groqKey.isBlank()) null
-                else groqJson(s, system, if (p == first) user else user.take(6000), maxTokens, hard || !task.lite, cap, effort)
+        // 先用分配的那家，失敗（額度用完、連不上）再改用另一家；剛被限流的那家先跳過一陣子
+        val order = (listOf(first) + Provider.entries.filter { it != first }).filter { p ->
+            if (p == Provider.GROQ) s.groqKey.isNotBlank() else s.geminiKey.isNotBlank()
+        }
+        val now = System.currentTimeMillis()
+        val ready = order.filter { (cooldownUntil[it] ?: 0) <= now }.ifEmpty { order }
+        for (p in ready) {
+            val model = when (p) {
+                Provider.GEMINI -> if (task.lite) s.geminiLiteModel.trim().ifBlank { "gemini-flash-lite-latest" } else s.geminiModel.trim().ifBlank { "gemini-flash-latest" }
+                Provider.GROQ -> if (hard || !task.lite) s.aiModelHard.trim().ifBlank { HARD_MODEL } else s.aiModel.trim().ifBlank { DEFAULT_MODEL }
             }
+            val t0 = System.currentTimeMillis()
+            lastError = null
+            val r = when (p) {
+                Provider.GEMINI -> callGemini(s.geminiKey.trim(), model, system, user,
+                    // Gemini 的思考也算在輸出長度裡：讀大量資料的工作多留空間
+                    maxOf(2048, maxTokens * 4).let { if (task.lite) it else maxOf(it, 12_000) }, timeoutSec = if (task.lite) 45 else 90)
+                Provider.GROQ -> groqJson(s, system, user, maxTokens, hard || !task.lite, cap, effort)
+            }
+            logCall(task, p, model, System.currentTimeMillis() - t0, r != null, lastError)
             if (r != null) return@withContext r
+            // 額度用完或伺服器忙：這家先休息，之後的呼叫直接用另一家
+            val err = lastError.orEmpty()
+            if ("429" in err || "額度" in err) cooldownUntil[p] = System.currentTimeMillis() + if (p == Provider.GEMINI) 15 * 60_000L else 2 * 60_000L
+            else if ("逾時" in err || "timeout" in err.lowercase() || "503" in err) cooldownUntil[p] = System.currentTimeMillis() + 5 * 60_000L
         }
         null
     }
 
+    /** 一次 AI 呼叫的紀錄（設定頁顯示，方便找出哪裡失敗）。 */
+    data class CallLog(val time: Long, val task: AiTask, val provider: Provider, val model: String, val ms: Long, val ok: Boolean, val error: String?)
+
+    val callLog = kotlinx.coroutines.flow.MutableStateFlow<List<CallLog>>(emptyList())
+    private val cooldownUntil = ConcurrentHashMap<Provider, Long>()
+
+    private fun logCall(task: AiTask, p: Provider, model: String, ms: Long, ok: Boolean, error: String?) {
+        callLog.value = (listOf(CallLog(System.currentTimeMillis(), task, p, model, ms, ok, if (ok) null else error)) + callLog.value).take(30)
+    }
+
+    /** 某家是否因限流或逾時暫停中（設定頁顯示）。 */
+    fun pausedUntil(p: Provider): Long? = cooldownUntil[p]?.takeIf { it > System.currentTimeMillis() }
+
     private fun groqJson(
-        s: com.enwei.moneymanager.data.AppSettings, system: String, userIn: String, maxTokens: Int, hard: Boolean, cap: Int, effort: String,
+        s: com.enwei.moneymanager.data.AppSettings, systemIn: String, userIn: String, maxTokens: Int, hard: Boolean, cap: Int, effort: String,
     ): JsonObject? {
         // Groq 每分鐘約 8,000 tokens：輸入過長時截短（中文約一字一 token）
         val reserve = minOf(cap, maxOf(if (hard) 4096 else 1024, maxTokens * 4))
-        val user = userIn.take(maxOf(800, 7600 - reserve - system.length))
+        // 系統提示也算在內：太長（例如股票對話帶了整個資料集）就一起截短
+        val budget = 7600 - reserve
+        val system = if (systemIn.length > budget - 800) systemIn.take(budget - 800) else systemIn
+        val user = userIn.take(maxOf(400, budget - system.length))
         // 難題先用大模型（推理強度中等）；大模型不能用或超過額度時改用一般模型
         if (hard) {
             val big = s.aiModelHard.trim().ifBlank { HARD_MODEL }
@@ -142,7 +172,7 @@ object GroqAi {
     /**
      * Google Gemini（generateContent，JSON 模式）。可附一張 JPEG（base64）。失敗回傳 null 並記下原因。
      */
-    private fun callGemini(key: String, model: String, system: String, user: String, maxOut: Int, imageB64: String? = null): JsonObject? {
+    private fun callGemini(key: String, model: String, system: String, user: String, maxOut: Int, imageB64: String? = null, timeoutSec: Long = 90): JsonObject? {
         val body = buildJsonObject {
             put("systemInstruction", buildJsonObject { put("parts", buildJsonArray { add(buildJsonObject { put("text", system) }) }) })
             put("contents", buildJsonArray {
@@ -167,7 +197,7 @@ object GroqAi {
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         return runCatching {
-            aiClient.newCall(req).execute().use { resp ->
+            aiClient.newBuilder().callTimeout(timeoutSec, java.util.concurrent.TimeUnit.SECONDS).build().newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
                     lastError = when (resp.code) {
@@ -194,7 +224,10 @@ object GroqAi {
                 lastError = null
                 Http.json.parseToJsonElement(content.substring(a, b + 1)).jsonObject
             }
-        }.getOrElse { lastError = "Gemini：" + (it.message ?: it.javaClass.simpleName); null }
+        }.getOrElse {
+            lastError = if (it is java.io.InterruptedIOException) "Gemini 逾時（$timeoutSec 秒沒有回應）" else "Gemini：" + (it.message ?: it.javaClass.simpleName)
+            null
+        }
     }
 
     private fun recordGeminiUsage(tokens: Long) {
@@ -276,7 +309,10 @@ object GroqAi {
                 lastError = null
                 Http.json.parseToJsonElement(content.substring(a, b + 1)).jsonObject to Fail.NONE
             }
-        }.getOrElse { lastError = it.message ?: it.javaClass.simpleName; null to Fail.NONE }
+        }.getOrElse {
+            lastError = if (it is java.io.InterruptedIOException) "Groq 逾時（沒有回應）" else "Groq：" + (it.message ?: it.javaClass.simpleName)
+            null to Fail.NONE
+        }
     }
 
     /** 今天的用量（請求數、tokens），每天重新計算；Groq 免費方案每個模型約每天 1,000 次請求、20 萬 tokens。 */

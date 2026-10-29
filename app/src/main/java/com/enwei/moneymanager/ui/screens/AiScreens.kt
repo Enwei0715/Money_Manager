@@ -107,6 +107,28 @@ fun AiSettingsScreen(nav: NavController) {
                 }
             }
 
+            // 最近的 AI 呼叫：哪項工作、哪一家、花多久、成功或失敗原因
+            val log by GroqAi.callLog.collectAsStateWithLifecycle()
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("最近的 AI 呼叫", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Provider.entries.forEach { p ->
+                        GroqAi.pausedUntil(p)?.let { t ->
+                            Text("${p.label} 暫停到 " + java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(t)) + "（剛才額度用完或沒有回應，先改用另一家）",
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    if (log.isEmpty()) Text("這次開啟 App 後還沒有呼叫", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    log.forEach { c ->
+                        Text(
+                            java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.TAIWAN).format(java.util.Date(c.time)) +
+                                "  ${c.task.label} · ${c.provider.label} ${c.model} · ${"%.1f".format(c.ms / 1000.0)} 秒 · " + (if (c.ok) "成功" else "失敗：${c.error ?: "沒有回應"}"),
+                            fontSize = 11.sp, color = if (c.ok) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+
             Text(
                 "只會送出已啟用 App 的通知文字、商家與分類名稱、檢討時的交易明細、股票分析用的新聞與持股，以及對帳時選的截圖。" +
                     "金鑰只存在這支手機、不放進備份。Gemini 免費方案可能會用送出的內容改進模型；不想讓交易明細送到 Gemini，可以把「收支檢討」「整理不明花費」改成 Groq。",
