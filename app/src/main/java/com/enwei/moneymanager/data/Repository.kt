@@ -1,6 +1,7 @@
 package com.enwei.moneymanager.data
 
 import androidx.room.withTransaction
+import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.core.CardCycle
 import com.enwei.moneymanager.core.CategoryGuesser
 import com.enwei.moneymanager.core.CategorySuggester
@@ -285,7 +286,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 請 AI 幫「不明」交易挑分類，結果放進待確認的「AI 建議分類」（不會直接修改交易）。
      * 每次送約 8 筆，附上這個人在類似情境（同帳戶、金額相近、時段相近）過去常用的分類當參考。
      */
-    suspend fun aiSortUnknown(onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }): Int {
+    suspend fun aiSortUnknown(onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> }): Int {
         if (!com.enwei.moneymanager.net.GroqAi.enabled) return 0
         val catsAll = db.categories().all()
         val cats = catsAll.associateBy { it.id }
@@ -394,7 +395,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     fun dismissDuplicate(p: DupPair) = settings.update { it.copy(dupDismissed = it.dupDismissed + p.key) }
 
     /** 請 AI 判斷每組是否為同一筆，並給出較精確的交易名稱與分類。 */
-    suspend fun aiJudgeDuplicates(pairs: List<DupPair>): Map<String, DupJudgement> {
+    suspend fun aiJudgeDuplicates(
+        pairs: List<DupPair>,
+        onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> },
+    ): Map<String, DupJudgement> {
         if (!com.enwei.moneymanager.net.GroqAi.enabled || pairs.isEmpty()) return emptyMap()
         val all = db.categories().all()
         val accounts = db.accounts().all().associateBy { it.id }
@@ -403,11 +407,16 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             "${t.source.label}｜${t.merchant ?: "（無名稱）"}${t.note?.let { "，$it" } ?: ""}" +
             (t.categoryId?.let { "｜分類 ${path(it)}" } ?: "") + (t.rawText?.take(120)?.let { "｜原文：${it.replace('\n', ' ')}" } ?: "")
         val out = HashMap<String, DupJudgement>()
-        for (chunk in pairs.groupBy { it.keep.type }.values.flatMap { it.chunked(6) }) {
+        val chunks = pairs.groupBy { it.keep.type }.values.flatMap { it.chunked(6) }
+        var done = 0
+        onProgress(done, pairs.size)
+        for (chunk in chunks) {
             val type = chunk.first().keep.type
             val cats = all.filter { it.kind == type && !it.archived && all.none { c -> c.parentId == it.id } && it.name != "不明" }.map { it.id to path(it.id) }
             val items = chunk.map { p -> p.key to "金額 ${Money.format(p.keep.amount, p.keep.currency)}\n  A：${desc(p.keep)}\n  B：${desc(p.drop)}" }
             out += com.enwei.moneymanager.net.GroqAi.judgeDuplicates(items, cats)
+            done += chunk.size
+            onProgress(done, pairs.size)
             kotlinx.coroutines.delay(2500)
         }
         // 記住判斷結果：下次打開不用再問 AI
@@ -415,25 +424,22 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return out
     }
 
-    private var tidyJob: kotlinx.coroutines.Job? = null
-
     /** 新的自動記帳進來後，等一陣子（通知、錢包畫面可能陸續到）再請 AI 整理一次。 */
-    fun scheduleAutoTidy(scope: kotlinx.coroutines.CoroutineScope) {
+    fun scheduleAutoTidy() {
         if (!settings.value.aiAutoTidy || !com.enwei.moneymanager.net.GroqAi.enabled) return
-        tidyJob?.cancel()
-        tidyJob = scope.launch { kotlinx.coroutines.delay(3 * 60_000L); runCatching { aiAutoTidy() } }
+        com.enwei.moneymanager.work.AiBackgroundWork.scheduleAutoTidy(MoneyApp.instance)
     }
 
     /**
      * AI 自動整理（背景執行）：近 14 天新出現的可能重複，請 AI 判斷；
      * 兩筆都是自動記帳（通知、錢包畫面）且 AI 判定為同一筆時直接合併，其餘留在「待確認」由使用者決定。
      */
-    suspend fun aiAutoTidy(): Int {
+    suspend fun aiAutoTidy(onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> }): Int {
         val s = settings.value
         if (!s.aiAutoTidy || !com.enwei.moneymanager.net.GroqAi.enabled) return 0
         val fresh = findDuplicates(14).filter { it.key !in s.dupVerdicts }.take(12)
         if (fresh.isEmpty()) return 0
-        val verdicts = aiJudgeDuplicates(fresh)
+        val verdicts = aiJudgeDuplicates(fresh, onProgress)
         val auto = setOf(TxnSource.NOTIFICATION, TxnSource.SCREEN)
         val done = ArrayList<String>()
         fresh.forEach { p ->

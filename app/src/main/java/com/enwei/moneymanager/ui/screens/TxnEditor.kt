@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -260,7 +261,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 FormRow("日期", color, active = false, onClick = { panel = Panel.NONE; showDate = true }, trailing = {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.clickable { nav.navigate("recurring/0") },
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.height(48.dp).clickable { nav.navigate("recurring/0") },
                     ) {
                         Icon(Icons.Outlined.Repeat, "週期", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                         Text("週期/分期", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -474,7 +476,7 @@ private fun FormRow(
         Text(shown, Modifier.width(if (english) 96.dp else 76.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyLarge, maxLines = 1, softWrap = false)
         Column(Modifier.weight(1f)) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { content() }
                 trailing?.invoke()
             }

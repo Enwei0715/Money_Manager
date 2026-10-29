@@ -46,10 +46,31 @@ class WalletScreenReader : AccessibilityService() {
             // 版面規則看不懂：同一個畫面只請 AI 整理一次（畫面沒變就不重送）
             if (records.isEmpty() && com.enwei.moneymanager.net.GroqAi.enabled) {
                 val sig = texts.hashCode()
+                if (aiSeen[pkg] == sig && scans.value.any { it.pkg == pkg && (it.status == "AI 背景判讀中…" || it.byAi) }) {
+                    return@launch
+                }
                 if (aiSeen[pkg] != sig) {
                     aiSeen[pkg] = sig
-                    records = com.enwei.moneymanager.net.GroqAi.parseScreen(texts, java.time.LocalDate.now())
-                    byAi = records.isNotEmpty()
+                    val scanTime = System.currentTimeMillis()
+                    try {
+                        WalletScreenAiWorker.enqueue(
+                            applicationContext,
+                            pkg,
+                            scanTime,
+                            texts,
+                            testMode.value,
+                        )
+                        record(ScanEntry(scanTime, pkg, texts.size, emptyList(), null, null, status = "AI 背景判讀中…"))
+                    } catch (e: Exception) {
+                        aiSeen.remove(pkg, sig)
+                        record(
+                            ScanEntry(
+                                scanTime, pkg, texts.size, emptyList(), null,
+                                "無法排入 AI 背景判讀：${e.message ?: e.javaClass.simpleName}",
+                            ),
+                        )
+                    }
+                    return@launch
                 }
             }
             if (records.isEmpty()) {
@@ -68,7 +89,7 @@ class WalletScreenReader : AccessibilityService() {
             }
             record(ScanEntry(System.currentTimeMillis(), pkg, texts.size, records, r, null, byAi))
             if (!test && r != null && r.created > 0) notifyImported(r.created)
-            if (!test && r != null && (r.created > 0 || r.merged > 0)) MoneyApp.repo.scheduleAutoTidy(MoneyApp.instance.appScope)
+            if (!test && r != null && (r.created > 0 || r.merged > 0)) MoneyApp.repo.scheduleAutoTidy()
         }
     }
 
@@ -87,19 +108,7 @@ class WalletScreenReader : AccessibilityService() {
         return out
     }
 
-    private fun notifyImported(count: Int) {
-        val nm = getSystemService(NotificationManager::class.java)
-        if (!nm.areNotificationsEnabled()) return
-        nm.notify(
-            9100,
-            NotificationCompat.Builder(this, MoneyApp.CHANNEL_RECORDS)
-                .setSmallIcon(R.drawable.ic_stat_ledger)
-                .setContentTitle("已從錢包畫面讀取 $count 筆交易")
-                .setContentText(if (MoneyApp.repo.settings.value.notifAutoConfirm) "已自動入帳" else "請到「待確認」檢查")
-                .setAutoCancel(true)
-                .build(),
-        )
-    }
+    private fun notifyImported(count: Int) = notifyWalletImported(this, count)
 
     override fun onInterrupt() = Unit
 
@@ -120,6 +129,7 @@ class WalletScreenReader : AccessibilityService() {
         val result: com.enwei.moneymanager.data.Repository.ScreenIngestResult?, val problem: String?,
         /** 版面規則看不懂，由 AI 從畫面文字整理出來的 */
         val byAi: Boolean = false,
+        val status: String? = null,
     )
 
     companion object {
@@ -133,7 +143,27 @@ class WalletScreenReader : AccessibilityService() {
         /** 每個 App 上次請 AI 整理的畫面（文字的 hash），畫面沒變不重送 */
         private val aiSeen = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
-        private fun record(e: ScanEntry) { scans.value = (listOf(e) + scans.value).take(10) }
+        internal fun record(e: ScanEntry) { scans.value = (listOf(e) + scans.value).take(10) }
+
+        internal fun updateScan(time: Long, transform: (ScanEntry) -> ScanEntry) {
+            val old = scans.value.firstOrNull { it.time == time }
+            if (old == null) return
+            scans.value = scans.value.map { if (it.time == time) transform(it) else it }
+        }
+
+        internal fun notifyWalletImported(context: Context, count: Int) {
+            val nm = context.getSystemService(NotificationManager::class.java)
+            if (!nm.areNotificationsEnabled()) return
+            nm.notify(
+                9100,
+                NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
+                    .setSmallIcon(R.drawable.ic_stat_ledger)
+                    .setContentTitle("已從錢包畫面讀取 $count 筆交易")
+                    .setContentText(if (MoneyApp.repo.settings.value.notifAutoConfirm) "已自動入帳" else "請到「待確認」檢查")
+                    .setAutoCancel(true)
+                    .build(),
+            )
+        }
 
         fun isEnabled(context: Context): Boolean {
             val flat = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false

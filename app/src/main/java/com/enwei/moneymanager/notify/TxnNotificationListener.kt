@@ -74,7 +74,7 @@ class TxnNotificationListener : NotificationListenerService() {
                     return@launch
                 }
                 results.filterNotNull().forEach { result ->
-                    if (result.kind == "RECORDED") app.repo.scheduleAutoTidy(app.appScope)
+                    if (result.kind == "RECORDED") app.repo.scheduleAutoTidy()
                     val pending = !app.repo.settings.value.notifAutoConfirm && result.kind == "RECORDED"
                     QuickActions.notifyRecorded(
                         this@TxnNotificationListener, result.txnId.takeIf { result.kind != "STOCK" }, tr(result.message), pending,
