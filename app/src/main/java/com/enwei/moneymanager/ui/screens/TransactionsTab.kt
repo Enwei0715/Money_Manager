@@ -173,16 +173,10 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     else Periods.month(month, startDay)
     val inPeriod = remember(all, range) { all.filter { inRange(it.date.toLocalDate(), range) } }
 
-    // 上期結轉（同 Money Manager）：本期之前所有收入－支出的累計，加上計入總額帳戶的期初餘額。
-    // 篩選條件必須和本期收支（totalsOf）完全相同，本期的結轉才會一定等於上一期的「合計」；
-    // 以前排除了不計入總額或隱藏帳戶的交易，本期收支卻有算，兩邊一不一致結轉就對不上。
-    val carry = if (settings.carryOver && tab != 3) {
-        val cutoff = range.first.toMillis(LocalTime.MIDNIGHT)
-        val opening = lk.accounts.filter { it.includeInNetWorth && !it.archived }.sumOf { lk.fx.convert(it.initialBalance, it.currency) }
-        opening + totalsOf(all.filter { it.date < cutoff }, lk.fx).total
-    } else 0L
+    // 不做「上期結轉」：每期只看這期的收支，帳戶餘額本來就會延續
+    val carry = 0L
     val base = totalsOf(inPeriod, lk.fx)
-    val totals = Totals(base.income + maxOf(0, carry), base.expense + maxOf(0, -carry))
+    val totals = base
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -347,10 +341,8 @@ private fun DailyView(
 @Composable
 fun NoData(text: String = "沒有資料") {
     Column(Modifier.fillMaxWidth().padding(top = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(verticalAlignment = Alignment.Top) {
-            Icon(Icons.Outlined.Pets, null, tint = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.size(72.dp))
-            Icon(Icons.Outlined.Chat, null, tint = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.size(28.dp))
-        }
+        // 自己的空白圖示（不沿用舊 App 的貓咪對話框）
+        Icon(com.enwei.moneymanager.ui.components.LineIcons.Inbox, null, tint = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.size(64.dp))
         Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 17.sp, modifier = Modifier.padding(top = 12.dp))
     }
 }

@@ -164,9 +164,6 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("每週起始日", if (s.weekStartDay == 7) "週日" else "週一") {
                     ask("每週起始日", listOf(7 to "週日", 1 to "週一"), s.weekStartDay) { v -> repo.settings.update { it.copy(weekStartDay = v) } }
                 }
-                ConfigRow("上期結轉", onOff(s.carryOver)) {
-                    askOnOff("上期結轉", s.carryOver, "把上個期間結束時的淨資產顯示在本期第一天，方便看到累計結餘。") { v -> repo.settings.update { it.copy(carryOver = v) } }
-                }
                 ConfigRow("滑動切換", if (s.swipe == 1) "切換期間" else "無") {
                     ask("滑動切換", listOf(0 to "無", 1 to "切換期間"), s.swipe, "在交易頁左右滑動時要做什麼。") { v -> repo.settings.update { it.copy(swipe = v) } }
                 }
