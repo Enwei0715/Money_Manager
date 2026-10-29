@@ -155,7 +155,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
             FormLine("名稱") { FormInput(name, { name = it }) }
             if (type == AccountType.LOAN) {
                 FormLine("類型") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         androidx.compose.material3.FilterChip(loanLent, { loanLent = true }, label = { Text("借出（別人欠我）") })
                         androidx.compose.material3.FilterChip(!loanLent, { loanLent = false }, label = { Text("借入（我欠別人）") })
                     }

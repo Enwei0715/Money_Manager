@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -458,7 +459,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     aiHint?.let { Text(it, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall) }
                     if (amount == null) Text("這則通知裡找不到金額，無法自動記帳。", color = MaterialTheme.colorScheme.error)
                     else Text("找到的金額：${Money.format(amount.first, amount.second)} ${amount.second}")
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("支出", "收入", "轉出", "轉入").forEachIndexed { i, l -> FilterChip(mode == i, { mode = i }, label = { Text(l) }) }
                     }
                     DropdownField(

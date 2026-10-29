@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -89,9 +90,11 @@ fun ReviewContent(nav: NavController) {
 
     run {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                ReviewSpan.entries.forEach { sp -> FilterChip(span == sp, { span = sp; offset = 0 }, label = { Text("每${sp.label}") }) }
-                Spacer(Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // 英文標籤較長：選項可左右捲動，切換期間的箭頭固定在右邊
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ReviewSpan.entries.forEach { sp -> FilterChip(span == sp, { span = sp; offset = 0 }, label = { Text("每${sp.label}", maxLines = 1) }) }
+                }
                 IconButton(onClick = { offset-- }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
                 IconButton(enabled = offset < 0, onClick = { offset++ }) { Icon(Icons.Filled.ChevronRight, "下一期") }
             }
@@ -294,7 +297,7 @@ private fun QuestionCard(
             }
             Text("？ ${q.question}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             if (q.why.isNotBlank()) Text(q.why, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 com.enwei.moneymanager.data.Necessity.entries.forEach { n ->
                     FilterChip(current?.first == n, {
                         repo.settings.update { st -> st.copy(txnNecessity = st.txnNecessity + txns.associate { it.id to "${n.name}|${note.trim()}" }) }

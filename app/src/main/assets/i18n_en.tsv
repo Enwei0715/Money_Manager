@@ -360,7 +360,7 @@ App 更新	App update
 證券交割	Brokerage
 週期交易	Recurring
 銀行帳戶	Bank account
-錢包畫面	Wallet screen
+錢包畫面	wallet screen
 電信網路	Telecom
 電子支付	E-wallet
 電支儲值	E-wallet top-up
@@ -661,7 +661,7 @@ App 更新	App update
 損益	P/L
 搜尋	Search
 數量	Quantity
-新增	Add
+新增	added
 日曆	Calendar
 日期	Date
 日用	Daily
@@ -669,8 +669,8 @@ App 更新	App update
 更多	More
 更新	Update
 書籤	Bookmarks
-最低	Min
-最高	Max
+最低	Low
+最高	High
 服飾	Clothing
 期間	Period
 標準	Standard
@@ -755,7 +755,7 @@ App 更新	App update
 週六	Sat
 股	sh
 退	Refund
-元	
+元	NT$
 吃	Eat
 大	Large
 天	days
@@ -763,7 +763,7 @@ App 更新	App update
 家	Home
 小	Small
 年	y
-張	lots
+張	 lots
 旅	Travel
 日	
 書	Books
@@ -788,7 +788,7 @@ App 更新	App update
 食	Food
 飯	Meals
 餐	Meals
-App 名稱也會跟著語言切換（帳理／Ledgerly）。	The app name changes with the language (帳理 / Ledgerly).
+App 名稱也會跟著語言切換（帳理／Ledgerly）。	The app name follows the language (帳理 / Ledgerly).
 自動雲端備份	Automatic cloud backup
 選一個備份檔位置（Google 雲端硬碟、OneDrive、Dropbox 或手機資料夾都可以），帳理會定期把完整備份覆寫到那個檔案，不需要任何帳號設定或金鑰。	Choose a backup file location (Google Drive, OneDrive, Dropbox or a phone folder). Ledgerly regularly overwrites it with a full backup — no account setup or keys needed.
 另外，Android 系統的「Google 備份」也會自動備份帳理的資料（設定 → 系統 → 備份），重新安裝時可自動還原。	 Android's own Google backup also backs up Ledgerly's data (Settings → System → Backup) and restores it on reinstall.
@@ -907,7 +907,7 @@ AI：不是同一筆	AI: different transactions
 這則通知已經記過	This notification was already recorded
 不會重複記帳	won't be recorded twice
 已匯入過	already imported
-會新增	Would add
+會新增	would add
 顯示全部	Show all
 收起	Collapse
 ＋ 備註	+ Note
@@ -919,8 +919,8 @@ AI：不是同一筆	AI: different transactions
 美股每筆手續費	US fee per trade
 各證券帳戶	Brokerage accounts
 用預設	Default
-成交即折	Discount at trade
-月退	Monthly rebate
+成交即折	At trade
+月退	Rebate
 成交時的折數（例如 0.6）	Discount at trade (e.g. 0.6)
 月退後的折數（例如 0.28）	Discount after rebate (e.g. 0.28)
 每月退款日（次月）	Rebate day (next month)
@@ -984,8 +984,8 @@ AI 市場分析與建議	AI market analysis
 資金分配	Allocation
 交易前檢查	Pre-trade checklist
 提醒	Reminders
-長線	Long-term
-短線	Short-term
+長線	Long
+短線	Short
 持股紀律（動態停損、分批停利）	Holdings discipline (trailing stops, partial profits)
 資金與紀律參數	Money & discipline settings
 我的交易紀律（一行一條）	My trading rules (one per line)
@@ -1094,3 +1094,318 @@ AI 智慧辨識（Groq／Gemini）	AI (Groq / Gemini)
 利多	Bullish
 利空	Bearish
 重要	Important
+蒐集新聞…	Collecting news…
+AI 標註新聞	AI tagging news
+批…	batch…
+讀取大盤與持股走勢…	Loading market and holdings…
+AI 分析資料集（	AI analyzing dataset (
+則新聞）…	 headlines)…
+確認推薦的代號與價格…	Checking pick codes and prices…
+（已依實際入帳	(corrected to actual
+校正）	)
+（校正估算金額）	(estimate corrected)
+（AI 判讀，請確認）	(read by AI, please confirm)
+（分類由 AI 推測）	(category guessed by AI)
+：儲值已由銀行通知記成轉帳	: top-up already recorded as a transfer
+」是同一筆	" is the same payment
+補上商家名稱	merchant name filled in
+，不重複記帳	, not recorded twice
+：已匯入過	: already imported
+不明	Unknown
+對帳調整	Reconcile adjustment
+AI 判斷不出來	AI couldn't tell
+學會「	Learned "
+」的通知格式（	" notification format (
+已套用	Applied
+成交時間：	Fill time: 
+」的持股	" holdings
+（AI 推測）	(AI guess)
+→ AI 命名「	→ AI name "
+（規則看不懂，由 AI 判讀；記帳時放到「待確認」，確認後會自動學會這種格式）	(rules couldn't read it, read by AI; goes to Pending and the format is learned once you confirm)
+（依你教過的格式辨識：	(matched a format you taught: 
+，從「	, from "
+，到「	, to "
+→ 會和另一則通知合併成轉帳：	→ will merge with another notification into a transfer: 
+→ 依 Email 的轉入銀行記成轉帳：	→ recorded as a transfer using the email's destination bank: 
+（依 Email 的轉入銀行）	(from the email's destination bank)
+已逾期（到期	overdue (due 
+），尚欠	), still owed 
+到期，尚欠	due, still owed 
+收款	collect
+未命名	Unnamed
+季	quarter
+年第	 Q
+，存得不錯	, nice saving
+，還有空間	, room to improve
+，偏低	, low
+，支出超過收入	, spending exceeds income by
+增加	up
+最大支出是	Biggest spending: 
+，占	, 
+固定支出（訂閱、房租等）每月	Fixed costs (subscriptions, rent…) per month
+，約占支出	, about
+超出預算	over budget by
+筆「不明」或未分類，共	 unknown or uncategorized, total
+，分類後檢討會更準	; categorize them for a better review
+週末花了	Weekends took
+的錢	 of spending
+獲利時分批賣（先賣 1/3），用移動停損保護剩下的，不要一次全賣而賣飛	Take profits in parts (sell 1/3 first) and protect the rest with a trailing stop; don't sell everything and miss the run
+短線一定設停損，跌破就走，不攤平、不凹單	Always set a stop on short-term trades; exit when hit, no averaging down
+長線部位不看短期波動，照計畫持有	Ignore short-term swings for long-term positions; hold to plan
+賣出後不急著買別檔：先看大盤、確認資金分配，再依股性挑標的	After selling, don't rush into another stock: check the market and allocation, then pick by style
+短線看線型與新聞，但下單前三思，不追高、不盲目買	Short-term: read charts and news, but think twice; no chasing, no blind buys
+只用計畫內的資金，生活費不動	Only use planned money; never touch living expenses
+類型	Type
+（遇假日順延）	(moved after holidays)
+從「	from "
+折 ›	 discount ›
+使用預設 ›	Default ›
+借款人／債權人	Borrower / lender
+借出／借入的總額	Total lent / borrowed
+%，無息留空	%, blank if no interest
+不設定	None
+設定到期日	Set due date
+金額，不分期留空	Amount, blank if none
+每月幾號	Day of month
+收款帳戶	Receiving account
+還款帳戶	Paying account
+每月到期會產生一筆轉帳放到「待確認」，確認金額後入帳。	Each month a transfer is created in Pending; confirm the amount to record it.
+助理	Assistant
+」餘額不足，卡費可能扣款失敗	" is short; card autopay may fail
+起自動扣繳共	autopay from, total
+已結清	Paid off
+已逾期	Overdue
+到期	due
+結帳後	Due
+天繳款	 days after statement
+讀取圖片失敗：	Couldn't read image: 
+圖片裡找不到餘額，請手動輸入（截圖請包含「餘額」字樣與金額）	No balance found in the image; enter it manually (include the balance label and amount)
+AI 從圖片讀到餘額	AI read balance
+，請確認	, please confirm
+從圖片的「	From "
+今日報告 ·	Today's report ·
+還沒有今日報告	No report yet today
+則（近 3 天已標註）	 (tagged, last 3 days)
+· 報告讀了	· report read
+則	items
+到「設定 → AI 智慧辨識」填入金鑰後，App 會每天在背景讀新聞、整理資料集並產生報告。	Add a key in Settings → AI and the app will read news, build the dataset and generate a report every day.
+趨勢	Trend
+｜停損	 | stop
+強	Strong
+弱	Weak
+代號未確認，請自行查證	Code not verified, please check
+進場：	Entry: 
+停損：	Stop: 
+建議投入約	Suggested amount about
+AI 沒有回應：	AI didn't respond: 
+可以問今天該買什麼、某檔股票能不能買、持股怎麼處理、資金怎麼分配。AI 會讀新聞資料集、你的持股、資金計畫與紀律再回答。	Ask what to buy today, whether a stock is worth buying, what to do with holdings or how to allocate. AI reads the news dataset, your holdings, plan and rules before answering.
+AI 思考中…	AI is thinking…
+今天該買什麼？	What should I buy today?
+我的持股怎麼處理？	What about my holdings?
+現在適合加碼嗎？	Good time to add?
+最近有什麼重大新聞？	Any major news lately?
+短線資金還能用多少？	How much short-term money is left?
+已執行	Running for
+，可以離開這個畫面，完成時會通知你。	; you can leave this screen, you'll be notified when done.
+共	Total
+則（近	 (last
+天），已標註	 days), tagged
+上次蒐集：	Last collected: 
+還沒有	not yet
+。背景每 3 小時從	. Every 3 hours the app reads
+個主題與你的持股抓新聞（每個主題最多約 100 則），AI 逐則標註題材、相關個股、多空與重要性。	 topics plus your holdings (up to ~100 each); AI tags each headline's theme, stocks, sentiment and importance.
+題材熱度（近 3 天，點選篩選）	Theme heat (3 days, tap to filter)
+則 ·	 ·
+偏多	Bullish
+偏空	Bearish
+中性	Neutral
+題材：	Theme: 
+顯示更多（還有	Show more (
+則）	 left)
+加權指數	TAIEX
+費城半導體：	SOX: 
+可動用現金	Available cash
+（已扣信用卡欠款）· 保留生活費	(after card debt) · living reserve
+可投資	Investable
+⚠ 現金比生活費少	⚠ Cash is below the living reserve by
+，先不要加碼	; don't add now
+⚠ 短線超出計畫	⚠ Short-term over plan by
+，新的短線單先暫停	; pause new short-term trades
+均價	Avg
+· 買進後最高	· high since buy
+停損	Stop
+停利	Take profit
+每 6 小時抓一次新聞並標註，早上 7 點後產生當天報告並通知；需要網路且電量不低。	News is collected and tagged every few hours; the daily report is generated after 7 AM and you're notified. Needs network and enough battery.
+還可投入	Room left
+保留生活費	Living reserve
+長線占可投資資金	Long-term share of investable money
+短線停損	Short-term stop
+短線移動停損（從高點回落）	Short-term trailing stop (from high)
+長線移動停損（從高點回落）	Long-term trailing stop (from high)
+分批停利門檻（長線為兩倍）	Partial profit threshold (double for long-term)
+只會送出已啟用 App 的通知文字、商家與分類名稱、檢討時的交易明細、股票分析用的新聞與持股，以及對帳時選的截圖。	Only notification text from enabled apps, merchant and category names, transactions for reviews, news and holdings for stock analysis, and screenshots you pick for reconciling are sent.
+金鑰只存在這支手機、不放進備份。Gemini 免費方案可能會用送出的內容改進模型；不想讓交易明細送到 Gemini，可以把「收支檢討」「整理不明花費」改成 Groq。	Keys stay on this phone and aren't backed up. Gemini's free tier may use what you send to improve its models; to keep transactions away from Gemini, set Spending review and Sort unknown spending to Groq.
+API 金鑰	API key
+連線失敗：	Connection failed: 
+判讀通知、整理名稱與分類、檢討與股票分析	Reads notifications, tidies names and categories, reviews and stock analysis
+自動合併重複記的同一筆；確認 AI 判讀的通知後自動學會格式	Merges duplicate records; learns a notification format after you confirm an AI-read one
+速度快，適合頻繁的小工作；免費方案每分鐘約 8,000 tokens、每天約 20 萬 tokens	Fast, good for frequent small jobs; free tier about 8,000 tokens/min and 200k tokens/day
+今天	Today
+次、	 requests,
+今天還沒用	Not used today
+進階模型	Advanced model
+看圖模型	Vision model
+一次可以讀大量資料（上千則新聞、整期交易、圖片）；免費方案每天請求次數有限，到 aistudio.google.com 申請金鑰	Reads lots at once (thousands of headlines, a whole period of transactions, images); free tier has a daily request limit. Get a key at aistudio.google.com
+主要模型（報告、檢討、對話、看圖）	Main model (reports, reviews, chat, images)
+輕量模型（新聞標註、錢包畫面）	Light model (news tagging, wallet screens)
+某一家額度用完或連不上時，會自動改用另一家。	If one runs out of quota or can't connect, the other is used automatically.
+（沒有	(no
+金鑰，改用	 key, using
+繁體中文	Traditional Chinese
+K 線與資訊	Chart & info
+折估算，請以券商帳單為準	 discount estimate; your broker statement is final
+其中利息（另記為利息	Of which interest (recorded as interest
+收到哪個帳戶	Received into
+從哪個帳戶付	Paid from
+超過尚欠金額	More than the amount owed
+還沒有設定借貸細節（對象、本金、到期日、每月還款）。	Loan details not set (counterparty, principal, due date, monthly payment).
+收回	Collected
+欠你	 owes you
+：你欠	: you owe
+· 已	· 
+開始	start
+天（到期	 days (due
+到期（剩	due (
+，約	, about
+期還清	 payments left
+，下次	, next
+% · 每月利息約	% · monthly interest about
+（從	(from
+（到	(to
+另一個帳戶也有通知時（金額相同、10 分鐘內），兩則會自動合併成一筆轉帳。	If the other account also notifies (same amount, within 10 minutes), the two merge into one transfer.
+每次都直接記成轉帳，不用等另一端的通知（例如固定轉到街口、儲值到悠遊付）。	Always record as a transfer without waiting for the other side (e.g. regular top-ups).
+從 .mmbak 匯入	Import from .mmbak
+匯出為 .mmbak	Export as .mmbak
+、和通知／手動記的對上	, matched with notification/manual
+筆（不重複記）	 (not recorded twice)
+同一筆	same payment
+支出比上	vs last
+前三	Prev 3
+花最多的商家：	Top merchants: 
+次	x
+這期	this period
+次、共	x, total
+，小額但累積起來不少	; small but it adds up
+深夜（22 點後）消費	Late-night (after 10 PM) spending
+筆、共	 items, total
+去年同期支出	Same period last year
+，今年	, this year
+多	more
+少	less
+你標為「可省」的	Marked "could skip":
+筆共	 items, total
+AI 連線失敗：	AI connection failed: 
+到「設定 → AI 智慧辨識」填入金鑰後，可以產生 AI 檢討。	Add a key in Settings → AI to generate an AI review.
+按「產生」，AI 會依這期的資料寫出檢討與下期目標。	Tap Generate and AI writes a review and next goals from this period's data.
+回答會記住，下次檢討時 AI 會參考（例如「可省」的金額會列入目標）。	Answers are remembered and used in the next review (e.g. "could skip" amounts go into goals).
+每月省	Saves per month
+支出上限	Spending cap
+% 以上	% or more
+產生於	Generated
+開盤	Open
+52 週高	52w high
+52 週低	52w low
+月線	MA20
+季線	MA60
+3 個月	3M
+6 個月	6M
+1 年	1Y
+— 5 日  — 20 日（月線）  — 60 日（季線）	— 5D  — 20D  — 60D
+走勢：	Trend: 
+日漲跌	-day change
+強於大盤	stronger than market
+弱於大盤	weaker than market
+與大盤相當	in line with market
+近一年現金股利	Cash dividends (1y)
+，殖利率約	, yield about
+即將除權息：	Upcoming ex-date: 
+天後）	 days)
+我已領現金股利	Dividends received
+每次除權息都用當次的配發金額，乘上除權息日當天的持股自動記帳；超過 60 天的紀錄會鎖定，事後資料修改不影響。	Each ex-date uses that payout times the shares held on that day; records older than 60 days are locked and later data revisions don't change them.
+開啟 AI 後可以查看	Available with AI enabled
+台股交易時間每 15 分鐘檢查一次，達到時通知（同一天只通知一次）。	Checked every 15 minutes during trading hours; notified once per day when reached.
+持股另外會依你的紀律自動提醒動態停損與分批停利。	Holdings also get automatic trailing-stop and partial-profit alerts from your rules.
+5 日均量	5D avg vol
+張、20 日均量	 lots, 20D avg vol
+（量增）	(rising volume)
+（量縮）	(falling volume)
+（過熱，追高小心）	(overbought, careful)
+（超賣，留意反彈）	(oversold, watch for a bounce)
+，剛出現黃金交叉	, golden cross
+，剛出現死亡交叉	, death cross
+、柱	, hist
+（高檔）	(high)
+（低檔）	(low)
+，K 向上穿越 D	, K crossed above D
+讀不到這檔股票的價格資料（代號可能不正確）	No price data for this stock (code may be wrong)
+· 台股買賣	· TW trades
+的交易開始計算	 onward
+筆 · 實收手續費	 trades · fees paid
+已入帳	Booked
+（依銀行通知校正）	(corrected by bank notice)
+（估算）	(estimated)
+預估退	Est. rebate
+入帳	booked
+元（已由銀行通知記錄或無須退款）	 (recorded from a bank notice or nothing due)
+原價手續費	Full fee
+元 · 賣出交易稅	 · sell tax
+預設（	Default (
+折）	 discount)
+成交收	Charged
+元，次月退	, rebate next month
+元，實付	, net
+有	There are
+筆「不明」或未分類的收支，可以請 AI 推測分類，確認後才套用。	 unknown or uncategorized items; AI can guess categories, applied after you confirm.
+筆建議，判斷不出來的維持「不明」	 suggestions; the rest stay Unknown
+合併 AI 判定的	Merge AI-judged
+組	 pairs
+AI 判斷	AI judged
+組：	 pairs:
+組是同一筆	 are the same
+產生失敗：	Failed: 
+準備中…	Preparing…
+資料集已更新：共	Dataset updated: total
+讀取大盤	Loading market
+達到目標價	hit target
+跌破停損價	broke stop
+即將除權息	ex-dividend soon
+，每股現金	, cash per share
+，約可領	, about
+分	m
+秒	s
+，目標	, target
+；依紀律可先分批停利，不要一次全賣	; per your rules take profit in parts, don't sell all at once
+；短線依紀律出場、不攤平	; exit short-term per your rules, no averaging down
+（和	(merged with 
+的同一筆合併）	 record)
+手動記帳	manual entry
+：和已記的「	: same as recorded "
+｜原文：	 | original: 
+與	 and 
+的同一筆	 same payment
+會新增到「	will be added to "
+和	Same as 
+的「	 "
+」是同一筆：會合併，帳戶改成這則通知的帳戶	": will merge and use this notification's account
+錢包畫面讀到	wallet screen
+手動記	manual
+3 分鐘內另一個 App 已通知同一筆（	another app notified the same payment within 3 minutes (
+（你沒有「	(you have no "
+」的帳戶，無法記成轉帳）	" account, can't record as a transfer)
+的 Email：沒有「轉入銀行」資訊，不處理（Email 只用來補充轉帳對象，不另外記帳）	 email: no destination bank, ignored (emails only fill in transfer targets)
+的轉帳 Email：轉入	 transfer email: to 
+。若剛剛有	. If there was a recent 
+的轉出紀錄，會改成轉帳到你的	 transfer out, it becomes a transfer to your 
+帳戶（不另外記帳）	 account (not recorded separately)
+自動除權：每股配	Auto stock dividend: per share
+內容被 Android 隱藏：Android 15 起，系統判斷含驗證碼（OTP）的通知會對第三方 App 隱藏內容，App 收不到金額。一般的消費通知不含驗證碼，通常不會被隱藏。若一定要讀取，可在電腦用 adb 執行下方指令開放。	Hidden by Android: since Android 15, notifications the system thinks contain a one-time code are hidden from other apps, so the amount can't be read. Normal purchase notifications usually aren't hidden. To allow it, run the adb command below on a computer.

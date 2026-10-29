@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -119,7 +120,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 // K 線
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf(60 to "3 個月", 120 to "6 個月", 250 to "1 年").forEach { (n, l) -> FilterChip(span == n, { span = n }, label = { Text(l) }) }
                         }
                         CandleChart(b, span, showBB)
@@ -127,7 +128,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             Text("— 5 日  — 20 日（月線）  — 60 日（季線）", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                             FilterChip(showBB, { showBB = !showBB }, label = { Text("布林", fontSize = 12.sp) })
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf("成交量", "RSI", "MACD", "KD").forEachIndexed { i, l -> FilterChip(indicator == i, { indicator = i }, label = { Text(l, fontSize = 12.sp) }) }
                         }
                         IndicatorChart(b, span, indicator)

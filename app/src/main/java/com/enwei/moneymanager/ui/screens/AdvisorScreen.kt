@@ -344,7 +344,7 @@ private fun NewsTab(store: NewsStore) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("全部新聞（${filtered.size}）" + (theme?.let { "　題材：$it" } ?: ""), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 OutlinedTextField(query, { query = it; shown = 100 }, placeholder = { Text("搜尋標題或代號") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("全部", "利多", "利空", "重要").forEachIndexed { i, l -> FilterChip(filter == i, { filter = i; shown = 100 }, label = { Text(l) }) }
                 }
             }

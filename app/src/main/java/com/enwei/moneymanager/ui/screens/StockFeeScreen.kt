@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -125,7 +126,7 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("用預設", "成交即折", "月退").forEachIndexed { i, label -> FilterChip(mode == i, { mode = i; msg = null }, label = { Text(label) }) }
             }
             when (mode) {
