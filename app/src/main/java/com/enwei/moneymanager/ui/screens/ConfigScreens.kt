@@ -207,7 +207,7 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("備份與還原（含 .mmbak）") { nav.navigate("backup") }
 
                 SectionHeader("關於")
-                ConfigRow("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 1.1.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
+                ConfigRow("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.0.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
                 ConfigRow("開啟時檢查新版本", onOff(s.notifyUpdates)) {
                     askOnOff("開啟時檢查新版本", s.notifyUpdates, "開啟 App 時有新版本會跳出更新視窗（可略過這一版），背景也會通知。") { v ->
                         repo.settings.update { it.copy(notifyUpdates = v, updateSkipped = 0) }

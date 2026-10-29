@@ -531,16 +531,26 @@ private fun CalendarView(
                                 }
                             }
                         }
-                        Spacer(Modifier.weight(1f))
                         val lines = listOf(
                             (if (t.income > 0) Money.full(t.income) else "") to IncomeColor,
                             (if (t.expense > 0) Money.full(t.expense) else "") to ExpenseColor,
                             (if (t.income > 0 && t.expense > 0) Money.full(t.total) else "") to MaterialTheme.colorScheme.onSurface,
                         )
-                        Column(Modifier.fillMaxWidth().height(45.dp), verticalArrangement = Arrangement.Bottom) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(top = 3.dp, start = 2.dp, end = 2.dp),
+                            verticalArrangement = Arrangement.spacedBy(1.dp),
+                        ) {
                             lines.forEach { (text, c) ->
-                                Text(text, fontSize = 10.sp, color = c.copy(alpha = alpha), maxLines = 1, textAlign = TextAlign.End,
-                                    modifier = Modifier.fillMaxWidth().height(15.dp).padding(end = 3.dp))
+                                Text(
+                                    text,
+                                    fontSize = 9.sp,
+                                    lineHeight = 11.sp,
+                                    color = c.copy(alpha = alpha),
+                                    maxLines = 1,
+                                    textAlign = TextAlign.End,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth().height(13.dp).padding(end = 1.dp),
+                                )
                             }
                         }
                     }

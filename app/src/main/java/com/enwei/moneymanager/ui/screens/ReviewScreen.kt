@@ -118,9 +118,8 @@ fun ReviewContent(
                 }
             }
             val d = data ?: return@Column
-            // 交易頁上方已顯示期間；季、年再補上實際日期範圍
+            // 交易頁上方已顯示期間，避免重複顯示年月或季度。
             if (period == null) Text(d.title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-            else if (span != ReviewSpan.MONTH) Text(d.title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             // ① 總覽
             Card(Modifier.fillMaxWidth()) {
@@ -162,13 +161,17 @@ fun ReviewContent(
                     Text("支出結構", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     val maxV = d.categories.maxOf { it.amount }.coerceAtLeast(1)
                     d.categories.take(8).forEach { c ->
-                        Column {
-                            Row {
-                                Text(c.name, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                                Text(m(c.amount), fontSize = 14.sp)
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(c.name, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                                Text(m(c.amount), fontSize = 14.sp, maxLines = 1, softWrap = false)
                                 Text(
-                                    if (c.prev == 0L) "  新" else "  ${if (c.change >= 0) "▲" else "▼"}${"%.0f".format(kotlin.math.abs(c.change) * 100.0 / c.prev)}%",
-                                    fontSize = 12.sp, color = if (c.change > 0) ExpenseColor else IncomeColor, modifier = Modifier.width(56.dp),
+                                    if (c.prev == 0L) "新" else "${if (c.change >= 0) "▲" else "▼"}${"%.0f".format(kotlin.math.abs(c.change) * 100.0 / c.prev)}%",
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    color = if (c.change > 0) ExpenseColor else IncomeColor,
+                                    modifier = Modifier.width(56.dp),
                                 )
                             }
                             Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {

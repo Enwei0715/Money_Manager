@@ -103,7 +103,7 @@ fun AdvisorContent(nav: NavController) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScrollableTabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface, edgePadding = 8.dp) {
             listOf("今日", "問 AI", "新聞", "資金與紀律").forEachIndexed { i, t ->
-                Tab(tab == i, { tab = i }, text = { Text(t, fontSize = 15.sp) },
+                Tab(tab == i, { tab = i }, text = { Text(t, fontSize = 15.sp, maxLines = 1, softWrap = false) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -797,13 +797,18 @@ private fun PlanTab(nav: NavController) {
         }
         if (settings.investPlan.disciplineOn && s != null && s.holdings.isNotEmpty() && !settings.investPlan.guardOn) Section("持股紀律") {
             s.holdings.forEach { h ->
-                Column(Modifier.clickable { nav.navigate("stock/${h.symbol}") }.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${h.symbol} ${h.name.orEmpty()}", fontSize = 15.sp, modifier = Modifier.weight(1f))
+                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "${h.symbol} ${h.name.orEmpty()}",
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        modifier = Modifier.fillMaxWidth().clickable { nav.navigate("stock/${h.symbol}") },
+                    )
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TradeStyle.entries.forEach { st ->
                             FilterChip(h.style == st, {
                                 repo.settings.update { it.copy(stockStyle = it.stockStyle + (h.symbol to st.name)) }
-                            }, label = { Text(st.label, fontSize = 12.sp) }, modifier = Modifier.padding(start = 4.dp))
+                            }, label = { Text(st.label, fontSize = 12.sp) })
                         }
                     }
                     val g = h.gainPct

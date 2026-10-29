@@ -76,12 +76,12 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/MoneyManager-1.1.${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "dist/MoneyManager-2.0.${{ github.run_number }}.apk"
           rm -f app/release.jks
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MoneyManager-1.1.${{ github.run_number }}
+          name: MoneyManager-2.0.${{ github.run_number }}
           path: dist/*.apk
 
       # 只在預設分支發布 Release，驗證分支與 PR 不會產生正式版本。
@@ -93,7 +93,7 @@ jobs:
           # 更新說明：有 RELEASE_NOTES.md 就用它（給使用者看的中文說明），否則用 commit 訊息
           # 只有這次 commit 改過 RELEASE_NOTES.md 才用它，避免舊說明沿用到之後的版本
           if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -qx RELEASE_NOTES.md; then notes="$(cat RELEASE_NOTES.md)"; else notes="$(git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):')"; fi
-          gh release create "v1.1.${{ github.run_number }}" dist/*.apk \
-            --title "帳理 Ledgerly 1.1.${{ github.run_number }}" \
+          gh release create "v2.0.${{ github.run_number }}" dist/*.apk \
+            --title "帳理 Ledgerly 2.0.${{ github.run_number }}" \
             --target "${{ github.sha }}" \
             --notes "$notes"

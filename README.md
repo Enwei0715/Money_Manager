@@ -34,7 +34,7 @@
 
 ## 安裝與更新
 
-1. 每次推送到預設分支，GitHub Actions 都會自動執行核心單元測試、編譯 Release APK 並發布 Release（`v1.1.<build>`）；其他分支與 PR 只執行驗證，不發布 Release。
+1. 每次推送到預設分支，GitHub Actions 都會自動執行核心單元測試、編譯 Release APK 並發布 Release（`v2.0.<build>`）；其他分支與 PR 只執行驗證，不發布 Release。
 2. 手機下載 APK 安裝（需允許「安裝不明應用程式」）。
 3. 之後到 App 的 **工具 → 設定 → App 更新** 填入 GitHub Token（因為儲存庫是私人的），按「檢查更新」即可一鍵更新。
    Token 建立方式：GitHub → Settings → Developer settings → Fine-grained tokens → 只選此儲存庫，權限 Contents: Read-only。
