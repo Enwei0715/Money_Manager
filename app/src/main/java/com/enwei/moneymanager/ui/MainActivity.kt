@@ -88,6 +88,8 @@ import com.enwei.moneymanager.ui.screens.RecurringScreen
 import com.enwei.moneymanager.ui.screens.SearchScreen
 import com.enwei.moneymanager.ui.screens.SettingsScreen
 import com.enwei.moneymanager.ui.screens.StockFeeScreen
+import com.enwei.moneymanager.ui.screens.ReviewScreen
+import com.enwei.moneymanager.ui.screens.AdvisorScreen
 import com.enwei.moneymanager.ui.screens.StatsTab
 import com.enwei.moneymanager.ui.screens.TotalStatsScreen
 import com.enwei.moneymanager.ui.screens.TradeEditScreen
@@ -335,6 +337,8 @@ private fun AppScaffold(nav: NavHostController) {
             composable("backup") { BackupScreen(nav) }
             composable("settings") { SettingsScreen(nav) }
             composable("stockfees") { StockFeeScreen(nav) }
+            composable("review") { ReviewScreen(nav) }
+            composable("advisor") { AdvisorScreen(nav) }
         }
     }
 }

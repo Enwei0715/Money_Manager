@@ -83,7 +83,8 @@ object GroqAi {
         val body = buildJsonObject {
             put("model", model)
             put("temperature", if (reasoning) 0.2 else 0.0)
-            put("max_tokens", if (reasoning) maxOf(if (effort == "low") 1024 else 4096, maxTokens * 4) else maxTokens)
+            // 免費方案每分鐘 token 上限約 8,000（含輸入），回覆上限不超過 6,000
+            put("max_tokens", minOf(6000, if (reasoning) maxOf(if (effort == "low") 1024 else 4096, maxTokens * 4) else maxTokens))
             if (reasoning && model.startsWith("openai/gpt-oss")) put("reasoning_effort", effort)
             if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
             put("messages", buildJsonArray {
@@ -334,5 +335,68 @@ object GroqAi {
                 typeLabel = o.str("label")?.take(10),
             )
         }
+    }
+
+    /** 收支檢討：依固定格式回覆（總評、做得好、需要改善、行動建議、下期目標）。 */
+    suspend fun review(summary: String, base: String): com.enwei.moneymanager.data.AiReview? {
+        if (!enabled) return null
+        val system = "你是台灣的個人理財教練，口吻直接、具體、友善，不說教。根據使用者這期的收支資料做檢討，所有建議都要引用資料裡的數字，" +
+            "不要編造資料裡沒有的消費。金額單位為 $base 元。只回 JSON：" +
+            "{\"score\": 0到100的整數（量入為出、儲蓄率、是否超支、比上期進步）, \"headline\": 一句話總評（30 字內）, " +
+            "\"good\": [做得好的地方，1-3 點], \"improve\": [需要改善的地方，2-3 點，含數字], " +
+            "\"actions\": [{\"action\": 具體可執行的行動（25 字內）, \"saving\": 預估每月可省的金額（整數，無法估計用 null）}]（3 點）, " +
+            "\"expense_cap\": 建議下期支出上限（整數）, \"savings_target\": 建議下期儲蓄率（百分比數字）, \"goals\": [下期 1-3 個分類上限或習慣目標]}"
+        val r = chatJson(system, summary, 1500, hard = true) ?: return null
+        fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(80) }.orEmpty()
+        val actions = (r["actions"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val a = o.str("action") ?: return@mapNotNull null
+            com.enwei.moneymanager.data.ReviewAction(a.take(60), o.str("saving")?.toDoubleOrNull()?.toLong()?.takeIf { it > 0 }?.times(100))
+        }.orEmpty()
+        return com.enwei.moneymanager.data.AiReview(
+            score = r.str("score")?.toDoubleOrNull()?.toInt()?.coerceIn(0, 100) ?: 0,
+            headline = r.str("headline")?.take(60).orEmpty(), good = list("good"), improve = list("improve"), actions = actions,
+            expenseCap = r.str("expense_cap")?.toDoubleOrNull()?.toLong()?.takeIf { it > 0 }?.times(100),
+            savingsTarget = r.str("savings_target")?.toDoubleOrNull(), goals = list("goals"),
+            createdAt = System.currentTimeMillis(),
+        )
+    }
+
+    /**
+     * 投資分析：依大盤數據、新聞標題、持股與使用者的紀律／資金計畫，回傳固定格式的建議。
+     * 用進階模型（推理較深）；推薦標的只能來自新聞或大型權值股，之後會再查報價確認代號。
+     */
+    suspend fun advise(user: String): com.enwei.moneymanager.data.AdvisorReport? {
+        if (!enabled) return null
+        val system = "你是台灣股市的投資教練兼分析師，任務是幫使用者遵守他自己的交易紀律，而不是鼓勵頻繁交易。" +
+            "使用者過去常犯的錯：1. 想實現獲利就整檔賣光，隔天繼續漲而賣飛；2. 短線看到新聞就衝動買；3. 賣完一有資金就立刻買別檔；4. 資金控管差。" +
+            "請依提供的指數數據判斷大盤趨勢與所處階段；從新聞歸納目前市場資金追逐的需求類型與題材；" +
+            "逐檔給持股建議，動作只能是「續抱」「長抱」「分批停利 1/3」「減碼 1/3」「停損出場」「觀察」之一，要參考提供的規則停損價，長線部位不可因短期波動建議全賣；" +
+            "推薦 2 到 4 檔觀察標的，只能是新聞中出現的台股或台灣大型權值股／ETF，附四到六碼代號，標明長線或短線、進場條件與停損條件，不保證獲利；" +
+            "依資金計畫說明本週長線、短線可動用多少；列出交易前檢查清單，並依使用者的錯誤提醒。內容要具體、引用數字，不可編造新聞沒有的消息。" +
+            "只回 JSON：{\"trend\": 大盤趨勢一句話, \"stage\": 階段, \"demand\": [市場需求類型或題材 2-4 項], \"summary\": 整體看法 80 字內, " +
+            "\"holdings\": [{\"symbol\": 代號, \"action\": 動作, \"stop\": 停損價數字或 null, \"reason\": 30 字內}], " +
+            "\"ideas\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\", \"reason\": 40 字內, \"entry\": 進場條件, \"stop\": 停損條件}], " +
+            "\"allocation\": 資金建議 80 字內, \"checklist\": [交易前檢查 3-5 項], \"warnings\": [依紀律的提醒 1-3 項]}"
+        val r = chatJson(system, user.take(4500), 1000, hard = true) ?: return null
+        fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(120) }.orEmpty()
+        fun objs(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
+        val sym = Regex("[0-9]{4,6}[A-Z]?")
+        return com.enwei.moneymanager.data.AdvisorReport(
+            trend = r.str("trend")?.take(120).orEmpty(), stage = r.str("stage")?.take(20).orEmpty(), demand = list("demand"),
+            summary = r.str("summary")?.take(200).orEmpty(),
+            holdings = objs("holdings").mapNotNull { o ->
+                val code = o.str("symbol")?.let { sym.find(it)?.value } ?: return@mapNotNull null
+                com.enwei.moneymanager.data.AdvisorHolding(code, o.str("action")?.take(12).orEmpty(), o.str("stop")?.toDoubleOrNull(), o.str("reason")?.take(80).orEmpty())
+            },
+            ideas = objs("ideas").mapNotNull { o ->
+                val code = o.str("symbol")?.let { sym.find(it)?.value } ?: return@mapNotNull null
+                com.enwei.moneymanager.data.AdvisorIdea(
+                    code, o.str("name")?.take(20).orEmpty(), o.str("style")?.take(4).orEmpty(), o.str("reason")?.take(100).orEmpty(),
+                    o.str("entry")?.take(80).orEmpty(), o.str("stop")?.take(80).orEmpty(),
+                )
+            }.take(4),
+            allocation = r.str("allocation")?.take(200).orEmpty(), checklist = list("checklist"), warnings = list("warnings"),
+        )
     }
 }

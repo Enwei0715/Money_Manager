@@ -493,3 +493,59 @@ class DawhoFillMailTest {
     }
 }
 
+
+class InvestPlanTest {
+    @Test fun allocationSplitsAfterReserve() {
+        // 現金 80,000、生活費 20,000、長線持股 10,000、短線 5,000 → 可投資 75,000，長線 2/3 = 50,000
+        val a = Allocation.of(8_000_000, 2_000_000, 1_000_000, 500_000, 2.0 / 3)
+        assertEquals(7_500_000, a.investable)
+        assertEquals(5_000_000, a.longTarget)
+        assertEquals(2_500_000, a.shortTarget)
+        assertEquals(4_000_000, a.longRoom)
+        assertEquals(2_000_000, a.shortRoom)
+    }
+
+    @Test fun reserveShortWhenCashLow() {
+        val a = Allocation.of(1_500_000, 2_000_000, 0, 0, 2.0 / 3)
+        assertEquals(500_000, a.reserveShort)
+        assertEquals(0, a.longRoom)
+    }
+
+    @Test fun shortStopLossTriggers() {
+        val s = Discipline.advise(TradeStyle.SHORT, 100.0, 91.0, 102.0)
+        assertEquals(true, s.triggered)
+        assertEquals("停損出場", s.action)
+    }
+
+    @Test fun shortTrailingProtectsProfit() {
+        // 漲到 130 後回落到 119：移動停損 130 × 0.92 = 119.6 → 停利出場，不是停損
+        val s = Discipline.advise(TradeStyle.SHORT, 100.0, 119.0, 130.0)
+        assertEquals("移動停利出場", s.action)
+        assertEquals(119.6, s.stop, 1e-6)
+    }
+
+    @Test fun shortPartialTakeProfit() {
+        val s = Discipline.advise(TradeStyle.SHORT, 100.0, 116.0, 116.0)
+        assertEquals("分批停利 1/3", s.action)
+    }
+
+    @Test fun longIgnoresSmallDips() {
+        val s = Discipline.advise(TradeStyle.LONG, 100.0, 95.0, 105.0)
+        assertEquals("長抱", s.action)
+        assertEquals(false, s.triggered)
+    }
+
+    @Test fun longTrimsInsteadOfSellingAll() {
+        val s = Discipline.advise(TradeStyle.LONG, 100.0, 120.0, 150.0)
+        assertEquals("減碼 1/3", s.action)
+    }
+
+    @Test fun stageUptrendAndDowntrend() {
+        val up = (0 until 120).map { 100.0 + it * 0.15 + (if (it % 2 == 0) 1.0 else -1.0) }
+        assertEquals(MarketStage.MAIN_UP, Technicals.stage(up))
+        val down = up.reversed()
+        assertEquals(MarketStage.MAIN_DOWN, Technicals.stage(down))
+        val hot = (0 until 120).map { if (it < 90) 100.0 + it * 0.1 else 109.0 + (it - 90) * 1.2 }
+        assertEquals(MarketStage.LATE_UP, Technicals.stage(hot))
+    }
+}

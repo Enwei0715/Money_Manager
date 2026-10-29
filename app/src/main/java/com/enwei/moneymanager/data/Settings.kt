@@ -55,6 +55,53 @@ data class LoanInfo(
     val recurringId: Long? = null,
 )
 
+/** 投資紀律與資金控管計畫（金額為最小單位、比例為 %）。 */
+@Serializable
+data class InvestPlanSettings(
+    /** 保留的生活費 */
+    val reserve: Long = 2_000_000,
+    /** 可投資資金中長線的比例（其餘為短線） */
+    val longRatio: Double = 2.0 / 3,
+    val shortStopPct: Double = 8.0,
+    val shortTrailPct: Double = 8.0,
+    val longTrailPct: Double = 15.0,
+    val takeProfitPct: Double = 15.0,
+    /** 自己的交易紀律（交易前檢查） */
+    val rules: List<String> = listOf(
+        "獲利時分批賣（先賣 1/3），用移動停損保護剩下的，不要一次全賣而賣飛",
+        "短線一定設停損，跌破就走，不攤平、不凹單",
+        "長線部位不看短期波動，照計畫持有",
+        "賣出後不急著買別檔：先看大盤、確認資金分配，再依股性挑標的",
+        "短線看線型與新聞，但下單前三思，不追高、不盲目買",
+        "只用計畫內的資金，生活費不動",
+    ),
+)
+
+/** AI 投資分析（最近一次）。 */
+@Serializable
+data class AdvisorReport(
+    val createdAt: Long = 0,
+    val trend: String = "",
+    val stage: String = "",
+    val demand: List<String> = emptyList(),
+    val summary: String = "",
+    val holdings: List<AdvisorHolding> = emptyList(),
+    val ideas: List<AdvisorIdea> = emptyList(),
+    val allocation: String = "",
+    val checklist: List<String> = emptyList(),
+    val warnings: List<String> = emptyList(),
+    val news: List<String> = emptyList(),
+)
+
+@Serializable
+data class AdvisorHolding(val symbol: String, val action: String, val stop: Double? = null, val reason: String = "")
+
+@Serializable
+data class AdvisorIdea(
+    val symbol: String, val name: String = "", val style: String = "", val reason: String = "",
+    val entry: String = "", val stop: String = "", val price: Double? = null,
+)
+
 /** AI 對一組可能重複交易的判斷（[same] 為同一筆；同一筆時附上較精確的名稱與分類）。 */
 @Serializable
 data class DupJudgement(val same: Boolean, val name: String? = null, val categoryId: Long? = null, val reason: String = "")
@@ -220,6 +267,12 @@ data class AppSettings(
     val aiUsageTokens: Long = 0,
     /** 使用者標記「不是重複」的交易組合（"小id-大id"） */
     val dupDismissed: Set<String> = emptySet(),
+    val investPlan: InvestPlanSettings = InvestPlanSettings(),
+    /** 股票代號 → 股性（LONG／SHORT），沒設定時 ETF 視為長線、其他視為短線 */
+    val stockStyle: Map<String, String> = emptyMap(),
+    val advisorReport: AdvisorReport? = null,
+    /** AI 收支檢討（期間代號 → 檢討），重新產生前沿用 */
+    val reviews: Map<String, AiReview> = emptyMap(),
     /** 借貸帳戶 id → 借貸細節 */
     val loans: Map<Long, LoanInfo> = emptyMap(),
     /** 上次通知的借貸提醒（避免重複通知） */
@@ -254,6 +307,7 @@ class SettingsStore(context: Context) {
     private val longStrSerializer = MapSerializer(Long.serializer(), String.serializer())
     private val learnedSerializer = ListSerializer(LearnedSource.serializer())
     private val aiSuggestionSerializer = ListSerializer(AiSuggestion.serializer())
+    private val reviewSerializer = MapSerializer(String.serializer(), AiReview.serializer())
     private val loanSerializer = MapSerializer(Long.serializer(), LoanInfo.serializer())
     private val dupVerdictSerializer = MapSerializer(String.serializer(), DupJudgement.serializer())
     private val strMapSerializer = MapSerializer(String.serializer(), String.serializer())
@@ -322,6 +376,10 @@ class SettingsStore(context: Context) {
         dupDismissed = prefs.getStringSet("dupDismissed", emptySet())!!.toSet(),
         loans = runCatching { json.decodeFromString(loanSerializer, prefs.getString("loans", "{}")!!) }.getOrDefault(emptyMap()),
         loanWarnKey = prefs.getString("loanWarnKey", "")!!,
+        investPlan = runCatching { json.decodeFromString(InvestPlanSettings.serializer(), prefs.getString("investPlan", "")!!) }.getOrDefault(InvestPlanSettings()),
+        stockStyle = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("stockStyle", "{}")!!) }.getOrDefault(emptyMap()),
+        advisorReport = runCatching { json.decodeFromString(AdvisorReport.serializer(), prefs.getString("advisorReport", "")!!) }.getOrNull(),
+        reviews = runCatching { json.decodeFromString(reviewSerializer, prefs.getString("reviews", "{}")!!) }.getOrDefault(emptyMap()),
         dupVerdicts = runCatching { json.decodeFromString(dupVerdictSerializer, prefs.getString("dupVerdicts", "{}")!!) }.getOrDefault(emptyMap()),
         aiAutoTidy = prefs.getBoolean("aiAutoTidy", true),
         aiTidyLog = runCatching { json.decodeFromString(ListSerializer(String.serializer()), prefs.getString("aiTidyLog", "[]")!!) }.getOrDefault(emptyList()),
@@ -456,6 +514,10 @@ class SettingsStore(context: Context) {
             .putStringSet("dupDismissed", s.dupDismissed)
             .putString("loans", json.encodeToString(loanSerializer, s.loans))
             .putString("loanWarnKey", s.loanWarnKey)
+            .putString("reviews", json.encodeToString(reviewSerializer, s.reviews))
+            .putString("investPlan", json.encodeToString(InvestPlanSettings.serializer(), s.investPlan))
+            .putString("stockStyle", json.encodeToString(strMapSerializer, s.stockStyle))
+            .putString("advisorReport", s.advisorReport?.let { json.encodeToString(AdvisorReport.serializer(), it) } ?: "")
             .putString("dupVerdicts", json.encodeToString(dupVerdictSerializer, s.dupVerdicts))
             .putBoolean("aiAutoTidy", s.aiAutoTidy)
             .putString("aiTidyLog", json.encodeToString(ListSerializer(String.serializer()), s.aiTidyLog))

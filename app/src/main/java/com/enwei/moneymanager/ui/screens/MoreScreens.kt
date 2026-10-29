@@ -120,6 +120,8 @@ fun MoreScreen(nav: NavController) {
         Triple("recurring", "週期扣款", com.enwei.moneymanager.ui.components.LineIcons.Recurring),
         Triple("fx", "匯率", com.enwei.moneymanager.ui.components.LineIcons.Exchange),
         Triple("pending", "待確認", com.enwei.moneymanager.ui.components.LineIcons.Inbox),
+        Triple("review", "收支檢討", com.enwei.moneymanager.ui.components.LineIcons.Review),
+        Triple("advisor", "投資助理", com.enwei.moneymanager.ui.components.LineIcons.Advisor),
         Triple("settings", "App 更新", com.enwei.moneymanager.ui.components.LineIcons.Update),
     )
     Scaffold(
