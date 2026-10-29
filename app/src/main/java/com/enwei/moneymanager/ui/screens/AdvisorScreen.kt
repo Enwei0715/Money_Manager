@@ -415,7 +415,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(e, fontSize = 13.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
                             // 失敗或停止後可以用同一個問題再問一次
-                            (job?.question ?: chatWork?.request)?.takeIf { it.isNotBlank() && GroqAi.enabled }?.let { q ->
+                            job?.question?.takeIf { it.isNotBlank() && GroqAi.enabled }?.let { q ->
                                 TextButton(onClick = { com.enwei.moneymanager.work.ChatJob.ask(ctx, q) }) { Text("重試") }
                             }
                         }
@@ -439,7 +439,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
             OutlinedTextField(input, { input = it }, placeholder = { Text("問股票助理…") }, modifier = Modifier.weight(1f), maxLines = 3)
             // AI 回覆中按鈕變成「停止」
             if (busy) OutlinedButton(
-                onClick = { com.enwei.moneymanager.work.ChatJob.stop(ctx, job?.question ?: chatWork?.request) },
+                onClick = { com.enwei.moneymanager.work.ChatJob.stop(ctx, job?.question) },
                 modifier = Modifier.padding(start = 6.dp),
             ) { Text("停止") }
             else Button(enabled = input.isNotBlank() && GroqAi.enabled, onClick = { send(input) }, modifier = Modifier.padding(start = 6.dp)) { Text("送出") }

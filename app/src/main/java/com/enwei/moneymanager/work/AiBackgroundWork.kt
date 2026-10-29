@@ -28,7 +28,6 @@ data class AiWorkStatus(
     val done: Int?,
     val total: Int?,
     val error: String? = null,
-    val request: String? = null,
 )
 
 object AiBackgroundWork {
@@ -78,7 +77,8 @@ object AiBackgroundWork {
 
     fun status(infos: List<WorkInfo>?, uniqueName: String): AiWorkStatus? {
         val info = infos
-            ?.maxByOrNull { it.inputData.getLong("queuedAt", it.inputData.getLong("requestedAt", 0)) }
+            ?.firstOrNull { !it.state.isFinished }
+            ?: infos?.lastOrNull()
             ?: return null
         if (info.state.isFinished && info.state != WorkInfo.State.FAILED) return null
         if (uniqueName == "news" && info.state == WorkInfo.State.ENQUEUED) return null
@@ -92,7 +92,6 @@ object AiBackgroundWork {
             total = data.getInt(PROGRESS_TOTAL, -1).takeIf { it > 0 },
             error = info.outputData.getString("error")?.takeIf { info.state == WorkInfo.State.FAILED }
                 ?: if (info.state == WorkInfo.State.FAILED) "背景工作失敗，請重試。" else null,
-            request = info.inputData.getString("q"),
         )
     }
 
@@ -102,7 +101,7 @@ object AiBackgroundWork {
         input: Data,
     ) {
         val request = OneTimeWorkRequestBuilder<AiBackgroundWorker>()
-            .setInputData(Data.Builder().putAll(input).putLong("queuedAt", System.currentTimeMillis()).build())
+            .setInputData(input)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.KEEP, request)
