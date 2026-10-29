@@ -402,7 +402,7 @@ class NewsDataset(context: Context) {
             val day = java.time.Instant.ofEpochSecond(it.epochSec).atZone(zone).toLocalDate().toString()
             "$day|${it.theme}"
         }
-        val digested = groups.sumOf { (key, items) ->
+        val digested = groups.entries.sumOf { (key, items) ->
             val digest = st.digests[key] ?: return@sumOf 0
             val ids = digest.points.flatMap { it.sourceIds }
             if (digest.contentHash == groupContentHash(items) &&
