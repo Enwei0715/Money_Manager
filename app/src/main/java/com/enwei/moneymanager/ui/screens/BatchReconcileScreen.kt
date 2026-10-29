@@ -119,9 +119,8 @@ fun BatchReconcileScreen(nav: NavController) {
         LazyColumn(Modifier.padding(pad).fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
                 Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("一次選好幾張銀行、信用卡、電子支付 App 的餘額截圖，App 會判斷每張是哪個帳戶、讀出餘額；確認後一次對帳，差額記成調整。",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (!GroqAi.enabled) Text("沒開 AI 時只能用畫面上的帳戶名稱或卡號末四碼辨認，認不出來的請自己選帳戶。",
+                    Text("選多張餘額截圖，自動判斷帳戶並讀出餘額", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!GroqAi.enabled) Text("未開啟 AI：只能用帳戶名稱或卡號末四碼辨認",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                     Button(enabled = progress == null, onClick = {
                         picker.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))

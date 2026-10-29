@@ -207,6 +207,7 @@ fun NotificationSettingsScreen(nav: NavController) {
     var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
     LaunchedEffect(Unit) { apps = withContext(Dispatchers.Default) { installedApps(ctx) } }
     var filter by remember { mutableStateOf("") }
+    var showAllApps by remember { mutableStateOf(false) }
     var testText by remember { mutableStateOf("") }
     var testTitle by remember { mutableStateOf("") }
     var testPkg by remember { mutableStateOf<String?>(null) }
@@ -285,8 +286,9 @@ fun NotificationSettingsScreen(nav: NavController) {
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         com.enwei.moneymanager.ui.components.StatusLine(enabled, if (enabled) "已取得通知存取權" else "尚未開啟通知存取權")
-                        Text(
-                            "讀取勾選的銀行、信用卡、支付 App 通知並自動記帳，資料只存在手機中。\n無法開啟時：設定 → 應用程式 → 帳理 → ⋮ →「允許受限制的設定」。",
+                        // 只在還沒開啟時說明「受限制的設定」的解法
+                        if (!enabled) Text(
+                            "無法開啟時：設定 → 應用程式 → 帳理 → ⋮ →「允許受限制的設定」。",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Spacer(Modifier.height(8.dp))
@@ -320,13 +322,50 @@ fun NotificationSettingsScreen(nav: NavController) {
                     )
                 }
             }
-            item { SectionTitle("用通知列上的真實通知測試（不會記帳）") }
+            item { SectionTitle("要監聽的 App（已選 ${settings.notifPackages.size}）") }
+            // 預設只列已勾選的 App；要新增時再展開全部（可搜尋）
+            item {
+                if (showAllApps) OutlinedTextField(filter, { filter = it }, label = { Text("搜尋 App") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+                TextButton(onClick = { showAllApps = !showAllApps; filter = "" }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    Text(if (showAllApps) "只顯示已選的 App" else "＋ 新增要監聽的 App")
+                }
+            }
+            val sorted = apps.filter { (showAllApps || it.pkg in settings.notifPackages) && (filter.isBlank() || it.label.contains(filter, true) || it.pkg.contains(filter, true)) }
+                .sortedByDescending { it.pkg in settings.notifPackages }
+            items(sorted, key = { it.pkg }) { a ->
+                val on = a.pkg in settings.notifPackages
+                ListItem(
+                    headlineContent = { Text(a.label) },
+                    supportingContent = {
+                        if (on) {
+                            // 這個 App 的通知記到哪個帳戶（信用卡會優先用末四碼對應）
+                            var menu by remember { mutableStateOf(false) }
+                            Box {
+                                Text(
+                                    "記入：" + (settings.notifAccountMap[a.pkg]?.let { lk.account(it)?.name } ?: "依卡號／預設帳戶") + " ▾",
+                                    color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.clickable { menu = true }.padding(vertical = 4.dp),
+                                )
+                                androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                                    androidx.compose.material3.DropdownMenuItem(text = { Text("依卡號／預設帳戶") }, onClick = {
+                                        repo.settings.update { it.copy(notifAccountMap = it.notifAccountMap - a.pkg) }; menu = false
+                                    })
+                                    lk.accounts.filter { !it.archived }.forEach { acc ->
+                                        androidx.compose.material3.DropdownMenuItem(text = { Text(acc.name) }, onClick = {
+                                            repo.settings.update { it.copy(notifAccountMap = it.notifAccountMap + (a.pkg to acc.id)) }; menu = false
+                                        })
+                                    }
+                                }
+                            }
+                        } else Text(a.pkg, style = MaterialTheme.typography.labelSmall)
+                    },
+                    trailingContent = { Checkbox(on, { toggle(a.pkg, it) }) },
+                    modifier = Modifier.clickable { toggle(a.pkg, !on) },
+                )
+            }
+            item { SectionTitle("測試通知辨識") }
             item {
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        "顯示通知列上每一則通知會怎麼記；漏記的可以補記，看不懂的可以教它辨識。",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
                     Button(onClick = { loadNotes() }) { Text(if (notes == null) "讀取目前通知" else "重新讀取") }
                     testMsg?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
                 }
@@ -374,43 +413,6 @@ fun NotificationSettingsScreen(nav: NavController) {
                         modifier = Modifier.clickable { repo.settings.update { it.copy(learnedSources = it.learnedSources - l) } },
                     )
                 }
-            }
-            item { SectionTitle("要監聽的 App（已選 ${settings.notifPackages.size}）") }
-            item {
-                OutlinedTextField(filter, { filter = it }, label = { Text("搜尋 App") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-            }
-            val sorted = apps.filter { filter.isBlank() || it.label.contains(filter, true) || it.pkg.contains(filter, true) }
-                .sortedByDescending { it.pkg in settings.notifPackages }
-            items(sorted, key = { it.pkg }) { a ->
-                val on = a.pkg in settings.notifPackages
-                ListItem(
-                    headlineContent = { Text(a.label) },
-                    supportingContent = {
-                        if (on) {
-                            // 這個 App 的通知記到哪個帳戶（信用卡會優先用末四碼對應）
-                            var menu by remember { mutableStateOf(false) }
-                            Box {
-                                Text(
-                                    "記入：" + (settings.notifAccountMap[a.pkg]?.let { lk.account(it)?.name } ?: "依卡號／預設帳戶") + " ▾",
-                                    color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.clickable { menu = true }.padding(vertical = 4.dp),
-                                )
-                                androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
-                                    androidx.compose.material3.DropdownMenuItem(text = { Text("依卡號／預設帳戶") }, onClick = {
-                                        repo.settings.update { it.copy(notifAccountMap = it.notifAccountMap - a.pkg) }; menu = false
-                                    })
-                                    lk.accounts.filter { !it.archived }.forEach { acc ->
-                                        androidx.compose.material3.DropdownMenuItem(text = { Text(acc.name) }, onClick = {
-                                            repo.settings.update { it.copy(notifAccountMap = it.notifAccountMap + (a.pkg to acc.id)) }; menu = false
-                                        })
-                                    }
-                                }
-                            }
-                        } else Text(a.pkg, style = MaterialTheme.typography.labelSmall)
-                    },
-                    trailingContent = { Checkbox(on, { toggle(a.pkg, it) }) },
-                    modifier = Modifier.clickable { toggle(a.pkg, !on) },
-                )
             }
             item { SectionTitle("最近處理紀錄") }
             items(log.take(30), key = { "log${it.id}" }) { e ->
@@ -474,8 +476,8 @@ fun NotificationSettingsScreen(nav: NavController) {
                             noneLabel = "等另一端的通知自動配對", onNone = { toId = null },
                         )
                         Text(
-                            if (toId == null) "另一個帳戶也有通知時（金額相同、10 分鐘內），兩則會自動合併成一筆轉帳。"
-                            else "每次都直接記成轉帳，不用等另一端的通知（例如固定轉到街口、儲值到悠遊付）。",
+                            if (toId == null) "另一端也有通知時會自動合併成一筆轉帳"
+                            else "每次直接記成轉帳，不等另一端的通知",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -576,7 +578,7 @@ fun BackupScreen(nav: NavController) {
                 withContext(Dispatchers.IO) {
                     ctx.contentResolver.openOutputStream(uri)!!.use { com.enwei.moneymanager.data.FullBackupIO.export(repo, BuildConfig.VERSION_NAME, it) }
                 }
-                "已匯出完整備份（所有帳戶、交易、股票、週期、分類、規則與設定）"
+                "已匯出完整備份"
             }.getOrElse { "匯出失敗：${it.message}" }
         }
     }
@@ -628,11 +630,10 @@ fun BackupScreen(nav: NavController) {
     var freqMenu by remember { mutableStateOf(false) }
     Scaffold(topBar = { BackTopBar("備份與還原", { nav.popBackStack() }) }) { pad ->
         Column(Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            status?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             Text("自動雲端備份", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "選一個備份檔位置（雲端硬碟或手機資料夾），帳理會定期把完整備份覆寫到那個檔案。",
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Text("選雲端硬碟或手機裡的檔案，定期自動覆寫完整備份。", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             val target = bs.autoBackupUri.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
             Text(
                 if (target == null) "尚未選擇備份位置"
@@ -660,28 +661,19 @@ fun BackupScreen(nav: NavController) {
                 }
             }
             HorizontalDivider()
-            Text("Money Manager 備份檔（.mmbak）", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "匯入 Money Manager 匯出的 .mmbak 檔，或把帳理的資料匯出成 .mmbak。",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Button(enabled = !busy, onClick = { mmImporter.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("從 .mmbak 匯入") }
-            OutlinedButton(enabled = !busy, onClick = { mmExporter.launch("帳理-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.mmbak") },
-                modifier = Modifier.fillMaxWidth()) { Text("匯出為 .mmbak") }
-            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            HorizontalDivider()
             Text("帳理完整備份（.lgbak）", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "包含所有帳戶、交易、股票、週期、分類與設定，換手機時還原即可。",
-                style = MaterialTheme.typography.bodyMedium,
-            )
             Button(onClick = { exporter.launch("帳理備份-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.lgbak") }, modifier = Modifier.fillMaxWidth()) {
                 Text("匯出完整備份（.lgbak）")
             }
             OutlinedButton(onClick = { importer.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
                 Text("從備份還原（.lgbak 或舊版 JSON）")
             }
-            status?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+            HorizontalDivider()
+            Text("Money Manager 備份檔（.mmbak）", style = MaterialTheme.typography.titleMedium)
+            Button(enabled = !busy, onClick = { mmImporter.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("從 .mmbak 匯入") }
+            OutlinedButton(enabled = !busy, onClick = { mmExporter.launch("帳理-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.mmbak") },
+                modifier = Modifier.fillMaxWidth()) { Text("匯出為 .mmbak") }
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         }
     }
     mmUri?.let { uri ->
@@ -813,6 +805,7 @@ fun WalletReaderScreen(nav: NavController) {
     var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
     LaunchedEffect(Unit) { apps = withContext(Dispatchers.Default) { installedApps(ctx) } }
     var filter by remember { mutableStateOf("") }
+    var showAllApps by remember { mutableStateOf(false) }
     val wallets = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.EWALLET && !it.archived }
     val today = java.time.LocalDate.now().toEpochDay()
     val testMode by com.enwei.moneymanager.notify.WalletScreenReader.testMode.collectAsStateWithLifecycle()
@@ -836,11 +829,8 @@ fun WalletReaderScreen(nav: NavController) {
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         com.enwei.moneymanager.ui.components.StatusLine(enabled, if (enabled) "錢包讀取已開啟" else "尚未開啟無障礙服務「帳理錢包讀取」")
-                        Text(
-                            "給不推播每筆消費的錢包（街口、悠遊付）：打開勾選 App 的「交易紀錄」頁就會自動匯入；通知或手動記過的同一筆會合併，不會重複。",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
+                        Text("打開錢包 App 的交易紀錄頁就會自動匯入，重複的會合併。", style = MaterialTheme.typography.bodySmall)
+                        if (!enabled) Text(
                             "無法開啟時：設定 → 應用程式 → 帳理 → ⋮ →「允許受限制的設定」。",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -850,6 +840,55 @@ fun WalletReaderScreen(nav: NavController) {
                     }
                 }
             }
+            if (wallets.isEmpty()) item {
+                Text("請先新增「電子支付」帳戶（例如街口、悠遊付），匯入的交易才有地方記。",
+                    color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            }
+            item { SectionTitle("要讀取的錢包 App（已選 ${settings.screenPackages.size}）") }
+            item {
+                if (showAllApps) OutlinedTextField(filter, { filter = it }, label = { Text("搜尋 App") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+                TextButton(onClick = { showAllApps = !showAllApps; filter = "" }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    Text(if (showAllApps) "只顯示已選的 App" else "＋ 新增要讀取的錢包 App")
+                }
+            }
+            val sorted = apps.filter { (showAllApps || it.pkg in settings.screenPackages) && (filter.isBlank() || it.label.contains(filter, true) || it.pkg.contains(filter, true)) }
+                .sortedByDescending { it.pkg in settings.screenPackages }
+            items(sorted, key = { "w" + it.pkg }) { a ->
+                val on = a.pkg in settings.screenPackages
+                ListItem(
+                    headlineContent = { Text(a.label) },
+                    supportingContent = {
+                        if (on) Column {
+                            var menu by remember { mutableStateOf(false) }
+                            Box {
+                                Text(
+                                    "記入：" + (settings.notifAccountMap[a.pkg]?.let { lk.account(it)?.name } ?: wallets.singleOrNull()?.name ?: "請選擇錢包帳戶") + " ▾",
+                                    color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.clickable { menu = true }.padding(vertical = 4.dp),
+                                )
+                                androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                                    wallets.forEach { w ->
+                                        androidx.compose.material3.DropdownMenuItem(text = { Text(w.name) }, onClick = {
+                                            repo.settings.update { it.copy(notifAccountMap = it.notifAccountMap + (a.pkg to w.id)) }; menu = false
+                                        })
+                                    }
+                                }
+                            }
+                            val since = settings.screenReadSince[a.pkg]?.let(java.time.LocalDate::ofEpochDay)
+                            Text(
+                                "匯入 ${since ?: "今天"} 之後的紀錄　（改為過去 30 天）",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.clickable {
+                                    repo.settings.update { it.copy(screenReadSince = it.screenReadSince + (a.pkg to today - 30)) }
+                                }.padding(vertical = 4.dp),
+                            )
+                        } else Text(a.pkg, style = MaterialTheme.typography.labelSmall)
+                    },
+                    trailingContent = { Checkbox(on, { toggle(a.pkg, it) }) },
+                    modifier = Modifier.clickable { toggle(a.pkg, !on) },
+                )
+            }
             // 測試：確認讀取是否真的有運作
             item { SectionTitle("測試錢包讀取") }
             item {
@@ -857,7 +896,7 @@ fun WalletReaderScreen(nav: NavController) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("測試模式（只讀取，不入帳）")
-                            Text("開啟後打開下方勾選的錢包 App 的交易紀錄頁，再回到這裡查看讀到什麼", style = MaterialTheme.typography.bodySmall)
+                            Text("打開錢包的交易紀錄頁後回來查看", style = MaterialTheme.typography.bodySmall)
                         }
                         Switch(testMode, { com.enwei.moneymanager.notify.WalletScreenReader.testMode.value = it })
                     }
@@ -926,52 +965,6 @@ fun WalletReaderScreen(nav: NavController) {
                         }
                     }
                 }
-            }
-            if (wallets.isEmpty()) item {
-                Text("提醒：請先到「帳戶」新增群組為「電子支付」的帳戶（例如：街口、悠遊付），匯入的交易才有地方記。",
-                    color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp))
-            }
-            item { SectionTitle("要讀取的錢包 App（已選 ${settings.screenPackages.size}）") }
-            item {
-                OutlinedTextField(filter, { filter = it }, label = { Text("搜尋 App") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-            }
-            val sorted = apps.filter { filter.isBlank() || it.label.contains(filter, true) || it.pkg.contains(filter, true) }
-                .sortedByDescending { it.pkg in settings.screenPackages }
-            items(sorted, key = { "w" + it.pkg }) { a ->
-                val on = a.pkg in settings.screenPackages
-                ListItem(
-                    headlineContent = { Text(a.label) },
-                    supportingContent = {
-                        if (on) Column {
-                            var menu by remember { mutableStateOf(false) }
-                            Box {
-                                Text(
-                                    "記入：" + (settings.notifAccountMap[a.pkg]?.let { lk.account(it)?.name } ?: wallets.singleOrNull()?.name ?: "請選擇錢包帳戶") + " ▾",
-                                    color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.clickable { menu = true }.padding(vertical = 4.dp),
-                                )
-                                androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
-                                    wallets.forEach { w ->
-                                        androidx.compose.material3.DropdownMenuItem(text = { Text(w.name) }, onClick = {
-                                            repo.settings.update { it.copy(notifAccountMap = it.notifAccountMap + (a.pkg to w.id)) }; menu = false
-                                        })
-                                    }
-                                }
-                            }
-                            val since = settings.screenReadSince[a.pkg]?.let(java.time.LocalDate::ofEpochDay)
-                            Text(
-                                "匯入 ${since ?: "今天"} 之後的紀錄　（改為過去 30 天）",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.clickable {
-                                    repo.settings.update { it.copy(screenReadSince = it.screenReadSince + (a.pkg to today - 30)) }
-                                }.padding(vertical = 4.dp),
-                            )
-                        } else Text(a.pkg, style = MaterialTheme.typography.labelSmall)
-                    },
-                    trailingContent = { Checkbox(on, { toggle(a.pkg, it) }) },
-                    modifier = Modifier.clickable { toggle(a.pkg, !on) },
-                )
             }
         }
     }
@@ -1115,7 +1108,7 @@ fun CashCounterScreen(nav: NavController, accountIdArg: Long) {
                 }
                 done?.let { Text(it, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 20.dp)) }
                 Text(
-                    "張數會記住；用「現金付款」「收到現金」或記帳時選「紙鈔硬幣」，付出、收到與找零會自動增減這裡的張數。「以點鈔金額對帳」會把差額記成一筆調整。",
+                    "現金記帳時，付出、收到與找零會自動增減這裡的張數。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(20.dp),
                 )

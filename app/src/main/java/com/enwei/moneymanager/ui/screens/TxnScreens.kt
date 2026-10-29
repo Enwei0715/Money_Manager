@@ -184,16 +184,7 @@ fun PendingScreen(nav: NavController) {
         }
     }) { pad ->
         LazyColumn(Modifier.padding(pad)) {
-            item {
-                Text(
-                    "自動建立的交易會先放在這裡，確認後才入帳。",
-                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp),
-                )
-            }
-            // AI 建議分類：只在使用者接受後才修改交易
-            item { AiSuggestionSection(lk) }
-            // 通知、錢包畫面、手動記帳可能重複記了同一筆：AI 判斷後合併
-            item { DuplicateSection(lk) }
+            // 待確認的交易放最上面，AI 整理與合併重複放在下面
             if (pending.isEmpty()) item { EmptyHint("沒有待確認的交易") }
             items(pending, key = { it.id }) { t ->
                 Column {
@@ -210,6 +201,10 @@ fun PendingScreen(nav: NavController) {
                     HorizontalDivider(Modifier.padding(top = 8.dp))
                 }
             }
+            // AI 建議分類：只在使用者接受後才修改交易
+            item { AiSuggestionSection(lk) }
+            // 通知、錢包畫面、手動記帳可能重複記了同一筆：AI 判斷後合併
+            item { DuplicateSection(lk) }
         }
     }
 }
@@ -235,7 +230,7 @@ private fun AiSuggestionSection(lk: Lookups) {
             if (open.size > 1) TextButton(onClick = { scope.launch { open.forEach { repo.acceptAiSuggestion(it) } } }) { Text("全部接受") }
         }
         if (aiOn && unknown > 0) {
-            Text("有 $unknown 筆「不明」或未分類的收支，可以請 AI 推測分類，確認後才套用。",
+            Text("有 $unknown 筆不明或未分類的收支",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(enabled = !running, onClick = {
                 running = true
@@ -308,10 +303,6 @@ private fun DuplicateSection(lk: Lookups) {
                 scope.launch { sure.forEach { p -> verdicts[p.key].let { v -> repo.mergeDuplicate(p, v?.name, v?.categoryId) } } }
             }) { Text("合併 AI 判定的 ${sure.size} 組") }
         }
-        Text(
-            "金額相同、時間相近的兩筆，合併時保留較完整的名稱與分類。",
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         if (aiOn) OutlinedButton(enabled = !running, onClick = {
             running = true; msg = null
             scope.launch {

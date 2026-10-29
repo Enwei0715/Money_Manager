@@ -97,7 +97,6 @@ fun AdvisorContent(nav: NavController) {
     val live by MoneyApp.news.flow.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { MoneyApp.news.load() }
     val store = live ?: NewsStore()
-    val tick = 0
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScrollableTabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface, edgePadding = 8.dp) {
             listOf("今日", "問 AI", "新聞", "資金與紀律").forEachIndexed { i, t ->
@@ -116,7 +115,7 @@ fun AdvisorContent(nav: NavController) {
 
 @Composable
 private fun Disclaimer() = Text(
-    "AI 分析與推薦僅供參考，不是投資建議；下單前請自行判斷並遵守自己的紀律。",
+    "AI 分析僅供參考，不是投資建議。",
     fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
 )
 
@@ -142,7 +141,10 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    r?.let { (if (old) "歷史報告 · " else "今日報告 · ") + fmt.format(java.util.Date(it.createdAt)) } ?: "還沒有今日報告",
+                    r?.let {
+                        val today = java.time.Instant.ofEpochMilli(it.createdAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate() == java.time.LocalDate.now()
+                        (if (old) "歷史報告 · " else if (today) "今日報告 · " else "報告 · ") + fmt.format(java.util.Date(it.createdAt))
+                    } ?: "還沒有報告",
                     fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
                 )
                 if (GroqAi.enabled && !old) OutlinedButton(enabled = job?.running != true, onClick = {
@@ -150,7 +152,7 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                 }) { Text(if (job?.running == true) "產生中…" else if (r == null) "產生報告" else "重新產生") }
             }
             Text(
-                "資料集 $recentCount 則（近 3 天已標註）" + (r?.let { " · 報告讀了 ${it.newsCount} 則" } ?: ""),
+                r?.let { "讀了 ${it.newsCount} 則新聞" } ?: "資料集 $recentCount 則新聞",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -167,9 +169,7 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
         }
         // 背景執行中：步驟、預估剩餘時間與進度（離開畫面也會繼續，完成時通知）
         JobProgress(job)
-        if (!GroqAi.enabled) Text("到「設定 → AI 智慧辨識」填入金鑰後，App 會每天在背景讀新聞、整理資料集並產生報告。", fontSize = 13.sp)
-        else if (r == null && job?.running != true) Text("還沒有報告：按右上「產生報告」，App 會讀完新聞資料集、你的持股與紀律後寫出今天的報告（之後每天早上自動產生）。",
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!GroqAi.enabled) Text("到「設定 → AI 智慧辨識」填入金鑰後才能產生報告。", fontSize = 13.sp)
         if (r != null) ReportBody(r, newsById, nav)
         Disclaimer()
         Spacer(Modifier.height(24.dp))
@@ -383,20 +383,20 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     Column(Modifier.fillMaxSize().imePadding()) {
         // 固定在上方的小工具列：對話則數與清除
         if (store.chat.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("對話 ${store.chat.size} 則 · 長按訊息可複製或刪除", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Text("長按訊息可複製或刪除", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             TextButton(enabled = !busy, onClick = { confirmClear = true }) { Text("清除對話") }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (store.chat.isEmpty()) item {
-                    Text("可以問今天該買什麼、某檔股票能不能買、持股怎麼處理、資金怎麼分配。AI 會讀新聞資料集、你的持股、資金計畫與紀律再回答。長按訊息可以複製或刪除。",
+                    Text("問今天該買什麼、持股怎麼處理、資金怎麼分配，或點下方的常見問題。",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                 } else item { Spacer(Modifier.height(4.dp)) }
                 items(store.chat, key = { "c${it.time}${it.fromUser}" }) { m ->
                     Bubble(m, newsById, nav) { scope.launch { MoneyApp.news.update { st -> st.copy(chat = st.chat.filterNot { it.time == m.time && it.fromUser == m.fromUser }) } } }
                 }
                 if (busy) item {
-                    Text("AI 思考中…（${com.enwei.moneymanager.work.ReportJob.formatDuration(now - (job?.startedAt ?: now))}，可以離開，回覆好會通知；按「停止」取消）",
+                    Text("AI 思考中… ${com.enwei.moneymanager.work.ReportJob.formatDuration(now - (job?.startedAt ?: now))}（離開也會繼續）",
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                 }
                 err?.let { e ->
@@ -434,7 +434,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     if (confirmClear) AlertDialog(
         onDismissRequest = { confirmClear = false },
         title = { Text("清除對話？") },
-        text = { Text("會刪除全部 ${store.chat.size} 則對話紀錄，AI 之後回答不會再參考這些內容。") },
+        text = { Text("刪除全部 ${store.chat.size} 則對話。") },
         confirmButton = {
             TextButton(onClick = {
                 confirmClear = false
@@ -733,8 +733,6 @@ private fun PlanTab(nav: NavController) {
             if (a.shortOver > 0) Text("⚠ 短線超出計畫 ${m(a.shortOver)}，新的短線單先暫停", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
         }
         if (s != null && s.holdings.isNotEmpty() && settings.investPlan.guardOn) Section("保本＋移動停利") {
-            Text("成本留在場內，只賣多賺的股數；跌破停利價才賣、續漲停利價跟著上移。下跌看 60 分 K 20MA／50MA 減碼。點一檔可以改保本金額、停利價與減碼價。",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             s.holdings.forEach { h -> GuardRow(h, nav) { editGuard = h } }
         }
         if (s != null && s.holdings.isNotEmpty() && !settings.investPlan.guardOn) Section("持股紀律（動態停損、分批停利）") {
@@ -781,7 +779,7 @@ private fun PlanTab(nav: NavController) {
                 Text("每天讀新聞並產生報告", fontSize = 14.sp, modifier = Modifier.weight(1f))
                 Switch(settings.advisorDaily, { v -> repo.settings.update { it.copy(advisorDaily = v) } }, enabled = GroqAi.enabled)
             }
-            Text("每 3 小時抓新聞、標註並整理重點，早上 7 點後產生當天報告並通知；需要網路且電量不低。", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("每 3 小時更新新聞，早上 7 點後產生報告並通知", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -844,15 +842,13 @@ private fun GuardDialog(h: com.enwei.moneymanager.data.HoldingPlan, gs: com.enwe
         title = { Text("${h.symbol} ${h.name.orEmpty()}") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField(principal, { principal = it }, "保本金額（空白＝自動：這一輪買進總成本）", suffix = "元")
+                NumberField(principal, { principal = it }, "保本金額（空白為自動）", suffix = "元")
                 if (gi != null) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedButton(onClick = { principal = "%.0f".format(gi.shares * gi.price) }) { Text("改成目前市值", fontSize = 12.sp) }
                     OutlinedButton(onClick = { principal = "" }) { Text("自動", fontSize = 12.sp) }
                 }
-                Text("減碼賣一半後，保本金額也要跟著調整（例如改成目前市值），之後才會從新的成本開始算多賺的股數。",
-                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                NumberField(tp, { tp = it }, "手動停利價（和自動移動停利取較高者）", suffix = "元")
-                NumberField(reduce, { reduce = it }, "減碼價（跌破賣一半，比現價低）", suffix = "元")
+                NumberField(tp, { tp = it }, "手動停利價", suffix = "元")
+                NumberField(reduce, { reduce = it }, "減碼價（跌破賣一半）", suffix = "元")
                 if (gi != null) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(3, 5, 8).forEach { pct -> OutlinedButton(onClick = { reduce = "%.2f".format(gi.price * (1 - pct / 100.0)) }) { Text("−$pct%", fontSize = 12.sp) } }
                 }

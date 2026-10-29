@@ -199,7 +199,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             fun d(i: Int) = java.time.LocalDate.ofEpochDay(kb.days[i]).let { "${it.monthValue}/${it.dayOfMonth}" }
-                            Text("${d(from)} – ${d(from + n - 1)}　雙指縮放、左右拖曳看更早的 K 棒", fontSize = 11.sp,
+                            Text("${d(from)} – ${d(from + n - 1)}", fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (back >= 1f) TextButton(onClick = { back = 0f }) { Text("回到最新") }
                             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -289,8 +289,6 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                     val mine = trades.filter { it.market == Market.TW && it.symbol.equals(symbol, true) && it.side == com.enwei.moneymanager.core.StockSide.CASH_DIVIDEND }
                     if (mine.isNotEmpty()) Text("我已領現金股利 ${"%,.0f".format(mine.sumOf { it.cashAmount })} 元（${mine.map { it.date }.distinct().size} 次）", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-                    Text("每次除權息都用當次的配發金額，乘上除權息日當天的持股自動記帳；超過 60 天的紀錄會鎖定，事後資料修改不影響。",
-                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             // 價格提醒
@@ -487,10 +485,6 @@ private fun PriceAlertCard(symbol: String, price: Double, held: Boolean) {
                 OutlinedButton(onClick = { target = "%.2f".format(price * 1.1); save() }) { Text("+10%") }
                 OutlinedButton(onClick = { stop = "%.2f".format(price * 0.92); save() }) { Text("−8%") }
             }
-            Text(
-                "台股交易時間每 15 分鐘檢查一次，達到時通知（同一天只通知一次）。" + if (held) "持股另外會依你的紀律自動提醒動態停損與分批停利。" else "",
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

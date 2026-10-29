@@ -478,13 +478,6 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
             if (acc?.type == AccountType.LOAN) item { LoanCard(acc, current, lk, nav) }
-            if (acc?.type == AccountType.EWALLET) item {
-                Text(
-                    "錢包沒有消費通知時，用「對帳」輸入實際餘額，差額會記成一筆支出。",
-                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 20.dp, vertical = 10.dp),
-                )
-            }
             if (chart) {
                 item {
                     val months = (5 downTo 0).map { month.minusMonths(it.toLong()) }
@@ -597,7 +590,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                     ?: com.enwei.moneymanager.net.GroqAi.pickBalance(acc.name, lines)
                 val best = ai ?: found.firstOrNull()?.amountMinor
                 ocrMsg = when {
-                    best == null -> "圖片裡找不到餘額，請手動輸入（截圖請包含「餘額」字樣與金額）"
+                    best == null -> "圖片裡找不到餘額，請手動輸入"
                     ai != null -> "AI 從圖片讀到餘額 ${Money.withSymbol(best, acc.currency)}，請確認"
                     else -> "從圖片的「${found.first().label}」讀到 ${Money.withSymbol(best, acc.currency)}，請確認"
                 }

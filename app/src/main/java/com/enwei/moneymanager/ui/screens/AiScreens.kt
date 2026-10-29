@@ -16,6 +16,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,7 +62,7 @@ fun AiSettingsScreen(nav: NavController) {
 
             // Groq
             ProviderCard(
-                Provider.GROQ, "速度快，適合頻繁的小工作；免費方案每分鐘約 8,000 tokens、每天約 20 萬 tokens",
+                Provider.GROQ, "速度快，適合頻繁的小工作",
                 s.groqKey, { k -> repo.settings.update { it.copy(groqKey = k.trim()) } },
                 usage = if (s.aiUsageDay == today) "今天 ${s.aiUsageRequests} 次、${"%,d".format(s.aiUsageTokens)} tokens" else "今天還沒用",
             ) {
@@ -72,7 +73,7 @@ fun AiSettingsScreen(nav: NavController) {
 
             // Gemini
             ProviderCard(
-                Provider.GEMINI, "一次可以讀大量資料（上千則新聞、整期交易、圖片）；免費方案每天請求次數有限，到 aistudio.google.com 申請金鑰",
+                Provider.GEMINI, "可一次讀大量資料與圖片；金鑰到 aistudio.google.com 申請",
                 s.geminiKey, { k -> repo.settings.update { it.copy(geminiKey = k.trim()) } },
                 usage = if (s.geminiUsageDay == today) "今天 ${s.geminiUsageRequests} 次、${"%,d".format(s.geminiUsageTokens)} tokens" else "今天還沒用",
             ) {
@@ -84,9 +85,12 @@ fun AiSettingsScreen(nav: NavController) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("模型選擇", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    SwitchRow("自動選擇（建議）", "依工作難度與資料量挑模型：簡單短的用 Groq 20b，要推理的用 Groq 120b，資料量大的用 Gemini；用完額度自動換下一個",
+                    SwitchRow("自動選擇（建議）", "依難度與資料量挑模型，額度用完自動換下一個",
                         s.aiAutoRoute, true) { v -> repo.settings.update { it.copy(aiAutoRoute = v) } }
-                    AiTask.entries.forEach { t ->
+                    // 每項工作的模型清單很長：自動選擇時預設收起
+                    var showTasks by remember { mutableStateOf(false) }
+                    if (s.aiAutoRoute) TextButton(onClick = { showTasks = !showTasks }) { Text(if (showTasks) "收起各項工作" else "查看各項工作使用的模型") }
+                    if (!s.aiAutoRoute || showTasks) AiTask.entries.forEach { t ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(t.label, fontSize = 14.sp)
@@ -122,19 +126,20 @@ fun AiSettingsScreen(nav: NavController) {
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                     }
                     if (log.isEmpty()) Text("這次開啟 App 後還沒有呼叫", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    log.forEach { c ->
+                    var allLog by remember { mutableStateOf(false) }
+                    (if (allLog) log else log.take(8)).forEach { c ->
                         Text(
                             java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.TAIWAN).format(java.util.Date(c.time)) +
                                 "  ${c.task.label} · ${c.provider.label} ${c.model} · ${"%.1f".format(c.ms / 1000.0)} 秒 · " + (if (c.ok) "成功" else "失敗：${c.error ?: "沒有回應"}"),
                             fontSize = 11.sp, color = if (c.ok) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                         )
                     }
+                    if (log.size > 8) TextButton(onClick = { allLog = !allLog }) { Text(if (allLog) "收起" else "顯示全部 ${log.size} 筆") }
                 }
             }
 
             Text(
-                "只會送出已啟用 App 的通知文字、商家與分類名稱、檢討時的交易明細、股票分析用的新聞與持股，以及對帳時選的截圖。" +
-                    "金鑰只存在這支手機、不放進備份。Gemini 免費方案可能會用送出的內容改進模型；不想讓交易明細送到 Gemini，可以把「收支檢討」「整理不明花費」改成 Groq。",
+                "金鑰只存在這支手機、不放進備份。Gemini 免費方案可能會用送出的內容改進模型。",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

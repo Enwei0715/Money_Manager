@@ -219,7 +219,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                 TextButton(onClick = { addWatch = true }) { Text("＋ 加入") }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            if (settings.watchlist.isEmpty()) Text("在個股頁按☆，或在 AI 推薦卡片按「加入觀察」，就會出現在這裡並每 30 秒更新報價。",
+            if (settings.watchlist.isEmpty()) Text("在個股頁按☆加入",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
         }
         items(settings.watchlist, key = { "w$it" }) { sym ->
