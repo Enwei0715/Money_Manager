@@ -182,7 +182,10 @@ fun reviewPeriod(span: ReviewSpan, offset: Int, startDay: Int, today: LocalDate 
     }
 }
 
-suspend fun Repository.spendingReview(span: ReviewSpan, offset: Int): ReviewData {
+/** 在背景執行緒計算，畫面不會卡。 */
+suspend fun Repository.spendingReview(span: ReviewSpan, offset: Int): ReviewData = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { spendingReviewImpl(span, offset) }
+
+private suspend fun Repository.spendingReviewImpl(span: ReviewSpan, offset: Int): ReviewData {
     val s = settings.value
     val conv = this.fx.first()
     val zone = ZoneId.systemDefault()

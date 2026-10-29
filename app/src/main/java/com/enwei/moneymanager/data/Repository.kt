@@ -270,7 +270,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         t.type != TxnType.TRANSFER && t.status == TxnStatus.CONFIRMED && (t.categoryId == null || cats[t.categoryId]?.name == "不明")
 
     /** 還沒請 AI 看過的「不明」交易數。 */
-    suspend fun unknownCount(): Int {
+    /** 計算量大的查詢都在背景執行緒做，畫面不會卡。 */
+    suspend fun unknownCount(): Int = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { unknownCountImpl() }
+
+    private suspend fun unknownCountImpl(): Int {
         val cats = db.categories().all().associateBy { it.id }
         val asked = settings.value.aiSuggestions.map { it.txnId }.toSet()
         return db.txns().all().count { isUnknown(it, cats) && it.id !in asked }
@@ -342,7 +345,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 找出近 [days] 天可能重複記的交易：同收支、同金額、30 分鐘內（錢包畫面只有日期時為同一天），
      * 而且至少一筆來自通知或錢包畫面（自動記帳最容易重複）。標記過「不是重複」的不再列出。
      */
-    suspend fun findDuplicates(days: Long = 90): List<DupPair> {
+    suspend fun findDuplicates(days: Long = 90): List<DupPair> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { findDuplicatesImpl(days) }
+
+    private suspend fun findDuplicatesImpl(days: Long): List<DupPair> {
         val since = System.currentTimeMillis() - days * 86_400_000
         val dismissed = settings.value.dupDismissed
         val list = db.txns().all().filter { it.type != TxnType.TRANSFER && it.date >= since }
@@ -1269,7 +1274,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     private val rebateWords = listOf("退佣", "手續費退", "退手續費", "手續費折讓", "折讓")
 
     /** 證券帳戶各月的月退狀況（新到舊）：從起算月到本月，沒有交易的月份略過。 */
-    suspend fun rebateMonths(brokerId: Long): List<RebateMonth> {
+    suspend fun rebateMonths(brokerId: Long): List<RebateMonth> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { rebateMonthsImpl(brokerId) }
+
+    private suspend fun rebateMonthsImpl(brokerId: Long): List<RebateMonth> {
         val s = settings.value
         val rule = s.brokerRebates[brokerId] ?: return emptyList()
         val since = java.time.YearMonth.from(LocalDate.ofEpochDay(rule.sinceEpochDay))
@@ -1427,7 +1434,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     /** 信用卡：應繳金額（已出帳未繳）、未出帳金額、下次繳款日。 */
-    suspend fun cardStatus(today: LocalDate = LocalDate.now()): Map<Long, CardStatus> {
+    suspend fun cardStatus(today: LocalDate = LocalDate.now()): Map<Long, CardStatus> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { cardStatusImpl(today) }
+
+    private suspend fun cardStatusImpl(today: LocalDate): Map<Long, CardStatus> {
         val fx = currentFx()
         val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
         return db.accounts().all().filter { it.type == AccountType.CREDIT_CARD }.associate { card ->
@@ -1488,7 +1497,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val periodsLeft: Int? get() = info.installment?.takeIf { it > 0 }?.let { ((outstanding + it - 1) / it).toInt() }
     }
 
-    suspend fun loanStatuses(today: LocalDate = LocalDate.now()): List<LoanStatus> {
+    suspend fun loanStatuses(today: LocalDate = LocalDate.now()): List<LoanStatus> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { loanStatusesImpl(today) }
+
+    private suspend fun loanStatusesImpl(today: LocalDate): List<LoanStatus> {
         val loans = settings.value.loans
         if (loans.isEmpty()) return emptyList()
         return balances.first().filter { it.account.type == AccountType.LOAN && !it.account.archived }
@@ -1571,7 +1582,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         )
     }
 
-    suspend fun fundingWarnings(today: LocalDate = LocalDate.now(), days: Long = 45): List<FundingWarning> {
+    suspend fun fundingWarnings(today: LocalDate = LocalDate.now(), days: Long = 45): List<FundingWarning> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { fundingWarningsImpl(today, days) }
+
+    private suspend fun fundingWarningsImpl(today: LocalDate, days: Long): List<FundingWarning> {
         val status = cardStatus(today)
         val accounts = db.accounts().all().filter { !it.archived }
         val bal = balances.first().associate { it.account.id to it.balance }

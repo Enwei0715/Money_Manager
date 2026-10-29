@@ -120,7 +120,13 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
     val r = store.report
-    val newsById = remember(System.identityHashCode(store)) { store.items.associateBy { it.id } }
+    val recentCount by androidx.compose.runtime.produceState(0, System.identityHashCode(store)) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { MoneyApp.news.recent(store, 3).size }
+    }
+    // 上萬則新聞的整理在背景執行緒做，畫面不卡
+    val newsById by androidx.compose.runtime.produceState(emptyMap<String, com.enwei.moneymanager.data.NewsItem>(), System.identityHashCode(store)) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { store.items.associateBy { it.id } }
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -129,7 +135,7 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                     fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    "資料集 ${MoneyApp.news.recent(store, 3).size} 則（近 3 天已標註）" + (r?.let { " · 報告讀了 ${it.newsCount} 則" } ?: ""),
+                    "資料集 $recentCount 則（近 3 天已標註）" + (r?.let { " · 報告讀了 ${it.newsCount} 則" } ?: ""),
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -232,7 +238,10 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(busy) { while (busy) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
     val list = rememberLazyListState()
-    val newsById = remember(System.identityHashCode(store)) { store.items.associateBy { it.id } }
+    // 上萬則新聞的整理在背景執行緒做，畫面不卡
+    val newsById by androidx.compose.runtime.produceState(emptyMap<String, com.enwei.moneymanager.data.NewsItem>(), System.identityHashCode(store)) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { store.items.associateBy { it.id } }
+    }
     fun send(q: String) {
         if (q.isBlank() || busy) return
         input = ""
@@ -299,19 +308,23 @@ private fun NewsTab(store: NewsStore) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
     val ds = MoneyApp.news
-    val tagged = remember(System.identityHashCode(store)) { store.items.count { it.tagged } }
-    val themes = remember(System.identityHashCode(store)) { ds.themes(store) }
-    val important = remember(System.identityHashCode(store)) { ds.important(store, 3, 30) }
+    // 統計與篩選都在背景執行緒算（資料集有上萬則）
+    val stats by androidx.compose.runtime.produceState(Triple(0, emptyList<com.enwei.moneymanager.data.TopicStat>(), emptyList<com.enwei.moneymanager.data.NewsItem>()), System.identityHashCode(store)) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { Triple(store.items.count { it.tagged }, ds.themes(store), ds.important(store, 3, 30)) }
+    }
+    val (tagged, themes, important) = stats
     var query by remember { mutableStateOf("") }
     // 0 全部、1 利多、2 利空、3 重要
     var filter by remember { mutableStateOf(0) }
     var theme by remember { mutableStateOf<String?>(null) }
     var shown by remember { mutableStateOf(100) }
-    val filtered = remember(System.identityHashCode(store), query, filter, theme) {
-        store.items.filter { n ->
-            (query.isBlank() || n.title.contains(query, true) || query in n.symbols) &&
-                (theme == null || n.theme == theme) &&
-                when (filter) { 1 -> n.sentiment > 0; 2 -> n.sentiment < 0; 3 -> n.importance >= 4; else -> true }
+    val filtered by androidx.compose.runtime.produceState(emptyList<com.enwei.moneymanager.data.NewsItem>(), System.identityHashCode(store), query, filter, theme) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            store.items.filter { n ->
+                (query.isBlank() || n.title.contains(query, true) || query in n.symbols) &&
+                    (theme == null || n.theme == theme) &&
+                    when (filter) { 1 -> n.sentiment > 0; 2 -> n.sentiment < 0; 3 -> n.importance >= 4; else -> true }
+            }
         }
     }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -272,7 +272,7 @@ fun NewsLine(n: NewsItem) {
 /** 日 K 線：紅漲綠跌（台股慣例），疊 5／20／60 日均線，下方成交量。 */
 @Composable
 private fun CandleChart(b: DailyBars, span: Int, showBB: Boolean = false) {
-    val bb = remember(b) { Technicals.bollinger(b.close) }
+    val bb = remember(System.identityHashCode(b)) { Technicals.bollinger(b.close) }
     val up = StockUp
     val down = StockDown
     val grid = MaterialTheme.colorScheme.outlineVariant
@@ -363,9 +363,9 @@ private fun IndicatorChart(b: DailyBars, span: Int, kind: Int) {
     val grid = MaterialTheme.colorScheme.outlineVariant
     val c1 = Color(0xFF7E57C2)
     val c2 = Color(0xFFFFA000)
-    val macd = remember(b) { Technicals.macd(b.close) }
-    val rsi = remember(b) { Technicals.rsiSeries(b.close) }
-    val kd = remember(b) { Technicals.kd(b.high, b.low, b.close) }
+    val macd = remember(System.identityHashCode(b)) { Technicals.macd(b.close) }
+    val rsi = remember(System.identityHashCode(b)) { Technicals.rsiSeries(b.close) }
+    val kd = remember(System.identityHashCode(b)) { Technicals.kd(b.high, b.low, b.close) }
     Canvas(Modifier.fillMaxWidth().height(110.dp).padding(top = 6.dp)) {
         val n = minOf(span, b.close.size)
         val from = b.close.size - n
@@ -415,7 +415,12 @@ private fun IndicatorChart(b: DailyBars, span: Int, kind: Int) {
 /** 指標目前數值與簡單判讀。 */
 @Composable
 private fun IndicatorNote(b: DailyBars, kind: Int) {
-    val txt = when (kind) {
+    val txt = remember(System.identityHashCode(b), kind) { indicatorText(b, kind) }
+    if (txt.isNotBlank()) Text(txt, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+private fun indicatorText(b: DailyBars, kind: Int): String {
+    return when (kind) {
         0 -> {
             val v = b.volume
             val v5 = if (v.size >= 5) v.takeLast(5).average() else null
@@ -437,5 +442,4 @@ private fun IndicatorNote(b: DailyBars, kind: Int) {
             } + if (k.size >= 2 && k[k.size - 2] < d[d.size - 2] && k.last() >= d.last()) "，K 向上穿越 D" else ""
         }
     }
-    if (txt.isNotBlank()) Text(txt, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

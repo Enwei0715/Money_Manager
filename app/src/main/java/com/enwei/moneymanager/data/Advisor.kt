@@ -61,7 +61,7 @@ private object BarCache {
     }
 }
 
-suspend fun Repository.advisorSnapshot(fetch: Boolean = true): AdvisorSnapshot = coroutineScope {
+suspend fun Repository.advisorSnapshot(fetch: Boolean = true): AdvisorSnapshot = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { coroutineScope {
     val s = settings.value
     val conv = fx.first()
     val plan = s.investPlan
@@ -102,7 +102,7 @@ suspend fun Repository.advisorSnapshot(fetch: Boolean = true): AdvisorSnapshot =
         index, index?.close?.let(Technicals::stage) ?: MarketStage.UNKNOWN,
         sox, sox?.close?.let(Technicals::stage) ?: MarketStage.UNKNOWN,
     )
-}
+}}
 
 private fun describe(name: String, b: DailyBars?, stage: MarketStage): String {
     if (b == null) return "$name：讀取失敗"
