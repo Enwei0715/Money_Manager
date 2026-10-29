@@ -2,6 +2,11 @@ package com.enwei.moneymanager.ui.screens
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -63,7 +69,12 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     var bars by remember { mutableStateOf<DailyBars?>(null) }
     var index by remember { mutableStateOf<DailyBars?>(null) }
     var loading by remember { mutableStateOf(true) }
-    var span by remember { mutableStateOf(120) }
+    // K 線：日 K／60 分 K，可雙指縮放（看的 K 棒數）與左右拖曳（往回看）
+    var hourly by remember { mutableStateOf(false) }
+    var hourBars by remember { mutableStateOf<DailyBars?>(null) }
+    var count by remember { mutableStateOf(120f) }
+    var back by remember { mutableStateOf(0f) }
+    var mas by remember { mutableStateOf(setOf(5, 20, 72)) }
     var business by remember { mutableStateOf<String?>(null) }
     var news by remember { mutableStateOf<List<NewsItem>>(emptyList()) }
     var divs by remember { mutableStateOf<List<com.enwei.moneymanager.core.DividendEvent>>(emptyList()) }
@@ -118,21 +129,42 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                 }
                 // K 線
+                LaunchedEffect(hourly, held.isNotEmpty()) { if ((hourly || held.isNotEmpty()) && hourBars == null) hourBars = InvestData.bars(symbol, "3mo", interval = "60m") }
+                val kb = if (hourly) hourBars else b
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf(60 to "3 個月", 120 to "6 個月", 250 to "1 年").forEach { (n, l) -> FilterChip(span == n, { span = n }, label = { Text(l) }) }
+                            FilterChip(!hourly, { hourly = false; count = 120f; back = 0f; mas = setOf(5, 20, 72) }, label = { Text("日 K") })
+                            FilterChip(hourly, { hourly = true; count = 50f; back = 0f; mas = setOf(20, 50) }, label = { Text("60 分 K") })
+                            (if (hourly) listOf(25 to "5 天", 50 to "10 天", 100 to "1 個月") else listOf(60 to "3 個月", 120 to "6 個月", 250 to "1 年"))
+                                .forEach { (n, l) -> FilterChip(count.toInt() == n && back < 1f, { count = n.toFloat(); back = 0f }, label = { Text(l) }) }
                         }
-                        CandleChart(b, span, showBB)
-                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Text("— 5 日  — 20 日（月線）  — 60 日（季線）", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                            FilterChip(showBB, { showBB = !showBB }, label = { Text("布林", fontSize = 12.sp) })
+                        if (kb == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 40.dp))
+                        if (kb != null) {
+                            val total = kb.close.size
+                            val n = count.toInt().coerceIn(minOf(10, total), total)
+                            val from = (total - n - back.toInt()).coerceIn(0, total - n)
+                            CandleChart(kb, from, n, showBB, mas.sorted(),
+                                onZoom = { z -> count = (count / z).coerceIn(10f, total.toFloat()); back = back.coerceIn(0f, (total - count).coerceAtLeast(0f)) },
+                                onPan = { bars -> back = (back + bars).coerceIn(0f, (total - count).coerceAtLeast(0f)) },
+                            )
+                            fun d(i: Int) = java.time.LocalDate.ofEpochDay(kb.days[i]).let { "${it.monthValue}/${it.dayOfMonth}" }
+                            Text("${d(from)} – ${d(from + n - 1)}　雙指縮放、左右拖曳看更早的 K 棒", fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (back >= 1f) TextButton(onClick = { back = 0f }) { Text("回到最新") }
+                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                (if (hourly) listOf(20, 50) else listOf(5, 10, 20, 60, 72, 100, 200)).forEach { len ->
+                                    FilterChip(len in mas, { mas = if (len in mas) mas - len else mas + len },
+                                        label = { Text("${len}${if (hourly) "" else "日"}", fontSize = 12.sp, color = maColor(len)) })
+                                }
+                                FilterChip(showBB, { showBB = !showBB }, label = { Text("布林", fontSize = 12.sp) })
+                            }
+                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf("成交量", "RSI", "MACD", "KD").forEachIndexed { i, l -> FilterChip(indicator == i, { indicator = i }, label = { Text(l, fontSize = 12.sp) }) }
+                            }
+                            IndicatorChart(kb, from, n, indicator)
+                            IndicatorNote(kb, indicator)
                         }
-                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("成交量", "RSI", "MACD", "KD").forEachIndexed { i, l -> FilterChip(indicator == i, { indicator = i }, label = { Text(l, fontSize = 12.sp) }) }
-                        }
-                        IndicatorChart(b, span, indicator)
-                        IndicatorNote(b, indicator)
                     }
                 }
                 // 強弱與階段
@@ -163,7 +195,22 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         val ad = Discipline.advise(style, avg, last, peak, settings.investPlan.rule())
                         Text("我的持股（${style.label}）", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                         Text("${"%.0f".format(shares)} 股 · 均價 ${"%.2f".format(avg)} · 損益 ${"%+.1f".format((last / avg - 1) * 100)}% · 買進後最高 ${"%.2f".format(peak)}", fontSize = 14.sp)
-                        Text("${ad.action}：${ad.note}", fontSize = 14.sp, color = if (ad.triggered) MaterialTheme.colorScheme.error else Color.Unspecified)
+                        if (!settings.investPlan.guardOn) Text("${ad.action}：${ad.note}", fontSize = 14.sp, color = if (ad.triggered) MaterialTheme.colorScheme.error else Color.Unspecified)
+                        if (settings.investPlan.guardOn) {
+                            // 保本＋移動停利（60 分 K 均線在「資金與紀律」頁一起看）
+                            val gs = settings.investPlan.guards[symbol]
+                            val principal = gs?.principal ?: com.enwei.moneymanager.data.autoPrincipal(trades.filter { it.market == Market.TW && it.symbol.equals(symbol, true) })
+                            val hc = hourBars?.close
+                            val g = com.enwei.moneymanager.core.ProfitGuard.advise(
+                                com.enwei.moneymanager.core.GuardInput(shares, last, principal, gs?.peak, gs?.takeProfit, gs?.reduceAt,
+                                    hc?.let { Technicals.sma(it, 20) }, hc?.let { Technicals.sma(it, 50) }),
+                                com.enwei.moneymanager.core.GuardRule(settings.investPlan.guardTrailPct, settings.investPlan.baseShares),
+                            )
+                            Text("保本 ${"%,.0f".format(principal)} · 市值 ${"%,.0f".format(shares * last)}" +
+                                (if (g.excessShares >= 1) " · 多賺 ${g.excessShares.toLong()} 股 · 停利價 ${"%.2f".format(g.takeProfit ?: 0.0)}" else ""), fontSize = 14.sp)
+                            Text("${g.action.label}：${g.note}", fontSize = 14.sp, color = if (g.triggered) MaterialTheme.colorScheme.error else Color.Unspecified)
+                            Text("日 K：" + com.enwei.moneymanager.core.ProfitGuard.dailyTrend(c).summary, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
@@ -269,26 +316,65 @@ fun NewsLine(n: NewsItem) {
     }
 }
 
-/** 日 K 線：紅漲綠跌（台股慣例），疊 5／20／60 日均線，下方成交量。 */
+/** 均線顏色（日 K 與 60 分 K 共用）。 */
+private fun maColor(len: Int): Color = when (len) {
+    5 -> Color(0xFFFFA000)
+    10 -> Color(0xFF42A5F5)
+    20 -> Color(0xFF7E57C2)
+    50 -> Color(0xFF26A69A)
+    60 -> Color(0xFF26A69A)
+    72 -> Color(0xFFEC407A)
+    100 -> Color(0xFF8D6E63)
+    else -> Color(0xFF546E7A)
+}
+
+/**
+ * K 線：紅漲綠跌（台股慣例），疊選擇的均線，下方成交量。顯示 [from] 起的 [n] 根；
+ * 雙指縮放改變根數（[onZoom] 傳縮放倍率），單指左右拖曳往回看（[onPan] 傳移動的根數，正數為往過去）。
+ */
 @Composable
-private fun CandleChart(b: DailyBars, span: Int, showBB: Boolean = false) {
+private fun CandleChart(b: DailyBars, from: Int, n: Int, showBB: Boolean, mas: List<Int>, onZoom: (Float) -> Unit, onPan: (Float) -> Unit) {
     val bb = remember(System.identityHashCode(b)) { Technicals.bollinger(b.close) }
+    val maSeries = remember(System.identityHashCode(b), mas) { mas.associateWith { len -> b.close.indices.map { i -> Technicals.sma(b.close, len, i + 1) } } }
     val up = StockUp
     val down = StockDown
     val grid = MaterialTheme.colorScheme.outlineVariant
-    val ma = listOf(5 to Color(0xFFFFA000), 20 to Color(0xFF7E57C2), 60 to Color(0xFF26A69A))
-    Canvas(Modifier.fillMaxWidth().height(260.dp).padding(top = 8.dp)) {
-        val n = minOf(span, b.close.size)
-        val from = b.close.size - n
+    val zoom by androidx.compose.runtime.rememberUpdatedState(onZoom)
+    val pan by androidx.compose.runtime.rememberUpdatedState(onPan)
+    val nNow by androidx.compose.runtime.rememberUpdatedState(n)
+    Canvas(
+        Modifier.fillMaxWidth().height(260.dp).padding(top = 8.dp)
+            // 兩指才算縮放，單指上下滑仍可捲動頁面
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val e = awaitPointerEvent()
+                        if (e.changes.count { it.pressed } >= 2) {
+                            val z = e.calculateZoom()
+                            if (z != 1f) zoom(z)
+                            e.changes.forEach { it.consume() }
+                        }
+                    } while (e.changes.any { it.pressed })
+                }
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures { change, dx ->
+                    change.consume()
+                    pan(dx / size.width * nNow)
+                }
+            },
+    ) {
+        val to = from + n
         val priceH = size.height * 0.75f
         val volTop = size.height * 0.80f
-        val hi = (from until b.close.size).maxOf { b.high[it] }
-        val lo = (from until b.close.size).minOf { b.low[it] }
+        val hi = (from until to).maxOf { b.high[it] }
+        val lo = (from until to).minOf { b.low[it] }
         val range = (hi - lo).takeIf { it > 0 } ?: 1.0
         val cw = size.width / n
         fun y(v: Double) = ((hi - v) / range * priceH).toFloat()
         for (k in 0..3) drawLine(grid, Offset(0f, priceH * k / 3), Offset(size.width, priceH * k / 3), 1f)
-        val maxVol = (from until b.close.size).maxOf { b.volume.getOrNull(it) ?: 0.0 }.takeIf { it > 0 } ?: 1.0
+        val maxVol = (from until to).maxOf { b.volume.getOrNull(it) ?: 0.0 }.takeIf { it > 0 } ?: 1.0
         for (i in 0 until n) {
             val j = from + i
             val o = b.open[j]; val c = b.close[j]
@@ -301,29 +387,20 @@ private fun CandleChart(b: DailyBars, span: Int, showBB: Boolean = false) {
             val vh = ((v / maxVol) * (size.height - volTop)).toFloat()
             drawRect(col.copy(alpha = 0.5f), Offset(i * cw + cw * 0.15f, size.height - vh), Size(cw * 0.7f, vh))
         }
-        if (showBB) listOf(bb.first, bb.third).forEach { band ->
+        fun series(values: List<Double?>, col: Color, w: Float) {
             val p = Path()
             var started = false
             for (i in 0 until n) {
-                val v = band[from + i] ?: continue
+                val v = values[from + i] ?: continue
                 val pt = Offset(i * cw + cw / 2, y(v).coerceIn(0f, priceH))
                 if (!started) { p.moveTo(pt.x, pt.y); started = true } else p.lineTo(pt.x, pt.y)
             }
-            drawPath(p, Color(0xFF90A4AE), style = Stroke(width = 1.5f))
+            drawPath(p, col, style = Stroke(width = w))
         }
-        ma.forEach { (len, col) ->
-            val p = Path()
-            var started = false
-            for (i in 0 until n) {
-                val v = Technicals.sma(b.close, len, from + i + 1) ?: continue
-                val pt = Offset(i * cw + cw / 2, y(v).coerceIn(0f, priceH))
-                if (!started) { p.moveTo(pt.x, pt.y); started = true } else p.lineTo(pt.x, pt.y)
-            }
-            drawPath(p, col, style = Stroke(width = 2f))
-        }
+        if (showBB) listOf(bb.first, bb.third).forEach { series(it, Color(0xFF90A4AE), 1.5f) }
+        maSeries.forEach { (len, v) -> series(v, maColor(len), 2f) }
     }
 }
-
 
 /** 價格提醒：目標價、停損價（盤中每 15 分鐘檢查，達到時通知）。 */
 @Composable
@@ -357,7 +434,7 @@ private fun PriceAlertCard(symbol: String, price: Double, held: Boolean) {
 
 /** K 線下方的指標圖：成交量、RSI（70／30）、MACD（DIF、DEA、柱狀體）、KD（80／20）。 */
 @Composable
-private fun IndicatorChart(b: DailyBars, span: Int, kind: Int) {
+private fun IndicatorChart(b: DailyBars, from: Int, n: Int, kind: Int) {
     val up = StockUp
     val down = StockDown
     val grid = MaterialTheme.colorScheme.outlineVariant
@@ -367,8 +444,7 @@ private fun IndicatorChart(b: DailyBars, span: Int, kind: Int) {
     val rsi = remember(System.identityHashCode(b)) { Technicals.rsiSeries(b.close) }
     val kd = remember(System.identityHashCode(b)) { Technicals.kd(b.high, b.low, b.close) }
     Canvas(Modifier.fillMaxWidth().height(110.dp).padding(top = 6.dp)) {
-        val n = minOf(span, b.close.size)
-        val from = b.close.size - n
+        val to = from + n
         val cw = size.width / n
         fun line(values: List<Double?>, lo: Double, hi: Double, col: Color) {
             val p = Path(); var started = false
@@ -386,7 +462,7 @@ private fun IndicatorChart(b: DailyBars, span: Int, kind: Int) {
         }
         when (kind) {
             0 -> {
-                val maxVol = (from until b.close.size).maxOf { b.volume.getOrNull(it) ?: 0.0 }.takeIf { it > 0 } ?: 1.0
+                val maxVol = (from until to).maxOf { b.volume.getOrNull(it) ?: 0.0 }.takeIf { it > 0 } ?: 1.0
                 for (i in 0 until n) {
                     val j = from + i
                     val v = b.volume.getOrNull(j) ?: 0.0
@@ -396,7 +472,7 @@ private fun IndicatorChart(b: DailyBars, span: Int, kind: Int) {
             }
             1 -> { hline(70.0, 0.0, 100.0); hline(30.0, 0.0, 100.0); line(rsi, 0.0, 100.0, c1) }
             2 -> {
-                val vals = (from until b.close.size).flatMap { listOf(macd.dif[it], macd.signal[it], macd.hist[it]) }
+                val vals = (from until to).flatMap { listOf(macd.dif[it], macd.signal[it], macd.hist[it]) }
                 val m = vals.maxOf { kotlin.math.abs(it) }.takeIf { it > 0 } ?: 1.0
                 hline(0.0, -m, m)
                 for (i in 0 until n) {

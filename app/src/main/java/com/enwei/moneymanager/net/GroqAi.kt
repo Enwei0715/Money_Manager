@@ -387,6 +387,67 @@ object GroqAi {
             minor.takeIf { ocrAmounts.isEmpty() || it in ocrAmounts || -it in ocrAmounts }
         }
 
+    /** 看圖回 JSON：依自動選擇的順序用 Gemini 或 Groq 的看圖模型。 */
+    private suspend fun visionJson(context: android.content.Context, uri: android.net.Uri, system: String, user: String, maxOut: Int = 800): JsonObject? =
+        withContext(Dispatchers.IO) {
+            val s = MoneyApp.repo.settings.value
+            if (!enabled) return@withContext null
+            val dataUrl = runCatching { imageDataUrl(context, uri) }.getOrNull() ?: return@withContext null
+            val model = s.aiModelVision.trim().ifBlank { VISION_MODEL }
+            fun groq(): JsonObject? {
+                if (s.groqKey.isBlank()) return null
+                var (r, fail) = call(s.groqKey.trim(), model, true, system, user, maxOut, imageDataUrl = dataUrl)
+                if (r == null && fail == Fail.NO_JSON_MODE) r = call(s.groqKey.trim(), model, false, system, user, maxOut, imageDataUrl = dataUrl).first
+                return r
+            }
+            fun gemini(): JsonObject? = if (s.geminiKey.isBlank()) null
+            else callGemini(s.geminiKey.trim(), s.geminiModel.trim().ifBlank { "gemini-flash-latest" }, system, user, maxOf(2048, maxOut * 3), dataUrl.substringAfter(","))
+            if (routes(AiTask.VISION, 0).firstOrNull()?.provider != Provider.GROQ) gemini() ?: groq() else groq() ?: gemini()
+        }
+
+    /** 拍照點鈔：數出照片裡新台幣各面額紙鈔與硬幣的數量。回傳面額 → 數量與 AI 的備註。 */
+    suspend fun countCash(context: android.content.Context, uri: android.net.Uri): Pair<Map<Int, Int>, String>? {
+        val system = "你是點鈔員。照片裡是新台幣的紙鈔與硬幣（可能攤開或疊在一起）。逐一數出每種面額的數量：" +
+            "紙鈔 2000、1000、500、200、100 元；硬幣 50、10、5、1 元。用顏色、大小、圖案分辨面額，重疊的要算進去，看不清楚的不要猜並寫在 note。" +
+            "只回 JSON：{\"counts\": {\"面額\": 數量}, \"note\": 字串}"
+        val r = visionJson(context, uri, system, "數出照片裡的鈔票與硬幣") ?: return null
+        val c = r["counts"] as? JsonObject ?: return null
+        val counts = c.mapNotNull { (k, v) ->
+            val d = k.filter(Char::isDigit).toIntOrNull()?.takeIf { it in com.enwei.moneymanager.core.Cash.DENOMS } ?: return@mapNotNull null
+            val n = (v as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt()?.takeIf { it > 0 } ?: return@mapNotNull null
+            d to n
+        }.toMap()
+        return counts to (r.str("note") ?: "")
+    }
+
+    /** 一張截圖裡辨認出的帳戶與餘額。 */
+    data class ShotBalance(val accountId: Long?, val label: String, val balanceMinor: Long, val confidence: Double)
+
+    /**
+     * 多張截圖對帳：看銀行、錢包、證券 App 的畫面，判斷是使用者的哪個帳戶（銀行名稱、App 樣式、帳號末幾碼、帳戶名稱），
+     * 並讀出餘額。[accounts] 為 (id, 說明)。只接受手機 OCR 讀到過的金額（OCR 沒讀到數字時才直接採用）。
+     */
+    suspend fun identifyBalances(
+        context: android.content.Context, uri: android.net.Uri, accounts: List<Pair<Long, String>>, ocrAmounts: Set<Long>,
+    ): List<ShotBalance>? {
+        val list = accounts.joinToString("\n") { "${it.first}: ${it.second}" }
+        val system = "你是記帳 App 的對帳助理。這是一張銀行、信用卡、電子支付或證券 App 的畫面截圖。" +
+            "使用者的帳戶清單（id: 名稱｜類型｜卡號或帳號末四碼）：\n$list\n" +
+            "判斷畫面上出現的是清單裡哪些帳戶（看銀行或 App 名稱、Logo 與配色、帳號末幾碼、帳戶名稱），一張圖可能有好幾個帳戶。" +
+            "每個帳戶讀出目前餘額（優先：可用餘額、帳戶餘額；信用卡填目前欠款並用負數）。交易明細的金額、額度、日期不是餘額。" +
+            "對不到清單的帳戶 account_id 填 null。只回 JSON：{\"items\": [{\"account_id\": id或null, \"label\": 畫面上的帳戶名稱, \"balance\": 數字, \"confidence\": 0到1}]}"
+        val r = visionJson(context, uri, system, "辨認帳戶並讀出餘額", 900) ?: return null
+        val ids = accounts.map { it.first }.toSet()
+        return (r["items"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val v = o.str("balance")?.replace(",", "")?.toDoubleOrNull() ?: return@mapNotNull null
+            val minor = Math.round(v * 100)
+            if (ocrAmounts.isNotEmpty() && minor !in ocrAmounts && -minor !in ocrAmounts) return@mapNotNull null
+            ShotBalance(o.str("account_id")?.toDoubleOrNull()?.toLong()?.takeIf { it in ids }, o.str("label")?.take(30).orEmpty(), minor,
+                o.str("confidence")?.toDoubleOrNull() ?: 0.5)
+        }
+    }
+
     /** 圖片縮到長邊 1280、JPEG 壓縮後轉成 data URL（Groq 限制 4MB）。 */
     private fun imageDataUrl(context: android.content.Context, uri: android.net.Uri): String? {
         val bmp = context.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) } ?: return null
@@ -715,7 +776,7 @@ object GroqAi {
     /** 投資助理對話：依資料集與使用者狀況回答，需要時附股票卡片與新聞編號。 */
     suspend fun advisorChat(context: String, history: List<Pair<Boolean, String>>, question: String): com.enwei.moneymanager.data.ChatMsg? {
         if (!enabled) return null
-        val system = ADVISOR_ROLE + "以下是資料與使用者狀況，請回答他的問題，口吻簡潔直接，300 字內。提到具體股票時放進 cards；引用新聞時放新聞編號。" +
+        val system = ADVISOR_ROLE + "以下是資料與使用者狀況，請回答他的問題，口吻簡潔直接，300 字內。提到具體股票時放進 cards；引用新聞時把編號放進 news，回答文字裡不要寫 [編號]。" +
             "只回 JSON：{\"reply\": 回答, \"cards\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\"或空, \"business\": 公司做什麼, \"strength\": 強勢/中性/弱勢, \"reason\": 40 字內}], \"news\": [編號]}\n\n" +
             context.take(if (bigContext(AiTask.CHAT)) 80_000 else 2500)
         val convo = history.takeLast(6).joinToString("\n") { (u, t) -> (if (u) "使用者：" else "助理：") + t.take(300) }

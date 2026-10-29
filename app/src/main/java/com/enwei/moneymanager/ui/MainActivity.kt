@@ -277,7 +277,7 @@ private fun AppScaffold(nav: NavHostController) {
                 )
             }
             composable(
-                "txn/{id}?type={type}&bookmark={bookmark}&date={date}&account={account}&to={to}&amount={amount}",
+                "txn/{id}?type={type}&bookmark={bookmark}&date={date}&account={account}&to={to}&amount={amount}&cash={cash}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.LongType },
                     navArgument("type") { type = NavType.StringType; nullable = true; defaultValue = null },
@@ -286,11 +286,12 @@ private fun AppScaffold(nav: NavHostController) {
                     navArgument("account") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("to") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("amount") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("cash") { type = NavType.BoolType; defaultValue = false },
                 ),
             ) { e ->
                 val a = e.arguments!!
                 TxnEditScreen(nav, a.getLong("id"), a.getString("type"), a.getLong("bookmark"), a.getLong("date").takeIf { it != Long.MIN_VALUE }, a.getLong("account").takeIf { it > 0 },
-                    a.getLong("to").takeIf { it > 0 }, a.getLong("amount").takeIf { it > 0 })
+                    a.getLong("to").takeIf { it > 0 }, a.getLong("amount").takeIf { it > 0 }, a.getBoolean("cash"))
             }
             composable(
                 "account/{id}?type={type}",
@@ -342,6 +343,7 @@ private fun AppScaffold(nav: NavHostController) {
             composable("review") { ReviewScreen(nav) }
             composable("advisor") { AccountsTab(nav, showBack = true, initialTab = 2) }
             composable("stock/{symbol}") { e -> StockDetailScreen(nav, e.arguments?.getString("symbol").orEmpty()) }
+            composable("reconcile-batch") { com.enwei.moneymanager.ui.screens.BatchReconcileScreen(nav) }
         }
     }
 }

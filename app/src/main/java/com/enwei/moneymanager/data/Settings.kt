@@ -71,14 +71,51 @@ data class InvestPlanSettings(
     val longTrailPct: Double = 15.0,
     val takeProfitPct: Double = 15.0,
     /** 自己的交易紀律（交易前檢查） */
-    val rules: List<String> = listOf(
-        "獲利時分批賣（先賣 1/3），用移動停損保護剩下的，不要一次全賣而賣飛",
-        "短線一定設停損，跌破就走，不攤平、不凹單",
-        "長線部位不看短期波動，照計畫持有",
-        "賣出後不急著買別檔：先看大盤、確認資金分配，再依股性挑標的",
-        "短線看線型與新聞，但下單前三思，不追高、不盲目買",
-        "只用計畫內的資金，生活費不動",
-    ),
+    val rules: List<String> = DEFAULT_RULES,
+    /** 保本＋移動停利紀律 */
+    val guardOn: Boolean = true,
+    /** 移動停利：從最高價回落幾 % 為停利價 */
+    val guardTrailPct: Double = 3.0,
+    /** 60 分 K 兩條均線都跌破時留下的基本股數 */
+    val baseShares: Double = 1.0,
+    /** 每檔的保本金額、移動停利最高價、手動停利價與減碼價（key 為代號） */
+    val guards: Map<String, GuardState> = emptyMap(),
+) {
+    companion object {
+        /** 舊版預設紀律（使用者沒改過時換成新版） */
+        val OLD_RULES = listOf(
+            "獲利時分批賣（先賣 1/3），用移動停損保護剩下的，不要一次全賣而賣飛",
+            "短線一定設停損，跌破就走，不攤平、不凹單",
+            "長線部位不看短期波動，照計畫持有",
+            "賣出後不急著買別檔：先看大盤、確認資金分配，再依股性挑標的",
+            "短線看線型與新聞，但下單前三思，不追高、不盲目買",
+            "只用計畫內的資金，生活費不動",
+        )
+        val DEFAULT_RULES = listOf(
+            "原則：風險低、獲利低，但保有一定獲利；大漲時少賺一些，不如預期時提前把獲利落袋，不抱上抱下",
+            "成本永遠留在場內：集保裡始終保留市值約等於原始成本的股數，只賣多賺出來的部分",
+            "市值超過成本時，把多出的金額換算成股數，這些才是可以停利的股數",
+            "不見價就賣：先設停利價，跌破才賣出多賺的股數；股價續漲時停利價跟著往上移（移動停利）",
+            "每多賺約一股的金額，就依同樣方式再處理一股；股數越來越少，但留在場內的市值始終約等於成本",
+            "想減碼時不要馬上賣：先設一個比現價低的減碼價，跌破時再賣，通常賣一半",
+            "下跌看 60 分 K 的 20MA 與 50MA：跌破一條約賣一半；兩條都跌破減到只剩基本股（約 1～2 股）",
+            "日 K 的 5、10、20、72、100、200 日均線輔助判斷整體趨勢與買賣時機",
+            "賣出後不急著買別檔；只用計畫內的資金，生活費不動",
+        )
+    }
+}
+
+/** 一檔持股的保本＋移動停利狀態。 */
+@Serializable
+data class GuardState(
+    /** 保本金額（原始成本）；null 表示自動用這一輪買進的總成本 */
+    val principal: Double? = null,
+    /** 出現多賺股數之後的最高價 */
+    val peak: Double? = null,
+    /** 手動設的停利價 */
+    val takeProfit: Double? = null,
+    /** 想減碼時設的觸發價 */
+    val reduceAt: Double? = null,
 )
 
 /** AI 投資分析（最近一次）。 */
@@ -426,7 +463,8 @@ class SettingsStore(context: Context) {
         updateNotified = prefs.getInt("updateNotified", 0),
         updateSkipped = prefs.getInt("updateSkipped", 0),
         txnNecessity = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("txnNecessity", "{}")!!) }.getOrDefault(emptyMap()),
-        investPlan = runCatching { json.decodeFromString(InvestPlanSettings.serializer(), prefs.getString("investPlan", "")!!) }.getOrDefault(InvestPlanSettings()),
+        investPlan = runCatching { json.decodeFromString(InvestPlanSettings.serializer(), prefs.getString("investPlan", "")!!) }.getOrDefault(InvestPlanSettings())
+            .let { if (it.rules == InvestPlanSettings.OLD_RULES) it.copy(rules = InvestPlanSettings.DEFAULT_RULES) else it },
         stockStyle = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("stockStyle", "{}")!!) }.getOrDefault(emptyMap()),
         advisorReport = runCatching { json.decodeFromString(AdvisorReport.serializer(), prefs.getString("advisorReport", "")!!) }.getOrNull(),
         reviews = runCatching { json.decodeFromString(reviewSerializer, prefs.getString("reviews", "{}")!!) }.getOrDefault(emptyMap()),

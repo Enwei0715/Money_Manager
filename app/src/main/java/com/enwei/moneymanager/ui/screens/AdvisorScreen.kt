@@ -173,7 +173,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
     Section("大盤") {
         StageChip(r.stage.ifBlank { "趨勢" }, r.trend)
         if (r.themes.isNotEmpty()) Text(r.themes.joinToString("　") { "#$it" }, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-        if (r.summary.isNotBlank()) Text(r.summary, fontSize = 14.sp)
+        if (r.summary.isNotBlank()) Text(com.enwei.moneymanager.data.stripCites(r.summary), fontSize = 14.sp)
     }
     if (r.picks.isNotEmpty()) {
         Text("今天可以考慮", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -198,7 +198,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
             }
         }
     }
-    if (r.allocation.isNotBlank()) Section("資金分配") { Text(r.allocation, fontSize = 14.sp) }
+    if (r.allocation.isNotBlank()) Section("資金分配") { Text(com.enwei.moneymanager.data.stripCites(r.allocation), fontSize = 14.sp) }
     if (r.checklist.isNotEmpty() || r.warnings.isNotEmpty()) Section("下單前") {
         r.checklist.forEach { Text("☐ $it", fontSize = 13.sp) }
         r.warnings.forEach { Text("! $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
@@ -286,7 +286,7 @@ fun PickCard(p: StockPick, onClick: () -> Unit) {
             p.price?.let { Text("現價 ${"%.2f".format(it)}", fontSize = 13.sp) }
                 ?: Text("代號未確認，請自行查證", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
             if (p.business.isNotBlank()) Text(p.business, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (p.reason.isNotBlank()) Text(p.reason, fontSize = 14.sp)
+            if (p.reason.isNotBlank()) Text(com.enwei.moneymanager.data.stripCites(p.reason), fontSize = 14.sp)
             if (p.entry.isNotBlank()) Text("進場：${p.entry}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (p.stop.isNotBlank()) Text("停損：${p.stop}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             p.amount?.let { Text("建議投入約 ${Money.withSymbol(it * 100, "TWD")}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) }
@@ -402,7 +402,7 @@ private fun Bubble(m: ChatMsg, newsById: Map<String, com.enwei.moneymanager.data
         Surface(
             color = if (m.fromUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(12.dp), modifier = Modifier.widthIn(max = 320.dp),
-        ) { Text(m.text, fontSize = 14.sp, modifier = Modifier.padding(10.dp)) }
+        ) { Text(com.enwei.moneymanager.data.stripCites(m.text), fontSize = 14.sp, modifier = Modifier.padding(10.dp)) }
         m.cards.forEach { c -> Box(Modifier.padding(top = 6.dp)) { PickCard(c) { nav.navigate("stock/${c.symbol}") } } }
         val ns = m.newsIds.mapNotNull { newsById[it] }
         if (ns.isNotEmpty()) Column(Modifier.padding(top = 4.dp)) { ns.forEach { NewsLine(it) } }
@@ -625,7 +625,8 @@ private fun PlanTab(nav: NavController) {
     var snap by remember { mutableStateOf<AdvisorSnapshot?>(null) }
     var editPlan by remember { mutableStateOf(false) }
     var editRules by remember { mutableStateOf(false) }
-    LaunchedEffect(holdings, settings.investPlan, settings.stockStyle) { snap = runCatching { repo.advisorSnapshot(fetch = true) }.getOrNull() }
+    var editGuard by remember { mutableStateOf<com.enwei.moneymanager.data.HoldingPlan?>(null) }
+    LaunchedEffect(holdings, settings.investPlan.copy(guards = emptyMap()), settings.investPlan.guards.mapValues { it.value.copy(peak = null) }, settings.stockStyle) { snap = runCatching { repo.advisorSnapshot(fetch = true) }.getOrNull() }
     fun m(v: Long) = Money.withSymbol(v, "TWD")
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         val s = snap
@@ -647,7 +648,12 @@ private fun PlanTab(nav: NavController) {
             if (a.reserveShort > 0) Text("⚠ 現金比生活費少 ${m(a.reserveShort)}，先不要加碼", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             if (a.shortOver > 0) Text("⚠ 短線超出計畫 ${m(a.shortOver)}，新的短線單先暫停", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
         }
-        if (s != null && s.holdings.isNotEmpty()) Section("持股紀律（動態停損、分批停利）") {
+        if (s != null && s.holdings.isNotEmpty() && settings.investPlan.guardOn) Section("保本＋移動停利") {
+            Text("成本留在場內，只賣多賺的股數；跌破停利價才賣、續漲停利價跟著上移。下跌看 60 分 K 20MA／50MA 減碼。點一檔可以改保本金額、停利價與減碼價。",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            s.holdings.forEach { h -> GuardRow(h, nav) { editGuard = h } }
+        }
+        if (s != null && s.holdings.isNotEmpty() && !settings.investPlan.guardOn) Section("持股紀律（動態停損、分批停利）") {
             s.holdings.forEach { h ->
                 Column(Modifier.clickable { nav.navigate("stock/${h.symbol}") }.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -697,6 +703,95 @@ private fun PlanTab(nav: NavController) {
     }
     if (editPlan) PlanDialog(settings.investPlan) { editPlan = false }
     if (editRules) RulesDialog(settings.investPlan.rules) { editRules = false }
+    editGuard?.let { h -> GuardDialog(h, settings.investPlan.guards[h.symbol] ?: com.enwei.moneymanager.data.GuardState()) { editGuard = null } }
+}
+
+/** 一檔持股的保本＋移動停利：保本與市值、多賺股數、停利價、60 分 K 均線、日均線趨勢與建議動作。 */
+@Composable
+private fun GuardRow(h: com.enwei.moneymanager.data.HoldingPlan, nav: NavController, onEdit: () -> Unit) {
+    val gi = h.guardInput
+    val g = h.guard
+    fun f(v: Double?) = v?.let { "%.2f".format(it) } ?: "?"
+    Column(Modifier.fillMaxWidth().clickable(onClick = onEdit).padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${h.symbol} ${h.name.orEmpty()}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            TextButton(onClick = { nav.navigate("stock/${h.symbol}") }) { Text("K 線", fontSize = 12.sp) }
+        }
+        if (gi == null || g == null) { Text("讀不到現價", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
+        val value = gi.shares * gi.price
+        Text(
+            "${"%.0f".format(gi.shares)} 股 · 現價 ${f(gi.price)} · 市值 ${"%,.0f".format(value)} · 保本 ${"%,.0f".format(gi.principal)}" + if (h.autoPrincipal) "（自動）" else "",
+            fontSize = 13.sp,
+        )
+        Text(
+            if (g.excessShares >= 1) "多賺 ${g.excessShares.toLong()} 股（${"%,.0f".format(g.excessValue)} 元）· 停利價 ${f(g.takeProfit)}" + (g.peak?.let { " · 最高 ${f(it)}" } ?: "")
+            else if (g.excessValue > 0) "多賺 ${"%,.0f".format(g.excessValue)} 元，還不到一股" else "比成本少 ${"%,.0f".format(-g.excessValue)} 元",
+            fontSize = 13.sp, color = if (g.excessValue >= 0) StockUp else StockDown,
+        )
+        Text(
+            "60 分 K：20MA ${f(gi.hourMa20)}" + (gi.hourMa20?.let { if (gi.price < it) "（跌破）" else "（之上）" } ?: "") +
+                "、50MA ${f(gi.hourMa50)}" + (gi.hourMa50?.let { if (gi.price < it) "（跌破）" else "（之上）" } ?: "") +
+                (gi.reduceAt?.let { " · 減碼價 ${f(it)}" } ?: ""),
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        h.trend?.let { Text("日 K：${it.summary}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                color = if (g.triggered) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(4.dp),
+            ) { Text(g.action.label + if (g.triggered) "：賣 ${g.sellShares.toLong()} 股" else "", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+        }
+        Text(g.note, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    androidx.compose.material3.HorizontalDivider()
+}
+
+/** 改一檔的保本金額、手動停利價、減碼價；也可以重設移動停利的最高價。 */
+@Composable
+private fun GuardDialog(h: com.enwei.moneymanager.data.HoldingPlan, gs: com.enwei.moneymanager.data.GuardState, onDismiss: () -> Unit) {
+    val gi = h.guardInput
+    fun t(v: Double?) = v?.let { if (it % 1.0 == 0.0) "%.0f".format(it) else "%.2f".format(it) }.orEmpty()
+    var principal by remember { mutableStateOf(t(gs.principal)) }
+    var tp by remember { mutableStateOf(t(gs.takeProfit)) }
+    var reduce by remember { mutableStateOf(t(gs.reduceAt)) }
+    var resetPeak by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${h.symbol} ${h.name.orEmpty()}") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                NumberField(principal, { principal = it }, "保本金額（空白＝自動：這一輪買進總成本）", suffix = "元")
+                if (gi != null) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(onClick = { principal = "%.0f".format(gi.shares * gi.price) }) { Text("改成目前市值", fontSize = 12.sp) }
+                    OutlinedButton(onClick = { principal = "" }) { Text("自動", fontSize = 12.sp) }
+                }
+                Text("減碼賣一半後，保本金額也要跟著調整（例如改成目前市值），之後才會從新的成本開始算多賺的股數。",
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                NumberField(tp, { tp = it }, "手動停利價（和自動移動停利取較高者）", suffix = "元")
+                NumberField(reduce, { reduce = it }, "減碼價（跌破賣一半，比現價低）", suffix = "元")
+                if (gi != null) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(3, 5, 8).forEach { pct -> OutlinedButton(onClick = { reduce = "%.2f".format(gi.price * (1 - pct / 100.0)) }) { Text("−$pct%", fontSize = 12.sp) } }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("重設移動停利的最高價", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Switch(resetPeak, { resetPeak = it })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val ng = gs.copy(
+                    principal = principal.replace(",", "").toDoubleOrNull()?.takeIf { it > 0 },
+                    takeProfit = tp.toDoubleOrNull()?.takeIf { it > 0 },
+                    reduceAt = reduce.toDoubleOrNull()?.takeIf { it > 0 },
+                    peak = if (resetPeak) null else gs.peak,
+                )
+                repo.settings.update { it.copy(investPlan = it.investPlan.copy(guards = it.investPlan.guards + (h.symbol to ng))) }
+                onDismiss()
+            }) { Text("儲存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
 @Composable
@@ -747,6 +842,9 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
     var trail by remember { mutableStateOf(p.shortTrailPct.toString()) }
     var longTrail by remember { mutableStateOf(p.longTrailPct.toString()) }
     var tp by remember { mutableStateOf(p.takeProfitPct.toString()) }
+    var guardOn by remember { mutableStateOf(p.guardOn) }
+    var gTrail by remember { mutableStateOf(p.guardTrailPct.toString()) }
+    var base by remember { mutableStateOf(p.baseShares.toLong().toString()) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("資金與紀律參數") },
@@ -754,10 +852,19 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumberField(reserve, { reserve = it }, "保留生活費", suffix = "元")
                 NumberField(longPct, { longPct = it }, "長線占可投資資金", suffix = "%")
-                NumberField(stop, { stop = it }, "短線停損", suffix = "%")
-                NumberField(trail, { trail = it }, "短線移動停損（從高點回落）", suffix = "%")
-                NumberField(longTrail, { longTrail = it }, "長線移動停損（從高點回落）", suffix = "%")
-                NumberField(tp, { tp = it }, "分批停利門檻（長線為兩倍）", suffix = "%")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("保本＋移動停利紀律", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Switch(guardOn, { guardOn = it })
+                }
+                if (guardOn) {
+                    NumberField(gTrail, { gTrail = it }, "移動停利：從最高價回落", suffix = "%")
+                    NumberField(base, { base = it }, "兩條 60 分 K 均線都跌破時留下的基本股", suffix = "股")
+                } else {
+                    NumberField(stop, { stop = it }, "短線停損", suffix = "%")
+                    NumberField(trail, { trail = it }, "短線移動停損（從高點回落）", suffix = "%")
+                    NumberField(longTrail, { longTrail = it }, "長線移動停損（從高點回落）", suffix = "%")
+                    NumberField(tp, { tp = it }, "分批停利門檻（長線為兩倍）", suffix = "%")
+                }
             }
         },
         confirmButton = {
@@ -771,6 +878,9 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
                             shortTrailPct = trail.toDoubleOrNull()?.coerceIn(1.0, 50.0) ?: p.shortTrailPct,
                             longTrailPct = longTrail.toDoubleOrNull()?.coerceIn(1.0, 60.0) ?: p.longTrailPct,
                             takeProfitPct = tp.toDoubleOrNull()?.coerceIn(1.0, 200.0) ?: p.takeProfitPct,
+                            guardOn = guardOn,
+                            guardTrailPct = gTrail.toDoubleOrNull()?.coerceIn(0.5, 30.0) ?: p.guardTrailPct,
+                            baseShares = base.toDoubleOrNull()?.coerceIn(0.0, 1_000_000.0) ?: p.baseShares,
                         ),
                     )
                 }

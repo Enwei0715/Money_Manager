@@ -12,6 +12,7 @@ import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.core.Market
 import com.enwei.moneymanager.core.TaiwanHolidays
 import com.enwei.moneymanager.data.advisorSnapshot
+import com.enwei.moneymanager.data.saveGuardPeaks
 import com.enwei.moneymanager.data.quoteKey
 import com.enwei.moneymanager.net.QuoteService
 import com.enwei.moneymanager.ui.tr
@@ -69,7 +70,17 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 if (a.target != null && p >= a.target) fire(sym, "target", "$sym 達到目標價", "現價 ${"%.2f".format(p)}，目標 ${"%.2f".format(a.target)}；依紀律可先分批停利，不要一次全賣")
                 if (a.stop != null && p <= a.stop) fire(sym, "stop", "$sym 跌破停損價", "現價 ${"%.2f".format(p)}，停損 ${"%.2f".format(a.stop)}；短線依紀律出場、不攤平")
             }
-            if (s.stockAlertsOn) snap.holdings.forEach { h ->
+            // 保本＋移動停利：換上即時價重算，跌破停利價／減碼價／60 分 K 均線時通知
+            val peaks = HashMap<String, Double?>()
+            if (s.stockAlertsOn && s.investPlan.guardOn) snap.holdings.forEach { h ->
+                val gi = h.guardInput ?: return@forEach
+                val p = price[quoteKey(Market.TW, h.symbol)] ?: return@forEach
+                val g = com.enwei.moneymanager.core.ProfitGuard.advise(gi.copy(price = p), s.investPlan.let { com.enwei.moneymanager.core.GuardRule(it.guardTrailPct, it.baseShares) })
+                peaks[h.symbol] = g.peak
+                if (g.triggered) fire(h.symbol, "guard-${g.action.name}", "${h.symbol} ${h.name.orEmpty()}：${g.action.label}", "${g.note}，建議賣 ${g.sellShares.toLong()} 股")
+            }
+            if (peaks.isNotEmpty()) repo.saveGuardPeaks(peaks)
+            if (s.stockAlertsOn && !s.investPlan.guardOn) snap.holdings.forEach { h ->
                 val p = price[quoteKey(Market.TW, h.symbol)] ?: h.price ?: return@forEach
                 val ad = com.enwei.moneymanager.core.Discipline.advise(h.style, h.avgCost, p, maxOf(h.peak ?: p, p), s.investPlan.let {
                     com.enwei.moneymanager.core.DisciplineRule(it.shortStopPct, it.shortTrailPct, it.longTrailPct, it.takeProfitPct)

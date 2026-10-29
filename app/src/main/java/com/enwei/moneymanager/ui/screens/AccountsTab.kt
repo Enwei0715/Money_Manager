@@ -159,6 +159,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     IconButton(onClick = { nav.navigate("stockfees") }) { Icon(Icons.Outlined.Settings, "手續費與月退") }
                     IconButton(onClick = { nav.navigate("trade/0") }) { Icon(Icons.Filled.Add, "新增股票交易") }
                   } else {
+                    IconButton(onClick = { nav.navigate("reconcile-batch") }) { Icon(Icons.Outlined.FactCheck, "截圖對帳") }
                     IconButton(onClick = { nav.navigate("totalstats") }) { Icon(Icons.Outlined.BarChart, "總資產統計") }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "選單") }

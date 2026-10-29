@@ -993,9 +993,61 @@ fun CashCounterScreen(nav: NavController, accountId: Long) {
         repo.settings.update { it.copy(cashCounts = it.cashCounts + (accountId to counts)) }
     }
 
+    // 拍照點鈔：AI 數出照片裡各面額的數量，確認後套用
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var photoMsg by remember { mutableStateOf<String?>(null) }
+    var photoCounts by remember { mutableStateOf<Map<Int, Int>?>(null) }
+    var counting by remember { mutableStateOf(false) }
+    fun countPhoto(uri: android.net.Uri) {
+        counting = true; photoMsg = null; photoCounts = null
+        scope.launch {
+            val r = com.enwei.moneymanager.net.GroqAi.countCash(ctx, uri)
+            if (r == null || r.first.isEmpty()) photoMsg = "數不出來：${com.enwei.moneymanager.net.GroqAi.lastError ?: "請把鈔票硬幣攤開、光線充足再拍一次"}"
+            else { photoCounts = r.first; photoMsg = r.second.takeIf { it.isNotBlank() } }
+            counting = false
+        }
+    }
+    val photoUri = remember {
+        val f = java.io.File(ctx.cacheDir, "photos").apply { mkdirs() }.let { java.io.File(it, "cash.jpg") }
+        androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
+    }
+    val takePhoto = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { ok -> if (ok) countPhoto(photoUri) }
+    val pickPhoto = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { u -> if (u != null) countPhoto(u) }
+
     Scaffold(containerColor = MaterialTheme.colorScheme.surface, topBar = { BackTopBar("點鈔：${b?.account?.name.orEmpty()}", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad)) {
             item {
+                // 用紙鈔硬幣記一筆：付出／收到的鈔票硬幣與找零會自動增減這裡的張數
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { nav.navigate("txn/0?type=EXPENSE&account=$accountId&cash=true") }, modifier = Modifier.weight(1f)) { Text("現金付款") }
+                    OutlinedButton(onClick = { nav.navigate("txn/0?type=INCOME&account=$accountId&cash=true") }, modifier = Modifier.weight(1f)) { Text("收到現金") }
+                }
+                if (com.enwei.moneymanager.net.GroqAi.enabled) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled = !counting, onClick = { takePhoto.launch(photoUri) }, modifier = Modifier.weight(1f)) { Text(if (counting) "點鈔中…" else "拍照點鈔") }
+                    OutlinedButton(enabled = !counting, onClick = {
+                        pickPhoto.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }, modifier = Modifier.weight(1f)) { Text("選照片") }
+                }
+                photoCounts?.let { pc ->
+                    Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("AI 數到：" + denoms.filter { (pc[it] ?: 0) > 0 }.joinToString("、") { "$it 元 ×${pc[it]}" } +
+                            "，共 ${Money.withSymbol(denoms.sumOf { it.toLong() * (pc[it] ?: 0) } * 100)}", color = MaterialTheme.colorScheme.primary)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                counts = pc
+                                repo.settings.update { it.copy(cashCounts = it.cashCounts + (accountId to pc)) }
+                                photoCounts = null; photoMsg = "已套用，請再核對一次數量"
+                            }) { Text("套用") }
+                            OutlinedButton(onClick = {
+                                val merged = denoms.associateWith { (counts[it] ?: 0) + (pc[it] ?: 0) }.filterValues { it > 0 }
+                                counts = merged
+                                repo.settings.update { it.copy(cashCounts = it.cashCounts + (accountId to merged)) }
+                                photoCounts = null; photoMsg = "已加到目前的數量"
+                            }) { Text("加到目前數量") }
+                        }
+                    }
+                }
+                photoMsg?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp)) }
                 Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("點鈔合計", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1058,7 +1110,7 @@ fun CashCounterScreen(nav: NavController, accountId: Long) {
                 }
                 done?.let { Text(it, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 20.dp)) }
                 Text(
-                    "張數會記住，下次可直接增減；「以點鈔金額對帳」會把差額記成一筆支出。",
+                    "張數會記住；用「現金付款」「收到現金」或記帳時選「紙鈔硬幣」，付出、收到與找零會自動增減這裡的張數。「以點鈔金額對帳」會把差額記成一筆調整。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(20.dp),
                 )

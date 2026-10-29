@@ -120,7 +120,7 @@ private fun minorToExpr(minor: Long) = Money.fromMinor(minor).stripTrailingZeros
 /** 記一筆：上方表單、下方依欄位切換計算機鍵盤／分類格／帳戶格。 */
 @Composable
 fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId: Long = 0, initialEpochDay: Long? = null, initialAccountId: Long? = null,
-    initialToAccountId: Long? = null, initialAmount: Long? = null,
+    initialToAccountId: Long? = null, initialAmount: Long? = null, openCash: Boolean = false,
 ) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
@@ -178,6 +178,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
     val toAcc = lk.account(toAccountId)
     val crossCurrency = type == TxnType.TRANSFER && toAcc != null && toAcc.currency != currency
     val canSave = amountMinor != null && accountId != null && (type != TxnType.TRANSFER || toAccountId != null)
+    // 現金帳戶可用紙鈔硬幣記：存檔時依付出／找回的鈔票硬幣增減皮夾
+    val isCash = type != TxnType.TRANSFER && lk.account(accountId)?.type == com.enwei.moneymanager.data.AccountType.CASH
+    var cashOpen by remember { mutableStateOf(openCash) }
+    var cashPlan by remember { mutableStateOf<Pair<Map<Int, Int>, Map<Int, Int>>?>(null) }
 
     fun build(): TxnEntity? {
         val minor = amountMinor ?: return null
@@ -195,8 +199,14 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
 
     fun save(again: Boolean) {
         val t = build() ?: return
+        val plan = cashPlan?.takeIf { isCash }
+        val cashAcc = accountId
         scope.launch {
             repo.saveTxn(t)
+            if (plan != null && cashAcc != null) {
+                repo.settings.update { st -> st.copy(cashCounts = st.cashCounts + (cashAcc to cashAfter(st.cashCounts[cashAcc].orEmpty(), plan.first, plan.second))) }
+                cashPlan = null
+            }
             // 轉帳手續費另記一筆支出
             if (type == TxnType.TRANSFER && feeMinor != null) repo.saveTxn(
                 TxnEntity(
@@ -320,6 +330,15 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                     FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
                         PlaceholderText(lk.account(accountId)?.name, "")
                     }
+                    if (isCash) FormRow("紙鈔硬幣", color, false, onClick = { focusManager.clearFocus(); panel = Panel.NONE; cashOpen = true }) {
+                        val pl = cashPlan
+                        Text(
+                            if (pl == null) "點這裡用鈔票硬幣記，自動算找零"
+                            else (if (type == TxnType.INCOME) "收到 " else "付出 ") + cashText(if (type == TxnType.INCOME) pl.second else pl.first) +
+                                (if ((if (type == TxnType.INCOME) pl.first else pl.second).isNotEmpty()) "，${if (type == TxnType.INCOME) "找出" else "找回"} " + cashText(if (type == TxnType.INCOME) pl.first else pl.second) else ""),
+                            fontSize = 14.sp, color = if (pl == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
                 FormRow("內容", color, merchantFocused, onClick = {}) {
                     UnderlineField(merchant, { merchant = it }, "",
@@ -426,6 +445,15 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
         }
     }
 
+    if (cashOpen && isCash) {
+        val acc = accountId
+        CashPayDialog(
+            have = acc?.let { settings.cashCounts[it] }.orEmpty(),
+            priceYuan = amountMinor?.let { it / 100 },
+            income = type == TxnType.INCOME,
+            onDone = { amt, out, inn -> expr = amt.toString(); cashPlan = out to inn; cashOpen = false },
+        ) { cashOpen = false }
+    }
     if (showDate) {
         val state = rememberDatePickerState(initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
         DatePickerDialog(
@@ -666,3 +694,7 @@ private fun Keypad(expr: String, calcMode: Boolean, onExpr: (String) -> Unit, on
         }
     }
 }
+
+/** 鈔票硬幣的簡短文字，例如「1000×1、100×2」。 */
+private fun cashText(m: Map<Int, Int>): String =
+    com.enwei.moneymanager.core.Cash.DENOMS.filter { (m[it] ?: 0) > 0 }.joinToString("、") { "$it×${m[it]}" }.ifBlank { "無" }

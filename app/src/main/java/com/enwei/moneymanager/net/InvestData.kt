@@ -22,12 +22,12 @@ data class DailyBars(
 data class Headline(val title: String, val source: String, val epochSec: Long, val url: String = "")
 
 object InvestData {
-    /** Yahoo Finance 日線；台股依序試 .TW、.TWO。 */
-    suspend fun bars(symbol: String, range: String = "1y", tw: Boolean = true): DailyBars? {
+    /** Yahoo Finance K 線（預設日線，[interval] 可用 "60m"）；台股依序試 .TW、.TWO。 */
+    suspend fun bars(symbol: String, range: String = "1y", tw: Boolean = true, interval: String = "1d"): DailyBars? {
         val candidates = if (symbol.startsWith("^") || !tw) listOf(symbol) else listOf("$symbol.TW", "$symbol.TWO")
         for (ys in candidates) {
             val root = runCatching {
-                Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(ys, "UTF-8")}?range=$range&interval=1d")
+                Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(ys, "UTF-8")}?range=$range&interval=$interval")
             }.getOrNull() ?: continue
             val result = ((root as? JsonObject)?.get("chart") as? JsonObject)?.get("result") as? JsonArray ?: continue
             val r = result.firstOrNull() as? JsonObject ?: continue
