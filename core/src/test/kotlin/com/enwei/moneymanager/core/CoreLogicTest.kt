@@ -576,9 +576,11 @@ class IndicatorTest {
 }
 
 class TyphoonExtraTest {
-    @Test fun knownTyphoonDayIsHolidayAndCanBeCancelled() {
-        val d = java.time.LocalDate.of(2026, 10, 23)
+    @Test fun customTyphoonDayIsHolidayAndCanBeCancelled() {
+        val d = java.time.LocalDate.of(2026, 1, 23)
         TaiwanHolidays.setExtra(emptyMap())
+        assertEquals(true, TaiwanHolidays.isBusinessDay(d))
+        TaiwanHolidays.setExtra(mapOf(d to "颱風假"))
         assertEquals(false, TaiwanHolidays.isBusinessDay(d))
         assertEquals("颱風假", TaiwanHolidays.holidayName(d))
         TaiwanHolidays.setExtra(mapOf(d to TaiwanHolidays.WORKING))

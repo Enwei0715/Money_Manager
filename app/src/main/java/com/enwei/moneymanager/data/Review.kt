@@ -255,7 +255,7 @@ fun ReviewData.aiInput(base: String, necessity: Map<Long, String>, full: Boolean
     fun m(v: Long) = Money.format(v, base)
     val zone = ZoneId.systemDefault()
     // 讀得下大量資料時（Gemini）送整期每一筆，否則只送重點交易
-    val list = if (full) expenses.takeLast(1500) else notable()
+    val list = if (full) expenses else notable()
     val text = buildString {
         append(summary(base))
         lastYearExpense?.let { appendLine("去年同期支出 ${m(it)}") }

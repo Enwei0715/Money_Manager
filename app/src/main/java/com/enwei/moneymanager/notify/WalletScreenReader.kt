@@ -31,8 +31,16 @@ class WalletScreenReader : AccessibilityService() {
         pendingJob?.cancel()
         pendingJob = MoneyApp.instance.appScope.launch {
             delay(1200)
-            val texts = runCatching { collectTexts(pkg) }.getOrNull() ?: return@launch
-            if (texts.isEmpty()) return@launch
+            val texts = try {
+                collectTexts(pkg)
+            } catch (e: Exception) {
+                record(ScanEntry(System.currentTimeMillis(), pkg, 0, emptyList(), null, "讀取錢包畫面失敗：${e.message ?: e.javaClass.simpleName}"))
+                return@launch
+            }
+            if (texts.isEmpty()) {
+                record(ScanEntry(System.currentTimeMillis(), pkg, 0, emptyList(), null, "沒有讀到錢包畫面文字；請確認目前在交易紀錄頁"))
+                return@launch
+            }
             var records = ScreenRecordParser.parse(texts)
             var byAi = false
             // 版面規則看不懂：同一個畫面只請 AI 整理一次（畫面沒變就不重送）
@@ -45,11 +53,19 @@ class WalletScreenReader : AccessibilityService() {
                 }
             }
             if (records.isEmpty()) {
-                record(ScanEntry(System.currentTimeMillis(), pkg, texts.size, emptyList(), null, "讀到 ${texts.size} 行文字，但沒有符合交易紀錄的格式（請打開「交易紀錄／明細」頁）"))
+                val issue = com.enwei.moneymanager.net.GroqAi.lastError
+                val problem = issue?.let { "AI 判讀未完成：$it" }
+                    ?: "讀到 ${texts.size} 行文字，但沒有符合交易紀錄的格式（請打開「交易紀錄／明細」頁）"
+                record(ScanEntry(System.currentTimeMillis(), pkg, texts.size, emptyList(), null, problem))
                 return@launch
             }
             val test = testMode.value
-            val r = runCatching { MoneyApp.repo.ingestScreenRecords(pkg, records, dryRun = test) }.getOrNull()
+            val r = try {
+                MoneyApp.repo.ingestScreenRecords(pkg, records, dryRun = test)
+            } catch (e: Exception) {
+                record(ScanEntry(System.currentTimeMillis(), pkg, texts.size, records, null, "處理錢包紀錄失敗：${e.message ?: e.javaClass.simpleName}", byAi))
+                return@launch
+            }
             record(ScanEntry(System.currentTimeMillis(), pkg, texts.size, records, r, null, byAi))
             if (!test && r != null && r.created > 0) notifyImported(r.created)
             if (!test && r != null && (r.created > 0 || r.merged > 0)) MoneyApp.repo.scheduleAutoTidy(MoneyApp.instance.appScope)

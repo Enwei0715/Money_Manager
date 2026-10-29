@@ -39,7 +39,6 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Repeat
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -86,7 +85,6 @@ import com.enwei.moneymanager.core.Calculator
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.core.Recurrence
 import com.enwei.moneymanager.data.AccountEntity
-import com.enwei.moneymanager.data.Bookmark
 import com.enwei.moneymanager.data.TxnEntity
 import com.enwei.moneymanager.data.TxnSource
 import com.enwei.moneymanager.data.TxnStatus
@@ -120,8 +118,8 @@ private fun minorToExpr(minor: Long) = Money.fromMinor(minor).stripTrailingZeros
 
 /** 記一筆：上方表單、下方依欄位切換計算機鍵盤／分類格／帳戶格。 */
 @Composable
-fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId: Long = 0, initialEpochDay: Long? = null, initialAccountId: Long? = null,
-    initialToAccountId: Long? = null, initialAmount: Long? = null, openCash: Boolean = false,
+fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpochDay: Long? = null, initialAccountId: Long? = null,
+    initialToAccountId: Long? = null, initialAmount: Long? = null,
 ) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
@@ -153,7 +151,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
     var merchantFocused by remember { mutableStateOf(false) }
     var calcMode by remember { mutableStateOf(false) }
 
-    LaunchedEffect(id, bookmarkId) {
+    LaunchedEffect(id) {
         if (original != null) return@LaunchedEffect
         if (id != 0L) repo.getTxn(id)?.let { t ->
             original = t
@@ -161,11 +159,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
             accountId = t.accountId; toAccountId = t.toAccountId; toExpr = t.toAmount?.let(::minorToExpr).orEmpty()
             categoryId = t.categoryId; merchant = t.merchant.orEmpty(); note = t.note.orEmpty()
             date = t.date.toLocalDate(); time = Instant.ofEpochMilli(t.date).atZone(ZoneId.systemDefault()).toLocalTime().withSecond(0).withNano(0)
-        } else if (bookmarkId != 0L) settings.bookmarks.find { it.id == bookmarkId }?.let { b ->
-            type = b.type; expr = if (b.amount > 0) minorToExpr(b.amount) else ""; currency = b.currency
-            accountId = b.accountId ?: accountId; toAccountId = b.toAccountId; categoryId = b.categoryId
-            merchant = b.merchant.orEmpty(); note = b.note.orEmpty()
-            panel = if (b.amount > 0) Panel.NONE else Panel.AMOUNT
         }
     }
     LaunchedEffect(accountId, lk.accounts) {
@@ -179,34 +172,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
     val toAcc = lk.account(toAccountId)
     val crossCurrency = type == TxnType.TRANSFER && toAcc != null && toAcc.currency != currency
     val canSave = amountMinor != null && accountId != null && (type != TxnType.TRANSFER || toAccountId != null)
-    // 現金帳戶可用紙鈔硬幣記：存檔時依付出／找回的鈔票硬幣增減皮夾
-    // （現金帳戶 id, 錢是不是進皮夾）：收入、轉入現金（例如 ATM 提款）是進，支出、從現金轉出是出
-    val cashSide: Pair<Long, Boolean>? = run {
-        fun cash(id: Long?) = id != null && lk.account(id)?.type == com.enwei.moneymanager.data.AccountType.CASH
-        when {
-            type == TxnType.TRANSFER && cash(toAccountId) -> toAccountId!! to true
-            type == TxnType.TRANSFER && cash(accountId) -> accountId!! to false
-            type != TxnType.TRANSFER && cash(accountId) -> accountId!! to (type == TxnType.INCOME)
-            else -> null
-        }
-    }
-    // 新的現金交易不用數字鍵盤：直接增減鈔票硬幣組出金額，再從推薦的付法（收法）選一種
-    val isCash = cashSide != null && id == 0L && settings.cashByDenom
-    var cashCompose by remember { mutableStateOf(emptyMap<Int, Int>()) }
-    var cashOpt by remember { mutableStateOf(0) }
-    val cashTotal = com.enwei.moneymanager.core.Cash.total(cashCompose)
-    val wallet = cashSide?.let { settings.cashCounts[it.first] }.orEmpty()
-    val cashOptions = remember(cashTotal, wallet, type, isCash) {
-        if (!isCash || type == TxnType.TRANSFER) emptyList()
-        else com.enwei.moneymanager.core.Cash.payOptions(cashTotal, if (type == TxnType.EXPENSE) wallet else emptyMap())
-    }
-    // （從皮夾拿出去的, 放進皮夾的）
-    val cashPlan: Pair<Map<Int, Int>, Map<Int, Int>>? = when {
-        !isCash || cashTotal <= 0 -> null
-        type == TxnType.TRANSFER -> if (cashSide!!.second) emptyMap<Int, Int>() to cashCompose else cashCompose to emptyMap()
-        else -> cashOptions.getOrNull(cashOpt)?.let { o -> if (type == TxnType.INCOME) o.back to o.give else o.give to o.back }
-    }
-    LaunchedEffect(isCash, panel) { if (isCash && panel == Panel.AMOUNT) panel = Panel.NONE }
     // 自動分類：依內容（商家）、過去紀錄、金額與帳戶建議分類；新交易還沒選分類時直接帶入
     var memoNew by remember { mutableStateOf(false) }
     var catSuggest by remember { mutableStateOf<com.enwei.moneymanager.core.CategorySuggester.Suggestion?>(null) }
@@ -235,16 +200,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
 
     fun save(again: Boolean) {
         val t = build() ?: return
-        val plan = cashPlan?.takeIf { isCash }
-        val cashAcc = cashSide?.first
-        // 記下這筆對皮夾的增減，刪除交易時可以還原
-        val tx = if (plan != null && cashAcc != null) t.copy(rawText = com.enwei.moneymanager.core.Cash.encode(com.enwei.moneymanager.core.Cash.Move(cashAcc, plan.first, plan.second))) else t
         scope.launch {
-            repo.saveTxn(tx)
-            if (plan != null && cashAcc != null) {
-                repo.settings.update { st -> st.copy(cashCounts = st.cashCounts + (cashAcc to cashAfter(st.cashCounts[cashAcc].orEmpty(), plan.first, plan.second))) }
-                cashCompose = emptyMap(); cashOpt = 0
-            }
+            repo.saveTxn(t)
             // 轉帳手續費另記一筆支出
             if (type == TxnType.TRANSFER && feeMinor != null) repo.saveTxn(
                 TxnEntity(
@@ -261,15 +218,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
         }
     }
 
-    fun addBookmark() {
-        val b = Bookmark(
-            id = System.currentTimeMillis(), type = type, amount = amountMinor ?: 0, currency = currency, accountId = accountId,
-            toAccountId = toAccountId, categoryId = categoryId, merchant = merchant.ifBlank { null }, note = note.ifBlank { null },
-        )
-        repo.settings.update { it.copy(bookmarks = it.bookmarks + b) }
-        scope.launch { snack.showSnackbar(com.enwei.moneymanager.ui.tr("已加入書籤")) }
-    }
-
     fun nextAfterAmount() {
         calcMode = false
         panel = when {
@@ -283,13 +231,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
-        topBar = {
-            BackTopBar(type.label, { nav.popBackStack() }) {
-                IconButton(onClick = { if (original != null || amountMinor != null) addBookmark() else nav.navigate("bookmarks") }) {
-                    Icon(Icons.Outlined.StarBorder, "書籤")
-                }
-            }
-        },
+        topBar = { BackTopBar(type.label, { nav.popBackStack() }) },
         snackbarHost = { SnackbarHost(snack) },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
@@ -329,15 +271,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                         if (settings.showTime) Text("   %02d:%02d".format(time.hour, time.minute), modifier = Modifier.clickable { showTime = true })
                     }
                 }
-                if (isCash) {
-                    CashAmountInput(cashCompose, wallet, color) { c ->
-                        cashCompose = c; cashOpt = 0
-                        val t = com.enwei.moneymanager.core.Cash.total(c)
-                        expr = if (t > 0) t.toString() else ""
-                    }
-                    CashOptions(cashOptions, cashOpt, type == TxnType.INCOME, wallet) { cashOpt = it }
-                    androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 16.dp, top = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                } else FormRow("金額", color, active = panel == Panel.AMOUNT, onClick = { focusManager.clearFocus(); panel = Panel.AMOUNT }, trailing = {
+                FormRow("金額", color, active = panel == Panel.AMOUNT, onClick = { focusManager.clearFocus(); panel = Panel.AMOUNT }, trailing = {
                     if (type == TxnType.TRANSFER) OutlinedButton(
                         onClick = { showFee = !showFee; if (showFee) panel = Panel.FEE },
                         shape = RoundedCornerShape(6.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
@@ -413,12 +347,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                 FormRow("說明", color, false, onClick = {}) {
                     UnderlineField(note, { note = it }, "", Modifier.onFocusChanged { if (it.isFocused) panel = Panel.NONE }, singleLine = false)
                 }
-                val cm = com.enwei.moneymanager.core.Cash.decode(original?.rawText)
-                if (cm != null) Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Text("拿出", fontSize = 12.sp, modifier = Modifier.width(40.dp)); CashIcons(cm.out, "無") }
-                    Row(verticalAlignment = Alignment.CenterVertically) { Text("放回", fontSize = 12.sp, modifier = Modifier.width(40.dp)); CashIcons(cm.inn, "無") }
-                }
-                original?.rawText?.takeIf { cm == null }?.let {
+                original?.rawText?.let {
                     Text("原始內容：$it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
@@ -454,9 +383,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                             }
                         }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp), contentPadding = smallPad) {
                             Text("複製", color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
-                        }
-                        OutlinedButton(onClick = { addBookmark() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp), contentPadding = smallPad) {
-                            Text(if (com.enwei.moneymanager.ui.I18n.english) "Bookmark" else "書籤", color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
                         }
                     }
                     Spacer(Modifier.height(16.dp))
@@ -624,8 +550,7 @@ private fun BottomPanel(
                 Keypad(expr, calcMode, onExpr, onToggleCalc, onDoneAmount)
             }
             Panel.CATEGORY -> {
-                // 上方：搜尋分類與自動分類建議；下方：左欄大分類、右欄子分類（子分類關閉時只顯示大分類格狀清單）
-                val subOn = repo.settings.flow.collectAsStateWithLifecycle().value.subcategoryOn
+                // 上方：搜尋分類與自動分類建議；下方：左欄大分類、右欄子分類
                 val roots = lk.categories.filter { it.kind == type && !it.archived && it.parentId == null }.sortedBy { it.sortOrder }
                 var query by remember(type) { mutableStateOf("") }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -666,17 +591,6 @@ private fun BottomPanel(
                                     color = if (c.id == selectedCategory) MaterialTheme.colorScheme.primary else Color.Unspecified)
                             }
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        }
-                    }
-                } else if (!subOn) {
-                    LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(280.dp)) {
-                        items(roots, key = { it.id }) { c ->
-                            val sel = c.id == lk.rootId(selectedCategory)
-                            Box(
-                                Modifier.height(56.dp).background(if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
-                                    .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { onCategory(c.id) }.padding(horizontal = 4.dp),
-                                contentAlignment = Alignment.Center,
-                            ) { Text(c.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                         }
                     }
                 } else {

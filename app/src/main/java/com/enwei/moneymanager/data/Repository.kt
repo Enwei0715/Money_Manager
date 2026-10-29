@@ -207,15 +207,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     suspend fun deleteTxn(id: Long) {
-        val t = db.txns().get(id)
         db.txns().delete(id)
-        // 用紙鈔硬幣記的現金交易：刪除時把皮夾的張數還原
-        com.enwei.moneymanager.core.Cash.decode(t?.rawText)?.let { m ->
-            settings.update { st ->
-                val after = com.enwei.moneymanager.core.Cash.apply(st.cashCounts[m.accountId].orEmpty(), m.inn, m.out).filterValues { it > 0 }
-                st.copy(cashCounts = st.cashCounts + (m.accountId to after))
-            }
-        }
     }
 
     /** 最近 90 天最常用的分類（通知上的一鍵分類按鈕用）。 */
@@ -466,6 +458,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val raw = listOfNotNull(entry.title, entry.text).joinToString(" ")
         if (NotificationParser.findAmount(NotificationParser.clean(raw))?.first != t.amount) return
         val key = learnKey(entry.title, entry.text)
+        if (key.isBlank()) return
         if (s.learnedSources.any { it.pkg == entry.packageName && it.title == key }) return
         val src = sourceBank(entry.packageName, entry.title)
         val learned = when (t.type) {
@@ -478,7 +471,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 else LearnedSource(entry.packageName, key, income = false, accountId = t.accountId, kind = "TRANSFER_OUT", toAccountId = t.toAccountId)
             }
         }
-        val msg = "學會「$key」的通知格式（${learned.label}）"
+        val msg = "已保存本機通知辨識偏好（${learned.label}）"
         settings.update { it.copy(learnedSources = it.learnedSources + learned, aiTidyLog = (listOf(msg) + it.aiTidyLog).take(30)) }
         // 學會之後把 AI 標記拿掉，這筆就和規則辨識的一樣
         db.txns().get(t.id)?.let { cur -> db.txns().upsert(cur.copy(rawText = cur.rawText?.replace("\n$AI_TAG", "")?.replace(AI_TAG, ""))) }
@@ -584,7 +577,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     /**
-     * 清掉舊版自動建立、從未使用的「現金」「銀行帳戶」：餘額 0、沒有任何交易、股票、週期、連結或點鈔紀錄，
+     * 清掉舊版自動建立、從未使用的「現金」「銀行帳戶」：餘額 0、沒有任何交易、股票、週期或連結，
      * 而且還有其他帳戶時才刪除。
      */
     private suspend fun removeUnusedSeedAccounts() {
@@ -592,15 +585,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val txns = db.txns().all()
         val trades = db.stocks().allTrades()
         val recurring = db.recurring().all()
-        val s = settings.value
         val candidates = accounts.filter { a ->
             (a.name == "現金" && a.type == AccountType.CASH || a.name == "銀行帳戶" && a.type == AccountType.BANK) &&
                 a.initialBalance == 0L &&
                 txns.none { it.accountId == a.id || it.toAccountId == a.id } &&
                 trades.none { it.cashAccountId == a.id || it.brokerAccountId == a.id } &&
                 recurring.none { it.accountId == a.id || it.toAccountId == a.id } &&
-                accounts.none { it.autopayFromId == a.id || it.linkedAccountId == a.id } &&
-                (s.cashCounts[a.id]?.values?.sum() ?: 0) == 0
+                accounts.none { it.autopayFromId == a.id || it.linkedAccountId == a.id }
         }
         if (candidates.isEmpty() || accounts.size - candidates.size < 1) return
         candidates.forEach { deleteAccount(it) }
@@ -625,7 +616,11 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 試算一則通知會被怎麼處理（不寫入任何資料），用來在不實際消費的情況下確認辨識是否正確。
      * 回傳 (是否會記帳, 說明)。
      */
-    suspend fun previewNotification(pkg: String, title: String?, text: String?, postedAt: Long? = null): Pair<Boolean, String> {
+    suspend fun previewNotification(
+        pkg: String, title: String?, text: String?, postedAt: Long? = null,
+        aiOverride: com.enwei.moneymanager.core.ParsedTransaction? = null,
+        aiHandled: Boolean = false,
+    ): Pair<Boolean, String> {
         val s = settings.value
         if (pkg == LINE_PACKAGE && !isLineWallet(title, text)) return false to "LINE 聊天訊息，不處理"
         val fillMail = pkg == GMAIL_PACKAGE && isBrokerFillMail(title, text)
@@ -646,10 +641,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             )
             return (enabled && broker != null) to lines.joinToString("\n")
         }
-        var aiParsed = false
-        val p = learned?.parse(title, text)
+        var aiParsed = aiOverride != null
+        val p = aiOverride ?: learned?.parse(title, text)
             ?: NotificationParser.parse(title, text)
-            ?: (if (enabled && com.enwei.moneymanager.net.GroqAi.enabled) com.enwei.moneymanager.net.GroqAi.parseNotification(title, text)?.also { aiParsed = true } else null)
+            ?: (if (!aiHandled && enabled && com.enwei.moneymanager.net.GroqAi.enabled) com.enwei.moneymanager.net.GroqAi.parseNotification(title, text)?.also { aiParsed = true } else null)
             ?: return false to "看不出是交易（找不到金額，或沒有「消費／付款／入帳」等字樣）。若這是交易通知，按「教它辨識」。"
         val accounts = db.accounts().all().filter { !it.archived }
         val raw0 = listOfNotNull(title, text).joinToString("\n")
@@ -717,6 +712,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     /** 一則通知在測試頁的試算結果。 */
     data class NotePreview(val pkg: String, val title: String?, val text: String?, val postedAt: Long)
+    data class NotificationInput(val pkg: String, val title: String?, val text: String?, val postedAt: Long)
 
     /**
      * 試算通知列上的一批通知，並和實際記帳一樣推算轉帳：
@@ -724,7 +720,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 銀行的轉帳 Email 寫有轉入銀行時，會把同一家銀行剛剛的轉出改成轉帳。
      */
     suspend fun previewBatch(list: List<NotePreview>): List<Pair<Boolean, String>> {
-        val base = list.map { previewNotification(it.pkg, it.title, it.text, it.postedAt) }.toMutableList()
+        val ai = classifyNotificationBatch(list.map { NotificationInput(it.pkg, it.title, it.text, it.postedAt) })
+        val base = list.mapIndexed { index, note ->
+            previewNotification(note.pkg, note.title, note.text, note.postedAt, ai.parsed[index], index in ai.handled)
+        }.toMutableList()
         val s = settings.value
         val accounts = db.accounts().all().filter { !it.archived }
         data class Side(val i: Int, val out: Boolean, val amount: Long, val at: Long, val account: AccountEntity?, val bank: BankDirectory.Bank?)
@@ -844,7 +843,41 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
     }
 
-    suspend fun ingestNotification(pkg: String, title: String?, text: String?, postedAt: Long, force: Boolean = false): IngestResult? {
+    suspend fun ingestNotificationBatch(notices: List<NotificationInput>): List<IngestResult?> {
+        if (notices.isEmpty()) return emptyList()
+        val ai = classifyNotificationBatch(notices)
+        return notices.mapIndexed { index, notice ->
+            ingestNotification(notice.pkg, notice.title, notice.text, notice.postedAt, aiOverride = ai.parsed[index], aiHandled = index in ai.handled)
+        }
+    }
+
+    private suspend fun classifyNotificationBatch(notices: List<NotificationInput>): com.enwei.moneymanager.net.GroqAi.NotificationBatchResult {
+        val s = settings.value
+        val accounts = db.accounts().all().filter { !it.archived }
+        val candidates = notices.mapIndexedNotNull { index, notice ->
+            if (notice.pkg == GMAIL_PACKAGE || isRedacted(notice.text) || NotificationParser.parseStockFill(notice.title, notice.text) != null) {
+                return@mapIndexedNotNull null
+            }
+            val learned = s.learnedFor(notice.pkg, notice.title, notice.text)
+            if (learned?.parse(notice.title, notice.text) != null || NotificationParser.parse(notice.title, notice.text) != null) {
+                return@mapIndexedNotNull null
+            }
+            val bank = sourceBank(notice.pkg, notice.title)
+            val enabled = notice.pkg in s.notifPackages ||
+                (notice.pkg == LINE_PACKAGE && isLineWallet(notice.title, notice.text)) ||
+                (bank != null && accounts.any { BankDirectory.matches(bank, it.name) })
+            if (!enabled) return@mapIndexedNotNull null
+            Triple(index, notice.title, notice.text)
+        }
+        return if (candidates.isNotEmpty()) com.enwei.moneymanager.net.GroqAi.parseNotificationBatch(candidates)
+        else com.enwei.moneymanager.net.GroqAi.NotificationBatchResult(emptyMap(), emptySet())
+    }
+
+    suspend fun ingestNotification(
+        pkg: String, title: String?, text: String?, postedAt: Long, force: Boolean = false,
+        aiOverride: com.enwei.moneymanager.core.ParsedTransaction? = null,
+        aiHandled: Boolean = false,
+    ): IngestResult? {
         // LINE：只處理「LINE錢包」付款通知（LINE Bank Money／LINE Pay），聊天訊息一律略過；不需另外勾選 LINE
         val isLine = pkg == LINE_PACKAGE
         if (isLine && !isLineWallet(title, text)) return null
@@ -867,10 +900,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = result, txnId = txnId)
 
         val fill = NotificationParser.parseStockFill(title, text)
-        var parsed = if (fill != null) null else learned?.parse(title, text) ?: NotificationParser.parse(title, text)
+        var parsed = if (fill != null) null else aiOverride ?: learned?.parse(title, text) ?: NotificationParser.parse(title, text)
         // 規則看不懂、但來自已啟用的銀行／支付 App：請 AI 判讀（結果一律放「待確認」）
-        var aiParsed = false
-        if (fill == null && parsed == null && enabled && !isRedacted(text) && com.enwei.moneymanager.net.GroqAi.enabled) {
+        var aiParsed = aiOverride != null
+        if (fill == null && parsed == null && !aiHandled && enabled && !isRedacted(text) && com.enwei.moneymanager.net.GroqAi.enabled) {
             parsed = com.enwei.moneymanager.net.GroqAi.parseNotification(title, text)
             aiParsed = parsed != null
         }
@@ -1479,7 +1512,6 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         settings.update { st ->
             val map = TyphoonDays.decode(st.typhoonDays).toMutableMap()
             if (on) map[day] = "颱風假"
-            else if (day in com.enwei.moneymanager.core.TaiwanHolidays.KNOWN_TYPHOON) map[day] = com.enwei.moneymanager.core.TaiwanHolidays.WORKING
             else map.remove(day)
             com.enwei.moneymanager.core.TaiwanHolidays.setExtra(map)
             st.copy(typhoonDays = TyphoonDays.encode(map))

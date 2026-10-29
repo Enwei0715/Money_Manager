@@ -12,12 +12,18 @@ import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.R
+import com.enwei.moneymanager.data.Repository
 import com.enwei.moneymanager.ui.MainActivity
 import com.enwei.moneymanager.ui.tr
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** 監聽銀行、信用卡、電子支付、券商 App 的推播並自動記帳。 */
 class TxnNotificationListener : NotificationListenerService() {
+    private val pendingLock = Any()
+    private val pendingNotes = LinkedHashMap<String, ActiveNote>()
+    private var flushJob: Job? = null
 
     override fun onListenerConnected() {
         super.onListenerConnected()
@@ -30,6 +36,11 @@ class TxnNotificationListener : NotificationListenerService() {
     }
 
     override fun onDestroy() {
+        synchronized(pendingLock) {
+            flushJob?.cancel()
+            flushJob = null
+            pendingNotes.clear()
+        }
         if (instance === this) instance = null
         super.onDestroy()
     }
@@ -44,13 +55,32 @@ class TxnNotificationListener : NotificationListenerService() {
         if (title.isNullOrBlank() && text.isNullOrBlank()) return
 
         val app = application as MoneyApp
-        app.appScope.launch {
-            val result = runCatching { app.repo.ingestNotification(sbn.packageName, title, text, sbn.postTime) }.getOrNull() ?: return@launch
-            if (result.kind == "RECORDED") app.repo.scheduleAutoTidy(app.appScope)
-            val pending = !app.repo.settings.value.notifAutoConfirm && result.kind == "RECORDED"
-            QuickActions.notifyRecorded(
-                this@TxnNotificationListener, result.txnId.takeIf { result.kind != "STOCK" }, tr(result.message), pending,
-            )
+        synchronized(pendingLock) {
+            pendingNotes["${sbn.packageName}:${sbn.key}:${sbn.postTime}"] = ActiveNote(sbn.packageName, title, text, sbn.postTime)
+            flushJob?.cancel()
+            flushJob = app.appScope.launch {
+                delay(900)
+                val batch = synchronized(pendingLock) {
+                    pendingNotes.values.toList().also {
+                        pendingNotes.clear()
+                        flushJob = null
+                    }
+                }
+                if (batch.isEmpty()) return@launch
+                val results = try {
+                    app.repo.ingestNotificationBatch(batch.map { Repository.NotificationInput(it.pkg, it.title, it.text, it.postedAt) })
+                } catch (e: Exception) {
+                    android.util.Log.e("TxnNotificationListener", "Failed to process notification batch", e)
+                    return@launch
+                }
+                results.filterNotNull().forEach { result ->
+                    if (result.kind == "RECORDED") app.repo.scheduleAutoTidy(app.appScope)
+                    val pending = !app.repo.settings.value.notifAutoConfirm && result.kind == "RECORDED"
+                    QuickActions.notifyRecorded(
+                        this@TxnNotificationListener, result.txnId.takeIf { result.kind != "STOCK" }, tr(result.message), pending,
+                    )
+                }
+            }
         }
     }
 

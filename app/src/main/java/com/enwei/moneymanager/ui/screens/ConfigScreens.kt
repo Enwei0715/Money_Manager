@@ -30,8 +30,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import com.enwei.moneymanager.ui.components.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,7 +55,6 @@ import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.OptionDialog
 import com.enwei.moneymanager.ui.components.FormInput
 import com.enwei.moneymanager.ui.components.FormLine
-import com.enwei.moneymanager.work.ReminderWorker
 import java.time.DayOfWeek
 
 private fun uiScaleLabel(v: Float) = when {
@@ -96,13 +93,12 @@ private fun lockDelayLabel(sec: Int) = when (sec) {
     else -> "${sec / 60} 分鐘後"
 }
 
-/** 設定：依用途分組（帳戶、分類與預算、記帳輸入、期間與顯示、幣別、外觀、自動記帳、安全與提醒、小工具、資料與更新）。 */
+/** 設定：依用途分組管理帳戶、記帳、外觀、自動化、AI、安全與備份更新。 */
 @Composable
 fun ConfigScreen(nav: NavController) {
     val ctx = LocalContext.current
     val s by repo.settings.flow.collectAsStateWithLifecycle()
     var choice by remember { mutableStateOf<Choice<Any>?>(null) }
-    var pickTime by remember { mutableStateOf(false) }
 
     @Suppress("UNCHECKED_CAST")
     fun <T> ask(title: String, options: List<Pair<T, String>>, selected: T?, description: String? = null, onPick: (T) -> Unit) {
@@ -119,14 +115,8 @@ fun ConfigScreen(nav: NavController) {
                 SectionHeader("帳戶")
                 ConfigRow("帳戶設定") { nav.navigate("accountsettings") }
                 ConfigRow("帳戶群組") { nav.navigate("accountgroups") }
-                ConfigRow("修改帳戶順序") { nav.navigate("accountorder") }
 
                 SectionHeader("分類與預算")
-                ConfigRow("子分類", onOff(s.subcategoryOn)) {
-                    askOnOff("子分類", s.subcategoryOn, "開啟後，分類可以再細分子分類（例如 餐飲 → 早餐、午餐）。記帳時左欄選大分類、右欄選子分類。") { v ->
-                        repo.settings.update { it.copy(subcategoryOn = v) }
-                    }
-                }
                 ConfigRow("支出分類設定") { nav.navigate("categories?kind=EXPENSE") }
                 ConfigRow("收入分類設定") { nav.navigate("categories?kind=INCOME") }
                 ConfigRow("預算設定") { nav.navigate("budget") }
@@ -141,17 +131,9 @@ fun ConfigScreen(nav: NavController) {
                     askOnOff("時間輸入", s.showTime, "記帳時除了日期也可以設定時間。") { v -> repo.settings.update { it.copy(showTime = v) } }
                 }
                 ConfigRow("週期交易", null) { nav.navigate("recurring") }
-                ConfigRow("書籤", null) { nav.navigate("bookmarks") }
                 ConfigRow("自動完成", onOff(s.autocomplete)) {
                     askOnOff("自動完成", s.autocomplete, "輸入內容時依過去紀錄建議，並帶入分類。") { v -> repo.settings.update { it.copy(autocomplete = v) } }
                 }
-                ConfigRow("快速記帳", onOff(s.quickAdd)) {
-                    askOnOff("快速記帳", s.quickAdd, "在通知列常駐「記一筆」捷徑，不用開 App 就能快速新增支出、收入或轉帳。") { v ->
-                        repo.settings.update { it.copy(quickAdd = v) }
-                        com.enwei.moneymanager.notify.QuickAdd.sync(ctx, v)
-                    }
-                }
-
                 SectionHeader("期間與顯示")
                 ConfigRow("起始畫面（每日／日曆）", if (s.startScreen == 1) "日曆" else "每日") {
                     ask("起始畫面", listOf(0 to "每日", 1 to "日曆"), s.startScreen) { v -> repo.settings.update { it.copy(startScreen = v) } }
@@ -208,19 +190,10 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("錢包畫面讀取") { nav.navigate("walletreader") }
 
                 SectionHeader("AI")
-                ConfigRow("AI 智慧辨識（Groq／Gemini）", onOff(s.aiEnabled && (s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()))) { nav.navigate("ai") }
-
-                SectionHeader("現金")
-                ConfigRow("紙鈔硬幣記帳", onOff(s.cashByDenom)) {
-                    askOnOff("紙鈔硬幣記帳", s.cashByDenom, "現金帳戶記帳時不用數字鍵盤，直接增減千元、五百元、百元鈔與硬幣的數量，並推薦常見的付法與找零；皮夾裡的張數會自動增減。") { v ->
-                        repo.settings.update { it.copy(cashByDenom = v) }
-                    }
-                }
-                ConfigRow("現金點鈔（皮夾張數、拍照點鈔）") { nav.navigate("cashcount/0") }
+                ConfigRow("AI 模型設定", onOff(s.aiEnabled && (s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()))) { nav.navigate("ai") }
 
                 SectionHeader("股票")
                 ConfigRow("手續費與月退") { nav.navigate("stockfees") }
-                ConfigRow("股票助理（報告、紀律、資金控管）") { nav.navigate("advisor") }
                 ConfigRow("股價提醒（保本停利、減碼、目標價）", onOff(s.stockAlertsOn)) {
                     askOnOff("股價提醒", s.stockAlertsOn, "台股交易時間每 15 分鐘檢查：跌破停利價或減碼價、跌破 60 分 K 均線、多賺的股數增加、達到目標價或停損價、持股即將除權息時通知。") { v ->
                         repo.settings.update { it.copy(stockAlertsOn = v) }
@@ -228,34 +201,13 @@ fun ConfigScreen(nav: NavController) {
                 }
                 ConfigRow("觀察清單", "${s.watchlist.size} 檔") { nav.navigate("invest") }
 
-                SectionHeader("安全與提醒")
+                SectionHeader("安全")
                 ConfigRow("密碼鎖", onOff(s.passcodeOn)) { nav.navigate("passcode") }
-                ConfigRow("每日提醒", if (s.reminderEnabled) "%02d:%02d".format(s.reminderMinutes / 60, s.reminderMinutes % 60) else "OFF") {
-                    if (s.reminderEnabled) {
-                        repo.settings.update { it.copy(reminderEnabled = false) }
-                        ReminderWorker.schedule(ctx)
-                    } else pickTime = true
-                }
-
-                SectionHeader("桌面小工具")
-                ConfigRow("小工具主題", listOf("跟隨系統", "淺色", "深色")[s.widgetTheme.coerceIn(0, 2)]) {
-                    ask("小工具主題", listOf(0 to "跟隨系統", 1 to "淺色", 2 to "深色"), s.widgetTheme) { v ->
-                        repo.settings.update { it.copy(widgetTheme = v) }
-                        com.enwei.moneymanager.widget.Widgets.refreshAll(ctx)
-                    }
-                }
-                ConfigRow("小工具背景不透明度", "${s.widgetOpacity}%") {
-                    ask("小工具背景不透明度", listOf(100, 85, 70, 50, 30, 0).map { it to "$it%" }, s.widgetOpacity) { v ->
-                        repo.settings.update { it.copy(widgetOpacity = v) }
-                        com.enwei.moneymanager.widget.Widgets.refreshAll(ctx)
-                    }
-                }
-
                 SectionHeader("資料")
                 ConfigRow("備份與還原（含 .mmbak）") { nav.navigate("backup") }
 
                 SectionHeader("關於")
-                ConfigRow("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 1.1.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
+                ConfigRow("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.0.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
                 ConfigRow("開啟時檢查新版本", onOff(s.notifyUpdates)) {
                     askOnOff("開啟時檢查新版本", s.notifyUpdates, "開啟 App 時有新版本會跳出更新視窗（可略過這一版），背景也會通知。") { v ->
                         repo.settings.update { it.copy(notifyUpdates = v, updateSkipped = 0) }
@@ -268,22 +220,6 @@ fun ConfigScreen(nav: NavController) {
 
     choice?.let { c ->
         OptionDialog(c.title, c.options, c.selected, c.description, onDismiss = { choice = null }) { c.onPick(it) }
-    }
-    if (pickTime) {
-        val state = rememberTimePickerState(s.reminderMinutes / 60, s.reminderMinutes % 60, is24Hour = true)
-        AlertDialog(
-            onDismissRequest = { pickTime = false },
-            title = { Text("每日提醒時間") },
-            text = { TimePicker(state) },
-            confirmButton = {
-                TextButton(onClick = {
-                    repo.settings.update { it.copy(reminderEnabled = true, reminderMinutes = state.hour * 60 + state.minute) }
-                    ReminderWorker.schedule(ctx)
-                    pickTime = false
-                }) { Text("確定") }
-            },
-            dismissButton = { TextButton(onClick = { pickTime = false }) { Text("取消") } },
-        )
     }
 }
 
@@ -387,49 +323,6 @@ fun BudgetScreen(nav: NavController) {
                 FormLine(c.name) { FormInput(fields.value[c.id].orEmpty(), { set(c.id, it) }, "", number = true) }
             }
             item { Spacer(Modifier.height(32.dp)) }
-        }
-    }
-}
-
-/** 書籤：常用交易範本，點一下帶入記帳頁。 */
-@Composable
-fun BookmarksScreen(nav: NavController) {
-    val lk = rememberLookups()
-    val s by repo.settings.flow.collectAsStateWithLifecycle()
-    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("書籤", { nav.popBackStack() }) }) { pad ->
-        LazyColumn(Modifier.padding(pad)) {
-            if (s.bookmarks.isEmpty()) item {
-                Column(Modifier.fillMaxWidth().padding(24.dp)) {
-                    Text("如何新增書籤？", fontSize = 18.sp)
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "打開一筆交易後按「書籤」，或在記帳頁按右上角的星號。",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp,
-                    )
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-            items(s.bookmarks, key = { it.id }) { b ->
-                Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("txn/0?bookmark=${b.id}") }
-                        .padding(start = 20.dp, top = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.width(96.dp)) {
-                        Text(if (b.type == TxnType.TRANSFER) "轉帳" else lk.category(b.categoryId)?.name ?: "未分類",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Column(Modifier.weight(1f)) {
-                        b.merchant?.let { Text(it, fontSize = 17.sp) }
-                        Text(lk.account(b.accountId)?.name.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-                    }
-                    Text(if (b.amount > 0) Money.withSymbol(b.amount, b.currency) else "", color = typeColor(b.type))
-                    IconButton(onClick = { repo.settings.update { st -> st.copy(bookmarks = st.bookmarks.filter { it.id != b.id }) } }) {
-                        Icon(Icons.Outlined.Delete, "刪除書籤", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
         }
     }
 }

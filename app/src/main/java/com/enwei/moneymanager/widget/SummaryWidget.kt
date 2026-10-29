@@ -91,15 +91,9 @@ class SummaryWidget : AppWidgetProvider() {
                 setTextViewText(R.id.widget_cash, com.enwei.moneymanager.ui.tr("－ 現金支出"))
                 setTextViewText(R.id.widget_income_btn, com.enwei.moneymanager.ui.tr("＋ 收入"))
                 setTextViewText(R.id.widget_pending, com.enwei.moneymanager.ui.tr("⇄ 轉帳"))
-                // 小工具設定：深淺色與背景不透明度
-                val dark = when (s.widgetTheme) {
-                    1 -> false
-                    2 -> true
-                    else -> (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-                        android.content.res.Configuration.UI_MODE_NIGHT_YES
-                }
+                val dark = Widgets.dark(context)
                 setInt(R.id.widget_bg, "setColorFilter", if (dark) 0xFF26272B.toInt() else 0xFFFFFFFF.toInt())
-                setInt(R.id.widget_bg, "setImageAlpha", s.widgetOpacity.coerceIn(0, 100) * 255 / 100)
+                setInt(R.id.widget_bg, "setImageAlpha", 255)
                 setTextColor(R.id.widget_legend, if (dark) 0xFFDDDDDD.toInt() else 0xFF444444.toInt())
                 setTextColor(R.id.widget_title, if (dark) 0xFFAAAAAA.toInt() else 0xFF8A8A8A.toInt())
             }

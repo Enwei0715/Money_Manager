@@ -113,60 +113,43 @@ private val timeFmt = SimpleDateFormat("M/d HH:mm", Locale.TAIWAN)
 @Composable
 fun MoreScreen(nav: NavController) {
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
-    val L = com.enwei.moneymanager.ui.components.LineIcons
-    // 依類別分組的功能入口；細部設定集中在「設定」裡
-    val groups = listOf(
-        "自動記帳" to listOf(
-            Triple("notif", "通知記帳", L.Notification),
-            Triple("walletreader", "錢包讀取", L.Wallet),
-            Triple("pending", "待確認", L.Inbox),
-            Triple("reconcile-batch", "截圖對帳", L.Scan),
-            Triple("cashcount/0", "現金點鈔", L.Cash),
-        ),
-        "投資" to listOf(
-            Triple("invest", "股票", L.Stocks),
-            Triple("advisor", "股票助理", L.Advisor),
-        ),
-        "工具" to listOf(
-            Triple("recurring", "週期扣款", L.Recurring),
-            Triple("fx", "匯率", L.Exchange),
-            Triple("backup", "備份", L.Backup),
-            Triple("config", "設定", L.Settings),
-        ),
-    )
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    val tools = ToolCatalog.items
+    val orderedTools = settings.toolOrder.mapNotNull { id -> tools.find { it.id == id } }
+        .plus(tools.filter { it.id !in settings.toolOrder })
+        .filter { it.id !in settings.hiddenTools }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             androidx.compose.material3.TopAppBar(
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
-                title = { Text("更多") },
+                title = { Text("工具") },
                 actions = {
-                    Text("Ledgerly " + BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp,
-                        modifier = Modifier.padding(end = 16.dp))
+                    TextButton(onClick = { nav.navigate("tool-order") }) { Text("排序") }
+                    IconButton(onClick = { nav.navigate("config") }) { Icon(Icons.Outlined.Settings, "設定") }
                 },
             )
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
-            groups.forEach { (title, entries) ->
-                Text(title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 20.dp, top = 16.dp))
-                entries.chunked(3).forEach { row ->
-                    Row(Modifier.fillMaxWidth()) {
-                        row.forEach { (route, label, icon) ->
-                            // 圖示固定在同一高度：英文標籤較長換成兩行時，圖示不會被往上推而對不齊
-                            Column(
-                                Modifier.weight(1f).height(112.dp).clickable { nav.navigate(route) }.padding(top = 18.dp, start = 4.dp, end = 4.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Top,
-                            ) {
-                                androidx.compose.material3.BadgedBox(badge = {
-                                    if (route == "pending" && pending.isNotEmpty()) Badge { Text("${pending.size}") }
-                                }) { Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(34.dp)) }
-                                Spacer(Modifier.height(10.dp))
-                                Text(label, fontSize = 15.sp, lineHeight = 18.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                            }
+            if (orderedTools.isEmpty()) {
+                Text("尚未選擇工具。點右上角「排序」新增工具。", modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            orderedTools.chunked(3).forEach { row ->
+                Row(Modifier.fillMaxWidth()) {
+                    row.forEach { tool ->
+                        Column(
+                            Modifier.weight(1f).height(112.dp).clickable { nav.navigate(tool.route) }.padding(top = 18.dp, start = 4.dp, end = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Top,
+                        ) {
+                            androidx.compose.material3.BadgedBox(badge = {
+                                if (tool.id == "pending" && pending.isNotEmpty()) Badge { Text("${pending.size}") }
+                            }) { Icon(tool.icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(34.dp)) }
+                            Spacer(Modifier.height(10.dp))
+                            Text(tool.label, fontSize = 15.sp, lineHeight = 18.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         }
-                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                     }
+                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
@@ -221,6 +204,7 @@ fun NotificationSettingsScreen(nav: NavController) {
     var notes by remember { mutableStateOf<List<TxnNotificationListener.ActiveNote>?>(null) }
     var previews by remember { mutableStateOf<List<Pair<Boolean, String>>>(emptyList()) }
     var testMsg by remember { mutableStateOf<String?>(null) }
+    var simulationPreviews by remember { mutableStateOf<List<Pair<Boolean, String>>?>(null) }
     var teach by remember { mutableStateOf<TxnNotificationListener.ActiveNote?>(null) }
     fun loadNotes() = testScope.launch {
         val n = TxnNotificationListener.activeNotes()
@@ -410,12 +394,37 @@ fun NotificationSettingsScreen(nav: NavController) {
                     }
                 }
             }
+            if (BuildConfig.DEBUG) {
+                item { SectionTitle("整合模擬器（Debug；只試算、不寫入）") }
+                item {
+                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("以合成通知測試支出、收入與轉帳配對；若已啟用 AI，也會測試批次判讀。", style = MaterialTheme.typography.bodySmall)
+                        Button(onClick = {
+                            val packages = settings.notifPackages.toList()
+                            val debitPkg = packages.firstOrNull() ?: "com.example.synthetic.bank"
+                            val creditPkg = packages.getOrNull(1) ?: debitPkg
+                            val now = System.currentTimeMillis()
+                            val samples = listOf(
+                                Repository.NotePreview(debitPkg, "刷卡通知", "NT\$125 在合成商店刷卡消費", now),
+                                Repository.NotePreview(debitPkg, "退款通知", "合成商店退款入帳 NT\$50", now + 1),
+                                Repository.NotePreview(debitPkg, "轉出通知", "跨行轉出 NT\$300", now + 2),
+                                Repository.NotePreview(creditPkg, "轉入通知", "跨行轉入 NT\$300", now + 3),
+                                Repository.NotePreview(debitPkg, "交易通知", "金額 NT\$420，交易已完成，對象：合成服務", now + 4),
+                            )
+                            testScope.launch { simulationPreviews = repo.previewBatch(samples) }
+                        }) { Text("執行合成情境") }
+                        simulationPreviews?.forEachIndexed { index, result ->
+                            Text("情境 ${index + 1}：${result.second}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
             if (settings.learnedSources.isNotEmpty()) {
-                item { SectionTitle("教過的通知格式（點擊刪除）") }
+                item { SectionTitle("本機通知辨識偏好（點擊刪除）") }
                 items(settings.learnedSources.size, key = { "learn$it" }) { i ->
                     val l = settings.learnedSources[i]
                     ListItem(
-                        headlineContent = { Text("${labelOf[l.pkg] ?: l.pkg}：「${l.title}」") },
+                        headlineContent = { Text("${labelOf[l.pkg] ?: l.pkg} · 本機辨識規則") },
                         supportingContent = {
                             Text("${l.label} → ${l.accountId?.let { lk.account(it)?.name } ?: "依卡號／預設帳戶"}" +
                                 (l.toAccountId?.let { lk.account(it)?.name }?.let { if (l.parsedKind == com.enwei.moneymanager.core.ParsedKind.TRANSFER_IN) "（從 $it）" else "（到 $it）" } ?: ""))
@@ -450,6 +459,7 @@ fun NotificationSettingsScreen(nav: NavController) {
         var accId by remember(nn) { mutableStateOf(settings.notifAccountMap[nn.pkg]) }
         var toId by remember(nn) { mutableStateOf<Long?>(null) }
         val amount = NotificationParser.findAmount(listOfNotNull(nn.title, nn.text).joinToString(" "))
+        val key = com.enwei.moneymanager.data.learnKey(nn.title, nn.text)
         // AI 先幫忙判斷收支類型與帳戶，使用者確認或修改後再儲存
         var aiHint by remember(nn) { mutableStateOf<String?>(null) }
         LaunchedEffect(nn) {
@@ -471,8 +481,11 @@ fun NotificationSettingsScreen(nav: NavController) {
             title = { Text("教它辨識") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("之後「${labelOf[nn.pkg] ?: nn.pkg}」標題為「${com.enwei.moneymanager.data.learnKey(nn.title, nn.text)}」的通知，會照下面的設定記帳。",
-                        style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        if (key.isBlank()) "這則通知沒有標題，為避免保存原始內容，無法建立本機辨識偏好。"
+                        else "此偏好只保存在本機；AI 判讀期間可讀取這次通知，但不保存通知原文，也不會用來微調 Groq／Gemini。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                     aiHint?.let { Text(it, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall) }
                     if (amount == null) Text("這則通知裡找不到金額，無法自動記帳。", color = MaterialTheme.colorScheme.error)
                     else Text("找到的金額：${Money.format(amount.first, amount.second)} ${amount.second}")
@@ -497,8 +510,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                 }
             },
             confirmButton = {
-                TextButton(enabled = amount != null, onClick = {
-                    val key = com.enwei.moneymanager.data.learnKey(nn.title, nn.text)
+                TextButton(enabled = amount != null && key.isNotBlank(), onClick = {
                     repo.settings.update { st ->
                         st.copy(learnedSources = st.learnedSources.filterNot { it.pkg == nn.pkg && it.title == key } +
                             com.enwei.moneymanager.data.LearnedSource(
@@ -734,7 +746,6 @@ fun BackupScreen(nav: NavController) {
                             if (bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
                                 val b = withContext(Dispatchers.IO) { com.enwei.moneymanager.data.FullBackupIO.read(bytes.inputStream()) }
                                 com.enwei.moneymanager.data.FullBackupIO.restore(repo, b)
-                                com.enwei.moneymanager.notify.QuickAdd.sync(ctx, repo.settings.value.quickAdd)
                                 "已還原完整備份：${b.accounts.size} 個帳戶、${b.transactions.size} 筆交易、${b.trades.size} 筆股票紀錄與所有設定"
                             } else {
                                 val b = repo.importJson(bytes.decodeToString())
@@ -841,6 +852,9 @@ fun WalletReaderScreen(nav: NavController) {
     val today = java.time.LocalDate.now().toEpochDay()
     val testMode by com.enwei.moneymanager.notify.WalletScreenReader.testMode.collectAsStateWithLifecycle()
     val scans by com.enwei.moneymanager.notify.WalletScreenReader.scans.collectAsStateWithLifecycle()
+    val testScope = rememberCoroutineScope()
+    var walletSimulation by remember { mutableStateOf<Repository.ScreenIngestResult?>(null) }
+    var walletSimulationProblem by remember { mutableStateOf<String?>(null) }
 
     fun toggle(pkg: String, on: Boolean) = repo.settings.update {
         it.copy(
@@ -944,6 +958,43 @@ fun WalletReaderScreen(nav: NavController) {
                     if (scans.isEmpty()) Text("還沒有讀取紀錄", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            if (BuildConfig.DEBUG) {
+                item { SectionTitle("整合模擬器（Debug；只試算、不寫入）") }
+                item {
+                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "先選取錢包 App 並建立電子支付帳戶。情境會試算支出、退款收入、儲值及既有交易比對；不同 App 指定不同帳戶時才能驗證跨帳戶配對。全程只試算，不會修改帳本。",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Button(enabled = settings.screenPackages.isNotEmpty(), onClick = {
+                            val pkg = settings.screenPackages.firstOrNull() ?: return@Button
+                            val day = java.time.LocalDate.now()
+                            val syntheticLines = listOf(
+                                day.toString(), "合成商店", "支付", "- NT$9,873",
+                                day.toString(), "合成退款", "退款", "+ NT$5,281",
+                                day.toString(), "合成儲值", "儲值", "+ NT$2,387",
+                            )
+                            val records = com.enwei.moneymanager.core.ScreenRecordParser.parse(syntheticLines, day)
+                            if (records.isEmpty()) {
+                                walletSimulationProblem = "合成畫面文字解析失敗；未執行匯入試算"
+                                return@Button
+                            }
+                            walletSimulationProblem = null
+                            testScope.launch { walletSimulation = repo.ingestScreenRecords(pkg, records, dryRun = true) }
+                        }) { Text("執行錢包合成情境") }
+                        walletSimulationProblem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                        walletSimulation?.let { result ->
+                            Text(
+                                if (result.wallet == null) "未能對應錢包帳戶；請先選取錢包 App 並指定電子支付帳戶。"
+                                else "試算完成：${result.total} 筆、會新增 ${result.created} 筆、已存在 ${result.existing} 筆、可合併 ${result.merged} 筆。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (result.wallet == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            )
+                            result.details.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                        }
+                    }
+                }
+            }
             items(scans.size, key = { "scan$it" }) { i ->
                 val e = scans[i]
                 val label = apps.find { it.pkg == e.pkg }?.label ?: e.pkg
@@ -996,153 +1047,6 @@ fun WalletReaderScreen(nav: NavController) {
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-/** 現金點鈔：輸入各面額數量，算出總額並可對帳。 */
-@Composable
-fun CashCounterScreen(nav: NavController, accountIdArg: Long) {
-    val scope = rememberCoroutineScope()
-    val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
-    // 從「更多」進來時（id 0）用第一個現金帳戶
-    val accountId = if (accountIdArg > 0) accountIdArg
-    else balances.firstOrNull { it.account.type == com.enwei.moneymanager.data.AccountType.CASH && !it.account.archived }?.account?.id ?: 0L
-    val b = balances.find { it.account.id == accountId }
-    val denoms = listOf(2000, 1000, 500, 200, 100, 50, 10, 5, 1)
-    var counts by remember(settings.cashCounts[accountId]) { mutableStateOf(settings.cashCounts[accountId].orEmpty()) }
-    val total = denoms.sumOf { it.toLong() * (counts[it] ?: 0) } * 100
-    val recorded = b?.balance ?: 0
-    var done by remember { mutableStateOf<String?>(null) }
-
-    fun set(d: Int, n: Int) {
-        counts = counts + (d to n.coerceAtLeast(0))
-        repo.settings.update { it.copy(cashCounts = it.cashCounts + (accountId to counts)) }
-    }
-
-    // 拍照點鈔：AI 數出照片裡各面額的數量，確認後套用
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    var photoMsg by remember { mutableStateOf<String?>(null) }
-    var photoCounts by remember { mutableStateOf<Map<Int, Int>?>(null) }
-    var counting by remember { mutableStateOf(false) }
-    fun countPhoto(uri: android.net.Uri) {
-        counting = true; photoMsg = null; photoCounts = null
-        scope.launch {
-            val r = com.enwei.moneymanager.net.GroqAi.countCash(ctx, uri)
-            if (r == null || r.first.isEmpty()) photoMsg = "數不出來：${com.enwei.moneymanager.net.GroqAi.lastError ?: "請把鈔票硬幣攤開、光線充足再拍一次"}"
-            else { photoCounts = r.first; photoMsg = r.second.takeIf { it.isNotBlank() } }
-            counting = false
-        }
-    }
-    val photoUri = remember {
-        val f = java.io.File(ctx.cacheDir, "photos").apply { mkdirs() }.let { java.io.File(it, "cash.jpg") }
-        androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
-    }
-    val takePhoto = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { ok -> if (ok) countPhoto(photoUri) }
-    val pickPhoto = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { u -> if (u != null) countPhoto(u) }
-
-    Scaffold(containerColor = MaterialTheme.colorScheme.surface, topBar = { BackTopBar("點鈔：${b?.account?.name.orEmpty()}", { nav.popBackStack() }) }) { pad ->
-        LazyColumn(Modifier.padding(pad)) {
-            item {
-                // 用紙鈔硬幣記一筆：付出／收到的鈔票硬幣與找零會自動增減這裡的張數
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { nav.navigate("txn/0?type=EXPENSE&account=$accountId&cash=true") }, modifier = Modifier.weight(1f)) { Text("現金付款") }
-                    OutlinedButton(onClick = { nav.navigate("txn/0?type=INCOME&account=$accountId&cash=true") }, modifier = Modifier.weight(1f)) { Text("收到現金") }
-                }
-                if (com.enwei.moneymanager.net.GroqAi.enabled) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(enabled = !counting, onClick = { takePhoto.launch(photoUri) }, modifier = Modifier.weight(1f)) { Text(if (counting) "點鈔中…" else "拍照點鈔") }
-                    OutlinedButton(enabled = !counting, onClick = {
-                        pickPhoto.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    }, modifier = Modifier.weight(1f)) { Text("選照片") }
-                }
-                photoCounts?.let { pc ->
-                    Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("AI 數到：" + denoms.filter { (pc[it] ?: 0) > 0 }.joinToString("、") { "$it 元 ×${pc[it]}" } +
-                            "，共 ${Money.withSymbol(denoms.sumOf { it.toLong() * (pc[it] ?: 0) } * 100)}", color = MaterialTheme.colorScheme.primary)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = {
-                                counts = pc
-                                repo.settings.update { it.copy(cashCounts = it.cashCounts + (accountId to pc)) }
-                                photoCounts = null; photoMsg = "已套用，請再核對一次數量"
-                            }) { Text("套用") }
-                            OutlinedButton(onClick = {
-                                val merged = denoms.associateWith { (counts[it] ?: 0) + (pc[it] ?: 0) }.filterValues { it > 0 }
-                                counts = merged
-                                repo.settings.update { it.copy(cashCounts = it.cashCounts + (accountId to merged)) }
-                                photoCounts = null; photoMsg = "已加到目前的數量"
-                            }) { Text("加到目前數量") }
-                        }
-                    }
-                }
-                photoMsg?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp)) }
-                Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("點鈔合計", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(Money.withSymbol(total), fontSize = 28.sp)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("帳上餘額 ${Money.withSymbol(recorded)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        val diff = total - recorded
-                        Text(
-                            if (diff == 0L) "相符" else "差額 ${Money.withSymbol(diff)}",
-                            color = if (diff == 0L) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-                HorizontalDivider()
-            }
-            items(denoms, key = { it }) { d ->
-                val n = counts[d] ?: 0
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Row(Modifier.width(110.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            if (d >= 100) androidx.compose.material.icons.Icons.Rounded.Payments else androidx.compose.material.icons.Icons.Rounded.Toll, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("$d 元", fontSize = 17.sp)
-                    }
-                    IconButton(onClick = { set(d, n - 1) }) { Text("－", fontSize = 22.sp) }
-                    androidx.compose.foundation.text.BasicTextField(
-                        value = if (n == 0) "" else n.toString(),
-                        onValueChange = { t -> set(d, t.filter(Char::isDigit).take(5).toIntOrNull() ?: 0) },
-                        singleLine = true,
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center),
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                        modifier = Modifier.width(64.dp),
-                        decorationBox = { inner -> Box(contentAlignment = Alignment.Center) { if (n == 0) Text("0", color = MaterialTheme.colorScheme.outlineVariant, fontSize = 20.sp); inner() } },
-                    )
-                    IconButton(onClick = { set(d, n + 1) }) { Text("＋", fontSize = 22.sp) }
-                    Text(Money.full(d.toLong() * n * 100), Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            item {
-                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(onClick = { counts = emptyMap(); repo.settings.update { it.copy(cashCounts = it.cashCounts - accountId) } },
-                        modifier = Modifier.weight(1f)) { Text("清除") }
-                    Button(
-                        enabled = b != null && total != recorded,
-                        onClick = {
-                            val acc = b?.account ?: return@Button
-                            scope.launch {
-                                val other = repo.categories.first().firstOrNull { it.kind == com.enwei.moneymanager.data.TxnType.EXPENSE && it.name == "其他" }?.id
-                                repo.reconcile(acc, recorded, total, if (total < recorded) other else null)
-                                done = "已將帳上餘額調整為 ${Money.withSymbol(total)}"
-                            }
-                        },
-                        modifier = Modifier.weight(2f),
-                    ) { Text("以點鈔金額對帳") }
-                }
-                done?.let { Text(it, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 20.dp)) }
-                Text(
-                    "現金記帳時，付出、收到與找零會自動增減這裡的張數。",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(20.dp),
-                )
             }
         }
     }

@@ -61,6 +61,7 @@ import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.data.TxnType
 import com.enwei.moneymanager.ui.screens.AccountDetailScreen
 import com.enwei.moneymanager.ui.screens.AiSettingsScreen
+import com.enwei.moneymanager.ui.screens.AiHubScreen
 import com.enwei.moneymanager.ui.screens.AccountEditScreen
 import com.enwei.moneymanager.ui.screens.AccountOrderScreen
 import com.enwei.moneymanager.ui.screens.AccountsTab
@@ -70,9 +71,7 @@ import com.enwei.moneymanager.ui.screens.CategorySettingsScreen
 import com.enwei.moneymanager.ui.screens.SubcategoryScreen
 import com.enwei.moneymanager.ui.screens.PasscodeScreen
 import com.enwei.moneymanager.ui.screens.BackupScreen
-import com.enwei.moneymanager.ui.screens.BookmarksScreen
 import com.enwei.moneymanager.ui.screens.BudgetScreen
-import com.enwei.moneymanager.ui.screens.CashCounterScreen
 import com.enwei.moneymanager.ui.screens.WalletReaderScreen
 import com.enwei.moneymanager.ui.screens.CategoryStatScreen
 import com.enwei.moneymanager.ui.screens.ConfigScreen
@@ -95,6 +94,7 @@ import com.enwei.moneymanager.ui.screens.TotalStatsScreen
 import com.enwei.moneymanager.ui.screens.TradeEditScreen
 import com.enwei.moneymanager.ui.screens.TransactionsTab
 import com.enwei.moneymanager.ui.screens.TxnEditScreen
+import com.enwei.moneymanager.ui.screens.ToolSettingsScreen
 
 class MainActivity : androidx.fragment.app.FragmentActivity() {
     private val pendingRoute = mutableStateOf<String?>(null)
@@ -180,7 +180,7 @@ private val tabs = listOf(
     Tab("txns", "交易", Icons.AutoMirrored.Outlined.MenuBook),
     Tab("stats", "統計", Icons.Outlined.BarChart),
     Tab("accounts", "帳戶", Icons.Outlined.AccountBalanceWallet),
-    Tab("more", "更多", Icons.Filled.MoreHoriz),
+    Tab("more", "工具", Icons.Filled.MoreHoriz),
 )
 
 @Composable
@@ -259,11 +259,9 @@ private fun AppScaffold(nav: NavHostController) {
             ) { e -> SearchScreen(nav, e.arguments!!.getBoolean("filter")) }
             composable("budget") { BudgetScreen(nav) }
             composable("walletreader") { WalletReaderScreen(nav) }
-            composable("cashcount/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->
-                CashCounterScreen(nav, e.arguments!!.getLong("id"))
-            }
-            composable("bookmarks") { BookmarksScreen(nav) }
             composable("config") { ConfigScreen(nav) }
+            composable("tool-order") { ToolSettingsScreen(nav) }
+            composable("ai-hub") { AiHubScreen(nav) }
             composable("totalstats") { TotalStatsScreen(nav) }
             composable("accountorder") { AccountOrderScreen(nav) }
             composable("acct/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->
@@ -277,21 +275,19 @@ private fun AppScaffold(nav: NavHostController) {
                 )
             }
             composable(
-                "txn/{id}?type={type}&bookmark={bookmark}&date={date}&account={account}&to={to}&amount={amount}&cash={cash}",
+                "txn/{id}?type={type}&date={date}&account={account}&to={to}&amount={amount}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.LongType },
                     navArgument("type") { type = NavType.StringType; nullable = true; defaultValue = null },
-                    navArgument("bookmark") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("date") { type = NavType.LongType; defaultValue = Long.MIN_VALUE },
                     navArgument("account") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("to") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("amount") { type = NavType.LongType; defaultValue = 0L },
-                    navArgument("cash") { type = NavType.BoolType; defaultValue = false },
                 ),
             ) { e ->
                 val a = e.arguments!!
-                TxnEditScreen(nav, a.getLong("id"), a.getString("type"), a.getLong("bookmark"), a.getLong("date").takeIf { it != Long.MIN_VALUE }, a.getLong("account").takeIf { it > 0 },
-                    a.getLong("to").takeIf { it > 0 }, a.getLong("amount").takeIf { it > 0 }, a.getBoolean("cash"))
+                TxnEditScreen(nav, a.getLong("id"), a.getString("type"), a.getLong("date").takeIf { it != Long.MIN_VALUE }, a.getLong("account").takeIf { it > 0 },
+                    a.getLong("to").takeIf { it > 0 }, a.getLong("amount").takeIf { it > 0 })
             }
             composable(
                 "account/{id}?type={type}",
@@ -343,7 +339,6 @@ private fun AppScaffold(nav: NavHostController) {
             composable("review") { ReviewScreen(nav) }
             composable("advisor") { AccountsTab(nav, showBack = true, initialTab = 2) }
             composable("stock/{symbol}") { e -> StockDetailScreen(nav, e.arguments?.getString("symbol").orEmpty()) }
-            composable("reconcile-batch") { com.enwei.moneymanager.ui.screens.BatchReconcileScreen(nav) }
         }
     }
 }

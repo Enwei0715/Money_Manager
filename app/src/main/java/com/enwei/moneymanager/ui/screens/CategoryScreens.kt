@@ -70,7 +70,6 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
     val scope = rememberCoroutineScope()
     val cats by repo.categories.collectAsStateWithLifecycle(emptyList())
     val rules by repo.rules.collectAsStateWithLifecycle(emptyList())
-    val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val lk = rememberLookups()
     var kind by rememberSaveable { mutableStateOf(initialKind) }
     var editing by remember { mutableStateOf<CategoryEntity?>(null) }
@@ -89,18 +88,13 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
             ReorderableColumn(roots, { it.id }, { scope.launch { repo.reorderCategories(it) } }) { c, handle ->
                 val subs = cats.filter { it.parentId == c.id }.sortedBy { it.sortOrder }
                 ManageRow(
-                    title = c.name + (if (settings.subcategoryOn && subs.isNotEmpty()) " (${subs.size})" else "") + if (c.archived) "（隱藏）" else "",
-                    subtitle = if (settings.subcategoryOn) subs.joinToString(", ") { it.name } else null,
+                    title = c.name + (if (subs.isNotEmpty()) " (${subs.size})" else "") + if (c.archived) "（隱藏）" else "",
+                    subtitle = subs.joinToString(", ").takeIf { it.isNotBlank() },
                     handle = handle, dimmed = c.archived,
                     onDelete = { deleting = c }, onEdit = { editing = c },
-                    onClick = if (settings.subcategoryOn) ({ nav.navigate("subcats/${c.id}") }) else null,
+                    onClick = { nav.navigate("subcats/${c.id}") },
                 )
             }
-            if (!settings.subcategoryOn) Text(
-                "子分類功能已關閉，可在 設定 → 分類與預算 → 子分類 開啟。",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(16.dp),
-            )
             val myRules = rules.filter { r -> lk.category(r.categoryId)?.kind == kind }
             if (myRules.isNotEmpty()) {
                 SectionTitle("已學習的商家分類（點擊刪除）", Modifier.padding(top = 16.dp))
@@ -192,7 +186,6 @@ private fun CategoryEditDialog(c: CategoryEntity, roots: List<CategoryEntity>, o
     var parentId by remember(c) { mutableStateOf(c.parentId) }
     var pickParent by remember { mutableStateOf(false) }
     val hasChildren = c.id != 0L && cats.any { it.parentId == c.id }
-    val subOn = repo.settings.flow.collectAsStateWithLifecycle().value.subcategoryOn
     val candidates = roots.filter { it.id != c.id }
 
     AlertDialog(
@@ -205,7 +198,7 @@ private fun CategoryEditDialog(c: CategoryEntity, roots: List<CategoryEntity>, o
                     Text("隱藏（不出現在記帳選單）", Modifier.weight(1f))
                     Switch(archived, { archived = it })
                 }
-                if (subOn && c.id != 0L && !hasChildren && candidates.isNotEmpty()) {
+                if (c.id != 0L && !hasChildren && candidates.isNotEmpty()) {
                     Row(
                         Modifier.fillMaxWidth().clickable { pickParent = true }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,

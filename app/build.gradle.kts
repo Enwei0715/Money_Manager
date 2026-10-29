@@ -18,7 +18,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = buildNumber
-        versionName = "1.1.$buildNumber"
+        versionName = "2.0.$buildNumber"
         buildConfigField("String", "UPDATE_REPO", "\"Enwei0715/Money_Manager\"")
     }
 
@@ -84,7 +84,6 @@ dependencies {
     ksp(libs.room.compiler)
     implementation(libs.work.runtime)
     implementation(libs.okhttp)
-    implementation(libs.mlkit.text.chinese)
     implementation(libs.serialization.json)
     implementation(libs.coroutines.android)
     testImplementation(libs.junit)

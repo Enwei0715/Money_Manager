@@ -3,6 +3,7 @@ package com.enwei.moneymanager.ui.screens
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -118,17 +120,29 @@ fun ReviewContent(
                 }
             }
             val d = data ?: return@Column
-            // 交易頁上方已顯示期間；季、年再補上實際日期範圍
+            // 交易頁上方已顯示期間，避免重複顯示年月或季度。
             if (period == null) Text(d.title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-            else if (span != ReviewSpan.MONTH) Text(d.title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             // ① 總覽
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row {
-                        Stat("收入", m(d.income), IncomeColor, Modifier.weight(1f))
-                        Stat("支出", m(d.expense), ExpenseColor, Modifier.weight(1f))
-                        Stat("結餘", m(d.net), if (d.net >= 0) IncomeColor else ExpenseColor, Modifier.weight(1f))
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val netColor = if (d.net >= 0) IncomeColor else ExpenseColor
+                        if (maxWidth < 340.dp) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row {
+                                    Stat("收入", m(d.income), IncomeColor, Modifier.weight(1f))
+                                    Stat("支出", m(d.expense), ExpenseColor, Modifier.weight(1f))
+                                }
+                                Stat("結餘", m(d.net), netColor, Modifier.fillMaxWidth())
+                            }
+                        } else {
+                            Row {
+                                Stat("收入", m(d.income), IncomeColor, Modifier.weight(1f))
+                                Stat("支出", m(d.expense), ExpenseColor, Modifier.weight(1f))
+                                Stat("結餘", m(d.net), netColor, Modifier.weight(1f))
+                            }
+                        }
                     }
                     Text(
                         listOfNotNull(
@@ -162,13 +176,17 @@ fun ReviewContent(
                     Text("支出結構", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     val maxV = d.categories.maxOf { it.amount }.coerceAtLeast(1)
                     d.categories.take(8).forEach { c ->
-                        Column {
-                            Row {
-                                Text(c.name, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                                Text(m(c.amount), fontSize = 14.sp)
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(c.name, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                                Text(m(c.amount), fontSize = 14.sp, maxLines = 1, softWrap = false)
                                 Text(
-                                    if (c.prev == 0L) "  新" else "  ${if (c.change >= 0) "▲" else "▼"}${"%.0f".format(kotlin.math.abs(c.change) * 100.0 / c.prev)}%",
-                                    fontSize = 12.sp, color = if (c.change > 0) ExpenseColor else IncomeColor, modifier = Modifier.width(56.dp),
+                                    if (c.prev == 0L) "新" else "${if (c.change >= 0) "▲" else "▼"}${"%.0f".format(kotlin.math.abs(c.change) * 100.0 / c.prev)}%",
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    color = if (c.change > 0) ExpenseColor else IncomeColor,
+                                    modifier = Modifier.width(56.dp),
                                 )
                             }
                             Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
@@ -219,7 +237,10 @@ fun ReviewContent(
                     val r = settings.reviews[d.key]
                     when {
                         r != null -> AiReviewBody(r, ::m, d, lk, settings.txnNecessity, nav)
-                        !GroqAi.enabled -> Text("到「設定 → AI 智慧辨識」填入金鑰後，可以產生 AI 檢討。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        !GroqAi.enabled -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("設定 AI 金鑰後即可產生檢討。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { nav.navigate("ai") }) { Text("設定 AI") }
+                        }
                         else -> Text("按「產生」寫出這期的檢討與下期目標", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -241,7 +262,7 @@ fun ReviewContent(
 private fun Stat(label: String, value: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
     Column(modifier) {
         Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontSize = 16.sp, color = color, maxLines = 1)
+        Text(value, fontSize = 16.sp, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

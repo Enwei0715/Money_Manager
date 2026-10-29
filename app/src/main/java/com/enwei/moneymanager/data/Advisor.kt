@@ -105,7 +105,7 @@ suspend fun Repository.advisorSnapshot(fetch: Boolean = true): AdvisorSnapshot =
     val grouped = raw.groupBy { it.symbol }
     val barsJobs = if (fetch) grouped.keys.associateWith { sym -> async { BarCache.get(sym, "1y") } } else emptyMap()
     // 保本＋移動停利要看 60 分 K 的 20MA、50MA
-    val hourJobs = if (fetch && plan.guardOn) grouped.keys.associateWith { sym -> async { BarCache.get(sym, "1mo", "60m") } } else emptyMap()
+    val hourJobs = if (fetch && plan.disciplineOn && plan.guardOn) grouped.keys.associateWith { sym -> async { BarCache.get(sym, "1mo", "60m") } } else emptyMap()
     val allTrades = trades.first().filter { it.market == Market.TW }
     val indexJob = if (fetch) async { BarCache.get("^TWII", "1y") } else null
     val soxJob = if (fetch) async { BarCache.get("^SOX", "1y") } else null
@@ -131,13 +131,15 @@ suspend fun Repository.advisorSnapshot(fetch: Boolean = true): AdvisorSnapshot =
         HoldingPlan(
             sym, list.firstNotNullOfOrNull { it.name } ?: bars?.name, shares, avg, price,
             conv.convert(Money.toMinor(list.sumOf { it.marketValue }), list.first().currency), style, first, peak,
-            price?.let { p -> Discipline.advise(style, avg, p, peak ?: p, plan.rule()) },
-            gi, gi?.let { com.enwei.moneymanager.core.ProfitGuard.advise(it, plan.guardRule()) }, gs?.principal == null,
+            price?.takeIf { plan.disciplineOn }?.let { p -> Discipline.advise(style, avg, p, peak ?: p, plan.rule()) },
+            gi.takeIf { plan.disciplineOn && plan.guardOn },
+            gi?.takeIf { plan.disciplineOn && plan.guardOn }?.let { com.enwei.moneymanager.core.ProfitGuard.advise(it, plan.guardRule()) },
+            gs?.principal == null,
             bars?.close?.let { com.enwei.moneymanager.core.ProfitGuard.dailyTrend(it) },
         )
     }.sortedByDescending { it.value }
     // 記下移動停利的最高價（下次從這裡繼續往上移）
-    if (plan.guardOn) saveGuardPeaks(holdings.mapNotNull { h -> h.guard?.let { h.symbol to it.peak } }.toMap())
+    if (plan.disciplineOn && plan.guardOn) saveGuardPeaks(holdings.mapNotNull { h -> h.guard?.let { h.symbol to it.peak } }.toMap())
     val longValue = holdings.filter { it.style == TradeStyle.LONG }.sumOf { it.value }
     val shortValue = holdings.filter { it.style == TradeStyle.SHORT }.sumOf { it.value }
     val index = indexJob?.await()
@@ -233,7 +235,7 @@ private fun Repository.situation(snap: AdvisorSnapshot): String {
         appendLine("今天：${LocalDate.now()}")
         appendLine(describe("加權指數", snap.index, snap.indexStage))
         appendLine(describe("費城半導體", snap.sox, snap.soxStage))
-        appendLine("資金計畫：現金 ${m(a.cash)}，保留生活費 ${m(a.reserve)}，可投資 ${m(a.investable)}（長線 ${"%.0f".format(s.investPlan.longRatio * 100)}%）；" +
+        appendLine("資金計畫：現金 ${m(a.cash)}，預留金額 ${m(a.reserve)}，可投資 ${m(a.investable)}（長線 ${"%.0f".format(s.investPlan.longRatio * 100)}%）；" +
             "長線已投入 ${m(a.longValue)}／目標 ${m(a.longTarget)}，可再投入 ${m(a.longRoom)}；短線已投入 ${m(a.shortValue)}／目標 ${m(a.shortTarget)}，可再投入 ${m(a.shortRoom)}")
         appendLine("持股（代號 名稱｜股性｜股數｜均價｜現價｜損益%｜規則建議）：" + if (snap.holdings.isEmpty()) "無" else "")
         snap.holdings.forEach { h ->
@@ -243,7 +245,7 @@ private fun Repository.situation(snap: AdvisorSnapshot): String {
             )
         }
         if (s.watchlist.isNotEmpty()) appendLine("觀察清單（使用者想留意、還沒買的）：" + s.watchlist.joinToString("、"))
-        if (s.investPlan.guardOn) {
+        if (s.investPlan.disciplineOn && s.investPlan.guardOn) {
             appendLine("保本＋移動停利（App 依紀律算好的，請以此為準給建議）：")
             snap.holdings.forEach { h ->
                 val g = h.guard ?: return@forEach
@@ -255,31 +257,39 @@ private fun Repository.situation(snap: AdvisorSnapshot): String {
                 )
             }
         }
-        appendLine("紀律：" + s.investPlan.rules.joinToString("；"))
+        if (s.investPlan.rules.isNotEmpty()) {
+            appendLine("使用者設定的投資原則：" + s.investPlan.rules.joinToString("；"))
+        }
     }
 }
 
 /** 資料集摘要：題材熱度、個股統計（附最新一則標題）、重點新聞（編號 → 新聞 id）。 */
 private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: Int, important: Int, full: Boolean = false): Pair<String, List<NewsItem>> {
     val recent = ds.recent(st, 3)
+    val coverage = ds.coverage(st)
+    val recentAll = st.items.filter { it.epochSec >= System.currentTimeMillis() / 1000 - 3 * 86_400L }
     val imp = ds.important(st, 2, important)
     val text = buildString {
-        appendLine("新聞資料集：近 3 天已標註 ${recent.size} 則（共收 ${st.items.size} 則）")
+        appendLine("新聞資料集：近 3 天共 ${coverage.recent} 則，待標註 ${coverage.pending} 則，已整理進重點庫 ${coverage.digested} 則；資料集共收 ${st.items.size} 則")
+        appendLine("近 3 天來源內容範圍：取得正文或摘要 ${recentAll.count { it.contentLevel != "title" }} 則，只有標題 ${recentAll.count { it.contentLevel == "title" }} 則")
+        com.enwei.moneymanager.net.InvestData.lastHeadlineError?.let { appendLine("新聞搜尋完整性警告：$it") }
         appendLine("題材熱度（則數｜平均多空 -2~2｜重大則數）：")
-        ds.themes(st).take(themes).forEach { appendLine("- ${it.key}｜${it.count}｜${"%+.1f".format(it.avgSentiment)}｜${it.important}") }
+        ds.themes(st).let { if (full) it else it.take(themes) }.forEach { appendLine("- ${it.key}｜${it.count}｜${"%+.1f".format(it.avgSentiment)}｜${it.important}") }
         appendLine("被提到最多的個股（代號｜則數｜多空｜最新標題）：")
-        ds.symbols(st).take(symbols).forEach { t ->
+        ds.symbols(st).let { if (full) it else it.take(symbols) }.forEach { t ->
             val heads = recent.filter { t.key in it.symbols }.take(if (full) 3 else 1).joinToString(" / ") { it.title.take(if (full) 40 else 24) }
             appendLine("- ${t.key}｜${t.count}｜${"%+.1f".format(t.avgSentiment)}｜$heads")
         }
         // 新聞重點庫：所有新聞依題材整理後的重點（同一事件只寫一次）
-        val byTheme = st.digests.values.groupBy { it.theme }.entries.sortedByDescending { e -> e.value.sumOf { it.count } }
+        val cutoff = LocalDate.now().minusDays(2).toString()
+        val byTheme = st.digests.values.filter { it.day >= cutoff }.groupBy { it.theme }
+            .entries.sortedByDescending { e -> e.value.sumOf { it.count } }
         if (byTheme.isNotEmpty()) {
             appendLine("新聞重點庫（依題材；每點後為相關代號、多空 -2~2、幾則新聞提到）：")
-            byTheme.take(if (full) 30 else 8).forEach { (theme, days) ->
+            (if (full) byTheme else byTheme.take(8)).forEach { (theme, days) ->
                 appendLine("【$theme】")
-                days.sortedByDescending { it.day }.take(if (full) 3 else 1).forEach { d ->
-                    d.points.take(if (full) 8 else 3).forEach { p ->
+                (if (full) days else days.sortedByDescending { it.day }.take(1)).forEach { d ->
+                    (if (full) d.points else d.points.take(3)).forEach { p ->
                         appendLine("- ${d.day.substring(5)} ${p.text}" + (if (p.symbols.isNotEmpty()) "｜${p.symbols.joinToString(",")}" else "") + "｜${p.sentiment}｜${p.count}則")
                     }
                 }
@@ -289,10 +299,13 @@ private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: 
         imp.forEachIndexed { i, n -> appendLine("[$i] ${n.title.take(45)}" + (n.note.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: "")) }
         // 讀得下大量資料時（Gemini）：附上近 3 天所有新聞標題，依題材分組
         if (full) {
-            appendLine("近 3 天所有新聞（依題材；括號為多空 -2~2）：")
+            appendLine("近 3 天所有新聞標題、來源內容範圍與合併篇數（依題材；括號為多空 -2~2）：")
             recent.groupBy { it.theme.ifBlank { "其他" } }.entries.sortedByDescending { it.value.size }.forEach { (theme, list) ->
                 appendLine("【$theme】")
-                list.take(40).forEach { n -> appendLine("- ${n.title.take(60)}（${n.sentiment}）" + if (n.symbols.isNotEmpty()) " ${n.symbols.joinToString(",")}" else "") }
+                list.forEach { n ->
+                    appendLine("- [${n.contentLevel}] ${n.title}（${n.sentiment}；合併 ${n.duplicateCount} 篇）" +
+                        (if (n.symbols.isNotEmpty()) " ${n.symbols.joinToString(",")}" else ""))
+                }
             }
         }
     }
@@ -310,6 +323,7 @@ suspend fun Repository.refreshNews(
     val extra = (holdings.map { "${it.symbol} ${it.name.orEmpty()}".trim() } + watched + watch).distinct().take(25)
     onStep("蒐集新聞…")
     val added = ds.collect(extra)
+    com.enwei.moneymanager.net.InvestData.lastHeadlineError?.let(onStep)
     if (com.enwei.moneymanager.net.GroqAi.enabled) {
         ds.tag { i, n -> onBatch(i, n); onStep("AI 標註新聞 ${i + 1}/$n 批…") }
         // 把全部新聞整理成每天、每個題材的重點
@@ -324,9 +338,18 @@ suspend fun Repository.refreshNews(
  */
 suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Unit): DailyReport? {
     var st = ds.load()
-    if (System.currentTimeMillis() - st.lastCollect > 3 * 3600_000L || ds.recent(st, 3).size < 300) {
+    if (System.currentTimeMillis() - st.lastCollect > 3 * 3600_000L) {
         refreshNews(ds, onStep)
         st = ds.load()
+    }
+    val coverage = ds.coverage(st)
+    if (coverage.pending > 0 || coverage.digested < coverage.recent) {
+        onStep("近 3 天新聞仍有 ${coverage.pending} 則待標註、${coverage.recent - coverage.digested} 則未納入完整重點整理，暫不產生可能遺漏資料的報告；稍後會繼續處理。")
+        return null
+    }
+    com.enwei.moneymanager.net.InvestData.lastHeadlineError?.let {
+        onStep("$it，新聞蒐集完整性未確認，暫不產生報告。")
+        return null
     }
     onStep("讀取大盤與持股走勢…")
     val snap = advisorSnapshot(fetch = true)
