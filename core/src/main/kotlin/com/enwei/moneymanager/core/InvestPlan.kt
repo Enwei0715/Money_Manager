@@ -26,6 +26,54 @@ object Technicals {
         return if (loss == 0.0) 100.0 else 100 - 100 / (1 + gain / loss)
     }
 
+    /** 指數移動平均（整條序列）。 */
+    fun ema(v: List<Double>, n: Int): List<Double> {
+        if (v.isEmpty()) return emptyList()
+        val k = 2.0 / (n + 1)
+        val out = ArrayList<Double>(v.size)
+        var e = v.first()
+        v.forEach { x -> e = x * k + e * (1 - k); out += e }
+        return out
+    }
+
+    /** MACD（12、26、9）：DIF、訊號線（DEA）、柱狀體（DIF − DEA），長度與輸入相同。 */
+    data class Macd(val dif: List<Double>, val signal: List<Double>, val hist: List<Double>)
+
+    fun macd(v: List<Double>, fast: Int = 12, slow: Int = 26, sig: Int = 9): Macd {
+        val f = ema(v, fast); val s = ema(v, slow)
+        val dif = f.indices.map { f[it] - s[it] }
+        val dea = ema(dif, sig)
+        return Macd(dif, dea, dif.indices.map { dif[it] - dea[it] })
+    }
+
+    /** RSI 整條序列（前 [n] 天為 null）。 */
+    fun rsiSeries(v: List<Double>, n: Int = 14): List<Double?> = v.indices.map { i -> if (i < n) null else rsi(v.subList(0, i + 1), n) }
+
+    /** KD（9、3、3，台股常用）：K、D 值 0～100。 */
+    fun kd(high: List<Double>, low: List<Double>, close: List<Double>, n: Int = 9): Pair<List<Double>, List<Double>> {
+        var k = 50.0; var d = 50.0
+        val ks = ArrayList<Double>(); val ds = ArrayList<Double>()
+        close.indices.forEach { i ->
+            val from = maxOf(0, i - n + 1)
+            val hh = (from..i).maxOf { high[it] }
+            val ll = (from..i).minOf { low[it] }
+            val rsv = if (hh > ll) (close[i] - ll) / (hh - ll) * 100 else 50.0
+            k = k * 2 / 3 + rsv / 3
+            d = d * 2 / 3 + k / 3
+            ks += k; ds += d
+        }
+        return ks to ds
+    }
+
+    /** 布林通道（20 日、2 倍標準差）：上軌、中軌、下軌（資料不足為 null）。 */
+    fun bollinger(v: List<Double>, n: Int = 20, k: Double = 2.0): Triple<List<Double?>, List<Double?>, List<Double?>> {
+        val mid = v.indices.map { i -> sma(v, n, i + 1) }
+        val sd = v.indices.map { i ->
+            mid[i]?.let { m -> kotlin.math.sqrt(v.subList(i + 1 - n, i + 1).sumOf { (it - m) * (it - m) } / n) }
+        }
+        return Triple(mid.indices.map { i -> mid[i]?.let { it + k * sd[i]!! } }, mid, mid.indices.map { i -> mid[i]?.let { it - k * sd[i]!! } })
+    }
+
     /** 收盤價相對 [daysAgo] 天前的漲跌幅（%）。 */
     fun change(v: List<Double>, daysAgo: Int): Double? =
         if (v.size <= daysAgo) null else (v.last() / v[v.size - 1 - daysAgo] - 1) * 100

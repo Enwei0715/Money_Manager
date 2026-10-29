@@ -19,7 +19,7 @@ data class DailyBars(
 }
 
 /** 一則新聞標題。 */
-data class Headline(val title: String, val source: String, val epochSec: Long)
+data class Headline(val title: String, val source: String, val epochSec: Long, val url: String = "")
 
 object InvestData {
     /** Yahoo Finance 日線；台股依序試 .TW、.TWO。 */
@@ -89,6 +89,7 @@ object InvestData {
     private val titleRe = Regex("<title>(.*?)</title>", RegexOption.DOT_MATCHES_ALL)
     private val sourceRe = Regex("<source[^>]*>(.*?)</source>", RegexOption.DOT_MATCHES_ALL)
     private val dateRe = Regex("<pubDate>(.*?)</pubDate>")
+    private val linkRe = Regex("<link>(.*?)</link>", RegexOption.DOT_MATCHES_ALL)
 
     fun parseRss(xml: String): List<Headline> = itemRe.findAll(xml).mapNotNull { m ->
         val body = m.groupValues[1]
@@ -99,7 +100,7 @@ object InvestData {
         val sec = dateRe.find(body)?.groupValues?.get(1)?.let {
             runCatching { java.time.ZonedDateTime.parse(it, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toEpochSecond() }.getOrNull()
         } ?: 0L
-        Headline(title, source, sec)
+        Headline(title, source, sec, linkRe.find(body)?.groupValues?.get(1)?.let(::unescape).orEmpty())
     }.sortedByDescending { it.epochSec }.toList()
 
     private fun unescape(s: String) = s.replace("<![CDATA[", "").replace("]]>", "")

@@ -2,6 +2,7 @@ package com.enwei.moneymanager.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -64,6 +65,10 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     var span by remember { mutableStateOf(120) }
     var business by remember { mutableStateOf<String?>(null) }
     var news by remember { mutableStateOf<List<NewsItem>>(emptyList()) }
+    var divs by remember { mutableStateOf<List<com.enwei.moneymanager.core.DividendEvent>>(emptyList()) }
+    var indicator by remember { mutableStateOf(0) }
+    var showBB by remember { mutableStateOf(false) }
+    val trades by repo.trades.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     LaunchedEffect(symbol) {
         bars = InvestData.bars(symbol, "2y")
@@ -72,6 +77,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
         business = st.business[symbol]
         news = MoneyApp.news.about(st, symbol)
         loading = false
+        divs = runCatching { com.enwei.moneymanager.net.QuoteService.fetchDividends(Market.TW, symbol) }.getOrDefault(emptyList())
     }
     val held = holdings.values.flatten().filter { it.market == Market.TW && it.symbol == symbol && it.shares > 0.0001 }
     val name = held.firstNotNullOfOrNull { it.name } ?: bars?.name
@@ -116,8 +122,16 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf(60 to "3 個月", 120 to "6 個月", 250 to "1 年").forEach { (n, l) -> FilterChip(span == n, { span = n }, label = { Text(l) }) }
                         }
-                        CandleChart(b, span)
-                        Text("— 5 日  — 20 日（月線）  — 60 日（季線）", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        CandleChart(b, span, showBB)
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Text("— 5 日  — 20 日（月線）  — 60 日（季線）", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                            FilterChip(showBB, { showBB = !showBB }, label = { Text("布林", fontSize = 12.sp) })
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("成交量", "RSI", "MACD", "KD").forEachIndexed { i, l -> FilterChip(indicator == i, { indicator = i }, label = { Text(l, fontSize = 12.sp) }) }
+                        }
+                        IndicatorChart(b, span, indicator)
+                        IndicatorNote(b, indicator)
                     }
                 }
                 // 強弱與階段
@@ -152,6 +166,37 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                 }
             }
+            // 除權息
+            if (divs.isNotEmpty() && b != null) Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("除權息", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    val today = java.time.LocalDate.now().toEpochDay()
+                    val yearCash = divs.filter { it.exEpochDay in (today - 365)..today }.sumOf { it.perShare }
+                    val last = b.close.last()
+                    Text(
+                        "近一年現金股利 ${"%.2f".format(yearCash)} 元" + (if (last > 0 && yearCash > 0) "，殖利率約 ${"%.2f".format(yearCash / last * 100)}%" else ""),
+                        fontSize = 14.sp,
+                    )
+                    divs.filter { it.exEpochDay > today }.forEach { e ->
+                        Text("即將除權息：${java.time.LocalDate.ofEpochDay(e.exEpochDay)}（${e.exEpochDay - today} 天後）", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                    divs.sortedByDescending { it.exEpochDay }.take(10).forEach { e ->
+                        Row {
+                            Text(java.time.LocalDate.ofEpochDay(e.exEpochDay).toString(), fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Text(listOfNotNull(
+                                e.perShare.takeIf { it > 0 }?.let { "現金 ${"%.4f".format(it).trimEnd('0').trimEnd('.')} 元" },
+                                e.stockPerShare.takeIf { it > 0 }?.let { "股票 ${"%.4f".format(it * 10).trimEnd('0').trimEnd('.')} 元" },
+                            ).joinToString("、"), fontSize = 13.sp)
+                        }
+                    }
+                    val mine = trades.filter { it.market == Market.TW && it.symbol.equals(symbol, true) && it.side == com.enwei.moneymanager.core.StockSide.CASH_DIVIDEND }
+                    if (mine.isNotEmpty()) Text("我已領現金股利 ${"%,.0f".format(mine.sumOf { it.cashAmount })} 元（${mine.map { it.date }.distinct().size} 次）", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                    Text("每次除權息都用當次的配發金額，乘上除權息日當天的持股自動記帳；超過 60 天的紀錄會鎖定，事後資料修改不影響。",
+                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            // 價格提醒
+            if (b != null) PriceAlertCard(symbol, b.close.last(), held.isNotEmpty())
             // 公司業務
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -207,7 +252,10 @@ fun NewsLine(n: NewsItem) {
         n.sentiment < 0 -> StockDown
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Column(Modifier.padding(vertical = 2.dp)) {
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    // 點新聞開啟原文；舊資料沒有連結時改用搜尋
+    val link = n.url.ifBlank { "https://www.google.com/search?tbm=nws&q=" + java.net.URLEncoder.encode(n.title, "UTF-8") }
+    Column(Modifier.fillMaxWidth().clickable { runCatching { uri.openUri(link) } }.padding(vertical = 4.dp)) {
         Text((if (n.sentiment > 0) "▲ " else if (n.sentiment < 0) "▼ " else "• ") + n.title, fontSize = 13.sp, color = c)
         Text(
             listOfNotNull(
@@ -222,7 +270,8 @@ fun NewsLine(n: NewsItem) {
 
 /** 日 K 線：紅漲綠跌（台股慣例），疊 5／20／60 日均線，下方成交量。 */
 @Composable
-private fun CandleChart(b: DailyBars, span: Int) {
+private fun CandleChart(b: DailyBars, span: Int, showBB: Boolean = false) {
+    val bb = remember(b) { Technicals.bollinger(b.close) }
     val up = StockUp
     val down = StockDown
     val grid = MaterialTheme.colorScheme.outlineVariant
@@ -251,6 +300,16 @@ private fun CandleChart(b: DailyBars, span: Int) {
             val vh = ((v / maxVol) * (size.height - volTop)).toFloat()
             drawRect(col.copy(alpha = 0.5f), Offset(i * cw + cw * 0.15f, size.height - vh), Size(cw * 0.7f, vh))
         }
+        if (showBB) listOf(bb.first, bb.third).forEach { band ->
+            val p = Path()
+            var started = false
+            for (i in 0 until n) {
+                val v = band[from + i] ?: continue
+                val pt = Offset(i * cw + cw / 2, y(v).coerceIn(0f, priceH))
+                if (!started) { p.moveTo(pt.x, pt.y); started = true } else p.lineTo(pt.x, pt.y)
+            }
+            drawPath(p, Color(0xFF90A4AE), style = Stroke(width = 1.5f))
+        }
         ma.forEach { (len, col) ->
             val p = Path()
             var started = false
@@ -262,4 +321,120 @@ private fun CandleChart(b: DailyBars, span: Int) {
             drawPath(p, col, style = Stroke(width = 2f))
         }
     }
+}
+
+
+/** 價格提醒：目標價、停損價（盤中每 15 分鐘檢查，達到時通知）。 */
+@Composable
+private fun PriceAlertCard(symbol: String, price: Double, held: Boolean) {
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    val a = settings.priceAlerts[symbol]
+    var target by remember(a) { mutableStateOf(a?.target?.toString().orEmpty()) }
+    var stop by remember(a) { mutableStateOf(a?.stop?.toString().orEmpty()) }
+    fun save() = repo.settings.update { st ->
+        val pa = com.enwei.moneymanager.data.PriceAlert(target.toDoubleOrNull()?.takeIf { it > 0 }, stop.toDoubleOrNull()?.takeIf { it > 0 })
+        st.copy(priceAlerts = if (pa.target == null && pa.stop == null) st.priceAlerts - symbol else st.priceAlerts + (symbol to pa))
+    }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("價格提醒", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                com.enwei.moneymanager.ui.components.NumberField(target, { target = it; save() }, "目標價（漲到通知）", Modifier.weight(1f))
+                com.enwei.moneymanager.ui.components.NumberField(stop, { stop = it; save() }, "停損價（跌到通知）", Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = { target = "%.2f".format(price * 1.1); save() }) { Text("+10%") }
+                OutlinedButton(onClick = { stop = "%.2f".format(price * 0.92); save() }) { Text("−8%") }
+            }
+            Text(
+                "台股交易時間每 15 分鐘檢查一次，達到時通知（同一天只通知一次）。" + if (held) "持股另外會依你的紀律自動提醒動態停損與分批停利。" else "",
+                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** K 線下方的指標圖：成交量、RSI（70／30）、MACD（DIF、DEA、柱狀體）、KD（80／20）。 */
+@Composable
+private fun IndicatorChart(b: DailyBars, span: Int, kind: Int) {
+    val up = StockUp
+    val down = StockDown
+    val grid = MaterialTheme.colorScheme.outlineVariant
+    val c1 = Color(0xFF7E57C2)
+    val c2 = Color(0xFFFFA000)
+    val macd = remember(b) { Technicals.macd(b.close) }
+    val rsi = remember(b) { Technicals.rsiSeries(b.close) }
+    val kd = remember(b) { Technicals.kd(b.high, b.low, b.close) }
+    Canvas(Modifier.fillMaxWidth().height(110.dp).padding(top = 6.dp)) {
+        val n = minOf(span, b.close.size)
+        val from = b.close.size - n
+        val cw = size.width / n
+        fun line(values: List<Double?>, lo: Double, hi: Double, col: Color) {
+            val p = Path(); var started = false
+            for (i in 0 until n) {
+                val v = values.getOrNull(from + i) ?: continue
+                val y = ((hi - v) / (hi - lo) * size.height).toFloat().coerceIn(0f, size.height)
+                val x = i * cw + cw / 2
+                if (!started) { p.moveTo(x, y); started = true } else p.lineTo(x, y)
+            }
+            drawPath(p, col, style = Stroke(width = 2f))
+        }
+        fun hline(v: Double, lo: Double, hi: Double) {
+            val y = ((hi - v) / (hi - lo) * size.height).toFloat()
+            drawLine(grid, Offset(0f, y), Offset(size.width, y), 1f)
+        }
+        when (kind) {
+            0 -> {
+                val maxVol = (from until b.close.size).maxOf { b.volume.getOrNull(it) ?: 0.0 }.takeIf { it > 0 } ?: 1.0
+                for (i in 0 until n) {
+                    val j = from + i
+                    val v = b.volume.getOrNull(j) ?: 0.0
+                    val h = (v / maxVol * size.height).toFloat()
+                    drawRect((if (b.close[j] >= b.open[j]) up else down).copy(alpha = 0.6f), Offset(i * cw + cw * 0.15f, size.height - h), Size(cw * 0.7f, h))
+                }
+            }
+            1 -> { hline(70.0, 0.0, 100.0); hline(30.0, 0.0, 100.0); line(rsi, 0.0, 100.0, c1) }
+            2 -> {
+                val vals = (from until b.close.size).flatMap { listOf(macd.dif[it], macd.signal[it], macd.hist[it]) }
+                val m = vals.maxOf { kotlin.math.abs(it) }.takeIf { it > 0 } ?: 1.0
+                hline(0.0, -m, m)
+                for (i in 0 until n) {
+                    val h = macd.hist[from + i]
+                    val y0 = size.height / 2
+                    val y1 = ((m - h) / (2 * m) * size.height).toFloat()
+                    drawRect((if (h >= 0) up else down).copy(alpha = 0.6f), Offset(i * cw + cw * 0.2f, minOf(y0, y1)), Size(cw * 0.6f, kotlin.math.abs(y1 - y0)))
+                }
+                line(macd.dif, -m, m, c2); line(macd.signal, -m, m, c1)
+            }
+            else -> { hline(80.0, 0.0, 100.0); hline(20.0, 0.0, 100.0); line(kd.first, 0.0, 100.0, c2); line(kd.second, 0.0, 100.0, c1) }
+        }
+    }
+}
+
+/** 指標目前數值與簡單判讀。 */
+@Composable
+private fun IndicatorNote(b: DailyBars, kind: Int) {
+    val txt = when (kind) {
+        0 -> {
+            val v = b.volume
+            val v5 = if (v.size >= 5) v.takeLast(5).average() else null
+            val v20 = if (v.size >= 20) v.takeLast(20).average() else null
+            if (v5 != null && v20 != null && v20 > 0) "5 日均量 ${"%,.0f".format(v5 / 1000)} 張、20 日均量 ${"%,.0f".format(v20 / 1000)} 張" +
+                if (v5 > v20 * 1.5) "（量增）" else if (v5 < v20 * 0.6) "（量縮）" else "" else ""
+        }
+        1 -> Technicals.rsi(b.close)?.let { r -> "RSI ${"%.0f".format(r)}" + if (r >= 70) "（過熱，追高小心）" else if (r <= 30) "（超賣，留意反彈）" else "" }.orEmpty()
+        2 -> Technicals.macd(b.close).let { m ->
+            val n = m.dif.size
+            val cross = if (n >= 2 && m.hist[n - 2] < 0 && m.hist[n - 1] >= 0) "，剛出現黃金交叉" else if (n >= 2 && m.hist[n - 2] > 0 && m.hist[n - 1] <= 0) "，剛出現死亡交叉" else ""
+            "DIF ${"%.2f".format(m.dif.last())}、DEA ${"%.2f".format(m.signal.last())}、柱 ${"%+.2f".format(m.hist.last())}$cross"
+        }
+        else -> Technicals.kd(b.high, b.low, b.close).let { (k, d) ->
+            "K ${"%.0f".format(k.last())}、D ${"%.0f".format(d.last())}" + when {
+                k.last() >= 80 -> "（高檔）"
+                k.last() <= 20 -> "（低檔）"
+                else -> ""
+            } + if (k.size >= 2 && k[k.size - 2] < d[d.size - 2] && k.last() >= d.last()) "，K 向上穿越 D" else ""
+        }
+    }
+    if (txt.isNotBlank()) Text(txt, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

@@ -1669,9 +1669,12 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         db.withTransaction {
             events.filter { it.exEpochDay > firstDay && it.exEpochDay <= today.toEpochDay() }.forEach { ev ->
                 val manual = all.any { it.side == StockSide.CASH_DIVIDEND && it.externalKey == null && kotlin.math.abs(it.date - ev.exEpochDay) <= 20 }
+                // 除權息超過 60 天（股利早已入帳）：已記的不再因資料來源事後修改而變動，只補記新買進批次漏算的
+                val frozen = ev.exEpochDay < today.toEpochDay() - 60
                 val prefix = "$sym:${LocalDate.ofEpochDay(ev.exEpochDay)}:"
                 val autoExisting = all.filter { k -> k.externalKey?.let { it.startsWith("DIV:$prefix") || it.startsWith("SDIV:$prefix") } == true }
                 if (manual) {
+                    if (frozen) return@forEach
                     autoExisting.forEach { db.stocks().deleteTrade(it.id); changed++ }
                     return@forEach
                 }
@@ -1705,7 +1708,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                                 ),
                             )
                             changed++
-                        } else if (old.cashAmount != cashAmt || old.shares != shares || old.cashAccountId != lot.cashAccountId ||
+                        } else if (!frozen && old.cashAmount != cashAmt || old.shares != shares || old.cashAccountId != lot.cashAccountId ||
                             old.brokerAccountId != lot.brokerAccountId || old.note != note || old.name != lot.name
                         ) {
                             db.stocks().upsertTrade(old.copy(cashAmount = cashAmt, shares = shares, cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId, note = note, name = lot.name))
@@ -1713,7 +1716,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                         }
                     }
                 }
-                autoExisting.filter { it.externalKey !in keep }.forEach { db.stocks().deleteTrade(it.id); changed++ }
+                if (!frozen) autoExisting.filter { it.externalKey !in keep }.forEach { db.stocks().deleteTrade(it.id); changed++ }
             }
         }
         return changed

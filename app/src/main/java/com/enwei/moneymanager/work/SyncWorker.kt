@@ -27,6 +27,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         runCatching { repo.aiAutoTidy() }
         runCatching { warnFunding(applicationContext, repo) }
         runCatching { warnLoans(applicationContext, repo) }
+        runCatching { StockAlertWorker.checkUpdate(applicationContext) }
         val ok = runCatching { refreshMarket(repo) }.isSuccess
         return if (ok || runAttemptCount > 2) Result.success() else Result.retry()
     }

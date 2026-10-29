@@ -55,6 +55,10 @@ data class LoanInfo(
     val recurringId: Long? = null,
 )
 
+/** 一檔股票的價格提醒：漲到 [target] 以上或跌到 [stop] 以下時通知。 */
+@Serializable
+data class PriceAlert(val target: Double? = null, val stop: Double? = null)
+
 /** 投資紀律與資金控管計畫（金額為最小單位、比例為 %）。 */
 @Serializable
 data class InvestPlanSettings(
@@ -277,6 +281,16 @@ data class AppSettings(
     /** 使用者標記「不是重複」的交易組合（"小id-大id"） */
     val dupDismissed: Set<String> = emptySet(),
     val investPlan: InvestPlanSettings = InvestPlanSettings(),
+    /** 股價提醒：代號 → 目標價／停損價 */
+    val priceAlerts: Map<String, PriceAlert> = emptyMap(),
+    /** 盤中依紀律（動態停損、分批停利）自動通知 */
+    val stockAlertsOn: Boolean = true,
+    /** 已通知過的提醒（「代號:種類」→ 日期 epochDay），同一天不重複 */
+    val alertsFired: Map<String, Long> = emptyMap(),
+    /** 有新版本時通知 */
+    val notifyUpdates: Boolean = true,
+    /** 已通知過的版本代碼 */
+    val updateNotified: Int = 0,
     /** 背景蒐集新聞並每天產生投資報告 */
     val advisorDaily: Boolean = true,
     /** 交易的必要性（交易 id → NEED／SAVE／ONCE＋備註），收支檢討時讓 AI 參考 */
@@ -397,6 +411,11 @@ class SettingsStore(context: Context) {
         loans = runCatching { json.decodeFromString(loanSerializer, prefs.getString("loans", "{}")!!) }.getOrDefault(emptyMap()),
         loanWarnKey = prefs.getString("loanWarnKey", "")!!,
         advisorDaily = prefs.getBoolean("advisorDaily", true),
+        priceAlerts = runCatching { json.decodeFromString(MapSerializer(String.serializer(), PriceAlert.serializer()), prefs.getString("priceAlerts", "{}")!!) }.getOrDefault(emptyMap()),
+        stockAlertsOn = prefs.getBoolean("stockAlertsOn", true),
+        alertsFired = runCatching { json.decodeFromString(MapSerializer(String.serializer(), Long.serializer()), prefs.getString("alertsFired", "{}")!!) }.getOrDefault(emptyMap()),
+        notifyUpdates = prefs.getBoolean("notifyUpdates", true),
+        updateNotified = prefs.getInt("updateNotified", 0),
         txnNecessity = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("txnNecessity", "{}")!!) }.getOrDefault(emptyMap()),
         investPlan = runCatching { json.decodeFromString(InvestPlanSettings.serializer(), prefs.getString("investPlan", "")!!) }.getOrDefault(InvestPlanSettings()),
         stockStyle = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("stockStyle", "{}")!!) }.getOrDefault(emptyMap()),
@@ -546,6 +565,11 @@ class SettingsStore(context: Context) {
             .putString("loanWarnKey", s.loanWarnKey)
             .putString("reviews", json.encodeToString(reviewSerializer, s.reviews))
             .putBoolean("advisorDaily", s.advisorDaily)
+            .putString("priceAlerts", json.encodeToString(MapSerializer(String.serializer(), PriceAlert.serializer()), s.priceAlerts))
+            .putBoolean("stockAlertsOn", s.stockAlertsOn)
+            .putString("alertsFired", json.encodeToString(MapSerializer(String.serializer(), Long.serializer()), s.alertsFired))
+            .putBoolean("notifyUpdates", s.notifyUpdates)
+            .putInt("updateNotified", s.updateNotified)
             .putString("txnNecessity", json.encodeToString(longStrSerializer, s.txnNecessity))
             .putString("investPlan", json.encodeToString(InvestPlanSettings.serializer(), s.investPlan))
             .putString("stockStyle", json.encodeToString(strMapSerializer, s.stockStyle))

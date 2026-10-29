@@ -43,6 +43,7 @@ class MoneyApp : Application() {
         }
         SyncWorker.schedule(this)
         com.enwei.moneymanager.work.NewsWorker.schedule(this)
+        com.enwei.moneymanager.work.StockAlertWorker.schedule(this)
         com.enwei.moneymanager.work.BackupWorker.schedule(this)
         // 資料有變動就更新桌面小工具
         appScope.launch {

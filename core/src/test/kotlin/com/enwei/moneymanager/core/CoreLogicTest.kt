@@ -549,3 +549,28 @@ class InvestPlanTest {
         assertEquals(MarketStage.LATE_UP, Technicals.stage(hot))
     }
 }
+
+class IndicatorTest {
+    @Test fun macdPositiveInUptrend() {
+        val up = (0 until 80).map { 100.0 + it }
+        val m = Technicals.macd(up)
+        assertEquals(true, m.dif.last() > 0)
+        assertEquals(true, m.signal.last() > 0)
+    }
+
+    @Test fun kdHighAtTopOfRange() {
+        val c = (0 until 30).map { 100.0 + it }
+        val (k, d) = Technicals.kd(c.map { it + 0.5 }, c.map { it - 0.5 }, c)
+        assertEquals(true, k.last() > 80)
+        assertEquals(true, d.last() > 70)
+    }
+
+    @Test fun bollingerFlatHasZeroWidth() {
+        val flat = List(30) { 50.0 }
+        val (u, m, l) = Technicals.bollinger(flat)
+        assertEquals(50.0, m.last()!!, 1e-9)
+        assertEquals(50.0, u.last()!!, 1e-9)
+        assertEquals(50.0, l.last()!!, 1e-9)
+        assertEquals(null, m.first())
+    }
+}

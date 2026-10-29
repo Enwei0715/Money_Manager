@@ -29,6 +29,8 @@ data class NewsItem(
     val importance: Int = 1,
     /** 重要新聞的一句話重點 */
     val note: String = "",
+    /** 新聞連結 */
+    val url: String = "",
 )
 
 /** 每日 AI 選股的一檔。 */
@@ -146,7 +148,7 @@ class NewsDataset(context: Context) {
             val have = st.items.associateBy { it.id }
             val fresh = heads.mapNotNull { h ->
                 val id = idOf(h.title)
-                if (id in have) null else NewsItem(id, h.title.take(120), h.source.take(20), h.epochSec.takeIf { it > 0 } ?: now, "")
+                if (id in have) null else NewsItem(id, h.title.take(120), h.source.take(20), h.epochSec.takeIf { it > 0 } ?: now, "", url = h.url)
             }
             added = fresh.size
             val keep = (st.items + fresh).filter { now - it.epochSec <= KEEP_DAYS * 86_400L }

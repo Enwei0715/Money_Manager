@@ -211,7 +211,7 @@ fun ConfigScreen(nav: NavController) {
 
                 SectionHeader("自動記帳")
                 ConfigRow("通知自動記帳") { nav.navigate("notif") }
-                ConfigRow("錢包畫面讀取（街口、悠遊付）") { nav.navigate("walletreader") }
+                ConfigRow("錢包畫面讀取") { nav.navigate("walletreader") }
 
                 SectionHeader("AI")
                 ConfigRow("AI 智慧辨識（Groq／Gemini）", onOff(s.aiEnabled && (s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()))) { nav.navigate("ai") }
@@ -220,6 +220,8 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("手續費與月退") { nav.navigate("stockfees") }
 
                 SectionHeader("安全與提醒")
+                ConfigRow("股價提醒（停損、停利、目標價）", onOff(s.stockAlertsOn)) { repo.settings.update { it.copy(stockAlertsOn = !it.stockAlertsOn) } }
+                ConfigRow("新版本通知", onOff(s.notifyUpdates)) { repo.settings.update { it.copy(notifyUpdates = !it.notifyUpdates) } }
                 ConfigRow("密碼鎖", onOff(s.passcodeOn)) { nav.navigate("passcode") }
                 ConfigRow("每日提醒", if (s.reminderEnabled) "%02d:%02d".format(s.reminderMinutes / 60, s.reminderMinutes % 60) else "OFF") {
                     if (s.reminderEnabled) {
