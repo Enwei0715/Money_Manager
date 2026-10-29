@@ -67,12 +67,12 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
             }
             s.priceAlerts.forEach { (sym, a) ->
                 val p = price[quoteKey(Market.TW, sym)] ?: return@forEach
-                if (a.target != null && p >= a.target) fire(sym, "target", "$sym 達到目標價", "現價 ${"%.2f".format(p)}，目標 ${"%.2f".format(a.target)}；依紀律可先分批停利，不要一次全賣")
-                if (a.stop != null && p <= a.stop) fire(sym, "stop", "$sym 跌破停損價", "現價 ${"%.2f".format(p)}，停損 ${"%.2f".format(a.stop)}；短線依紀律出場、不攤平")
+                if (a.target != null && p >= a.target) fire(sym, "target", "$sym 達到目標價", "現價 ${"%.2f".format(p)}，已達你設定的目標 ${"%.2f".format(a.target)}。")
+                if (a.stop != null && p <= a.stop) fire(sym, "stop", "$sym 跌破停損價", "現價 ${"%.2f".format(p)}，已低於你設定的停損價 ${"%.2f".format(a.stop)}。")
             }
             // 保本＋移動停利：換上即時價重算，跌破停利價／減碼價／60 分 K 均線時通知
             val peaks = HashMap<String, Double?>()
-            if (s.stockAlertsOn && s.investPlan.guardOn) snap.holdings.forEach { h ->
+            if (s.stockAlertsOn && s.investPlan.disciplineOn && s.investPlan.guardOn) snap.holdings.forEach { h ->
                 val gi = h.guardInput ?: return@forEach
                 val p = price[quoteKey(Market.TW, h.symbol)] ?: return@forEach
                 val g = com.enwei.moneymanager.core.ProfitGuard.advise(gi.copy(price = p), s.investPlan.let { com.enwei.moneymanager.core.GuardRule(it.guardTrailPct, it.baseShares) })
@@ -84,7 +84,7 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         "停利價 ${"%.2f".format(g.takeProfit ?: 0.0)}，跌破才賣這 ${g.excessShares.toLong()} 股；續漲停利價會跟著上移")
             }
             if (peaks.isNotEmpty()) repo.saveGuardPeaks(peaks)
-            if (s.stockAlertsOn && !s.investPlan.guardOn) snap.holdings.forEach { h ->
+            if (s.stockAlertsOn && s.investPlan.disciplineOn && !s.investPlan.guardOn) snap.holdings.forEach { h ->
                 val p = price[quoteKey(Market.TW, h.symbol)] ?: h.price ?: return@forEach
                 val ad = com.enwei.moneymanager.core.Discipline.advise(h.style, h.avgCost, p, maxOf(h.peak ?: p, p), s.investPlan.let {
                     com.enwei.moneymanager.core.DisciplineRule(it.shortStopPct, it.shortTrailPct, it.longTrailPct, it.takeProfitPct)

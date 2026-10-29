@@ -111,6 +111,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
     val byBroker by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
     val brokers = balances.filter { it.account.type == AccountType.BROKERAGE && !it.account.archived }
         .sortedWith(compareBy({ it.account.sortOrder }, { it.account.id }))
+    var brokersExpanded by rememberSaveable { mutableStateOf(false) }
 
     // 畫面開著時每 30 秒更新一次報價；手動按更新時 refreshTick 會變動
     val quotes by repo.quotes.collectAsStateWithLifecycle(emptyList())
@@ -156,18 +157,35 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
-        // 證券帳戶：現金＋持股市值，小字標示預估損益；新增證券帳戶也在這裡
+        if (open.isEmpty()) item {
+            Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("尚無持股", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 17.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("按右上角＋新增，或在「通知記帳」啟用券商 App 自動記錄成交",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = { nav.navigate("trade/0") }) { Text("新增股票") }
+            }
+        } else {
+            item {
+                StockHeader("持股（${open.size}）", Money.withSymbol(totalValue, lk.base))
+            }
+            items(open, key = { "${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
+        }
         item {
             Row(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
+                    .padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("證券帳戶（${brokers.size}）", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { nav.navigate("account/0?type=BROKERAGE") }) { Text("＋ 新增證券帳戶") }
+                TextButton(onClick = { brokersExpanded = !brokersExpanded }, modifier = Modifier.weight(1f)) {
+                    Text("證券帳戶（${brokers.size}） ${if (brokersExpanded) "▴" else "▾"}")
+                }
+                TextButton(onClick = { nav.navigate("account/0?type=BROKERAGE") }) { Text("＋ 新增") }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
-        items(brokers, key = { "b${it.account.id}" }) { b ->
+        if (brokersExpanded) items(brokers, key = { "b${it.account.id}" }) { b ->
             val hs = byBroker[b.account.id].orEmpty().filter { it.shares > 0.0001 }
             val stock = hs.sumOf { lk.fx.convert(Money.toMinor(it.marketValue), it.currency) }
             val pnl = hs.sumOf { lk.fx.convert(Money.toMinor(it.unrealized), it.currency) }
@@ -193,21 +211,6 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
-        }
-        if (open.isEmpty()) item {
-            Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("尚無持股", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 17.sp)
-                Spacer(Modifier.height(8.dp))
-                Text("按右上角＋新增，或在「通知記帳」啟用券商 App 自動記錄成交",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = { nav.navigate("trade/0") }) { Text("新增股票") }
-            }
-        } else {
-            item {
-                StockHeader("持股（${open.size}）", Money.withSymbol(totalValue, lk.base))
-            }
-            items(open, key = { "${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
         }
         // 觀察清單：還沒買、想留意的股票（AI 推薦卡片或個股頁的☆加入）
         item {
@@ -593,7 +596,9 @@ fun TradeEditScreen(
                 if (market == Market.TW && byLot && shares > 0) Text("= ${formatNum(shares, 0)} 股", fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp))
                 // 賣出時提示保本紀律：多賺幾股可以賣，超過的算減碼
-                if (side == StockSide.SELL && market == Market.TW && original == null && settings.investPlan.guardOn) {
+                if (side == StockSide.SELL && market == Market.TW && original == null &&
+                    settings.investPlan.disciplineOn && settings.investPlan.guardOn
+                ) {
                     val p = price.replace(",", "").toDoubleOrNull() ?: 0.0
                     val g by androidx.compose.runtime.produceState<com.enwei.moneymanager.core.GuardAdvice?>(null, symbol, p) {
                         value = if (symbol.isBlank() || p <= 0) null else repo.guardFor(symbol.trim(), p)

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -32,18 +31,16 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.net.GroqAi
-import com.enwei.moneymanager.net.GroqAi.AiTask
 import com.enwei.moneymanager.net.GroqAi.Provider
 import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.Text
 import kotlinx.coroutines.launch
 
-/** AI 設定：Groq 與 Gemini 兩家的金鑰、模型、用量與測試，以及每項工作交給哪一家。 */
+/** AI 設定：Groq 與 Gemini 金鑰、模型及自動分工。 */
 @Composable
 fun AiSettingsScreen(nav: NavController) {
     val s by repo.settings.flow.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
-    val today = java.time.LocalDate.now().toEpochDay()
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("AI 智慧辨識", { nav.popBackStack() }) }) { pad ->
         Column(
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
@@ -64,77 +61,27 @@ fun AiSettingsScreen(nav: NavController) {
             ProviderCard(
                 Provider.GROQ, "速度快，適合頻繁的小工作",
                 s.groqKey, { k -> repo.settings.update { it.copy(groqKey = k.trim()) } },
-                usage = if (s.aiUsageDay == today) "今天 ${s.aiUsageRequests} 次、${"%,d".format(s.aiUsageTokens)} tokens" else "今天還沒用",
             ) {
                 ModelField("一般模型", s.aiModel) { v -> repo.settings.update { it.copy(aiModel = v) } }
                 ModelField("進階模型", s.aiModelHard) { v -> repo.settings.update { it.copy(aiModelHard = v) } }
-                ModelField("看圖模型", s.aiModelVision) { v -> repo.settings.update { it.copy(aiModelVision = v) } }
             }
 
             // Gemini
             ProviderCard(
-                Provider.GEMINI, "可一次讀大量資料與圖片；金鑰到 aistudio.google.com 申請",
+                Provider.GEMINI, "適合讀取較大量的資料；金鑰到 aistudio.google.com 申請",
                 s.geminiKey, { k -> repo.settings.update { it.copy(geminiKey = k.trim()) } },
-                usage = if (s.geminiUsageDay == today) "今天 ${s.geminiUsageRequests} 次、${"%,d".format(s.geminiUsageTokens)} tokens" else "今天還沒用",
             ) {
-                ModelField("主要模型（報告、檢討、對話、看圖）", s.geminiModel) { v -> repo.settings.update { it.copy(geminiModel = v) } }
+                ModelField("主要模型（報告、檢討、對話）", s.geminiModel) { v -> repo.settings.update { it.copy(geminiModel = v) } }
                 ModelField("輕量模型（新聞標註、錢包畫面）", s.geminiLiteModel) { v -> repo.settings.update { it.copy(geminiLiteModel = v) } }
             }
 
-            // 工作分配
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("模型選擇", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    SwitchRow("自動選擇（建議）", "依難度與資料量挑模型，額度用完自動換下一個",
-                        s.aiAutoRoute, true) { v -> repo.settings.update { it.copy(aiAutoRoute = v) } }
-                    // 每項工作的模型清單很長：自動選擇時預設收起
-                    var showTasks by remember { mutableStateOf(false) }
-                    if (s.aiAutoRoute) TextButton(onClick = { showTasks = !showTasks }) { Text(if (showTasks) "收起各項工作" else "查看各項工作使用的模型") }
-                    if (!s.aiAutoRoute || showTasks) AiTask.entries.forEach { t ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(t.label, fontSize = 14.sp)
-                                // 自動時顯示這項工作的候選順序（資料量小／大兩種情況）
-                                val small = GroqAi.routes(t, 1000).joinToString(" → ") { it.model.substringAfterLast('/') }
-                                val large = GroqAi.routes(t, 50_000).joinToString(" → ") { it.model.substringAfterLast('/') }
-                                Text(
-                                    t.desc + "\n" + if (small == large) small else "資料少：$small\n資料多：$large",
-                                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (!s.aiAutoRoute) {
-                                val want = s.aiRoutes[t.name]?.let { r -> Provider.entries.find { it.name == r } } ?: t.default
-                                Provider.entries.forEach { p ->
-                                    FilterChip(want == p, { repo.settings.update { it.copy(aiRoutes = it.aiRoutes + (t.name to p.name)) } },
-                                        label = { Text(p.label, fontSize = 12.sp) }, modifier = Modifier.padding(start = 4.dp))
-                                }
-                            }
-                        }
-                        HorizontalDivider()
-                    }
-                    if (!s.aiAutoRoute) OutlinedButton(onClick = { repo.settings.update { it.copy(aiRoutes = emptyMap()) } }) { Text("恢復建議分配") }
-                }
-            }
-
-            // 最近的 AI 呼叫：哪項工作、哪一家、花多久、成功或失敗原因
-            val log by GroqAi.callLog.collectAsStateWithLifecycle()
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("最近的 AI 呼叫", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    GroqAi.paused().forEach { (m, t) ->
-                        Text("$m 暫停到 " + java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(t)) + "（剛才額度用完或沒有回應，先用下一個模型）",
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-                    }
-                    if (log.isEmpty()) Text("這次開啟 App 後還沒有呼叫", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    var allLog by remember { mutableStateOf(false) }
-                    (if (allLog) log else log.take(8)).forEach { c ->
-                        Text(
-                            java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.TAIWAN).format(java.util.Date(c.time)) +
-                                "  ${c.task.label} · ${c.provider.label} ${c.model} · ${"%.1f".format(c.ms / 1000.0)} 秒 · " + (if (c.ok) "成功" else "失敗：${c.error ?: "沒有回應"}"),
-                            fontSize = 11.sp, color = if (c.ok) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    if (log.size > 8) TextButton(onClick = { allLog = !allLog }) { Text(if (allLog) "收起" else "顯示全部 ${log.size} 筆") }
+                    Text("模型自動分工", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "App 會依工作類型與資料量選擇 Groq 或 Gemini，並在額度不足或模型無回應時改用其他可用模型。",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
@@ -159,7 +106,7 @@ private fun SwitchRow(title: String, desc: String, on: Boolean, enabled: Boolean
 
 @Composable
 private fun ProviderCard(
-    p: Provider, desc: String, key: String, onKey: (String) -> Unit, usage: String, models: @Composable () -> Unit,
+    p: Provider, desc: String, key: String, onKey: (String) -> Unit, models: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var k by remember { mutableStateOf(key) }
@@ -175,7 +122,7 @@ private fun ProviderCard(
             )
             models()
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(usage, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
                 OutlinedButton(enabled = k.isNotBlank() && !testing, onClick = {
                     testing = true; result = null
                     scope.launch { result = GroqAi.testProvider(p)?.let { "連線失敗：$it" } ?: "連線成功"; testing = false }

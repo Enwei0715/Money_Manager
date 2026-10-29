@@ -63,7 +63,12 @@ object ReportJob {
         }
         return try {
             var st = ds.load()
-            val needCollect = refreshOnly || System.currentTimeMillis() - st.lastCollect > 3 * 3600_000L || ds.recent(st, 3).size < 300
+            val coverage = ds.coverage(st)
+            val needCollect = refreshOnly ||
+                System.currentTimeMillis() - st.lastCollect > 3 * 3600_000L ||
+                ds.recent(st, 3).size < 300 ||
+                coverage.pending > 0 ||
+                coverage.digested < coverage.recent
             if (needCollect) {
                 // 還不知道會抓到多少新的：先以 400 則估算，抓完再修正
                 // 新聞重點整理：每組約 [digestMs]，先以 10 組估算
@@ -82,7 +87,9 @@ object ReportJob {
                 return null
             }
             val aiStart = System.currentTimeMillis()
+            var reportStep = ""
             val r = repo.buildDailyReport(ds) { step ->
+                reportStep = step
                 when {
                     step.startsWith("讀取大盤") -> update(step, SNAPSHOT_MS + aiMs)
                     step.startsWith("AI 分析") -> update(step, aiMs)
@@ -94,17 +101,20 @@ object ReportJob {
             // 記住這次 AI 分析花的時間，下次估得更準
             repo.settings.update { it.copy(reportAiMs = (it.reportAiMs * 0.5 + took * 0.5).toLong()) }
             if (r == null) {
-                val msg = "產生失敗：${GroqAi.lastError ?: "沒有回應"}"
+                val msg = if (reportStep.startsWith("近 3 天新聞") || reportStep.endsWith("暫不產生報告。")) {
+                    reportStep
+                } else "產生失敗：${GroqAi.lastError ?: "沒有回應"}"
                 state.value = State(msg, start, System.currentTimeMillis(), running = false, error = msg)
-                if (notifyProgress) doneNotice(context, tr("投資報告產生失敗"), msg)
+                doneNotice(context, tr("投資報告產生失敗"), msg)
             } else {
                 state.value = State("完成", start, System.currentTimeMillis(), running = false)
                 doneNotice(context, tr("今日投資報告已更新"), r.picks.joinToString("、") { "${it.symbol} ${it.name}" }.ifBlank { r.trend })
             }
             r
         } catch (e: Exception) {
-            val msg = "產生失敗：${e.message ?: e.javaClass.simpleName}"
+            val msg = "${if (refreshOnly) "更新失敗" else "產生失敗"}：${e.message ?: e.javaClass.simpleName}"
             state.value = State(msg, start, System.currentTimeMillis(), running = false, error = msg)
+            doneNotice(context, tr(if (refreshOnly) "新聞資料集更新失敗" else "投資報告產生失敗"), msg)
             null
         }
     }

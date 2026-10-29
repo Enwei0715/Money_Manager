@@ -38,7 +38,6 @@ import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Pets
 import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
@@ -203,7 +202,6 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     if (pending.isNotEmpty()) IconButton(onClick = { nav.navigate("pending") }) {
                         BadgedBox(badge = { Badge { Text("${pending.size}") } }) { Icon(Icons.Filled.NotificationsActive, "待確認") }
                     }
-                    IconButton(onClick = { nav.navigate("bookmarks") }) { Icon(Icons.Outlined.StarBorder, "書籤") }
                     IconButton(onClick = { nav.navigate("search") }) { Icon(Icons.Outlined.Search, "搜尋") }
                     IconButton(onClick = { nav.navigate("search?filter=true") }) { Icon(Icons.Outlined.Tune, "篩選") }
                 },
@@ -503,32 +501,35 @@ private fun CalendarView(
                         val offDay = !com.enwei.moneymanager.core.TaiwanHolidays.isBusinessDay(date)
                         // 放假日（含落在週末的節日）日期用紅字
                         val holiday = com.enwei.moneymanager.core.TaiwanHolidays.label(date)?.takeIf { offDay }
-                        Row(
-                            Modifier.fillMaxWidth().background(if (isToday) NavyHighlight else Color.Transparent).padding(horizontal = 4.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                label, fontSize = 13.sp,
-                                color = when {
-                                    isToday -> Color.White
-                                    holiday != null -> SundayColor.copy(alpha = alpha)
-                                    !offDay -> MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
-                                    else -> weekdayColor(date.dayOfWeek, MaterialTheme.colorScheme.onSurface).copy(alpha = alpha)
-                                },
-                            )
-                            // 有備註：日期右側一個小圓圈（顏色同備註主題色）
-                            memoDays[date]?.let { ms ->
-                                Spacer(Modifier.weight(1f))
-                                MemoDot(ms.first().color, Modifier.size(8.dp).alpha(alpha))
+                        Column(Modifier.fillMaxWidth().height(32.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth().height(18.dp)
+                                    .background(if (isToday) NavyHighlight else Color.Transparent)
+                                    .padding(horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    label, fontSize = 13.sp,
+                                    color = when {
+                                        isToday -> Color.White
+                                        holiday != null -> SundayColor.copy(alpha = alpha)
+                                        !offDay -> MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
+                                        else -> weekdayColor(date.dayOfWeek, MaterialTheme.colorScheme.onSurface).copy(alpha = alpha)
+                                    },
+                                )
+                                memoDays[date]?.let { ms ->
+                                    Spacer(Modifier.weight(1f))
+                                    MemoDot(ms.first().color, Modifier.size(8.dp).alpha(alpha))
+                                }
                             }
-                        }
-                        // 節日名稱放在日期下方（短名稱、最多兩行），不再被截掉；補行上班用一般顏色
-                        com.enwei.moneymanager.core.TaiwanHolidays.shortLabel(date)?.let { name ->
-                            Text(
-                                name, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                color = (if (offDay) SundayColor else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = alpha),
-                                modifier = Modifier.padding(horizontal = 4.dp),
-                            )
+                            Box(Modifier.fillMaxWidth().height(14.dp).padding(horizontal = 4.dp), contentAlignment = Alignment.CenterStart) {
+                                com.enwei.moneymanager.core.TaiwanHolidays.shortLabel(date)?.let { name ->
+                                    Text(
+                                        name, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        color = (if (offDay) SundayColor else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = alpha),
+                                    )
+                                }
+                            }
                         }
                         Spacer(Modifier.weight(1f))
                         val lines = listOf(
@@ -536,9 +537,11 @@ private fun CalendarView(
                             (if (t.expense > 0) Money.full(t.expense) else "") to ExpenseColor,
                             (if (t.income > 0 && t.expense > 0) Money.full(t.total) else "") to MaterialTheme.colorScheme.onSurface,
                         )
-                        lines.forEach { (text, c) ->
-                            Text(text, fontSize = 10.sp, color = c.copy(alpha = alpha), maxLines = 1, textAlign = TextAlign.End,
-                                modifier = Modifier.fillMaxWidth().padding(end = 3.dp, bottom = 3.dp))
+                        Column(Modifier.fillMaxWidth().height(45.dp), verticalArrangement = Arrangement.Bottom) {
+                            lines.forEach { (text, c) ->
+                                Text(text, fontSize = 10.sp, color = c.copy(alpha = alpha), maxLines = 1, textAlign = TextAlign.End,
+                                    modifier = Modifier.fillMaxWidth().height(15.dp).padding(end = 3.dp))
+                            }
                         }
                     }
                 }

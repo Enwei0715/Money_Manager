@@ -14,7 +14,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 
-/** 書籤：常用交易範本。 */
+/** 舊版書籤交易範本資料型別，保留供偏好與 .lgbak 相容。 */
 @Serializable
 data class Bookmark(
     val id: Long,
@@ -59,21 +59,23 @@ data class LoanInfo(
 @Serializable
 data class PriceAlert(val target: Double? = null, val stop: Double? = null)
 
-/** 投資紀律與資金控管計畫（金額為最小單位、比例為 %）。 */
+/** 資金配置與可選的持股提示（金額為最小單位、比例為 %）。 */
 @Serializable
 data class InvestPlanSettings(
-    /** 保留的生活費 */
-    val reserve: Long = 2_000_000,
+    /** 使用者自行設定的預留金額 */
+    val reserve: Long = 0,
     /** 可投資資金中長線的比例（其餘為短線） */
-    val longRatio: Double = 2.0 / 3,
+    val longRatio: Double = 0.5,
     val shortStopPct: Double = 8.0,
     val shortTrailPct: Double = 8.0,
     val longTrailPct: Double = 15.0,
     val takeProfitPct: Double = 15.0,
     /** 自己的交易紀律（交易前檢查） */
-    val rules: List<String> = DEFAULT_RULES,
+    val rules: List<String> = emptyList(),
+    /** 持股停損／停利建議；新安裝預設關閉，使用者可自行啟用及設定。 */
+    val disciplineOn: Boolean = false,
     /** 保本＋移動停利紀律 */
-    val guardOn: Boolean = true,
+    val guardOn: Boolean = false,
     /** 移動停利：從最高價回落幾 % 為停利價 */
     val guardTrailPct: Double = 3.0,
     /** 60 分 K 兩條均線都跌破時留下的基本股數 */
@@ -82,26 +84,17 @@ data class InvestPlanSettings(
     val guards: Map<String, GuardState> = emptyMap(),
 ) {
     companion object {
-        /** 舊版預設紀律（使用者沒改過時換成新版） */
-        val OLD_RULES = listOf(
-            "獲利時分批賣（先賣 1/3），用移動停損保護剩下的，不要一次全賣而賣飛",
-            "短線一定設停損，跌破就走，不攤平、不凹單",
-            "長線部位不看短期波動，照計畫持有",
-            "賣出後不急著買別檔：先看大盤、確認資金分配，再依股性挑標的",
-            "短線看線型與新聞，但下單前三思，不追高、不盲目買",
-            "只用計畫內的資金，生活費不動",
+        private val legacySeededRuleHashes = setOf(
+            "b4322682235d52cf1ee195b241f5ae04d3f12ddf027ed833f53e8b514304041d",
+            "2e4325e7a4834bf73f78ff7b052361b7375fa85161726f3aad60075eee2cafa6",
         )
-        val DEFAULT_RULES = listOf(
-            "原則：風險低、獲利低，但保有一定獲利；大漲時少賺一些，不如預期時提前把獲利落袋，不抱上抱下",
-            "成本永遠留在場內：集保裡始終保留市值約等於原始成本的股數，只賣多賺出來的部分",
-            "市值超過成本時，把多出的金額換算成股數，這些才是可以停利的股數",
-            "不見價就賣：先設停利價，跌破才賣出多賺的股數；股價續漲時停利價跟著往上移（移動停利）",
-            "每多賺約一股的金額，就依同樣方式再處理一股；股數越來越少，但留在場內的市值始終約等於成本",
-            "想減碼時不要馬上賣：先設一個比現價低的減碼價，跌破時再賣，通常賣一半",
-            "下跌看 60 分 K 的 20MA 與 50MA：跌破一條約賣一半；兩條都跌破減到只剩基本股（約 1～2 股）",
-            "日 K 的 5、10、20、72、100、200 日均線輔助判斷整體趨勢與買賣時機",
-            "賣出後不急著買別檔；只用計畫內的資金，生活費不動",
-        )
+
+        fun hasLegacySeededRules(rules: List<String>): Boolean {
+            if (rules.isEmpty()) return false
+            val bytes = MessageDigest.getInstance("SHA-256").digest(rules.joinToString("\n").toByteArray(Charsets.UTF_8))
+            val fingerprint = bytes.joinToString("") { "%02x".format(it) }
+            return fingerprint in legacySeededRuleHashes
+        }
     }
 }
 
@@ -170,10 +163,11 @@ val memoColors: List<Long> = listOf(
 @Serializable
 data class RebateRule(val discount: Double, val sinceEpochDay: Long, val payDay: Int = 15)
 
-/** 使用者教過的通知格式：某 App、標題相同的通知一律視為指定收支，記到指定帳戶。 */
+/** 使用者確認過的本機辨識偏好；title 欄位沿用舊備份結構，實際保存的是標題指紋。 */
 @Serializable
 data class LearnedSource(
     val pkg: String,
+    /** 舊版欄位名稱，內容為 semantic:<hash>，不保存標題或通知原文。 */
     val title: String,
     val income: Boolean,
     val accountId: Long?,
@@ -185,7 +179,7 @@ data class LearnedSource(
     val parsedKind: com.enwei.moneymanager.core.ParsedKind
         get() = runCatching { com.enwei.moneymanager.core.ParsedKind.valueOf(kind) }.getOrDefault(com.enwei.moneymanager.core.ParsedKind.NORMAL)
 
-    /** 依教過的設定解析這則通知（關鍵是標題，金額、時間、卡號仍從內文找）。 */
+    /** 依本機辨識偏好解析這則通知（實際金額、時間、卡號仍從當次內文找）。 */
     fun parse(title: String?, text: String?): com.enwei.moneymanager.core.ParsedTransaction? =
         com.enwei.moneymanager.core.NotificationParser.parseLearned(
             title, text,
@@ -227,6 +221,7 @@ data class AppSettings(
     /** true：先選分類再輸入金額 */
     val inputFromCategory: Boolean = false,
     val passcodeHash: String = "",
+    /** 以下舊版功能欄位保留供偏好與 .lgbak 相容，現行介面不再使用。 */
     val reminderEnabled: Boolean = false,
     val reminderMinutes: Int = 21 * 60,
     val bookmarks: List<Bookmark> = emptyList(),
@@ -241,13 +236,13 @@ data class AppSettings(
     val screenPackages: Set<String> = emptySet(),
     /** 每個錢包 App 從哪一天開始匯入（epochDay），避免第一次把半年歷史全部匯入 */
     val screenReadSince: Map<String, Long> = emptyMap(),
-    /** 現金點鈔：帳戶 id → 面額 → 數量 */
+    /** 舊版點鈔資料：帳戶 id → 面額 → 數量；保留備份相容。 */
     val cashCounts: Map<Long, Map<Int, Int>> = emptyMap(),
     /** 0 跟隨系統、1 淺色、2 深色 */
     val themeMode: Int = 0,
     /** 介面縮放比例（整體文字、間距、圖示等比例） */
     val uiScale: Float = 0.9f,
-    /** 子分類功能 */
+    /** 舊版欄位；現行版本固定啟用子分類。 */
     val subcategoryOn: Boolean = true,
     /** 交易頁顯示「新增備註」按鈕 */
     val noteButton: Boolean = true,
@@ -255,16 +250,19 @@ data class AppSettings(
     val swipe: Int = 0,
     /** 交易列表顯示說明 */
     val showDescription: Boolean = false,
-    /** 通知列常駐「快速記帳」 */
+    /** 舊版常駐快速記帳通知設定，保留備份相容。 */
     val quickAdd: Boolean = false,
     /** 密碼鎖可用指紋／臉部解鎖 */
     val biometric: Boolean = false,
     /** 離開 App 多久後要求密碼（秒），0 = 立即 */
     val lockDelaySec: Int = 0,
-    /** 小工具：0 跟隨系統、1 淺色、2 深色 */
+    /** 舊版小工具外觀設定，保留備份相容。 */
     val widgetTheme: Int = 0,
-    /** 小工具背景不透明度（%） */
     val widgetOpacity: Int = 100,
+    /** 工具首頁的顯示順序（僅保存入口 id，不影響工具資料）。 */
+    val toolOrder: List<String> = listOf("pending", "recurring", "fx", "backup", "ai-hub"),
+    /** 工具首頁隱藏的入口 id。 */
+    val hiddenTools: Set<String> = emptySet(),
     /** 帳戶群組順序（AccountType 名稱） */
     val accountGroupOrder: List<String> = emptyList(),
     /** 帳戶群組自訂名稱 */
@@ -299,10 +297,10 @@ data class AppSettings(
     val geminiKey: String = "",
     val geminiModel: String = "gemini-flash-latest",
     val geminiLiteModel: String = "gemini-flash-lite-latest",
-    /** 自動依工作難度與資料量選模型（關閉時用下面的手動分配） */
+    /** 舊版 AI 手動分配欄位，保留備份相容；目前一律自動分工。 */
     val aiAutoRoute: Boolean = true,
-    /** AI 工作分配：工作名稱 → GROQ／GEMINI（沒設定時用預設） */
     val aiRoutes: Map<String, String> = emptyMap(),
+    /** 舊版用量統計欄位；保留備份相容，不再更新或顯示。 */
     val geminiUsageDay: Long = 0,
     val geminiUsageRequests: Int = 0,
     val geminiUsageTokens: Long = 0,
@@ -311,9 +309,9 @@ data class AppSettings(
     val aiModel: String = "openai/gpt-oss-20b",
     /** 較難推估（整理不明花費）用的大模型 */
     val aiModelHard: String = "openai/gpt-oss-120b",
-    /** 看圖模型（截圖對帳） */
+    /** 舊版截圖對帳模型欄位，保留備份相容。 */
     val aiModelVision: String = "qwen/qwen3.8-27b",
-    /** AI 今日用量：日期（epochDay）、請求數、tokens */
+    /** 舊版 AI 用量統計欄位；保留備份相容，不再更新或顯示。 */
     val aiUsageDay: Long = 0,
     val aiUsageRequests: Int = 0,
     val aiUsageTokens: Long = 0,
@@ -324,7 +322,7 @@ data class AppSettings(
     val priceAlerts: Map<String, PriceAlert> = emptyMap(),
     /** 觀察清單（台股代號），股票頁顯示報價，新聞與 AI 分析也會一起看 */
     val watchlist: List<String> = emptyList(),
-    /** 現金帳戶用紙鈔硬幣記帳（關閉時用數字鍵盤） */
+    /** 舊版現金面額設定，保留備份相容。 */
     val cashByDenom: Boolean = true,
     /** 盤中依紀律（動態停損、分批停利）自動通知 */
     val stockAlertsOn: Boolean = true,
@@ -394,7 +392,34 @@ class SettingsStore(context: Context) {
     val flow: StateFlow<AppSettings> = state.asStateFlow()
     val value: AppSettings get() = state.value
 
-    private fun read() = AppSettings(
+    private fun read(): AppSettings {
+        val savedPlan = runCatching {
+            json.decodeFromString(InvestPlanSettings.serializer(), prefs.getString("investPlan", "")!!)
+        }.getOrDefault(InvestPlanSettings())
+        val seededRules = InvestPlanSettings.hasLegacySeededRules(savedPlan.rules)
+        val defaultPlan = InvestPlanSettings()
+        val plan = if (seededRules) {
+            savedPlan.copy(
+                reserve = if (savedPlan.reserve == 2_000_000L) defaultPlan.reserve else savedPlan.reserve,
+                longRatio = if (savedPlan.longRatio == 2.0 / 3.0) defaultPlan.longRatio else savedPlan.longRatio,
+                rules = emptyList(),
+                disciplineOn = false,
+                guardOn = if (savedPlan.guardTrailPct == 3.0 && savedPlan.baseShares == 1.0) false else savedPlan.guardOn,
+            )
+        } else savedPlan.copy(disciplineOn = prefs.getBoolean("stockDisciplineOn", prefs.contains("investPlan")))
+        if (seededRules) {
+            prefs.edit()
+                .putString("investPlan", json.encodeToString(InvestPlanSettings.serializer(), plan))
+                .putBoolean("stockDisciplineOn", false)
+                .apply()
+        }
+        val savedLearned = runCatching { json.decodeFromString(learnedSerializer, prefs.getString("learnedSources", "[]")!!) }.getOrDefault(emptyList())
+        val learned = savedLearned.asReversed().map { it.copy(title = learnKey(it.title, null)) }
+            .distinctBy { it.pkg to it.title }.asReversed()
+        if (learned != savedLearned) {
+            prefs.edit().putString("learnedSources", json.encodeToString(learnedSerializer, learned)).apply()
+        }
+        return AppSettings(
         baseCurrency = prefs.getString("baseCurrency", "TWD")!!,
         subCurrency = prefs.getString("subCurrency", "USD")!!,
         defaultAccountId = prefs.getLong("defaultAccountId", -1).takeIf { it > 0 },
@@ -427,7 +452,7 @@ class SettingsStore(context: Context) {
         cashCounts = runCatching { json.decodeFromString(cashSerializer, prefs.getString("cashCounts", "{}")!!) }.getOrDefault(emptyMap()),
         themeMode = prefs.getInt("themeMode", 0),
         uiScale = prefs.getFloat("uiScale", 0.9f),
-        subcategoryOn = prefs.getBoolean("subcategoryOn", true),
+        subcategoryOn = true,
         noteButton = prefs.getBoolean("noteButton", true),
         swipe = prefs.getInt("swipe", 0),
         showDescription = prefs.getBoolean("showDescription", false),
@@ -436,6 +461,9 @@ class SettingsStore(context: Context) {
         lockDelaySec = prefs.getInt("lockDelaySec", 0),
         widgetTheme = prefs.getInt("widgetTheme", 0),
         widgetOpacity = prefs.getInt("widgetOpacity", 100),
+        toolOrder = if (prefs.contains("toolOrder")) prefs.getString("toolOrder", "")!!.split(',').filter { it.isNotBlank() }
+            else AppSettings().toolOrder,
+        hiddenTools = prefs.getStringSet("hiddenTools", emptySet())!!.toSet(),
         accountGroupOrder = prefs.getString("accountGroupOrder", "")!!.split(',').filter { it.isNotBlank() },
         seedCleaned = prefs.getBoolean("seedCleaned", false),
         language = prefs.getInt("language", 1),
@@ -475,8 +503,7 @@ class SettingsStore(context: Context) {
         updateCheckLog = prefs.getString("updateCheckLog", "")!!,
         updateAvailable = prefs.getInt("updateAvailable", 0),
         txnNecessity = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("txnNecessity", "{}")!!) }.getOrDefault(emptyMap()),
-        investPlan = runCatching { json.decodeFromString(InvestPlanSettings.serializer(), prefs.getString("investPlan", "")!!) }.getOrDefault(InvestPlanSettings())
-            .let { if (it.rules == InvestPlanSettings.OLD_RULES) it.copy(rules = InvestPlanSettings.DEFAULT_RULES) else it },
+        investPlan = plan,
         stockStyle = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("stockStyle", "{}")!!) }.getOrDefault(emptyMap()),
         advisorReport = runCatching { json.decodeFromString(AdvisorReport.serializer(), prefs.getString("advisorReport", "")!!) }.getOrNull(),
         reviews = runCatching { json.decodeFromString(reviewSerializer, prefs.getString("reviews", "{}")!!) }.getOrDefault(emptyMap()),
@@ -493,9 +520,10 @@ class SettingsStore(context: Context) {
         cardShift = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardShift", "{}")!!) }.getOrDefault(emptyMap()),
         dismissedDividends = prefs.getStringSet("dismissedDividends", emptySet())!!.toSet(),
         brokerRebates = runCatching { json.decodeFromString(rebateSerializer, prefs.getString("brokerRebates", "{}")!!) }.getOrDefault(emptyMap()),
-        learnedSources = runCatching { json.decodeFromString(learnedSerializer, prefs.getString("learnedSources", "[]")!!) }.getOrDefault(emptyList()),
+        learnedSources = learned,
         accountGroupNames = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("accountGroupNames", "{}")!!) }.getOrDefault(emptyMap()),
-    )
+        )
+    }
 
     @Synchronized
     /** 匯出所有設定（完整備份用）；GitHub Token 屬於憑證，不放進備份檔。 */
@@ -548,7 +576,7 @@ class SettingsStore(context: Context) {
      */
     @Synchronized
     fun update(block: (AppSettings) -> AppSettings) {
-        val s = block(state.value)
+        val s = block(state.value).copy(subcategoryOn = true)
         if (s == state.value) return
         prefs.edit()
             .putString("baseCurrency", s.baseCurrency)
@@ -583,7 +611,7 @@ class SettingsStore(context: Context) {
             .putString("cashCounts", json.encodeToString(cashSerializer, s.cashCounts))
             .putInt("themeMode", s.themeMode)
             .putFloat("uiScale", s.uiScale)
-            .putBoolean("subcategoryOn", s.subcategoryOn)
+            .putBoolean("subcategoryOn", true)
             .putBoolean("noteButton", s.noteButton)
             .putInt("swipe", s.swipe)
             .putBoolean("showDescription", s.showDescription)
@@ -592,6 +620,8 @@ class SettingsStore(context: Context) {
             .putInt("lockDelaySec", s.lockDelaySec)
             .putInt("widgetTheme", s.widgetTheme)
             .putInt("widgetOpacity", s.widgetOpacity)
+            .putString("toolOrder", s.toolOrder.joinToString(","))
+            .putStringSet("hiddenTools", s.hiddenTools)
             .putString("accountGroupOrder", s.accountGroupOrder.joinToString(","))
             .putString("accountGroupNames", json.encodeToString(strMapSerializer, s.accountGroupNames))
             .putString("learnedSources", json.encodeToString(learnedSerializer, s.learnedSources))
@@ -638,6 +668,7 @@ class SettingsStore(context: Context) {
             .putInt("updateAvailable", s.updateAvailable)
             .putString("txnNecessity", json.encodeToString(longStrSerializer, s.txnNecessity))
             .putString("investPlan", json.encodeToString(InvestPlanSettings.serializer(), s.investPlan))
+            .putBoolean("stockDisciplineOn", s.investPlan.disciplineOn)
             .putString("stockStyle", json.encodeToString(strMapSerializer, s.stockStyle))
             .putString("advisorReport", s.advisorReport?.let { json.encodeToString(AdvisorReport.serializer(), it) } ?: "")
             .putString("dupVerdicts", json.encodeToString(dupVerdictSerializer, s.dupVerdicts))
@@ -663,12 +694,20 @@ fun AppSettings.groupOrder(): List<AccountType> {
     return custom + AccountType.entries.filter { it !in custom }
 }
 
-/** 這則通知符合哪個教過的格式（同一 App、標題相同；沒有標題時比對內文開頭）。 */
+/** 這則通知符合哪個本機辨識偏好。 */
 fun AppSettings.learnedFor(pkg: String, title: String?, text: String?): LearnedSource? =
-    learnedSources.lastOrNull { it.pkg == pkg && it.title == learnKey(title, text) }
+    learnKey(title, text).takeIf { it.isNotBlank() }?.let { key -> learnedSources.lastOrNull { it.pkg == pkg && it.title == key } }
 
-fun learnKey(title: String?, text: String?): String =
-    title?.trim()?.takeIf { it.isNotEmpty() } ?: text.orEmpty().trim().take(8)
+private val learnedKeyPattern = Regex("semantic:[0-9a-f]{24}")
+
+@Suppress("UNUSED_PARAMETER")
+fun learnKey(title: String?, text: String?): String {
+    val source = title?.trim()?.takeIf { it.isNotEmpty() } ?: return ""
+    if (learnedKeyPattern.matches(source)) return source
+    val normalized = source.lowercase().replace(Regex("\\d+"), "#").replace(Regex("\\s+"), " ").trim()
+    val digest = MessageDigest.getInstance("SHA-256").digest(normalized.toByteArray(Charsets.UTF_8))
+    return "semantic:" + digest.joinToString("") { "%02x".format(it) }.take(24)
+}
 
 fun AppSettings.shiftFor(cardId: Long): com.enwei.moneymanager.core.StatementShift =
     cardShift[cardId]?.let { n -> com.enwei.moneymanager.core.StatementShift.entries.find { it.name == n } } ?: com.enwei.moneymanager.core.StatementShift.NONE

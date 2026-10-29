@@ -52,8 +52,8 @@ class MoneyApp : Application() {
         appScope.launch {
             repo.transactions.debounce(1500).collect { com.enwei.moneymanager.widget.Widgets.refreshAll(this@MoneyApp) }
         }
-        com.enwei.moneymanager.work.ReminderWorker.schedule(this)
-        com.enwei.moneymanager.notify.QuickAdd.sync(this, repo.settings.value.quickAdd)
+        com.enwei.moneymanager.work.ReminderWorker.cancelLegacy(this)
+        com.enwei.moneymanager.notify.QuickAdd.cancelLegacy(this)
     }
 
     companion object {

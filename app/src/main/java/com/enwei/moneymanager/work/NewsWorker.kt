@@ -12,6 +12,7 @@ import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.data.buildDailyReport
 import com.enwei.moneymanager.data.refreshNews
 import com.enwei.moneymanager.net.GroqAi
+import kotlinx.coroutines.CancellationException
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.concurrent.TimeUnit
@@ -26,7 +27,18 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val s = repo.settings.value
         if (!s.advisorDaily || !GroqAi.enabled) return Result.success()
         val ds = MoneyApp.news
-        runCatching { repo.refreshNews(ds) }
+        try {
+            repo.refreshNews(ds)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("NewsWorker", "News refresh failed (${e.javaClass.simpleName}); retrying")
+            val msg = "新聞資料集更新失敗：${com.enwei.moneymanager.net.InvestData.lastHeadlineError ?: "網路或資料儲存錯誤"}，將稍後重試。"
+            if (ReportJob.state.value?.running != true) {
+                ReportJob.state.value = ReportJob.State(msg, System.currentTimeMillis(), System.currentTimeMillis(), running = false, error = msg)
+            }
+            return Result.retry()
+        }
         val st = ds.load()
         val today = LocalDate.now().toEpochDay()
         if (LocalTime.now().hour >= 7 && st.report?.day != today && ds.recent(st, 3).size >= 100) {

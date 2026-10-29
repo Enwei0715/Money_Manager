@@ -118,7 +118,7 @@ enum class MarketStage(val label: String, val hint: String) {
     RANGE_HIGH("高檔整理", "方向未明，降低短線部位、等待突破"),
     RANGE_LOW("低檔整理／築底", "觀察是否站回季線，小量試單"),
     EARLY_DOWN("初跌段", "跌破均線，短線先減碼、嚴守停損"),
-    MAIN_DOWN("主跌段", "空頭排列，保留現金，不攤平"),
+    MAIN_DOWN("主跌段", "空頭排列，市場處於弱勢"),
     LATE_DOWN("末跌段（超跌）", "可能出現反彈，只用短線資金試單"),
     UNKNOWN("資料不足", "需要至少 65 天的價格"),
 }
@@ -179,7 +179,7 @@ object Discipline {
     private fun fmt(v: Double) = if (v >= 100) "%.0f".format(v) else "%.2f".format(v).trimEnd('0').trimEnd('.')
 }
 
-/** 資金分配：保留生活費後，可投資的錢依比例分成長線與短線。金額為最小單位。 */
+/** 資金分配：扣除使用者設定的預留金額後，依比例計算配置目標。金額為最小單位。 */
 data class Allocation(
     val cash: Long,
     val reserve: Long,
@@ -188,12 +188,12 @@ data class Allocation(
     val longTarget: Long,
     val shortTarget: Long,
 ) {
-    /** 扣掉生活費後還能動用的現金 */
+    /** 扣除預留金額後可配置的現金 */
     val spareCash: Long get() = max(0, cash - reserve)
     val longRoom: Long get() = max(0, min(longTarget - longValue, spareCash))
     val shortRoom: Long get() = max(0, min(shortTarget - shortValue, spareCash - longRoom))
     val investable: Long get() = longTarget + shortTarget
-    /** 生活費不夠保留時的缺口 */
+    /** 現金低於預留金額時的差額 */
     val reserveShort: Long get() = max(0, reserve - cash)
     val shortOver: Long get() = max(0, shortValue - shortTarget)
 

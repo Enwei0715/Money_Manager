@@ -162,7 +162,11 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                 }
                 // K 線
-                LaunchedEffect(hourly, held.isNotEmpty()) { if ((hourly || held.isNotEmpty()) && hourBars == null) hourBars = InvestData.bars(symbol, "3mo", interval = "60m") }
+                LaunchedEffect(hourly, held.isNotEmpty(), settings.investPlan.disciplineOn, settings.investPlan.guardOn) {
+                    if ((hourly || held.isNotEmpty() && settings.investPlan.disciplineOn && settings.investPlan.guardOn) && hourBars == null) {
+                        hourBars = InvestData.bars(symbol, "3mo", interval = "60m")
+                    }
+                }
                 val kb = if (hourly) hourBars else b
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
@@ -234,8 +238,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         }
                     }
                 }
-                // 持股紀律
-                if (held.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+                if (held.isNotEmpty() && settings.investPlan.disciplineOn) Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         val shares = held.sumOf { it.shares }
                         val avg = held.sumOf { it.avgCost * it.shares } / shares
@@ -362,6 +365,8 @@ fun NewsLine(n: NewsItem, num: Int? = null) {
         Text(
             listOfNotNull(
                 n.source.takeIf { it.isNotBlank() },
+                if (n.contentLevel == "title") "只有標題" else n.contentLevel,
+                "合併 ${n.duplicateCount.coerceAtLeast(1)} 篇".takeIf { n.duplicateCount > 1 },
                 n.theme.takeIf { it.isNotBlank() },
                 java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(n.epochSec * 1000)),
             ).joinToString(" · ") + (n.note.takeIf { it.isNotBlank() }?.let { "　$it" } ?: ""),

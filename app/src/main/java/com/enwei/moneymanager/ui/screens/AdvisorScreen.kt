@@ -110,7 +110,7 @@ fun AdvisorContent(nav: NavController) {
         when (tab) {
             0 -> TodayTab(nav, store) {}
             1 -> ChatTab(nav, store) {}
-            2 -> NewsTab(store)
+            2 -> NewsTab(nav, store)
             else -> PlanTab(nav)
         }
     }
@@ -506,9 +506,11 @@ private data class NewsStats(
 
 /** 新聞資料集：蒐集狀態、整理進度、題材熱度、重點，以及可多條件篩選的全部新聞（清單會即時更新）。 */
 @Composable
-private fun NewsTab(store: NewsStore) {
+private fun NewsTab(nav: NavController, store: NewsStore) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    val aiReady = settings.aiEnabled && (settings.groqKey.isNotBlank() || settings.geminiKey.isNotBlank())
     val holdings by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
     val mine = remember(holdings) { holdings.values.flatten().map { it.symbol }.toSet() }
     val ds = MoneyApp.news
@@ -548,7 +550,7 @@ private fun NewsTab(store: NewsStore) {
             val q = query.trim()
             val list = store.items.filter { n ->
                 n.epochSec >= since &&
-                    (q.isEmpty() || n.title.contains(q, true) || q in n.symbols || n.source.contains(q, true)) &&
+                    (q.isEmpty() || n.title.contains(q, true) || n.content.contains(q, true) || q in n.symbols || n.source.contains(q, true)) &&
                     (theme == null || n.theme == theme) && (symbol == null || symbol in n.symbols) && (source == null || n.source == source) &&
                     (!onlyImportant || n.importance >= 4) && (!onlyMine || n.symbols.any { it in mine }) &&
                     when (sent) { 1 -> n.sentiment > 0; 2 -> n.sentiment < 0; 3 -> n.tagged && n.sentiment == 0; else -> true }
@@ -570,6 +572,37 @@ private fun NewsTab(store: NewsStore) {
     var filtersOpen by remember { mutableStateOf(false) }
     val activeCount = listOf(days != 0, sent != 0, onlyImportant, onlyMine, sort != 0, theme != null, symbol != null, source != null).count { it }
     Column(Modifier.fillMaxSize()) {
+        Card(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        ) {
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("新聞自動更新與每日報告", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "啟用後約每 3 小時蒐集新聞，並在每日報告完成後通知。",
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = settings.advisorDaily,
+                        onCheckedChange = { enabled -> repo.settings.update { it.copy(advisorDaily = enabled) } },
+                        enabled = aiReady,
+                    )
+                }
+                if (!aiReady) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "需先啟用 AI 並設定至少一組模型金鑰。",
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { nav.navigate("ai") }) { Text("設定 AI") }
+                    }
+                }
+            }
+        }
         // 搜尋與篩選固定在最上方，不用先滑過整理好的題材與重點
         Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -620,8 +653,7 @@ private fun NewsTab(store: NewsStore) {
                         val pct = if (c.recent > 0) c.digested * 100 / c.recent else 0
                         Text(
                             "近 3 天 ${c.recent} 則，已整理進重點庫 ${c.digested} 則（$pct%）" +
-                                (if (c.pending > 0) "；待標註 ${c.pending} 則" else "") +
-                                (if (c.fallback > 0) "；AI 連續漏標 3 次歸入「其他」${c.fallback} 則" else ""),
+                                (if (c.pending > 0) "；待標註 ${c.pending} 則" else ""),
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -712,15 +744,15 @@ private fun ChipRow(label: String, content: @Composable () -> Unit) {
 private fun HowItWorks() {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         listOf(
-            "① 蒐集：每 3 小時用 ${com.enwei.moneymanager.data.NewsDataset.BASE_QUERIES.size} 個主題關鍵字加上你的持股代號查新聞，每個查詢最多約 100 則；標題去掉空白後相同的視為同一則，只留一份。保留 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天、最多 ${com.enwei.moneymanager.data.NewsDataset.MAX_ITEMS} 則。",
-            "② 標註：一批 150 則（Gemini）或 40 則（Groq）編號後送給 AI，回傳每則的相關台股代號、題材（固定清單）、多空與重要性。App 用編號逐則核對，AI 漏掉的會留著、下一批優先重送；連續 3 次都沒結果才歸入「其他」，所以每一則都會被算進統計。",
-            "③ 重點庫：近 3 天依「日期 × 題材」分組，整組標題交給 AI 合併成不重複的重點，同一件事只寫一次並記下有幾則在講。一組太多時分段送（Gemini 每段 250 則、Groq 60 則），各段重點再合併，不會因為輸入上限漏讀；只有 1～2 則的小組直接用標題當重點。新聞增加 20% 以上就重新整理。",
-            "④ 報告與對話：讀題材熱度、個股統計、整個重點庫與重要新聞，再加上大盤、持股與你的紀律，不是只看幾十則標題。",
+            "① 蒐集：每 3 小時以一般市場關鍵字及你的持股、觀察標的搜尋新聞，不預設產業題材；合併完全重複內容並保留篇數。只讀 RSS 直接提供的正文或摘要，沒有內文時會標明只有標題。保留 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天、最多 ${com.enwei.moneymanager.data.NewsDataset.MAX_ITEMS} 則。",
+            "② 標註：依內容長度分批，將來源提供的正文／摘要（沒有時只有標題）交給 AI，逐則回傳個股、動態歸納題材、多空與重要性。App 以編號核對回覆；漏標或超出模型預算的新聞會留在待處理清單，不會靜默截斷或直接算成「其他」。",
+            "③ 重點庫：近 3 天依「日期 × AI 歸納題材」分組，逐段讀取來源內容。每段都核對新聞 id 是否完整且只歸類一次；未完整涵蓋的組別不會寫入。新聞增加約 20% 或來源內容更新時重新整理。",
+            "④ 報告與對話：整合標註、完整性狀態、題材與持股統計、重點庫及大盤／資金／持倉紀律。每日報告在近 3 天新聞未完成標註、摘要或來源搜尋失敗時會暫停，不產生可能遺漏資料的報告。",
         ).forEach { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 
-/** 資金與紀律：大盤階段、資金分配、持股動態停損、交易紀律、背景報告開關。 */
+/** 資金與紀律：大盤階段、資金分配、持股動態停損與交易紀律。 */
 @Composable
 private fun PlanTab(nav: NavController) {
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
@@ -744,17 +776,26 @@ private fun PlanTab(nav: NavController) {
         }
         if (s != null) Section("資金控管", action = "調整" to { editPlan = true }) {
             val a = s.alloc
-            Text("可動用現金 ${m(a.cash)}（已扣信用卡欠款）· 保留生活費 ${m(a.reserve)}", fontSize = 13.sp)
+            Text("可動用現金 ${m(a.cash)}（已扣信用卡欠款）· 預留金額 ${m(a.reserve)}", fontSize = 13.sp)
             Text("可投資 ${m(a.investable)}：長線 ${"%.0f".format(settings.investPlan.longRatio * 100)}% / 短線 ${"%.0f".format(100 - settings.investPlan.longRatio * 100)}%", fontSize = 13.sp)
             Bucket("長線", a.longValue, a.longTarget, a.longRoom, ::m)
             Bucket("短線", a.shortValue, a.shortTarget, a.shortRoom, ::m)
-            if (a.reserveShort > 0) Text("⚠ 現金比生活費少 ${m(a.reserveShort)}，先不要加碼", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            if (a.reserveShort > 0) Text("⚠ 可動用現金低於預留金額 ${m(a.reserveShort)}", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             if (a.shortOver > 0) Text("⚠ 短線超出計畫 ${m(a.shortOver)}，新的短線單先暫停", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("持股紀律建議")
+                    Text("依你設定的門檻顯示停損／停利提示", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(settings.investPlan.disciplineOn, { on ->
+                    repo.settings.update { it.copy(investPlan = it.investPlan.copy(disciplineOn = on)) }
+                })
+            }
         }
-        if (s != null && s.holdings.isNotEmpty() && settings.investPlan.guardOn) Section("保本＋移動停利") {
+        if (settings.investPlan.disciplineOn && s != null && s.holdings.isNotEmpty() && settings.investPlan.guardOn) Section("保本＋移動停利") {
             s.holdings.forEach { h -> GuardRow(h, nav) { editGuard = h } }
         }
-        if (s != null && s.holdings.isNotEmpty() && !settings.investPlan.guardOn) Section("持股紀律（動態停損、分批停利）") {
+        if (settings.investPlan.disciplineOn && s != null && s.holdings.isNotEmpty() && !settings.investPlan.guardOn) Section("持股紀律") {
             s.holdings.forEach { h ->
                 Column(Modifier.clickable { nav.navigate("stock/${h.symbol}") }.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -790,15 +831,9 @@ private fun PlanTab(nav: NavController) {
                 }
             }
         }
-        Section("我的交易紀律（${settings.investPlan.rules.size} 條）", action = "編輯" to { editRules = true }, collapsible = true, initiallyOpen = false) {
+        Section("我的投資原則（${settings.investPlan.rules.size} 條）", action = "編輯" to { editRules = true }, collapsible = true, initiallyOpen = false) {
+            if (settings.investPlan.rules.isEmpty()) Text("尚未設定投資原則。", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             settings.investPlan.rules.forEachIndexed { i, r -> Text("${i + 1}. $r", fontSize = 14.sp) }
-        }
-        Section("背景分析") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("每天讀新聞並產生報告", fontSize = 14.sp, modifier = Modifier.weight(1f))
-                Switch(settings.advisorDaily, { v -> repo.settings.update { it.copy(advisorDaily = v) } }, enabled = GroqAi.enabled)
-            }
-            Text("每 3 小時更新新聞，早上 7 點後產生報告並通知", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -998,28 +1033,41 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
     var trail by remember { mutableStateOf(p.shortTrailPct.toString()) }
     var longTrail by remember { mutableStateOf(p.longTrailPct.toString()) }
     var tp by remember { mutableStateOf(p.takeProfitPct.toString()) }
+    var disciplineOn by remember { mutableStateOf(p.disciplineOn) }
     var guardOn by remember { mutableStateOf(p.guardOn) }
     var gTrail by remember { mutableStateOf(p.guardTrailPct.toString()) }
     var base by remember { mutableStateOf(p.baseShares.toLong().toString()) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("資金與紀律參數") },
+        title = { Text("資金與持股建議") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField(reserve, { reserve = it }, "保留生活費", suffix = "元")
+                NumberField(reserve, { reserve = it }, "預留金額", suffix = "元")
                 NumberField(longPct, { longPct = it }, "長線占可投資資金", suffix = "%")
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("保本＋移動停利紀律", fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    Switch(guardOn, { guardOn = it })
+                    Column(Modifier.weight(1f)) {
+                        Text("持股紀律建議")
+                        Text("依你設定的參數計算，預設關閉", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(disciplineOn, {
+                        disciplineOn = it
+                        if (!it) guardOn = false
+                    })
                 }
-                if (guardOn) {
-                    NumberField(gTrail, { gTrail = it }, "移動停利：從最高價回落", suffix = "%")
-                    NumberField(base, { base = it }, "兩條 60 分 K 均線都跌破時留下的基本股", suffix = "股")
-                } else {
-                    NumberField(stop, { stop = it }, "短線停損", suffix = "%")
-                    NumberField(trail, { trail = it }, "短線移動停損（從高點回落）", suffix = "%")
-                    NumberField(longTrail, { longTrail = it }, "長線移動停損（從高點回落）", suffix = "%")
-                    NumberField(tp, { tp = it }, "分批停利門檻（長線為兩倍）", suffix = "%")
+                if (disciplineOn) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("保本＋移動停利", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Switch(guardOn, { guardOn = it })
+                    }
+                    if (guardOn) {
+                        NumberField(gTrail, { gTrail = it }, "移動停利：從最高價回落", suffix = "%")
+                        NumberField(base, { base = it }, "兩條 60 分 K 均線都跌破時留下的基本股", suffix = "股")
+                    } else {
+                        NumberField(stop, { stop = it }, "短線停損", suffix = "%")
+                        NumberField(trail, { trail = it }, "短線移動停損（從高點回落）", suffix = "%")
+                        NumberField(longTrail, { longTrail = it }, "長線移動停損（從高點回落）", suffix = "%")
+                        NumberField(tp, { tp = it }, "分批停利門檻（長線為兩倍）", suffix = "%")
+                    }
                 }
             }
         },
@@ -1035,6 +1083,7 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
                             longTrailPct = longTrail.toDoubleOrNull()?.coerceIn(1.0, 60.0) ?: p.longTrailPct,
                             takeProfitPct = tp.toDoubleOrNull()?.coerceIn(1.0, 200.0) ?: p.takeProfitPct,
                             guardOn = guardOn,
+                            disciplineOn = disciplineOn,
                             guardTrailPct = gTrail.toDoubleOrNull()?.coerceIn(0.5, 30.0) ?: p.guardTrailPct,
                             baseShares = base.toDoubleOrNull()?.coerceIn(0.0, 1_000_000.0) ?: p.baseShares,
                         ),

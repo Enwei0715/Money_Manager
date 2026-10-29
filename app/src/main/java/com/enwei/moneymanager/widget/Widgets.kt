@@ -55,17 +55,14 @@ object Widgets {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    fun dark(context: Context): Boolean = when (MoneyApp.repo.settings.value.widgetTheme) {
-        1 -> false
-        2 -> true
-        else -> (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-    }
+    fun dark(context: Context): Boolean =
+        (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
     /** 背景、主要文字與次要文字顏色。 */
     fun style(context: Context, v: RemoteViews, primaryIds: List<Int>, secondaryIds: List<Int>) {
         val d = dark(context)
         v.setInt(R.id.widget_bg, "setColorFilter", if (d) 0xFF26272B.toInt() else 0xFFFFFFFF.toInt())
-        v.setInt(R.id.widget_bg, "setImageAlpha", MoneyApp.repo.settings.value.widgetOpacity.coerceIn(0, 100) * 255 / 100)
+        v.setInt(R.id.widget_bg, "setImageAlpha", 255)
         primaryIds.forEach { v.setTextColor(it, if (d) 0xFFEEEEEE.toInt() else 0xFF333333.toInt()) }
         secondaryIds.forEach { v.setTextColor(it, if (d) 0xFFAAAAAA.toInt() else 0xFF8A8A8A.toInt()) }
     }

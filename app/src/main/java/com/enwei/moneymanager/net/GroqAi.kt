@@ -40,40 +40,27 @@ object GroqAi {
     enum class Provider(val label: String) { GROQ("Groq"), GEMINI("Gemini") }
 
     /**
-     * App 裡所有用到 AI 的工作與預設分配：頻繁、小量、要快的交給 Groq；
-     * 要一次讀大量資料（新聞、整期交易、圖片）的交給 Gemini。[lite] 為用較輕量的模型即可。
+     * App 裡所有用到 AI 的工作與分配；大量輸入優先使用較大上下文模型。[lite] 為用較輕量的模型即可。
      */
-    enum class AiTask(val label: String, val desc: String, val default: Provider, val lite: Boolean, val userText: Boolean = true) {
-        NOTIFY("通知判讀", "規則看不懂的銀行／支付通知", Provider.GROQ, true, userText = false),
-        NAMING("商家命名與分類", "代碼商家換成好讀名稱、挑分類", Provider.GROQ, true),
-        TEACH("教它辨識", "先幫你判斷通知的類型與帳戶", Provider.GROQ, true),
-        DUPLICATE("重複交易判斷", "通知、錢包、手動重複記的同一筆", Provider.GROQ, true),
-        COMPANY("公司說明", "股票資訊頁的公司業務", Provider.GROQ, true),
-        WALLET("錢包畫面整理", "版面規則看不懂的交易紀錄畫面", Provider.GEMINI, true, userText = false),
-        NEWS_TAG("新聞標註", "每則新聞的相關個股、題材、多空、重要性", Provider.GEMINI, true),
-        DIGEST("新聞重點整理", "把每天每個題材的所有新聞整理成重點", Provider.GEMINI, true),
-        UNKNOWN("整理不明花費", "依習慣推測不明交易的分類", Provider.GEMINI, false),
-        VISION("截圖對帳", "看銀行畫面找餘額", Provider.GEMINI, false, userText = false),
-        REVIEW("收支檢討", "逐筆讀整期交易、分析與提問", Provider.GEMINI, false),
-        REPORT("每日投資報告", "讀整個新聞資料集產生報告", Provider.GEMINI, false),
-        CHAT("問 AI（股票）", "對話時讀資料集與你的狀況", Provider.GEMINI, false),
+    enum class AiTask(val label: String, val desc: String, val lite: Boolean, val userText: Boolean = true) {
+        NOTIFY("通知判讀", "規則看不懂的銀行／支付通知", true, userText = false),
+        NAMING("商家命名與分類", "代碼商家換成好讀名稱、挑分類", true),
+        TEACH("教它辨識", "先幫你判斷通知的類型與帳戶", true),
+        DUPLICATE("重複交易判斷", "通知、錢包、手動重複記的同一筆", true),
+        COMPANY("公司說明", "股票資訊頁的公司業務", true),
+        WALLET("錢包畫面整理", "版面規則看不懂的交易紀錄畫面", true, userText = false),
+        NEWS_TAG("新聞標註", "每則新聞的相關個股、題材、多空、重要性", true),
+        DIGEST("新聞重點整理", "把每天每個題材的所有新聞整理成重點", true),
+        UNKNOWN("整理不明花費", "依習慣推測不明交易的分類", false),
+        REVIEW("收支檢討", "逐筆讀整期交易、分析與提問", false),
+        REPORT("每日投資報告", "讀整個新聞資料集產生報告", false),
+        CHAT("問 AI（股票）", "對話時讀資料集與你的狀況", false),
     }
-
-    /** 這項工作實際會用哪一家：照設定，沒有那家的金鑰時改用另一家。 */
-    fun providerFor(task: AiTask): Provider? {
-        val s = MoneyApp.repo.settings.value
-        val want = s.aiRoutes[task.name]?.let { r -> Provider.entries.find { it.name == r } } ?: task.default
-        val has = { p: Provider -> if (p == Provider.GROQ) s.groqKey.isNotBlank() else s.geminiKey.isNotBlank() }
-        return if (has(want)) want else Provider.entries.firstOrNull(has)
-    }
-
 
     /** 預設模型。llama-3.1-8b-instant 已於 2026/8/16 停止提供給免費與開發者方案。 */
     const val DEFAULT_MODEL = "openai/gpt-oss-20b"
     /** 較難的推估（整理「不明」花費）用的大模型；失敗時退回 [DEFAULT_MODEL] */
     const val HARD_MODEL = "openai/gpt-oss-120b"
-    /** 看得懂圖片的模型（截圖對帳用） */
-    const val VISION_MODEL = "qwen/qwen3.8-27b"
     /** 已停止提供的模型，自動改用預設模型 */
     val RETIRED_MODELS = setOf("llama-3.1-8b-instant", "llama3-8b-8192", "llama-3.3-70b-versatile")
 
@@ -84,15 +71,15 @@ object GroqAi {
     data class Route(val provider: Provider, val model: String, val big: Boolean)
 
     /** 需要推理、整合大量資料的工作 */
-    private val HEAVY = setOf(AiTask.UNKNOWN, AiTask.REVIEW, AiTask.REPORT, AiTask.CHAT, AiTask.VISION)
+    private val HEAVY = setOf(AiTask.UNKNOWN, AiTask.REVIEW, AiTask.REPORT, AiTask.CHAT)
 
     /**
      * 自動選模型：依工作的難度與這次要送的資料量排出候選順序，前一個失敗或被限流就換下一個。
      * - 簡單又短（通知、命名、重複判斷…）：Groq 20b（最快）→ Gemini Lite
-     * - 簡單但很長（新聞標註、錢包畫面、新聞重點）：Gemini Lite → Gemini Flash → Groq 20b（截短）
+     * - 簡單但很長（新聞標註、錢包畫面、新聞重點）：Gemini Lite → Gemini Flash → Groq（只處理符合預算的分段）
      * - 複雜但放得進 Groq：Groq 120b（推理）→ Gemini Flash → Gemini Lite
-     * - 複雜又很長（報告、檢討、對話）：Gemini Flash → Gemini Lite → Groq 120b（截短）
-     * 手動模式則依設定的分配。額度用完的模型會暫停一陣子，直接跳過。
+     * - 複雜又很長（報告、檢討、對話）：Gemini Flash → Gemini Lite → Groq（超出預算則拒絕，不截斷）
+     * 額度用完的模型會暫停一陣子，直接跳過。
      */
     fun routes(task: AiTask, inputLen: Int): List<Route> {
         val s = MoneyApp.repo.settings.value
@@ -102,12 +89,7 @@ object GroqAi {
         val flash = Route(Provider.GEMINI, s.geminiModel.trim().ifBlank { "gemini-flash-latest" }, true)
         val heavy = task in HEAVY
         val fitsGroq = inputLen <= 5000
-        val order = if (!s.aiAutoRoute) {
-            val want = s.aiRoutes[task.name]?.let { r -> Provider.entries.find { it.name == r } } ?: task.default
-            val groq = if (heavy || !task.lite) g120 else g20
-            val gem = if (task.lite) lite else flash
-            if (want == Provider.GROQ) listOf(groq, gem) else listOf(gem, groq)
-        } else when {
+        val order = when {
             !heavy && fitsGroq -> listOf(g20, lite, g120)
             !heavy -> listOf(lite, flash, g20)
             fitsGroq -> listOf(g120, flash, lite, g20)
@@ -139,7 +121,6 @@ object GroqAi {
         // 剛被限流或沒回應的模型先跳過；全部都在暫停就照原順序再試
         val ready = all.filter { (cooldownUntil[it.model] ?: 0) <= now }.ifEmpty { all }
         for (r in ready) {
-            val t0 = System.currentTimeMillis()
             lastError = null
             val out = when (r.provider) {
                 Provider.GEMINI -> callGemini(s.geminiKey.trim(), r.model, system, user,
@@ -147,7 +128,6 @@ object GroqAi {
                     maxOf(2048, maxTokens * 4).let { if (r.big) maxOf(it, 12_000) else it }, timeoutSec = if (r.big) 90 else 45)
                 Provider.GROQ -> groqJson(s, system, user, maxTokens, r.big || hard, cap, if (r.big) effort else "low", forceModel = r.model)
             }
-            logCall(task, r.provider, r.model, System.currentTimeMillis() - t0, out != null, lastError)
             if (out != null) return@withContext out
             // 額度用完或沒回應：這個模型先暫停，之後的呼叫直接用下一個
             val err = lastError.orEmpty()
@@ -157,30 +137,23 @@ object GroqAi {
         null
     }
 
-    /** 一次 AI 呼叫的紀錄（設定頁顯示，方便找出哪裡失敗）。 */
-    data class CallLog(val time: Long, val task: AiTask, val provider: Provider, val model: String, val ms: Long, val ok: Boolean, val error: String?)
-
-    val callLog = kotlinx.coroutines.flow.MutableStateFlow<List<CallLog>>(emptyList())
     /** 模型 → 暫停到的時間（各模型的額度分開計算） */
     private val cooldownUntil = ConcurrentHashMap<String, Long>()
-
-    private fun logCall(task: AiTask, p: Provider, model: String, ms: Long, ok: Boolean, error: String?) {
-        callLog.value = (listOf(CallLog(System.currentTimeMillis(), task, p, model, ms, ok, if (ok) null else error)) + callLog.value).take(30)
-    }
-
-    /** 目前暫停中的模型與恢復時間（設定頁顯示）。 */
-    fun paused(): Map<String, Long> = cooldownUntil.filterValues { it > System.currentTimeMillis() }
 
     private fun groqJson(
         s: com.enwei.moneymanager.data.AppSettings, systemIn: String, userIn: String, maxTokens: Int, hard: Boolean, cap: Int, effort: String,
         forceModel: String? = null,
     ): JsonObject? {
-        // Groq 每分鐘約 8,000 tokens：輸入過長時截短（中文約一字一 token）
+        // Groq 每分鐘約 8,000 tokens：輸入超出預算時拒絕送出，不可靜默截斷資料。
         val reserve = minOf(cap, maxOf(if (hard) 4096 else 1024, maxTokens * 4))
-        // 系統提示也算在內：太長（例如股票對話帶了整個資料集）就一起截短
         val budget = 7600 - reserve
-        val system = if (systemIn.length > budget - 800) systemIn.take(budget - 800) else systemIn
-        val user = userIn.take(maxOf(400, budget - system.length))
+        val userBudget = maxOf(400, budget - systemIn.length)
+        if (systemIn.length > budget - 800 || userIn.length > userBudget) {
+            lastError = "資料超過 Groq 可安全讀取範圍，未送出；請分批處理或啟用 Gemini"
+            return null
+        }
+        val system = systemIn
+        val user = userIn
         // 指定模型時只用那個（自動選模型會自己排下一個）；否則難題先用大模型，不行再用一般模型
         if (forceModel == null && hard) {
             val big = s.aiModelHard.trim().ifBlank { HARD_MODEL }
@@ -206,10 +179,8 @@ object GroqAi {
     /** AI 呼叫可能要讀大量資料，等久一點。 */
     private val aiClient by lazy { Http.client.newBuilder().readTimeout(150, java.util.concurrent.TimeUnit.SECONDS).build() }
 
-    /**
-     * Google Gemini（generateContent，JSON 模式）。可附一張 JPEG（base64）。失敗回傳 null 並記下原因。
-     */
-    private fun callGemini(key: String, model: String, system: String, user: String, maxOut: Int, imageB64: String? = null, timeoutSec: Long = 90): JsonObject? {
+    /** Google Gemini（generateContent，JSON 模式）。失敗回傳 null 並記下原因。 */
+    private fun callGemini(key: String, model: String, system: String, user: String, maxOut: Int, timeoutSec: Long = 90): JsonObject? {
         val body = buildJsonObject {
             put("systemInstruction", buildJsonObject { put("parts", buildJsonArray { add(buildJsonObject { put("text", system) }) }) })
             put("contents", buildJsonArray {
@@ -217,9 +188,6 @@ object GroqAi {
                     put("role", "user")
                     put("parts", buildJsonArray {
                         add(buildJsonObject { put("text", user) })
-                        if (imageB64 != null) add(buildJsonObject {
-                            put("inlineData", buildJsonObject { put("mimeType", "image/jpeg"); put("data", imageB64) })
-                        })
                     })
                 })
             })
@@ -247,8 +215,6 @@ object GroqAi {
                     return@use null
                 }
                 val root = Http.json.parseToJsonElement(text).jsonObject
-                val usage = (root["usageMetadata"] as? JsonObject)?.get("totalTokenCount")?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0
-                recordGeminiUsage(usage)
                 val parts = ((root["candidates"] as? kotlinx.serialization.json.JsonArray)?.firstOrNull() as? JsonObject)
                     ?.get("content")?.let { it as? JsonObject }?.get("parts") as? kotlinx.serialization.json.JsonArray
                 val content = parts?.mapNotNull { p ->
@@ -267,14 +233,6 @@ object GroqAi {
         }
     }
 
-    private fun recordGeminiUsage(tokens: Long) {
-        val today = java.time.LocalDate.now().toEpochDay()
-        MoneyApp.repo.settings.update { s ->
-            if (s.geminiUsageDay != today) s.copy(geminiUsageDay = today, geminiUsageRequests = 1, geminiUsageTokens = tokens)
-            else s.copy(geminiUsageRequests = s.geminiUsageRequests + 1, geminiUsageTokens = s.geminiUsageTokens + tokens)
-        }
-    }
-
     /** 設定頁：分別測試兩家的連線。回傳 null 表示成功。 */
     suspend fun testProvider(p: Provider): String? = withContext(Dispatchers.IO) {
         val s = MoneyApp.repo.settings.value
@@ -289,7 +247,7 @@ object GroqAi {
 
     private fun call(
         key: String, model: String, jsonMode: Boolean, system: String, user: String, maxTokens: Int, effort: String = "low",
-        imageDataUrl: String? = null, cap: Int = 6000,
+        cap: Int = 6000,
     ): Pair<JsonObject?, Fail> {
         // gpt-oss 等推理模型的思考過程也算在 max_tokens 裡，要多留空間並把推理強度調低
         val reasoning = model.startsWith("openai/gpt-oss") || model.contains("qwen3") || model.contains("deepseek")
@@ -302,14 +260,7 @@ object GroqAi {
             if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
             put("messages", buildJsonArray {
                 add(buildJsonObject { put("role", "system"); put("content", system) })
-                add(buildJsonObject {
-                    put("role", "user")
-                    if (imageDataUrl == null) put("content", user)
-                    else put("content", buildJsonArray {
-                        add(buildJsonObject { put("type", "text"); put("text", user) })
-                        add(buildJsonObject { put("type", "image_url"); put("image_url", buildJsonObject { put("url", imageDataUrl) }) })
-                    })
-                })
+                add(buildJsonObject { put("role", "user"); put("content", user) })
             })
         }.toString()
         val req = Request.Builder().url(URL)
@@ -334,7 +285,6 @@ object GroqAi {
                     return@use null to (fail ?: Fail.NONE)
                 }
                 val root = Http.json.parseToJsonElement(text).jsonObject
-                recordUsage((root["usage"] as? JsonObject)?.get("total_tokens")?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0)
                 val content = root["choices"]
                     ?.let { (it as? kotlinx.serialization.json.JsonArray)?.firstOrNull() }
                     ?.jsonObject?.get("message")?.jsonObject?.get("content")
@@ -350,112 +300,6 @@ object GroqAi {
             lastError = if (it is java.io.InterruptedIOException) "Groq 逾時（沒有回應）" else "Groq：" + (it.message ?: it.javaClass.simpleName)
             null to Fail.NONE
         }
-    }
-
-    /** 今天的用量（請求數、tokens），每天重新計算；Groq 免費方案每個模型約每天 1,000 次請求、20 萬 tokens。 */
-    private fun recordUsage(tokens: Long) {
-        val today = java.time.LocalDate.now().toEpochDay()
-        MoneyApp.repo.settings.update { s ->
-            if (s.aiUsageDay != today) s.copy(aiUsageDay = today, aiUsageRequests = 1, aiUsageTokens = tokens)
-            else s.copy(aiUsageRequests = s.aiUsageRequests + 1, aiUsageTokens = s.aiUsageTokens + tokens)
-        }
-    }
-
-    /**
-     * 用視覺模型直接看截圖找餘額。只接受圖片文字（手機 OCR）裡真的出現過的金額；OCR 什麼都沒讀到時才直接採用（仍需使用者確認）。
-     * 模型不能用時回傳 null，改用文字判斷。
-     */
-    suspend fun readBalanceFromImage(context: android.content.Context, uri: android.net.Uri, accountName: String, ocrAmounts: Set<Long>): Long? =
-        withContext(Dispatchers.IO) {
-            val s = MoneyApp.repo.settings.value
-            if (!enabled) return@withContext null
-            val dataUrl = runCatching { imageDataUrl(context, uri) }.getOrNull() ?: return@withContext null
-            val system = "你是記帳 App 的助理。看這張銀行或錢包 App 的畫面，找出帳戶「$accountName」目前的餘額（優先：可用餘額、帳戶餘額）。" +
-                "交易金額、額度、帳號、日期都不是餘額。只回 JSON：{\"balance\": number|null}"
-            val model = s.aiModelVision.trim().ifBlank { VISION_MODEL }
-            fun groq(): JsonObject? {
-                if (s.groqKey.isBlank()) return null
-                var (r, fail) = call(s.groqKey.trim(), model, true, system, "找出餘額", 300, imageDataUrl = dataUrl)
-                if (r == null && fail == Fail.NO_JSON_MODE) r = call(s.groqKey.trim(), model, false, system, "找出餘額", 300, imageDataUrl = dataUrl).first
-                return r
-            }
-            fun gemini(): JsonObject? = if (s.geminiKey.isBlank()) null
-            else callGemini(s.geminiKey.trim(), s.geminiModel.trim().ifBlank { "gemini-flash-latest" }, system, "找出餘額", 2048, dataUrl.substringAfter(","))
-            val r = if (routes(AiTask.VISION, 0).firstOrNull()?.provider != Provider.GROQ) gemini() ?: groq() else groq() ?: gemini()
-            val v = r?.str("balance")?.replace(",", "")?.toDoubleOrNull() ?: return@withContext null
-            val minor = Math.round(v * 100)
-            minor.takeIf { ocrAmounts.isEmpty() || it in ocrAmounts || -it in ocrAmounts }
-        }
-
-    /** 看圖回 JSON：依自動選擇的順序用 Gemini 或 Groq 的看圖模型。 */
-    private suspend fun visionJson(context: android.content.Context, uri: android.net.Uri, system: String, user: String, maxOut: Int = 800): JsonObject? =
-        withContext(Dispatchers.IO) {
-            val s = MoneyApp.repo.settings.value
-            if (!enabled) return@withContext null
-            val dataUrl = runCatching { imageDataUrl(context, uri) }.getOrNull() ?: return@withContext null
-            val model = s.aiModelVision.trim().ifBlank { VISION_MODEL }
-            fun groq(): JsonObject? {
-                if (s.groqKey.isBlank()) return null
-                var (r, fail) = call(s.groqKey.trim(), model, true, system, user, maxOut, imageDataUrl = dataUrl)
-                if (r == null && fail == Fail.NO_JSON_MODE) r = call(s.groqKey.trim(), model, false, system, user, maxOut, imageDataUrl = dataUrl).first
-                return r
-            }
-            fun gemini(): JsonObject? = if (s.geminiKey.isBlank()) null
-            else callGemini(s.geminiKey.trim(), s.geminiModel.trim().ifBlank { "gemini-flash-latest" }, system, user, maxOf(2048, maxOut * 3), dataUrl.substringAfter(","))
-            if (routes(AiTask.VISION, 0).firstOrNull()?.provider != Provider.GROQ) gemini() ?: groq() else groq() ?: gemini()
-        }
-
-    /** 拍照點鈔：數出照片裡新台幣各面額紙鈔與硬幣的數量。回傳面額 → 數量與 AI 的備註。 */
-    suspend fun countCash(context: android.content.Context, uri: android.net.Uri): Pair<Map<Int, Int>, String>? {
-        val system = "你是點鈔員。照片裡是新台幣的紙鈔與硬幣（可能攤開或疊在一起）。逐一數出每種面額的數量：" +
-            "紙鈔 2000、1000、500、200、100 元；硬幣 50、10、5、1 元。用顏色、大小、圖案分辨面額，重疊的要算進去，看不清楚的不要猜並寫在 note。" +
-            "只回 JSON：{\"counts\": {\"面額\": 數量}, \"note\": 字串}"
-        val r = visionJson(context, uri, system, "數出照片裡的鈔票與硬幣") ?: return null
-        val c = r["counts"] as? JsonObject ?: return null
-        val counts = c.mapNotNull { (k, v) ->
-            val d = k.filter(Char::isDigit).toIntOrNull()?.takeIf { it in com.enwei.moneymanager.core.Cash.DENOMS } ?: return@mapNotNull null
-            val n = (v as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt()?.takeIf { it > 0 } ?: return@mapNotNull null
-            d to n
-        }.toMap()
-        return counts to (r.str("note") ?: "")
-    }
-
-    /** 一張截圖裡辨認出的帳戶與餘額。 */
-    data class ShotBalance(val accountId: Long?, val label: String, val balanceMinor: Long, val confidence: Double)
-
-    /**
-     * 多張截圖對帳：看銀行、錢包、證券 App 的畫面，判斷是使用者的哪個帳戶（銀行名稱、App 樣式、帳號末幾碼、帳戶名稱），
-     * 並讀出餘額。[accounts] 為 (id, 說明)。只接受手機 OCR 讀到過的金額（OCR 沒讀到數字時才直接採用）。
-     */
-    suspend fun identifyBalances(
-        context: android.content.Context, uri: android.net.Uri, accounts: List<Pair<Long, String>>, ocrAmounts: Set<Long>,
-    ): List<ShotBalance>? {
-        val list = accounts.joinToString("\n") { "${it.first}: ${it.second}" }
-        val system = "你是記帳 App 的對帳助理。這是一張銀行、信用卡、電子支付或證券 App 的畫面截圖。" +
-            "使用者的帳戶清單（id: 名稱｜類型｜卡號或帳號末四碼）：\n$list\n" +
-            "判斷畫面上出現的是清單裡哪些帳戶（看銀行或 App 名稱、Logo 與配色、帳號末幾碼、帳戶名稱），一張圖可能有好幾個帳戶。" +
-            "每個帳戶讀出目前餘額（優先：可用餘額、帳戶餘額；信用卡填目前欠款並用負數）。交易明細的金額、額度、日期不是餘額。" +
-            "對不到清單的帳戶 account_id 填 null。只回 JSON：{\"items\": [{\"account_id\": id或null, \"label\": 畫面上的帳戶名稱, \"balance\": 數字, \"confidence\": 0到1}]}"
-        val r = visionJson(context, uri, system, "辨認帳戶並讀出餘額", 900) ?: return null
-        val ids = accounts.map { it.first }.toSet()
-        return (r["items"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
-            val o = e as? JsonObject ?: return@mapNotNull null
-            val v = o.str("balance")?.replace(",", "")?.toDoubleOrNull() ?: return@mapNotNull null
-            val minor = Math.round(v * 100)
-            if (ocrAmounts.isNotEmpty() && minor !in ocrAmounts && -minor !in ocrAmounts) return@mapNotNull null
-            ShotBalance(o.str("account_id")?.toDoubleOrNull()?.toLong()?.takeIf { it in ids }, o.str("label")?.take(30).orEmpty(), minor,
-                o.str("confidence")?.toDoubleOrNull() ?: 0.5)
-        }
-    }
-
-    /** 圖片縮到長邊 1280、JPEG 壓縮後轉成 data URL（Groq 限制 4MB）。 */
-    private fun imageDataUrl(context: android.content.Context, uri: android.net.Uri): String? {
-        val bmp = context.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) } ?: return null
-        val scale = minOf(1f, 1280f / maxOf(bmp.width, bmp.height))
-        val scaled = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true) else bmp
-        val out = java.io.ByteArrayOutputStream()
-        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out)
-        return "data:image/jpeg;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
     }
 
     private fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() && it != "null" }
@@ -481,20 +325,6 @@ object GroqAi {
         val name = r.str("name")?.take(30)
         val id = r.str("category_id")?.toDoubleOrNull()?.toLong()?.takeIf { id -> categories.any { it.first == id } }
         return (name to id).also { nameCache[merchant + "@" + hour / 6] = it }
-    }
-
-    /**
-     * 從銀行 App 畫面的文字（OCR）找出這個帳戶目前的餘額。只接受畫面上真的出現過的金額，避免 AI 自己編數字。
-     */
-    suspend fun pickBalance(accountName: String, lines: List<String>): Long? {
-        if (!enabled || lines.isEmpty()) return null
-        val seen = lines.flatMap { com.enwei.moneymanager.core.BalanceExtractor.amounts(it) }.toSet()
-        if (seen.isEmpty()) return null
-        val system = "你是記帳 App 的助理。以下是銀行或錢包 App 畫面的文字（由上到下）。找出帳戶「$accountName」目前的餘額" +
-            "（優先：可用餘額、帳戶餘額）。不是餘額的數字（交易金額、額度、帳號、日期）不要選。只回 JSON：{\"balance\": number|null}。"
-        val r = chatJson(system, lines.joinToString("\n").take(3000), 40, task = AiTask.VISION) ?: return null
-        val v = r.str("balance")?.replace(",", "")?.toDoubleOrNull() ?: return null
-        return Math.round(v * 100).takeIf { it in seen || -it in seen }
     }
 
     /** 判斷每組（A、B）是不是同一筆交易，同一筆時給較精確的名稱與分類。[items] 為 (組別代號, 說明)。 */
@@ -548,7 +378,7 @@ object GroqAi {
     /** 規則看不懂的銀行／支付通知：請 AI 判讀是否為交易與內容。 */
     suspend fun parseNotification(title: String?, text: String?, now: LocalDateTime = LocalDateTime.now()): ParsedTransaction? {
         if (!enabled) return null
-        val full = listOfNotNull(title, text).joinToString("\n").take(800)
+        val full = listOfNotNull(title, text).joinToString("\n")
         if (full.none { it.isDigit() }) return null
         val system = "你是台灣記帳 App 的通知判讀器。判斷這則銀行或支付 App 的通知是否代表一筆已完成的金錢進出" +
             "（驗證碼、登入、行銷、優惠、帳單提醒、未完成的交易都不是）。只回 JSON：" +
@@ -560,9 +390,10 @@ object GroqAi {
         val amount = r.str("amount")?.replace(",", "")?.toDoubleOrNull()?.takeIf { it > 0 && it < 1e9 } ?: return null
         val (type, kind) = when (r.str("type")) {
             "income" -> ParsedType.INCOME to ParsedKind.NORMAL
+            "expense" -> ParsedType.EXPENSE to ParsedKind.NORMAL
             "transfer_out" -> ParsedType.EXPENSE to ParsedKind.TRANSFER_OUT
             "transfer_in" -> ParsedType.INCOME to ParsedKind.TRANSFER_IN
-            else -> ParsedType.EXPENSE to ParsedKind.NORMAL
+            else -> return null
         }
         val at = r.str("datetime")?.let { runCatching { LocalDateTime.parse(it, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) }.getOrNull() }
             ?.takeIf { !it.isAfter(now.plusMinutes(5)) && it.isAfter(now.minusDays(7)) }
@@ -572,12 +403,87 @@ object GroqAi {
         )
     }
 
+    data class NotificationBatchResult(
+        val parsed: Map<Int, ParsedTransaction>,
+        val handled: Set<Int>,
+    )
+
+    /** 同一短時間收到的多則交易候選一起判讀；索引讓每一筆結果仍可對回原通知。 */
+    suspend fun parseNotificationBatch(
+        notices: List<Triple<Int, String?, String?>>,
+        now: LocalDateTime = LocalDateTime.now(),
+    ): NotificationBatchResult {
+        if (!enabled || notices.isEmpty()) return NotificationBatchResult(emptyMap(), emptySet())
+        val output = LinkedHashMap<Int, ParsedTransaction>()
+        val handled = LinkedHashSet<Int>()
+        val groups = ArrayList<List<Triple<Int, String?, String?>>>()
+        var group = ArrayList<Triple<Int, String?, String?>>()
+        var length = 0
+        notices.forEach { notice ->
+            val textLength = (notice.second.orEmpty().length + notice.third.orEmpty().length)
+            if (textLength > 1_800) return@forEach
+            if (group.isNotEmpty() && (group.size >= 4 || length + textLength > 4_800)) {
+                groups += group
+                group = ArrayList()
+                length = 0
+            }
+            group += notice
+            length += textLength
+        }
+        if (group.isNotEmpty()) groups += group
+        for (batch in groups) {
+            val body = batch.joinToString("\n\n") { (index, title, text) ->
+                "通知 $index：\n" + listOfNotNull(title, text).joinToString("\n")
+            }
+            val system = "你是台灣記帳 App 的通知判讀器。這是一組同時收到的通知，請逐則判斷是否為已完成的金錢交易。" +
+                "利用彼此資訊辨別自己的帳戶轉帳：同金額、時間接近且一出一入時，兩則都標記為 transfer_out/transfer_in。" +
+                "登入、驗證碼、廣告、帳單提醒、未完成交易不得列入。索引必須使用原通知編號，不可漏掉能判斷的交易。只回 JSON：" +
+                "{\"items\":[{\"index\":number,\"is_transaction\":boolean,\"type\":\"expense\"|\"income\"|\"transfer_out\"|\"transfer_in\"," +
+                "\"amount\":number,\"currency\":\"TWD\",\"merchant\":string|null,\"datetime\":\"yyyy-MM-dd HH:mm\"|null}]}。今天是 ${now.toLocalDate()}。"
+            val response = chatJson(system, body, maxTokens = 900, task = AiTask.NOTIFY) ?: continue
+            val items = response["items"] as? kotlinx.serialization.json.JsonArray ?: continue
+            items.forEach { element ->
+                val item = element as? JsonObject ?: return@forEach
+                val index = item.str("index")?.toDoubleOrNull()?.toInt() ?: return@forEach
+                if (batch.none { it.first == index }) return@forEach
+                when (item.str("is_transaction")) {
+                    "false" -> { handled += index; return@forEach }
+                    "true" -> Unit
+                    else -> return@forEach
+                }
+                val amount = item.str("amount")?.replace(",", "")?.toDoubleOrNull()
+                    ?.takeIf { it > 0 && it < 1e9 } ?: return@forEach
+                val typeAndKind = when (item.str("type")) {
+                    "income" -> ParsedType.INCOME to ParsedKind.NORMAL
+                    "expense" -> ParsedType.EXPENSE to ParsedKind.NORMAL
+                    "transfer_out" -> ParsedType.EXPENSE to ParsedKind.TRANSFER_OUT
+                    "transfer_in" -> ParsedType.INCOME to ParsedKind.TRANSFER_IN
+                    else -> return@forEach
+                }
+                val at = item.str("datetime")
+                    ?.let { runCatching { LocalDateTime.parse(it, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) }.getOrNull() }
+                    ?.takeIf { !it.isAfter(now.plusMinutes(5)) && it.isAfter(now.minusDays(7)) }
+                output[index] = ParsedTransaction(
+                    type = typeAndKind.first,
+                    amountMinor = Math.round(amount * 100),
+                    currency = item.str("currency")?.uppercase()?.take(3) ?: "TWD",
+                    merchant = item.str("merchant")?.take(40),
+                    cardLast4 = null,
+                    kind = typeAndKind.second,
+                    occurredAt = at,
+                )
+                handled += index
+            }
+        }
+        return NotificationBatchResult(output, handled)
+    }
+
     /** 「教它辨識」的 AI 建議：[mode] 0 支出、1 收入、2 轉出、3 轉入；帳戶從 [accounts]（id 與說明）挑。 */
     data class TeachHint(val mode: Int, val accountId: Long?, val toAccountId: Long?, val reason: String)
 
     suspend fun suggestTeach(title: String?, text: String?, accounts: List<Pair<Long, String>>): TeachHint? {
         if (!enabled) return null
-        val full = listOfNotNull(title, text).joinToString("\n").take(800)
+        val full = listOfNotNull(title, text).joinToString("\n")
         val system = "你是台灣記帳 App 的助理。使用者要教 App 辨識這種格式的通知。判斷它是支出(expense)、收入(income)、" +
             "轉出到自己另一個帳戶或別人(transfer_out)、從別的帳戶轉入(transfer_in)；從帳戶清單挑出這則通知所屬的帳戶（依銀行名稱、卡號末四碼、App 名稱）；" +
             "轉帳時若看得出另一端是清單裡的哪個帳戶也一併挑出。理由 20 字以內。只回 JSON：" +
@@ -600,25 +506,82 @@ object GroqAi {
      */
     suspend fun parseScreen(lines: List<String>, today: java.time.LocalDate): List<com.enwei.moneymanager.core.ScreenRecord> {
         if (!enabled) return emptyList()
-        val body = lines.joinToString("\n").take(2500)
-        if (body.count { it.isDigit() } < 4) return emptyList()
+        lastError = null
+        val chunks = ArrayList<String>()
+        var chunk = StringBuilder()
+        var totalLength = 0
+        for (line in lines) {
+            totalLength += line.length + 1
+            if (totalLength > 20_000) {
+                lastError = "錢包畫面內容過長，未送出 AI 判讀；請縮小交易紀錄範圍後重試"
+                return emptyList()
+            }
+            if (line.length > 1_900) {
+                lastError = "錢包畫面有單行內容超出安全判讀長度，未送出 AI 判讀"
+                return emptyList()
+            }
+            if (chunk.isNotEmpty() && chunk.length + line.length + 1 > 1_900) {
+                chunks += chunk.toString()
+                chunk = StringBuilder()
+            }
+            if (chunk.isNotEmpty()) chunk.append('\n')
+            chunk.append(line)
+        }
+        if (chunk.isNotEmpty()) chunks += chunk.toString()
+        if (chunks.isEmpty()) return emptyList()
+        val records = ArrayList<com.enwei.moneymanager.core.ScreenRecord>()
+        for (body in chunks) {
+            if (body.count { it.isDigit() } < 4) continue
+            val parsed = parseScreenChunk(body, today) ?: return emptyList()
+            records += parsed
+        }
+        return records
+    }
+
+    private suspend fun parseScreenChunk(body: String, today: java.time.LocalDate): List<com.enwei.moneymanager.core.ScreenRecord>? {
         val system = "你是台灣記帳 App 的助理。以下是電子錢包 App「交易紀錄」畫面依順序讀到的文字。整理出畫面上每一筆已完成的交易；" +
             "沒有交易紀錄（例如首頁、設定頁、廣告）就回空陣列。儲值、加值算 income 並把 label 設為「儲值」。年份沒寫時依今天推斷（今天是 $today），不可晚於今天。" +
             "只回 JSON：{\"records\": [{\"date\": \"yyyy-MM-dd\", \"time\": \"HH:mm\"|null, \"merchant\": string|null, \"amount\": number, \"income\": boolean, \"label\": string|null}]}"
-        val r = chatJson(system, body, 900, task = AiTask.WALLET) ?: return emptyList()
-        val arr = r["records"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
-        return arr.mapNotNull { e ->
-            val o = e as? JsonObject ?: return@mapNotNull null
+        val r = chatJson(system, body, 900, task = AiTask.WALLET) ?: run {
+            if (lastError.isNullOrBlank()) lastError = "AI 未能完成錢包紀錄判讀，未匯入任何部分結果"
+            return null
+        }
+        val arr = r["records"] as? kotlinx.serialization.json.JsonArray ?: run {
+            lastError = "AI 錢包判讀回覆格式不完整，未匯入部分結果"
+            return null
+        }
+        val records = ArrayList<com.enwei.moneymanager.core.ScreenRecord>()
+        for (element in arr) {
+            val o = element as? JsonObject ?: run {
+                lastError = "AI 錢包判讀含有無效紀錄，未匯入部分結果"
+                return null
+            }
             val date = o.str("date")?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
-                ?.takeIf { !it.isAfter(today) && it.isAfter(today.minusYears(1)) } ?: return@mapNotNull null
-            val time = o.str("time")?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() }
-            val amount = o.str("amount")?.replace(",", "")?.toDoubleOrNull()?.let { kotlin.math.abs(it) }?.takeIf { it > 0 && it < 1e7 } ?: return@mapNotNull null
-            com.enwei.moneymanager.core.ScreenRecord(
+                ?.takeIf { !it.isAfter(today) && it.isAfter(today.minusYears(1)) } ?: run {
+                lastError = "AI 錢包判讀的日期無效，未匯入部分結果"
+                return null
+            }
+            val timeText = o.str("time")
+            val time = timeText?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() }
+            if (timeText != null && time == null) {
+                lastError = "AI 錢包判讀的時間無效，未匯入部分結果"
+                return null
+            }
+            val amount = o.str("amount")?.replace(",", "")?.toDoubleOrNull()?.let { kotlin.math.abs(it) }?.takeIf { it > 0 && it < 1e7 } ?: run {
+                lastError = "AI 錢包判讀的金額無效，未匯入部分結果"
+                return null
+            }
+            val income = o.str("income")?.toBooleanStrictOrNull() ?: run {
+                lastError = "AI 錢包判讀的收支方向無效，未匯入部分結果"
+                return null
+            }
+            records += com.enwei.moneymanager.core.ScreenRecord(
                 time = date.atTime(time ?: java.time.LocalTime.MIDNIGHT), dateOnly = time == null,
-                merchant = o.str("merchant")?.take(40), amountMinor = Math.round(amount * 100), isIncome = o.str("income") == "true",
+                merchant = o.str("merchant")?.take(40), amountMinor = Math.round(amount * 100), isIncome = income,
                 typeLabel = o.str("label")?.take(10),
             )
         }
+        return records
     }
 
     /**
@@ -665,8 +628,8 @@ object GroqAi {
      */
     suspend fun advise(user: String): com.enwei.moneymanager.data.AdvisorReport? {
         if (!enabled) return null
-        val system = "你是台灣股市的投資教練兼分析師，任務是幫使用者遵守他自己的交易紀律，而不是鼓勵頻繁交易。" +
-            "使用者過去常犯的錯：1. 想實現獲利就整檔賣光，隔天繼續漲而賣飛；2. 短線看到新聞就衝動買；3. 賣完一有資金就立刻買別檔；4. 資金控管差。" +
+        val system = "你是台灣股市分析助理，依使用者提供的市場資料、持倉與自行設定的投資原則提供中性分析。" +
+            "使用者沒有設定的資金限制、交易習慣或紀律不可自行假設；不要替使用者編造過往行為。" +
             "請依提供的指數數據判斷大盤趨勢與所處階段；從新聞歸納目前市場資金追逐的需求類型與題材；" +
             "逐檔給持股建議，動作只能是「續抱」「長抱」「分批停利 1/3」「減碼 1/3」「停損出場」「觀察」之一，要參考提供的規則停損價，長線部位不可因短期波動建議全賣；" +
             "推薦 2 到 4 檔觀察標的，只能是新聞中出現的台股或台灣大型權值股／ETF，附四到六碼代號，標明長線或短線、進場條件與停損條件，不保證獲利；" +
@@ -700,29 +663,30 @@ object GroqAi {
     /** 新聞標註結果。 */
     data class NewsTag(val symbols: List<String>, val theme: String, val sentiment: Int, val importance: Int, val note: String)
 
-    val THEMES = listOf(
-        "大盤資金", "總經利率", "美股國際", "半導體", "AI伺服器", "IC設計", "記憶體", "先進封裝", "PCB載板", "散熱", "光通訊",
-        "網通衛星", "機器人", "電動車", "重電綠能", "航運", "金融", "生技", "營建", "傳產原物料", "內需觀光", "ETF存股", "其他",
-    )
-
-    /** 逐則標註新聞：相關台股代號、題材、多空與重要性。[items] 為 (id, 標題)。 */
-    suspend fun tagNews(items: List<Pair<String, String>>): Map<String, NewsTag>? {
+    /** 逐則標註新聞；模型只可依新聞來源提供的標題／內文判斷。 */
+    suspend fun tagNews(items: List<com.enwei.moneymanager.data.NewsItem>): Map<String, NewsTag>? {
         if (!enabled || items.isEmpty()) return emptyMap()
         val system = "你是台股新聞標註員。逐則判斷：相關的台股代號（4～6 碼，只填你確定的，例如台積電 2330；不確定就空陣列）、" +
-            "題材（只能從這些挑一個：${THEMES.joinToString("、")}）、對相關台股的多空 m（-2 大利空、-1 利空、0 中性、1 利多、2 大利多）、" +
+            "題材請依內容自行歸納成簡短名稱，不得套用固定題材清單；對相關台股的多空 m（-2 大利空、-1 利空、0 中性、1 利多、2 大利多）、" +
             "重要性 p（1～5，5 是會影響大盤或主流題材的重大消息，一般個股新聞 2～3，業配與無關新聞 1）；p 為 4 以上時用 n 寫 20 字內重點。" +
+            "內容標成「標題」時不得假設你已讀到正文；僅依輸入內容判斷。逐筆都要輸出，不能省略。" +
             "只回 JSON：{\"r\": [{\"i\": 編號, \"s\": [代號], \"t\": 題材, \"m\": 數字, \"p\": 數字, \"n\": 字串或空}]}"
-        val user = items.mapIndexed { i, it -> "$i. ${it.second.take(70)}" }.joinToString("\n")
+        val user = items.mapIndexed { i, item ->
+            buildString {
+                append("$i. [${item.contentLevel}] ${item.title}")
+                if (item.content.isNotBlank()) append("\n來源內容：${item.content}")
+            }
+        }.joinToString("\n\n")
         val r = chatJson(system, user, 25 * items.size + 200, task = AiTask.NEWS_TAG) ?: return null
         val arr = r["r"] as? kotlinx.serialization.json.JsonArray ?: return null
         val code = Regex("^[0-9]{4,6}[A-Z]?$")
         return arr.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             val idx = o.str("i")?.toDoubleOrNull()?.toInt() ?: return@mapNotNull null
-            val id = items.getOrNull(idx)?.first ?: return@mapNotNull null
+            val id = items.getOrNull(idx)?.id ?: return@mapNotNull null
             val syms = (o["s"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { s -> code.matches(s) } }.orEmpty()
             id to NewsTag(
-                syms.distinct().take(5), o.str("t")?.takeIf { it in THEMES } ?: "其他",
+                syms.distinct().take(5), o.str("t")?.take(40)?.ifBlank { "其他" } ?: "其他",
                 o.str("m")?.toDoubleOrNull()?.toInt()?.coerceIn(-2, 2) ?: 0, o.str("p")?.toDoubleOrNull()?.toInt()?.coerceIn(1, 5) ?: 1,
                 o.str("n")?.take(40).orEmpty(),
             )
@@ -738,9 +702,8 @@ object GroqAi {
         )
     }
 
-    const val ADVISOR_ROLE = "你是台灣股市的投資教練兼分析師，任務是幫使用者遵守他自己的交易紀律與資金計畫，而不是鼓勵頻繁交易。" +
-        "使用者過去常犯的錯：1. 想實現獲利就整檔賣光，隔天繼續漲而賣飛；2. 短線看到新聞就衝動買；3. 賣完一有資金就立刻買別檔；4. 資金控管差。" +
-        "所有建議都要符合他的資金計畫（短線可動用金額不可超過計畫）與紀律，長線部位不可因短期波動建議全賣，獲利了結一律建議分批。" +
+    const val ADVISOR_ROLE = "你是台灣股市資料助理，根據提供的市場資料、使用者持倉與使用者自行設定的投資原則回答。" +
+        "使用者沒有設定的資金限制、交易習慣或紀律不可自行假設；不要替使用者編造過往行為。" +
         "只能根據提供的資料集、價格數據與新聞說話，不可編造；推薦的股票必須在資料集的個股統計或新聞中出現，附正確的台股代號；不保證獲利。"
 
     /** 每日投資報告：讀整理過的新聞資料集（題材熱度、個股統計、重點新聞）＋大盤與持股，用進階模型產生。 */
@@ -800,23 +763,40 @@ object GroqAi {
     /**
      * 新聞重點整理：同一天、同一題材的所有標題整理成不重複的重點（同一事件只寫一次，附相關代號、多空與幾則新聞提到）。
      */
-    suspend fun digestTheme(theme: String, day: String, headlines: List<String>): List<com.enwei.moneymanager.data.DigestPoint>? {
-        if (!enabled || headlines.isEmpty()) return emptyList()
-        val system = "你是台股新聞編輯。以下是 $day「$theme」題材的所有新聞標題。把它們整理成 3～8 個不重複的重點（同一件事只寫一次，合併相同事件），" +
-            "每點 40 字內、具體（公司、數字、事件），標出相關台股代號（確定的才填）、對相關個股的多空（-2～2）、有幾則標題在講這件事。重要的排前面。" +
-            "只回 JSON：{\"p\": [{\"t\": 重點, \"s\": [代號], \"m\": 數字, \"n\": 則數}]}"
-        val user = headlines.take(300).mapIndexed { i, h -> "$i. ${h.take(60)}" }.joinToString("\n")
+    suspend fun digestTheme(theme: String, day: String, items: List<com.enwei.moneymanager.data.NewsItem>): List<com.enwei.moneymanager.data.DigestPoint>? {
+        if (!enabled || items.isEmpty()) return emptyList()
+        val system = "你是台股新聞編輯。以下是 $day「$theme」題材的新聞，每筆包含來源提供的內容範圍與內容。" +
+            "把所有輸入新聞分成 3～12 個不重複事件重點；每筆新聞的編號必須且只能歸入一個重點，不能漏掉。" +
+            "每點 40 字內、具體（公司、數字、事件），標出相關台股代號（確定的才填）、對相關個股的多空（-2～2）。" +
+            "內容只有標題時不可假設讀到正文。JSON 中 i 是該重點包含的輸入編號陣列。" +
+            "只回 JSON：{\"p\": [{\"t\": 重點, \"s\": [代號], \"m\": 數字, \"i\": [輸入編號]}]}"
+        val user = items.mapIndexed { i, item ->
+            buildString {
+                append("$i. [${item.contentLevel}] ${item.title}")
+                if (item.content.isNotBlank()) append("\n來源內容：${item.content}")
+            }
+        }.joinToString("\n\n")
         val r = chatJson(system, user, 900, task = AiTask.DIGEST) ?: return null
         val code = Regex("^[0-9]{4,6}[A-Z]?$")
-        return (r["p"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
+        val points = (r["p"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             val t = o.str("t") ?: return@mapNotNull null
+            val indexes = (o["i"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull {
+                (it as? JsonPrimitive)?.contentOrNull?.toIntOrNull()?.takeIf { index -> index in items.indices }
+            }?.distinct().orEmpty()
+            if (indexes.isEmpty()) return@mapNotNull null
+            val sourceItems = indexes.map(items::get)
             com.enwei.moneymanager.data.DigestPoint(
                 t.take(80),
                 (o["s"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { c -> code.matches(c) } }.orEmpty().distinct().take(5),
                 o.str("m")?.toDoubleOrNull()?.toInt()?.coerceIn(-2, 2) ?: 0,
-                o.str("n")?.toDoubleOrNull()?.toInt()?.coerceAtLeast(1) ?: 1,
+                sourceItems.sumOf { it.duplicateCount.coerceAtLeast(1) },
+                sourceItems.map { it.id },
             )
-        }?.take(8)
+        }?.take(12)
+        val covered = points.orEmpty().flatMap { it.sourceIds }
+        return points?.takeIf {
+            covered.toSet() == items.map { item -> item.id }.toSet() && covered.size == items.size
+        }
     }
 }

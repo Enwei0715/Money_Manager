@@ -52,7 +52,7 @@ object TaiwanBanks {
         CardBank("806", "元大銀行", 15, verified = false),
         CardBank(
             "807", "永豐銀行", 15, autopayLagBusinessDays = 1,
-            note = "截止日＝結帳日＋15 天，遇假日順延；順延時自動扣繳再晚一個營業日（實際帳單：10/23 結帳 → 截止 11/09 → 11/10 扣款）",
+            note = "截止日＝結帳日＋15 天，遇假日順延；順延時自動扣繳再晚一個營業日",
         ),
         CardBank("808", "玉山銀行", 15),
         CardBank("809", "凱基銀行", 17),

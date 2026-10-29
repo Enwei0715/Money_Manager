@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,13 +18,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FactCheck
@@ -61,7 +61,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.core.Periods
-import com.enwei.moneymanager.data.AccountEntity
 import com.enwei.moneymanager.data.AccountType
 import com.enwei.moneymanager.data.groupLabel
 import com.enwei.moneymanager.data.groupOrder
@@ -79,6 +78,7 @@ import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.DualBarChart
 import com.enwei.moneymanager.ui.components.EmptyHint
 import com.enwei.moneymanager.ui.components.LineChart
+import com.enwei.moneymanager.ui.components.ReorderableColumn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
@@ -159,7 +159,6 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     IconButton(onClick = { nav.navigate("stockfees") }) { Icon(Icons.Outlined.Settings, "手續費與月退") }
                     IconButton(onClick = { nav.navigate("trade/0") }) { Icon(Icons.Filled.Add, "新增股票交易") }
                   } else {
-                    IconButton(onClick = { nav.navigate("reconcile-batch") }) { Icon(Icons.Outlined.FactCheck, "截圖對帳") }
                     IconButton(onClick = { nav.navigate("totalstats") }) { Icon(Icons.Outlined.BarChart, "總資產統計") }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "選單") }
@@ -411,7 +410,6 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         Text(if (tab == 2) "全部" else "${start.monthValue}.${start.dayOfMonth}.${start.year % 100} ~ ${end.monthValue}.${end.dayOfMonth}.${end.year % 100}",
                             fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                     }
-                    if (acc?.type == AccountType.CASH) IconButton(onClick = { nav.navigate("cashcount/$id") }) { Icon(Icons.Outlined.Payments, "點鈔") }
                     IconButton(onClick = { reconcileOpen = true }) { Icon(Icons.Outlined.FactCheck, "對帳") }
                     IconButton(onClick = { chart = !chart }) {
                         Icon(if (chart) Icons.AutoMirrored.Filled.List else Icons.Outlined.BarChart, if (chart) "列表" else "圖表")
@@ -573,61 +571,12 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
         var catId by remember { mutableStateOf(lk.categories.firstOrNull { it.kind == TxnType.EXPENSE && it.name == "其他" }?.id) }
         var catMenu by remember { mutableStateOf(false) }
         val actual = Money.parseMinor(actualText)
-        // 從銀行 App 的截圖或照片讀出餘額：手機上 OCR → AI（有啟用時）或規則挑出餘額 → 填入，使用者確認後才調整
-        val ctx = androidx.compose.ui.platform.LocalContext.current
-        var reading by remember { mutableStateOf(false) }
-        var ocrMsg by remember { mutableStateOf<String?>(null) }
-        var found by remember { mutableStateOf<List<com.enwei.moneymanager.core.BalanceExtractor.Candidate>>(emptyList()) }
-        fun plain(minor: Long) = if (minor % 100 == 0L) (minor / 100).toString() else "%.2f".format(minor / 100.0)
-        fun readImage(uri: android.net.Uri) {
-            reading = true; ocrMsg = null; found = emptyList()
-            scope.launch {
-                val lines = runCatching { com.enwei.moneymanager.ocr.ScreenOcr.read(ctx, uri) }.getOrElse { ocrMsg = "讀取圖片失敗：${it.message}"; reading = false; return@launch }
-                found = com.enwei.moneymanager.core.BalanceExtractor.candidates(lines)
-                // 先讓看圖模型直接看截圖，不行再用手機讀出的文字問一般模型
-                val seen = lines.flatMap { com.enwei.moneymanager.core.BalanceExtractor.amounts(it) }.toSet()
-                val ai = com.enwei.moneymanager.net.GroqAi.readBalanceFromImage(ctx, uri, acc.name, seen)
-                    ?: com.enwei.moneymanager.net.GroqAi.pickBalance(acc.name, lines)
-                val best = ai ?: found.firstOrNull()?.amountMinor
-                ocrMsg = when {
-                    best == null -> "圖片裡找不到餘額，請手動輸入"
-                    ai != null -> "AI 從圖片讀到餘額 ${Money.withSymbol(best, acc.currency)}，請確認"
-                    else -> "從圖片的「${found.first().label}」讀到 ${Money.withSymbol(best, acc.currency)}，請確認"
-                }
-                if (best != null) actualText = plain(best)
-                reading = false
-            }
-        }
-        val pickShot = androidx.activity.compose.rememberLauncherForActivityResult(
-            androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
-        ) { uri -> if (uri != null) readImage(uri) }
-        val photoUri = remember {
-            val f = java.io.File(ctx.cacheDir, "photos").apply { mkdirs() }.let { java.io.File(it, "balance.jpg") }
-            androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
-        }
-        val takePhoto = androidx.activity.compose.rememberLauncherForActivityResult(
-            androidx.activity.result.contract.ActivityResultContracts.TakePicture(),
-        ) { ok -> if (ok) readImage(photoUri) }
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { reconcileOpen = false },
             title = { Text("對帳：${acc.name}") },
             text = {
                 Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
                     Text("帳理目前餘額：${Money.withSymbol(current, acc.currency)}")
-                    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                        androidx.compose.material3.OutlinedButton(enabled = !reading, onClick = {
-                            pickShot.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        }) { Text("選截圖") }
-                        androidx.compose.material3.OutlinedButton(enabled = !reading, onClick = { takePhoto.launch(photoUri) }) { Text("拍照") }
-                    }
-                    if (reading) Text("讀取中…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ocrMsg?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
-                    if (found.size > 1) Text("也讀到這些金額，點一下可改用：", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (found.size > 1) Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
-                        found.take(3).forEach { c ->
-                            androidx.compose.material3.AssistChip({ actualText = plain(c.amountMinor) }, label = { Text("${c.label} ${Money.full(c.amountMinor)}", fontSize = 12.sp) })
-                        }
-                    }
                     androidx.compose.material3.OutlinedTextField(
                         actualText, { actualText = it.filter { c -> c.isDigit() || c == '.' || c == '-' } },
                         label = { Text("App 裡的實際餘額") }, singleLine = true,
@@ -740,25 +689,36 @@ fun AccountOrderScreen(nav: NavController) {
     val st by repo.settings.flow.collectAsStateWithLifecycle()
     val rank = st.groupOrder()
     val sorted = accounts.sortedWith(compareBy({ rank.indexOf(it.type) }, { it.sortOrder }, { it.id }))
-    fun move(a: AccountEntity, dir: Int) {
-        val group = sorted.filter { it.type == a.type }
-        val idx = group.indexOf(a)
-        val j = idx + dir
-        if (j !in group.indices) return
-        val reordered = group.toMutableList().apply { add(j, removeAt(idx)) }
-        scope.launch { reordered.forEachIndexed { i, acc -> if (acc.sortOrder != i) repo.saveAccount(acc.copy(sortOrder = i)) } }
-    }
     Scaffold(topBar = { BackTopBar("修改順序", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad)) {
             sorted.groupBy { it.type }.forEach { (type, list) ->
                 item(key = "h$type") { GrayHeader(st.groupLabel(type)) }
-                items(list, key = { it.id }) { a ->
-                    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(a.name, Modifier.weight(1f))
-                        IconButton(onClick = { move(a, -1) }) { Icon(Icons.Filled.ArrowUpward, "上移") }
-                        IconButton(onClick = { move(a, 1) }) { Icon(Icons.Filled.ArrowDownward, "下移") }
+                item(key = "a$type") {
+                    ReorderableColumn(list, { it.id }, { reordered ->
+                        scope.launch {
+                            reordered.forEachIndexed { index, account ->
+                                if (account.sortOrder != index) repo.saveAccount(account.copy(sortOrder = index))
+                            }
+                        }
+                    }) { account, handle ->
+                        Column {
+                            Row(
+                                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 20.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
+                                    Text(account.name)
+                                    account.description?.takeIf { it.isNotBlank() }?.let {
+                                        Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                                Box(handle.size(48.dp), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Rounded.DragHandle, "拖曳排序", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
         }
