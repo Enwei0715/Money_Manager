@@ -24,6 +24,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Card
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.graphics.Color
+import com.enwei.moneymanager.data.adjustGuardAfterSell
+import com.enwei.moneymanager.data.guardFor
 import com.enwei.moneymanager.ui.components.SectionTitle
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -539,6 +541,21 @@ fun TradeEditScreen(
                 }) { FormInput(qty, { qty = it; feeEdited = false }, if (market == Market.TW && byLot) "1 張 = 1000 股" else "股數（零股、美股可含小數）", number = true) }
                 if (market == Market.TW && byLot && shares > 0) Text("= ${formatNum(shares, 0)} 股", fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp))
+                // 賣出時提示保本紀律：多賺幾股可以賣，超過的算減碼
+                if (side == StockSide.SELL && market == Market.TW && original == null && settings.investPlan.guardOn) {
+                    val p = price.replace(",", "").toDoubleOrNull() ?: 0.0
+                    val g by androidx.compose.runtime.produceState<com.enwei.moneymanager.core.GuardAdvice?>(null, symbol, p) {
+                        value = if (symbol.isBlank() || p <= 0) null else repo.guardFor(symbol.trim(), p)
+                    }
+                    g?.let { a ->
+                        Text(
+                            "保本紀律：以這個價格多賺 ${a.excessShares.toLong()} 股可以賣" +
+                                if (shares > a.excessShares && shares > 0) "；超過的 ${formatNum(shares - a.excessShares, 0)} 股算減碼，存檔後保本金額會依比例調降" else "",
+                            fontSize = 12.sp, color = if (shares > a.excessShares) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 108.dp, top = 4.dp, end = 16.dp),
+                        )
+                    }
+                }
                 if (side != StockSide.STOCK_DIVIDEND) {
                     FormLine("成交價") { FormInput(price, { price = it; feeEdited = false }, "", number = true) }
                     if (market == Market.TW) {
@@ -586,6 +603,8 @@ fun TradeEditScreen(
                     }
                     // 用 App 層級的 scope，離開畫面後仍會完成儲存與報價更新
                     MoneyApp.instance.appScope.launch {
+                        // 新的賣出：先依賣出前的持股調整保本紀律
+                        if (original == null && t.side == StockSide.SELL && t.market == Market.TW) runCatching { repo.adjustGuardAfterSell(t.symbol, t.shares, t.price) }
                         repo.saveTrade(t)
                         runCatching { SyncWorker.refreshDividends(repo, setOfNotNull(t.symbol.uppercase(), original?.symbol?.uppercase())) }
                         runCatching { SyncWorker.refreshQuotes(repo) }

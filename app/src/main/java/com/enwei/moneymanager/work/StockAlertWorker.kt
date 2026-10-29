@@ -78,6 +78,10 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 val g = com.enwei.moneymanager.core.ProfitGuard.advise(gi.copy(price = p), s.investPlan.let { com.enwei.moneymanager.core.GuardRule(it.guardTrailPct, it.baseShares) })
                 peaks[h.symbol] = g.peak
                 if (g.triggered) fire(h.symbol, "guard-${g.action.name}", "${h.symbol} ${h.name.orEmpty()}：${g.action.label}", "${g.note}，建議賣 ${g.sellShares.toLong()} 股")
+                // 多賺的股數變多（每多賺約一股）：提醒一次停利價，不用盯盤
+                else if (g.excessShares >= 1 && !fired.containsKey("${h.symbol}:guard-excess-${g.excessShares.toLong()}"))
+                    fire(h.symbol, "guard-excess-${g.excessShares.toLong()}", "${h.symbol} ${h.name.orEmpty()}：多賺 ${g.excessShares.toLong()} 股",
+                        "停利價 ${"%.2f".format(g.takeProfit ?: 0.0)}，跌破才賣這 ${g.excessShares.toLong()} 股；續漲停利價會跟著上移")
             }
             if (peaks.isNotEmpty()) repo.saveGuardPeaks(peaks)
             if (s.stockAlertsOn && !s.investPlan.guardOn) snap.holdings.forEach { h ->

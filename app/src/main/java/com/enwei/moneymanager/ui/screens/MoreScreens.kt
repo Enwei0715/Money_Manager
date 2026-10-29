@@ -120,6 +120,8 @@ fun MoreScreen(nav: NavController) {
             Triple("notif", "通知記帳", L.Notification),
             Triple("walletreader", "錢包讀取", L.Wallet),
             Triple("pending", "待確認", L.Inbox),
+            Triple("reconcile-batch", "截圖對帳", L.Scan),
+            Triple("cashcount/0", "現金點鈔", L.Cash),
         ),
         "投資" to listOf(
             Triple("invest", "股票", L.Stocks),
@@ -977,10 +979,13 @@ fun WalletReaderScreen(nav: NavController) {
 
 /** 現金點鈔：輸入各面額數量，算出總額並可對帳。 */
 @Composable
-fun CashCounterScreen(nav: NavController, accountId: Long) {
+fun CashCounterScreen(nav: NavController, accountIdArg: Long) {
     val scope = rememberCoroutineScope()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
+    // 從「更多」進來時（id 0）用第一個現金帳戶
+    val accountId = if (accountIdArg > 0) accountIdArg
+    else balances.firstOrNull { it.account.type == com.enwei.moneymanager.data.AccountType.CASH && !it.account.archived }?.account?.id ?: 0L
     val b = balances.find { it.account.id == accountId }
     val denoms = listOf(2000, 1000, 500, 200, 100, 50, 10, 5, 1)
     var counts by remember(settings.cashCounts[accountId]) { mutableStateOf(settings.cashCounts[accountId].orEmpty()) }

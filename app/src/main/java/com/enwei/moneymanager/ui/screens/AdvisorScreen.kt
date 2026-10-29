@@ -697,7 +697,7 @@ private fun PlanTab(nav: NavController) {
                 Text("每天讀新聞並產生報告", fontSize = 14.sp, modifier = Modifier.weight(1f))
                 Switch(settings.advisorDaily, { v -> repo.settings.update { it.copy(advisorDaily = v) } }, enabled = GroqAi.enabled)
             }
-            Text("每 6 小時抓一次新聞並標註，早上 7 點後產生當天報告並通知；需要網路且電量不低。", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("每 3 小時抓新聞、標註並整理重點，早上 7 點後產生當天報告並通知；需要網路且電量不低。", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(24.dp))
     }

@@ -157,6 +157,43 @@ fun citeNumbers(text: String): List<Int> = citeRe.findAll(text).flatMap { m -> R
 /** 拿掉 AI 文字裡的新聞編號引用。 */
 fun stripCites(text: String): String = text.replace(citeRe, "")
 
+/** 目前持股依保本紀律算出的建議（記賣出時提示用）；沒持有時為 null。 */
+suspend fun Repository.guardFor(symbol: String, price: Double): com.enwei.moneymanager.core.GuardAdvice? {
+    val plan = settings.value.investPlan
+    val held = holdingsByBroker.first().values.flatten().filter { it.market == Market.TW && it.symbol.equals(symbol, true) }
+    val shares = held.sumOf { it.shares }
+    if (!plan.guardOn || shares <= 0.0001 || price <= 0) return null
+    val gs = plan.guards[symbol.uppercase()] ?: plan.guards[symbol]
+    val principal = gs?.principal ?: autoPrincipal(trades.first().filter { it.market == Market.TW && it.symbol.equals(symbol, true) })
+    return com.enwei.moneymanager.core.ProfitGuard.advise(com.enwei.moneymanager.core.GuardInput(shares, price, principal, gs?.peak, gs?.takeProfit), plan.guardRule())
+}
+
+/**
+ * 記一筆賣出後調整保本紀律：只賣多賺的股數時保本金額不變；賣超過的部分是減碼，
+ * 保本金額依留下的「成本股數」等比例調降。移動停利的最高價、手動停利價重新開始；全部賣光就清掉這檔的紀錄。
+ * 要在存檔之前呼叫（用賣出前的持股計算）。
+ */
+suspend fun Repository.adjustGuardAfterSell(symbol: String, sold: Double, price: Double) {
+    val plan = settings.value.investPlan
+    if (!plan.guardOn || sold <= 0 || price <= 0) return
+    val key = plan.guards.keys.firstOrNull { it.equals(symbol, true) } ?: symbol
+    val held = holdingsByBroker.first().values.flatten().filter { it.market == Market.TW && it.symbol.equals(symbol, true) }
+    val shares = held.sumOf { it.shares }
+    if (shares <= 0.0001) return
+    if (sold >= shares - 0.0001) {
+        settings.update { st -> st.copy(investPlan = st.investPlan.copy(guards = st.investPlan.guards - key)) }
+        return
+    }
+    val gs = plan.guards[key] ?: GuardState()
+    val principal = gs.principal ?: autoPrincipal(trades.first().filter { it.market == Market.TW && it.symbol.equals(symbol, true) })
+    val excess = kotlin.math.floor(maxOf(0.0, shares * price - principal) / price)
+    val reduce = (sold - excess).coerceAtLeast(0.0)
+    val costShares = (shares - excess).coerceAtLeast(0.0)
+    val ng = if (reduce > 0 && costShares > 0) gs.copy(principal = principal * ((costShares - reduce).coerceAtLeast(0.0) / costShares), reduceAt = null)
+    else gs
+    settings.update { st -> st.copy(investPlan = st.investPlan.copy(guards = st.investPlan.guards + (key to ng.copy(peak = null, takeProfit = null)))) }
+}
+
 /** 更新各檔移動停利的最高價（有變才寫入）。 */
 fun Repository.saveGuardPeaks(peaks: Map<String, Double?>) {
     val cur = settings.value.investPlan.guards

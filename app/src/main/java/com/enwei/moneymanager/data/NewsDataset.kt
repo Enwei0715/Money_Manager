@@ -122,7 +122,7 @@ data class TopicStat(val key: String, val count: Int, val avgSentiment: Double, 
 
 /**
  * 新聞資料集：背景定期從 Google 新聞抓上百則台股相關標題，請 AI 逐則標註，
- * 累積近 10 天的資料再統整成題材與個股熱度，給每日選股與對話使用。存在 App 的私有檔案。
+ * 累積近 14 天的資料再統整成題材與個股熱度，給每日選股與對話使用。存在 App 的私有檔案。
  */
 class NewsDataset(context: Context) {
     private val file = File(context.filesDir, "news_dataset.json")

@@ -179,7 +179,17 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
     val crossCurrency = type == TxnType.TRANSFER && toAcc != null && toAcc.currency != currency
     val canSave = amountMinor != null && accountId != null && (type != TxnType.TRANSFER || toAccountId != null)
     // 現金帳戶可用紙鈔硬幣記：存檔時依付出／找回的鈔票硬幣增減皮夾
-    val isCash = type != TxnType.TRANSFER && lk.account(accountId)?.type == com.enwei.moneymanager.data.AccountType.CASH
+    // （現金帳戶 id, 錢是不是進皮夾）：收入、轉入現金（例如 ATM 提款）是進，支出、從現金轉出是出
+    val cashSide: Pair<Long, Boolean>? = run {
+        fun cash(id: Long?) = id != null && lk.account(id)?.type == com.enwei.moneymanager.data.AccountType.CASH
+        when {
+            type == TxnType.TRANSFER && cash(toAccountId) -> toAccountId!! to true
+            type == TxnType.TRANSFER && cash(accountId) -> accountId!! to false
+            type != TxnType.TRANSFER && cash(accountId) -> accountId!! to (type == TxnType.INCOME)
+            else -> null
+        }
+    }
+    val isCash = cashSide != null
     var cashOpen by remember { mutableStateOf(openCash) }
     var cashPlan by remember { mutableStateOf<Pair<Map<Int, Int>, Map<Int, Int>>?>(null) }
 
@@ -200,7 +210,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
     fun save(again: Boolean) {
         val t = build() ?: return
         val plan = cashPlan?.takeIf { isCash }
-        val cashAcc = accountId
+        val cashAcc = cashSide?.first
         scope.launch {
             repo.saveTxn(t)
             if (plan != null && cashAcc != null) {
@@ -330,15 +340,17 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                     FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
                         PlaceholderText(lk.account(accountId)?.name, "")
                     }
-                    if (isCash) FormRow("紙鈔硬幣", color, false, onClick = { focusManager.clearFocus(); panel = Panel.NONE; cashOpen = true }) {
-                        val pl = cashPlan
-                        Text(
-                            if (pl == null) "點這裡用鈔票硬幣記，自動算找零"
-                            else (if (type == TxnType.INCOME) "收到 " else "付出 ") + cashText(if (type == TxnType.INCOME) pl.second else pl.first) +
-                                (if ((if (type == TxnType.INCOME) pl.first else pl.second).isNotEmpty()) "，${if (type == TxnType.INCOME) "找出" else "找回"} " + cashText(if (type == TxnType.INCOME) pl.first else pl.second) else ""),
-                            fontSize = 14.sp, color = if (pl == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
+
+                }
+                if (isCash) FormRow("紙鈔硬幣", color, false, onClick = { focusManager.clearFocus(); panel = Panel.NONE; cashOpen = true }) {
+                    val pl = cashPlan
+                    val inn = cashSide?.second == true
+                    Text(
+                        if (pl == null) "點這裡用鈔票硬幣記，自動算找零"
+                        else (if (inn) "收到 " else "付出 ") + cashText(if (inn) pl.second else pl.first) +
+                            (if ((if (inn) pl.first else pl.second).isNotEmpty()) "，${if (inn) "找出" else "找回"} " + cashText(if (inn) pl.first else pl.second) else ""),
+                        fontSize = 14.sp, color = if (pl == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    )
                 }
                 FormRow("內容", color, merchantFocused, onClick = {}) {
                     UnderlineField(merchant, { merchant = it }, "",
@@ -445,12 +457,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
         }
     }
 
-    if (cashOpen && isCash) {
-        val acc = accountId
+    if (cashOpen && cashSide != null) {
         CashPayDialog(
-            have = acc?.let { settings.cashCounts[it] }.orEmpty(),
+            have = settings.cashCounts[cashSide.first].orEmpty(),
             priceYuan = amountMinor?.let { it / 100 },
-            income = type == TxnType.INCOME,
+            income = cashSide.second,
             onDone = { amt, out, inn -> expr = amt.toString(); cashPlan = out to inn; cashOpen = false },
         ) { cashOpen = false }
     }

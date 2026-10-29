@@ -17,7 +17,7 @@ import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
 /**
- * 投資助理的背景工作：每 6 小時蒐集新聞並請 AI 標註，累積成資料集；
+ * 投資助理的背景工作：每 3 小時蒐集新聞並請 AI 標註，累積成資料集；
  * 每天早上 7 點後、資料集夠完整時產生當天的投資報告並通知。
  */
 class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {

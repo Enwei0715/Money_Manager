@@ -41,7 +41,8 @@ object Updater {
         return ReleaseInfo(
             tag = tag,
             versionCode = VersionUtil.codeFromTag(tag) ?: 0,
-            notes = root.str("body").orEmpty(),
+            // 拿掉 commit 訊息裡給開發用的標記行
+            notes = root.str("body").orEmpty().lines().filterNot { it.startsWith("Co-Authored-By:") || it.startsWith("Claude-Session:") }.joinToString("\n").trim(),
             assetApiUrl = asset.str("url").orEmpty(),
             assetBrowserUrl = asset.str("browser_download_url").orEmpty(),
             sizeBytes = asset.num("size")?.toLong() ?: 0,
