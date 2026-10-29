@@ -12,7 +12,6 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import androidx.work.getWorkInfosForUniqueWorkFlow
 import androidx.work.workDataOf
 import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.data.ReviewSpan
@@ -20,8 +19,6 @@ import com.enwei.moneymanager.data.aiInput
 import com.enwei.moneymanager.data.spendingReview
 import com.enwei.moneymanager.net.GroqAi
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
 
 data class AiWorkStatus(
@@ -79,25 +76,25 @@ object AiBackgroundWork {
         WorkManager.getInstance(context).enqueueUniqueWork("ai-auto-tidy-trigger", ExistingWorkPolicy.REPLACE, request)
     }
 
-    fun observe(context: Context, uniqueName: String): Flow<AiWorkStatus?> =
-        WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(uniqueName).map { infos ->
-            val info = infos.maxByOrNull { it.inputData.getLong("queuedAt", it.inputData.getLong("requestedAt", 0)) }
-                ?: return@map null
-            if (info.state.isFinished && info.state != WorkInfo.State.FAILED) return@map null
-            if (uniqueName == "news" && info.state == WorkInfo.State.ENQUEUED) return@map null
-            val data = info.progress
-            val startedAt = data.getLong(PROGRESS_STARTED, 0)
-            AiWorkStatus(
-                running = info.state == WorkInfo.State.RUNNING || (info.state == WorkInfo.State.ENQUEUED && uniqueName != "news"),
-                step = data.getString(PROGRESS_STEP) ?: if (info.state == WorkInfo.State.ENQUEUED) "等待網路或背景排程…" else "準備中…",
-                startedAt = startedAt,
-                done = data.getInt(PROGRESS_DONE, -1).takeIf { it >= 0 },
-                total = data.getInt(PROGRESS_TOTAL, -1).takeIf { it > 0 },
-                error = info.outputData.getString("error")?.takeIf { info.state == WorkInfo.State.FAILED }
-                    ?: if (info.state == WorkInfo.State.FAILED) "背景工作失敗，請重試。" else null,
-                request = info.inputData.getString("q"),
-            )
-        }
+    fun status(infos: List<WorkInfo>?, uniqueName: String): AiWorkStatus? {
+        val info = infos
+            ?.maxByOrNull { it.inputData.getLong("queuedAt", it.inputData.getLong("requestedAt", 0)) }
+            ?: return null
+        if (info.state.isFinished && info.state != WorkInfo.State.FAILED) return null
+        if (uniqueName == "news" && info.state == WorkInfo.State.ENQUEUED) return null
+        val data = info.progress
+        val startedAt = data.getLong(PROGRESS_STARTED, 0)
+        return AiWorkStatus(
+            running = info.state == WorkInfo.State.RUNNING || (info.state == WorkInfo.State.ENQUEUED && uniqueName != "news"),
+            step = data.getString(PROGRESS_STEP) ?: if (info.state == WorkInfo.State.ENQUEUED) "等待網路或背景排程…" else "準備中…",
+            startedAt = startedAt,
+            done = data.getInt(PROGRESS_DONE, -1).takeIf { it >= 0 },
+            total = data.getInt(PROGRESS_TOTAL, -1).takeIf { it > 0 },
+            error = info.outputData.getString("error")?.takeIf { info.state == WorkInfo.State.FAILED }
+                ?: if (info.state == WorkInfo.State.FAILED) "背景工作失敗，請重試。" else null,
+            request = info.inputData.getString("q"),
+        )
+    }
 
     private fun enqueue(
         context: Context,

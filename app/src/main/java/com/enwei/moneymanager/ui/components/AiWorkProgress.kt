@@ -3,25 +3,38 @@ package com.enwei.moneymanager.ui.components
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Observer
 import com.enwei.moneymanager.work.AiBackgroundWork
 import com.enwei.moneymanager.work.AiWorkStatus
 import com.enwei.moneymanager.work.ReportJob
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import kotlinx.coroutines.delay
 
 @Composable
 fun rememberAiWorkStatus(uniqueName: String): AiWorkStatus? {
     val context = LocalContext.current
-    val flow = remember(uniqueName) { AiBackgroundWork.observe(context, uniqueName) }
-    val status by flow.collectAsStateWithLifecycle(initialValue = null)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val infos = remember(context, uniqueName) {
+        WorkManager.getInstance(context).getWorkInfosForUniqueWorkLiveData(uniqueName)
+    }
+    var status by remember(uniqueName) { mutableStateOf<AiWorkStatus?>(null) }
+    DisposableEffect(infos, lifecycleOwner, uniqueName) {
+        val observer = Observer<List<WorkInfo>> { status = AiBackgroundWork.status(it, uniqueName) }
+        infos.observe(lifecycleOwner, observer)
+        onDispose { infos.removeObserver(observer) }
+    }
     return status
 }
 
