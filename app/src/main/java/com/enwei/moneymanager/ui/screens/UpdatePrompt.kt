@@ -12,7 +12,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,11 +27,11 @@ import com.enwei.moneymanager.net.Updater
 import com.enwei.moneymanager.ui.components.Text
 import kotlinx.coroutines.launch
 
-/** 這次開啟 App 已經檢查過（換頁、轉向不重複檢查） */
-private var checkedThisLaunch = false
+/** 上次檢查的時間：每次回到 App 都會檢查，但 10 分鐘內不重複 */
+private var lastCheck = 0L
 
 /**
- * 開啟 App 時檢查 GitHub 上的新版；有新版且沒被略過就跳出視窗，
+ * 開啟或回到 App 時檢查 GitHub 上的新版；有新版且沒被略過就跳出視窗，
  * 可以直接下載安裝、稍後再說，或略過這一版（下一版出來會再提醒）。
  */
 @Composable
@@ -42,13 +41,24 @@ fun UpdatePrompt() {
     var release by remember { mutableStateOf<ReleaseInfo?>(null) }
     var progress by remember { mutableStateOf<Float?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        if (checkedThisLaunch) return@LaunchedEffect
-        checkedThisLaunch = true
-        val s = repo.settings.value
-        if (!s.notifyUpdates) return@LaunchedEffect
-        val r = runCatching { Updater.latest(s.githubToken) }.getOrNull() ?: return@LaunchedEffect
-        if (Updater.isNewer(r) && r.versionCode != s.updateSkipped) release = r
+    fun check() {
+        val now = System.currentTimeMillis()
+        if (release != null || now - lastCheck < 10 * 60_000) return
+        lastCheck = now
+        scope.launch {
+            val s = repo.settings.value
+            if (!s.notifyUpdates) return@launch
+            val r = runCatching { Updater.latest(s.githubToken) }.getOrNull()
+            if (r == null) { lastCheck = 0; return@launch }   // 沒網路或失敗：下次回到 App 再試
+            if (Updater.isNewer(r) && r.versionCode != s.updateSkipped) release = r
+        }
+    }
+    // App 從背景回到前景（不一定會重新啟動）時也要檢查
+    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) check() }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
     }
     val r = release ?: return
     AlertDialog(
