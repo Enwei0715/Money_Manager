@@ -27,6 +27,11 @@ object ChatJob {
     /** 對話畫面是否正在顯示（顯示中就不另外通知） */
     @Volatile var visible = false
 
+    /** 對話清單的捲動位置與看過的最後一則訊息時間（這次開 App 期間記住；-1 表示還沒進過對話） */
+    var scrollIndex = 0
+    var scrollOffset = 0
+    var seenLast = -1L
+
     fun ask(context: Context, question: String) {
         if (state.value?.running == true || question.isBlank()) return
         state.value = State(question, System.currentTimeMillis())

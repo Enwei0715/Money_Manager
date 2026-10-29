@@ -74,12 +74,26 @@ fun ReviewScreen(nav: NavController) {
 
 /** 收支檢討內容（交易頁的「檢討」分頁）。 */
 @Composable
-fun ReviewContent(nav: NavController) {
+fun ReviewContent(
+    nav: NavController,
+    /** 交易頁傳入的期間（月／季／年與上方選的月份）；null 時自己顯示切換箭頭 */
+    period: Pair<ReviewSpan, java.time.YearMonth>? = null,
+    onSpan: (ReviewSpan) -> Unit = {},
+) {
     val lk = rememberLookups()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
-    var span by rememberSaveable { mutableStateOf(ReviewSpan.MONTH) }
-    var offset by rememberSaveable { mutableStateOf(0) }
+    var ownSpan by rememberSaveable { mutableStateOf(ReviewSpan.MONTH) }
+    var ownOffset by rememberSaveable { mutableStateOf(0) }
+    val span = period?.first ?: ownSpan
+    val offset = period?.let { (sp, ym) ->
+        val cur = com.enwei.moneymanager.core.Periods.monthOf(java.time.LocalDate.now(), settings.monthStartDay)
+        when (sp) {
+            ReviewSpan.MONTH -> (ym.year * 12 + ym.monthValue) - (cur.year * 12 + cur.monthValue)
+            ReviewSpan.QUARTER -> (ym.year * 4 + (ym.monthValue - 1) / 3) - (cur.year * 4 + (cur.monthValue - 1) / 3)
+            ReviewSpan.YEAR -> ym.year - cur.year
+        }
+    } ?: ownOffset
     var data by remember { mutableStateOf<ReviewData?>(null) }
     var busy by remember { mutableStateOf(false) }
     var err by remember { mutableStateOf<String?>(null) }
@@ -93,13 +107,19 @@ fun ReviewContent(nav: NavController) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // 英文標籤較長：選項可左右捲動，切換期間的箭頭固定在右邊
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ReviewSpan.entries.forEach { sp -> FilterChip(span == sp, { span = sp; offset = 0 }, label = { Text("每${sp.label}", maxLines = 1) }) }
+                    ReviewSpan.entries.forEach { sp ->
+                        FilterChip(span == sp, { if (period != null) onSpan(sp) else { ownSpan = sp; ownOffset = 0 } }, label = { Text("每${sp.label}", maxLines = 1) })
+                    }
                 }
-                IconButton(onClick = { offset-- }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
-                IconButton(enabled = offset < 0, onClick = { offset++ }) { Icon(Icons.Filled.ChevronRight, "下一期") }
+                if (period == null) {
+                    IconButton(onClick = { ownOffset-- }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
+                    IconButton(enabled = ownOffset < 0, onClick = { ownOffset++ }) { Icon(Icons.Filled.ChevronRight, "下一期") }
+                }
             }
             val d = data ?: return@Column
-            Text(d.title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            // 交易頁上方已顯示期間；季、年再補上實際日期範圍
+            if (period == null) Text(d.title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            else if (span != ReviewSpan.MONTH) Text(d.title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             // ① 總覽
             Card(Modifier.fillMaxWidth()) {

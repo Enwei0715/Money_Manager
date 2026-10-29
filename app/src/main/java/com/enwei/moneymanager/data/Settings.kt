@@ -293,6 +293,8 @@ data class AppSettings(
     val notifyUpdates: Boolean = true,
     /** 已通知過的版本代碼 */
     val updateNotified: Int = 0,
+    /** 使用者在更新視窗按「略過這版」的版本 */
+    val updateSkipped: Int = 0,
     /** 上次產生報告時 AI 分析花的時間（毫秒），用來估算 */
     val reportAiMs: Long = 50_000,
     /** 背景蒐集新聞並每天產生投資報告 */
@@ -422,6 +424,7 @@ class SettingsStore(context: Context) {
         alertsFired = runCatching { json.decodeFromString(MapSerializer(String.serializer(), Long.serializer()), prefs.getString("alertsFired", "{}")!!) }.getOrDefault(emptyMap()),
         notifyUpdates = prefs.getBoolean("notifyUpdates", true),
         updateNotified = prefs.getInt("updateNotified", 0),
+        updateSkipped = prefs.getInt("updateSkipped", 0),
         txnNecessity = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("txnNecessity", "{}")!!) }.getOrDefault(emptyMap()),
         investPlan = runCatching { json.decodeFromString(InvestPlanSettings.serializer(), prefs.getString("investPlan", "")!!) }.getOrDefault(InvestPlanSettings()),
         stockStyle = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("stockStyle", "{}")!!) }.getOrDefault(emptyMap()),
@@ -578,6 +581,7 @@ class SettingsStore(context: Context) {
             .putString("alertsFired", json.encodeToString(MapSerializer(String.serializer(), Long.serializer()), s.alertsFired))
             .putBoolean("notifyUpdates", s.notifyUpdates)
             .putInt("updateNotified", s.updateNotified)
+            .putInt("updateSkipped", s.updateSkipped)
             .putString("txnNecessity", json.encodeToString(longStrSerializer, s.txnNecessity))
             .putString("investPlan", json.encodeToString(InvestPlanSettings.serializer(), s.investPlan))
             .putString("stockStyle", json.encodeToString(strMapSerializer, s.stockStyle))

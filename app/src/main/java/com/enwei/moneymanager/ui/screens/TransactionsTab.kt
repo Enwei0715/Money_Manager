@@ -156,7 +156,17 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     val trades by repo.trades.collectAsStateWithLifecycle(emptyList())
     val recurring by repo.recurring.collectAsStateWithLifecycle(emptyList())
     var memoEditing by remember { mutableStateOf<Memo?>(null) }
+    // 「檢討」分頁的期間（月／季／年）：上方的期間切換直接控制檢討，不在下方再放一組
+    var reviewSpan by rememberSaveable { mutableStateOf(com.enwei.moneymanager.data.ReviewSpan.MONTH) }
     val yearly = tab == 2
+    fun step(n: Long) {
+        month = when {
+            yearly -> month.plusYears(n)
+            tab == 5 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.QUARTER -> month.plusMonths(3 * n)
+            tab == 5 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> month.plusYears(n)
+            else -> month.plusMonths(n)
+        }
+    }
     val startDay = settings.monthStartDay
 
     val range = if (yearly) Periods.month(YearMonth.of(month.year, 1), startDay).first to Periods.month(YearMonth.of(month.year, 12), startDay).second
@@ -181,12 +191,17 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(x = (-12).dp)) {
-                        IconButton(onClick = { month = if (yearly) month.minusYears(1) else month.minusMonths(1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
+                        IconButton(onClick = { step(-1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
                         Text(
-                            if (yearly) "${month.year}" else "${month.year}年${month.monthValue}月",
+                            when {
+                                yearly -> "${month.year}"
+                                tab == 5 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.QUARTER -> "${month.year}年Q${(month.monthValue - 1) / 3 + 1}"
+                                tab == 5 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> "${month.year}年"
+                                else -> "${month.year}年${month.monthValue}月"
+                            },
                             fontSize = 18.sp, modifier = Modifier.clickable { month = Periods.monthOf(LocalDate.now(), startDay) },
                         )
-                        IconButton(onClick = { month = if (yearly) month.plusYears(1) else month.plusMonths(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
+                        IconButton(onClick = { step(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                     }
                 },
                 actions = {
@@ -253,7 +268,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 3 -> TotalView(inPeriod, all, lk, nav, month, range)
                 4 -> MemoView(settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }
                 // 收支檢討（月、季、年；AI 逐筆檢查並提問）
-                else -> ReviewContent(nav)
+                else -> ReviewContent(nav, reviewSpan to month) { reviewSpan = it }
             }
         }
     }

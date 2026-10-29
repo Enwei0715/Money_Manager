@@ -121,7 +121,7 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
             val s = repo.settings.value
             if (!s.notifyUpdates) return
             val r = runCatching { com.enwei.moneymanager.net.Updater.latest(s.githubToken) }.getOrNull() ?: return
-            if (!com.enwei.moneymanager.net.Updater.isNewer(r) || r.versionCode <= s.updateNotified) return
+            if (!com.enwei.moneymanager.net.Updater.isNewer(r) || r.versionCode <= s.updateNotified || r.versionCode == s.updateSkipped) return
             repo.settings.update { it.copy(updateNotified = r.versionCode) }
             val nm = context.getSystemService(android.app.NotificationManager::class.java)
             if (!nm.areNotificationsEnabled()) return

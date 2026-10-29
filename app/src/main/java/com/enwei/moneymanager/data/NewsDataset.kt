@@ -104,7 +104,18 @@ data class NewsStore(
     val business: Map<String, String> = emptyMap(),
     /** 新聞重點庫：「日期|題材」→ 重點（所有新聞都整理進來） */
     val digests: Map<String, ThemeDigest> = emptyMap(),
+    /** 過去的每日報告（新到舊，不含目前這份） */
+    val history: List<DailyReport> = emptyList(),
+    /** 報告保留天數；0 表示不自動刪除 */
+    val historyKeepDays: Int = 30,
 )
+
+/** 依保留天數刪掉太舊的報告。 */
+fun NewsStore.prunedHistory(): NewsStore {
+    if (historyKeepDays <= 0) return this
+    val cut = System.currentTimeMillis() - historyKeepDays * 86_400_000L
+    return copy(history = history.filter { it.createdAt >= cut })
+}
 
 /** 題材或個股在資料集中的統計。 */
 data class TopicStat(val key: String, val count: Int, val avgSentiment: Double, val important: Int)
@@ -181,53 +192,103 @@ class NewsDataset(context: Context) {
         return added
     }
 
-    /** 請 AI 標註還沒標過的新聞（每批 40 則，批次之間稍等以免超過每分鐘額度）。回傳標註則數。 */
+    /**
+     * 請 AI 標註還沒標過的新聞。每批送出後核對回覆：沒被標到的（AI 漏掉、或輸入被截短）
+     * 會留在待標註清單，下一批優先重送；同一則送了 3 次仍沒結果，才歸到「其他」，
+     * 確保每一則最後都有題材、會被算進統計與重點庫。回傳標註則數。
+     */
     suspend fun tag(onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
         var done = 0
         // Gemini 一次可以標 150 則、請求之間只要稍等；Groq 每分鐘 token 少，一次 40 則、等久一點
         val big = GroqAi.bigContext(GroqAi.AiTask.NEWS_TAG)
-        val pending = load().items.filter { !it.tagged }
-        val batches = pending.chunked(if (big) 150 else 40).take(if (big) 30 else 12)
-        batches.forEachIndexed { i, batch ->
-            onProgress(i, batches.size)
+        val size = if (big) 150 else 40
+        val maxBatches = if (big) 40 else 15
+        val total = ((load().items.count { !it.tagged } + size - 1) / size).coerceAtMost(maxBatches)
+        for (i in 0 until maxBatches) {
+            // 每一批都重新取待標註清單：漏標的（tries 較多）排前面優先重送
+            val batch = load().items.filter { !it.tagged }.sortedByDescending { it.tries }.take(size)
+            if (batch.isEmpty()) break
+            onProgress(i, maxOf(total, i + 1))
             val tags = GroqAi.tagNews(batch.map { it.id to it.title }) ?: return done
+            val ids = batch.map { it.id }.toHashSet()
             update { st ->
                 st.copy(items = st.items.map { n ->
                     tags[n.id]?.let { t -> n.copy(tagged = true, symbols = t.symbols, theme = t.theme, sentiment = t.sentiment, importance = t.importance, note = t.note) }
-                        // 沒被標到的（例如改用 Groq 時輸入被截短）下次再送，兩次都沒有才放棄
-                        ?: if (batch.any { it.id == n.id }) (if (n.tries >= 1) n.copy(tagged = true) else n.copy(tries = n.tries + 1)) else n
+                        ?: if (n.id in ids) (if (n.tries >= 2) n.copy(tagged = true, theme = "其他", tries = n.tries + 1) else n.copy(tries = n.tries + 1)) else n
                 })
             }
-            done += batch.size
-            if (i < batches.lastIndex) delay(if (big) 6_000 else 15_000)
+            done += tags.size
+            delay(if (big) 6_000 else 15_000)
         }
         return done
     }
 
     /**
-     * 新聞重點庫：近 3 天每天、每個題材的全部新聞交給 AI 整理成不重複的重點。
-     * 已整理過的只在新聞增加不少時才重整；先整理則數多的。回傳整理了幾組。
+     * 新聞重點庫：近 3 天每天、每個題材的「全部」新聞整理成不重複的重點。
+     * - 一組新聞太多時分段送（Gemini 每段 250 則、Groq 60 則），每段的重點再合併，不會因為輸入上限漏讀。
+     * - 只有 1～2 則的小組不必叫 AI，直接把標題當重點，所以每一則都會進到重點庫。
+     * - 已整理過的只在新聞增加不少時才重整；先整理則數多的。回傳整理了幾組。
      */
-    suspend fun digest(maxCalls: Int = 30, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
+    suspend fun digest(maxCalls: Int = 40, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
         val st = load()
         val zone = java.time.ZoneId.of("Asia/Taipei")
         fun dayOf(n: NewsItem) = java.time.Instant.ofEpochSecond(n.epochSec).atZone(zone).toLocalDate().toString()
         val groups = recent(st, 3).filter { it.theme.isNotBlank() }.groupBy { dayOf(it) to it.theme }
             .filter { (k, l) ->
                 val old = st.digests["${k.first}|${k.second}"]
-                l.size >= 3 && (old == null || l.size >= old.count + maxOf(5, old.count / 5))
-            }.entries.sortedByDescending { it.value.size }.take(maxCalls)
+                old == null || l.size >= old.count + maxOf(if (old.count < 3) 1 else 5, old.count / 5)
+            }.entries.sortedByDescending { it.value.size }
         val big = GroqAi.bigContext(GroqAi.AiTask.DIGEST)
+        val chunk = if (big) 250 else 60
+        var calls = 0
         var done = 0
-        groups.forEachIndexed { i, (k, list) ->
-            onProgress(i, groups.size)
-            val points = GroqAi.digestTheme(k.second, k.first, list.sortedByDescending { it.importance }.map { it.title }) ?: return done
+        for ((i, e) in groups.withIndex()) {
+            val (k, list) = e
+            val sorted = list.sortedByDescending { it.importance }
+            val points: List<DigestPoint> = if (list.size < 3) {
+                sorted.map { DigestPoint(it.note.ifBlank { it.title }.take(80), it.symbols, it.sentiment) }
+            } else {
+                val parts = sorted.chunked(chunk)
+                if (calls + parts.size > maxCalls) continue
+                onProgress(i, groups.size)
+                val got = ArrayList<DigestPoint>()
+                for ((pi, part) in parts.withIndex()) {
+                    got += GroqAi.digestTheme(k.second, k.first, part.map { it.title }) ?: return done
+                    calls++
+                    if (pi < parts.lastIndex) delay(if (big) 5_000 else 12_000)
+                }
+                mergePoints(got)
+            }
             update { s -> s.copy(digests = (s.digests + ("${k.first}|${k.second}" to ThemeDigest(k.first, k.second, list.size, points, System.currentTimeMillis())))
                 .filterValues { d -> runCatching { java.time.LocalDate.parse(d.day) }.getOrNull()?.isAfter(java.time.LocalDate.now().minusDays(KEEP_DAYS.toLong())) == true }) }
             done++
-            if (i < groups.lastIndex) delay(if (big) 5_000 else 12_000)
+            if (list.size >= 3 && i < groups.lastIndex) delay(if (big) 5_000 else 12_000)
         }
         return done
+    }
+
+    /** 分段整理出的重點合併：同一件事（開頭相同、或代號相同且內容相近）只留一點、則數相加。 */
+    private fun mergePoints(points: List<DigestPoint>): List<DigestPoint> {
+        val out = ArrayList<DigestPoint>()
+        fun norm(t: String) = t.replace(Regex("[\\s，,。、：:「」]"), "").take(10)
+        for (p in points.sortedByDescending { it.count }) {
+            val j = out.indexOfFirst { o -> norm(o.text) == norm(p.text) || (o.symbols.isNotEmpty() && o.symbols == p.symbols && o.sentiment == p.sentiment) }
+            if (j >= 0) out[j] = out[j].copy(count = out[j].count + p.count) else out += p
+        }
+        return out.sortedByDescending { it.count }.take(12)
+    }
+
+    /** 整理進度：近 3 天已標註、待標註、AI 漏標後歸「其他」、已進重點庫的則數。 */
+    data class Coverage(val recent: Int, val pending: Int, val fallback: Int, val digested: Int)
+
+    fun coverage(st: NewsStore): Coverage {
+        val r = recent(st, 3)
+        val keys = st.digests.values.associate { "${it.day}|${it.theme}" to it.count }
+        val zone = java.time.ZoneId.of("Asia/Taipei")
+        val digested = r.filter { it.theme.isNotBlank() }
+            .groupBy { java.time.Instant.ofEpochSecond(it.epochSec).atZone(zone).toLocalDate().toString() + "|" + it.theme }
+            .entries.sumOf { (k, l) -> minOf(l.size, keys[k] ?: 0) }
+        return Coverage(r.size, st.items.count { !it.tagged }, st.items.count { it.tries >= 3 }, digested)
     }
 
     /** 近 [days] 天的題材統計（依則數排序）。 */

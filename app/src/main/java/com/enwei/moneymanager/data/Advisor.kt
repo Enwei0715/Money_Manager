@@ -218,7 +218,7 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
     }
     val keyNews = r.keyNews.mapNotNull { k -> k.id.toIntOrNull()?.let { imp.getOrNull(it) }?.let { KeyNews(it.id, k.why) } }
     val report = r.copy(picks = picks, keyNews = keyNews, createdAt = System.currentTimeMillis(), day = LocalDate.now().toEpochDay(), newsCount = ds.recent(st, 3).size)
-    ds.update { it.copy(report = report, business = it.business + picks.filter { p -> p.business.isNotBlank() }.associate { p -> p.symbol to p.business }) }
+    ds.update { it.copy(report = report, history = (listOfNotNull(it.report) + it.history).take(400), business = it.business + picks.filter { p -> p.business.isNotBlank() }.associate { p -> p.symbol to p.business }).prunedHistory() }
     return report
 }
 

@@ -132,6 +132,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                         pendingRoute.value = null
                     }
                     AppScaffold(nav)
+                    // 開啟 App 時檢查新版，有的話跳出更新視窗（可略過這版）
+                    com.enwei.moneymanager.ui.screens.UpdatePrompt()
                 }
             }
         }
