@@ -352,6 +352,8 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
         text = stripCites(reply.text),
         newsIds = (reply.newsIds.mapNotNull { it.toIntOrNull() } + cited).distinct().mapNotNull { i -> imp.getOrNull(i)?.id },
     )
+    // 使用者按了停止：不把回覆加進對話
+    kotlinx.coroutines.yield()
     ds.update { it.copy(chat = (it.chat + fixed).takeLast(40), business = it.business + fixed.cards.filter { c -> c.business.isNotBlank() }.associate { c -> c.symbol to c.business }) }
     return fixed
 }

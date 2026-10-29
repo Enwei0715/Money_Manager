@@ -82,4 +82,48 @@ object Cash {
     /** 付款後皮夾的內容：減掉付出的、加上找回的。 */
     fun apply(have: Map<Int, Int>, paid: Map<Int, Int>, received: Map<Int, Int>): Map<Int, Int> =
         DENOMS.associateWith { d -> (have[d] ?: 0) - (paid[d] ?: 0) + (received[d] ?: 0) }.filterValues { it != 0 }
+
+    /** 一種付款方式：給出去的鈔票硬幣與找回來的。 */
+    data class PayOption(val give: Map<Int, Int>, val back: Map<Int, Int>) {
+        val pieces: Int get() = pieces(give) + pieces(back)
+    }
+
+    /** 金額用最少張數組成（不用 2000、200 元）。 */
+    fun compose(amount: Long): Map<Int, Int> = change(amount)
+
+    /**
+     * 常見的付款與找零方式：剛好付、付一張（枚）剛好超過的鈔票硬幣再找零、
+     * 大鈔加上零頭讓找零變整數（例如 132 元付 500＋32 找 400）。
+     * [have] 不為空時，皮夾付得出來的排前面，並加上「從皮夾挑最省」的組合。最多回傳 [limit] 種。
+     */
+    fun payOptions(price: Long, have: Map<Int, Int> = emptyMap(), limit: Int = 4): List<PayOption> {
+        if (price <= 0) return emptyList()
+        val out = ArrayList<PayOption>()
+        fun add(give: Map<Int, Int>) {
+            val g = give.filterValues { it > 0 }
+            val paid = total(g)
+            if (paid < price) return
+            val o = PayOption(g, change(paid - price))
+            if (out.none { it == o }) out += o
+        }
+        if (have.isNotEmpty()) suggestPay(price, have)?.let { add(it) }
+        add(compose(price))
+        // 付一張（枚）剛好超過的，和再大一級的
+        val singles = DENOMS.filter { it != 2000 && it != 200 && it >= price }.sorted()
+        singles.take(2).forEach { add(mapOf(it to 1)) }
+        // 大鈔＋零頭：讓找零是整數
+        for (unit in listOf(100, 10)) {
+            val r = price % unit
+            if (r == 0L || price < unit) continue
+            val base = price - r
+            for (n in listOf(100, 500, 1000).filter { it > unit }) {
+                val k = (base + n - 1) / n
+                if (k * n > base && k <= 3) add(mapOf(n to k.toInt()) + compose(r))
+            }
+        }
+        // 金額比最大面額大時：用千元鈔湊整再找零
+        if (singles.isEmpty()) add(mapOf(1000 to ((price + 999) / 1000).toInt()))
+        fun fits(g: Map<Int, Int>) = have.isEmpty() || g.all { (d, n) -> (have[d] ?: 0) >= n }
+        return out.sortedWith(compareBy<PayOption>({ !fits(it.give) }, { it.back.isNotEmpty() }, { it.pieces })).take(limit)
+    }
 }

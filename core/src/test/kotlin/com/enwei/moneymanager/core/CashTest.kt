@@ -29,4 +29,22 @@ class CashTest {
         val after = Cash.apply(mapOf(1000 to 1, 10 to 2), mapOf(1000 to 1), Cash.change(1000 - 132))
         assertEquals(20L + 868, Cash.total(after))
     }
+
+    @Test fun payOptionsForFourDollars() {
+        val o = Cash.payOptions(4)
+        assertEquals(mapOf(1 to 4), o.first().give)
+        assert(o.any { it.give == mapOf(5 to 1) && it.back == mapOf(1 to 1) })
+        assert(o.any { it.give == mapOf(10 to 1) && it.back == mapOf(5 to 1, 1 to 1) })
+    }
+
+    @Test fun payOptionsWithOddChange() {
+        val o = Cash.payOptions(132, limit = 10)
+        assert(o.any { it.give == mapOf(500 to 1, 10 to 3, 1 to 2) && it.back == mapOf(100 to 4) })
+        assert(o.all { Cash.total(it.give) - Cash.total(it.back) == 132L })
+    }
+
+    @Test fun payOptionsPreferWallet() {
+        val o = Cash.payOptions(4, mapOf(10 to 2))
+        assertEquals(mapOf(10 to 1), o.first().give)
+    }
 }

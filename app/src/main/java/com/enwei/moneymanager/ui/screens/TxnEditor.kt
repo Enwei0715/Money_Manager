@@ -189,9 +189,23 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
             else -> null
         }
     }
-    val isCash = cashSide != null
-    var cashOpen by remember { mutableStateOf(openCash) }
-    var cashPlan by remember { mutableStateOf<Pair<Map<Int, Int>, Map<Int, Int>>?>(null) }
+    // 新的現金交易不用數字鍵盤：直接增減鈔票硬幣組出金額，再從推薦的付法（收法）選一種
+    val isCash = cashSide != null && id == 0L
+    var cashCompose by remember { mutableStateOf(emptyMap<Int, Int>()) }
+    var cashOpt by remember { mutableStateOf(0) }
+    val cashTotal = com.enwei.moneymanager.core.Cash.total(cashCompose)
+    val wallet = cashSide?.let { settings.cashCounts[it.first] }.orEmpty()
+    val cashOptions = remember(cashTotal, wallet, type, isCash) {
+        if (!isCash || type == TxnType.TRANSFER) emptyList()
+        else com.enwei.moneymanager.core.Cash.payOptions(cashTotal, if (type == TxnType.EXPENSE) wallet else emptyMap())
+    }
+    // （從皮夾拿出去的, 放進皮夾的）
+    val cashPlan: Pair<Map<Int, Int>, Map<Int, Int>>? = when {
+        !isCash || cashTotal <= 0 -> null
+        type == TxnType.TRANSFER -> if (cashSide!!.second) emptyMap<Int, Int>() to cashCompose else cashCompose to emptyMap()
+        else -> cashOptions.getOrNull(cashOpt)?.let { o -> if (type == TxnType.INCOME) o.back to o.give else o.give to o.back }
+    }
+    LaunchedEffect(isCash, panel) { if (isCash && panel == Panel.AMOUNT) panel = Panel.NONE }
 
     fun build(): TxnEntity? {
         val minor = amountMinor ?: return null
@@ -215,7 +229,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
             repo.saveTxn(t)
             if (plan != null && cashAcc != null) {
                 repo.settings.update { st -> st.copy(cashCounts = st.cashCounts + (cashAcc to cashAfter(st.cashCounts[cashAcc].orEmpty(), plan.first, plan.second))) }
-                cashPlan = null
+                cashCompose = emptyMap(); cashOpt = 0
             }
             // 轉帳手續費另記一筆支出
             if (type == TxnType.TRANSFER && feeMinor != null) repo.saveTxn(
@@ -293,7 +307,15 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                         if (settings.showTime) Text("   %02d:%02d".format(time.hour, time.minute), modifier = Modifier.clickable { showTime = true })
                     }
                 }
-                FormRow("金額", color, active = panel == Panel.AMOUNT, onClick = { focusManager.clearFocus(); panel = Panel.AMOUNT }, trailing = {
+                if (isCash) {
+                    CashAmountInput(cashCompose, wallet, color) { c ->
+                        cashCompose = c; cashOpt = 0
+                        val t = com.enwei.moneymanager.core.Cash.total(c)
+                        expr = if (t > 0) t.toString() else ""
+                    }
+                    CashOptions(cashOptions, cashOpt, type == TxnType.INCOME, wallet) { cashOpt = it }
+                    androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 16.dp, top = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                } else FormRow("金額", color, active = panel == Panel.AMOUNT, onClick = { focusManager.clearFocus(); panel = Panel.AMOUNT }, trailing = {
                     if (type == TxnType.TRANSFER) OutlinedButton(
                         onClick = { showFee = !showFee; if (showFee) panel = Panel.FEE },
                         shape = RoundedCornerShape(6.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
@@ -341,16 +363,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
                         PlaceholderText(lk.account(accountId)?.name, "")
                     }
 
-                }
-                if (isCash) FormRow("紙鈔硬幣", color, false, onClick = { focusManager.clearFocus(); panel = Panel.NONE; cashOpen = true }) {
-                    val pl = cashPlan
-                    val inn = cashSide?.second == true
-                    Text(
-                        if (pl == null) "點這裡用鈔票硬幣記，自動算找零"
-                        else (if (inn) "收到 " else "付出 ") + cashText(if (inn) pl.second else pl.first) +
-                            (if ((if (inn) pl.first else pl.second).isNotEmpty()) "，${if (inn) "找出" else "找回"} " + cashText(if (inn) pl.first else pl.second) else ""),
-                        fontSize = 14.sp, color = if (pl == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                    )
                 }
                 FormRow("內容", color, merchantFocused, onClick = {}) {
                     UnderlineField(merchant, { merchant = it }, "",
@@ -457,14 +469,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, bookmarkId
         }
     }
 
-    if (cashOpen && cashSide != null) {
-        CashPayDialog(
-            have = settings.cashCounts[cashSide.first].orEmpty(),
-            priceYuan = amountMinor?.let { it / 100 },
-            income = cashSide.second,
-            onDone = { amt, out, inn -> expr = amt.toString(); cashPlan = out to inn; cashOpen = false },
-        ) { cashOpen = false }
-    }
     if (showDate) {
         val state = rememberDatePickerState(initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
         DatePickerDialog(
@@ -705,7 +709,3 @@ private fun Keypad(expr: String, calcMode: Boolean, onExpr: (String) -> Unit, on
         }
     }
 }
-
-/** 鈔票硬幣的簡短文字，例如「1000×1、100×2」。 */
-private fun cashText(m: Map<Int, Int>): String =
-    com.enwei.moneymanager.core.Cash.DENOMS.filter { (m[it] ?: 0) > 0 }.joinToString("、") { "$it×${m[it]}" }.ifBlank { "無" }

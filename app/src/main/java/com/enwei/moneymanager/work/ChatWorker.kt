@@ -44,10 +44,23 @@ object ChatJob {
         )
     }
 
+    /** 停止目前的回覆：取消背景工作，回覆就算之後回來也不會加進對話。 */
+    fun stop(context: Context) {
+        val cur = state.value ?: return
+        WorkManager.getInstance(context).cancelUniqueWork("advisor-chat")
+        state.value = cur.copy(running = false, error = "已停止這次回覆")
+    }
+
     suspend fun run(context: Context, question: String) {
         val start = state.value?.startedAt ?: System.currentTimeMillis()
         state.value = State(question, start)
-        val r = runCatching { MoneyApp.repo.askAdvisor(MoneyApp.news, question) }.getOrNull()
+        val r = try {
+            MoneyApp.repo.askAdvisor(MoneyApp.news, question)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
         if (r == null) {
             state.value = State(question, start, running = false, error = "AI 沒有回應：${GroqAi.lastError ?: ""}")
             return
