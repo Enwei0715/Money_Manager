@@ -178,23 +178,27 @@ object ReportJob {
 
 class ReportWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val initial = ReportJob.state.value
-            ?: ReportJob.State("準備中…", System.currentTimeMillis(), refreshOnly = inputData.getBoolean("refreshOnly", false))
-        val running = initial.copy(step = "準備中…", startedAt = System.currentTimeMillis())
+        val refreshOnly = inputData.getBoolean("refreshOnly", false)
         val userInitiated = inputData.getBoolean("userInitiated", false)
-        ReportJob.state.value = running
-        setProgress(ReportJob.workProgress(running))
-        if (userInitiated) setForeground(ReportJob.foregroundInfo(applicationContext, running))
+        val queued = ReportJob.State("等待其他 AI 工作完成…", 0, refreshOnly = refreshOnly)
+        ReportJob.state.value = queued
+        setProgress(ReportJob.workProgress(queued))
         try {
-            ReportJob.execute(
-                applicationContext,
-                notifyProgress = true,
-                refreshOnly = inputData.getBoolean("refreshOnly", false),
-                onProgress = { state ->
-                    setProgressAsync(ReportJob.workProgress(state))
-                    if (userInitiated) setForegroundAsync(ReportJob.foregroundInfo(applicationContext, state))
-                },
-            )
+            AiBackgroundWork.withAiExecution {
+                val running = queued.copy(step = "準備中…", startedAt = System.currentTimeMillis())
+                ReportJob.state.value = running
+                setProgress(ReportJob.workProgress(running))
+                if (userInitiated) setForeground(ReportJob.foregroundInfo(applicationContext, running))
+                ReportJob.execute(
+                    applicationContext,
+                    notifyProgress = true,
+                    refreshOnly = refreshOnly,
+                    onProgress = { state ->
+                        setProgressAsync(ReportJob.workProgress(state))
+                        if (userInitiated) setForegroundAsync(ReportJob.foregroundInfo(applicationContext, state))
+                    },
+                )
+            }
         } catch (e: CancellationException) {
             ReportJob.state.value?.let {
                 ReportJob.state.value = it.copy(step = "背景工作已停止", running = false, error = "背景工作已停止。")

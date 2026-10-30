@@ -511,8 +511,11 @@ private fun JobProgress(
             LinearProgressIndicator(progress = { (done.toFloat() / total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
         } else LinearProgressIndicator(Modifier.fillMaxWidth())
         Text(
-            if (startedAt > 0) "已執行 ${com.enwei.moneymanager.work.ReportJob.formatDuration(now - startedAt)}；離開畫面或 App 後仍會繼續。"
-            else "等待網路或背景排程。",
+            when {
+                startedAt > 0 -> "已執行 ${com.enwei.moneymanager.work.ReportJob.formatDuration(now - startedAt)}；離開畫面或 App 後仍會繼續。"
+                step == "等待其他 AI 工作完成…" -> "前面還有 AI 工作；完成後會自動接續。"
+                else -> "等待網路或背景排程。"
+            },
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -19,6 +19,7 @@ import com.enwei.moneymanager.data.aiInput
 import com.enwei.moneymanager.data.spendingReview
 import com.enwei.moneymanager.net.GroqAi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
 import java.util.concurrent.TimeUnit
 
 data class AiWorkStatus(
@@ -31,6 +32,7 @@ data class AiWorkStatus(
 )
 
 object AiBackgroundWork {
+    private val executionMutex = Mutex()
     private const val KIND = "kind"
     private const val REVIEW = "review"
     private const val UNKNOWN = "unknown"
@@ -45,6 +47,16 @@ object AiBackgroundWork {
     const val UNKNOWN_NAME = "ai-unknown-sort"
     const val DUPLICATES_NAME = "ai-duplicate-review"
     const val AUTO_TIDY_NAME = "ai-auto-tidy"
+
+    /** Keep long-running AI workers from making overlapping provider requests. */
+    suspend fun <T> withAiExecution(block: suspend () -> T): T {
+        executionMutex.lock()
+        return try {
+            block()
+        } finally {
+            executionMutex.unlock()
+        }
+    }
 
     fun review(context: Context, span: ReviewSpan, offset: Int, key: String) {
         enqueue(
@@ -136,29 +148,31 @@ class AiBackgroundWorker(context: Context, params: WorkerParameters) : Coroutine
 
     override suspend fun doWork(): Result {
         val kind = inputData.getString("kind") ?: return Result.failure(workDataOf("error" to "缺少 AI 工作類型。"))
-        val startedAt = System.currentTimeMillis()
-        var currentStep = "準備中…"
         val userInitiated = inputData.getBoolean("userInitiated", false)
-        return try {
-            if (!GroqAi.enabled) throw IllegalStateException("AI 已停用或尚未設定可用金鑰。")
-            setProgress(AiBackgroundWork.progress(currentStep, startedAt))
-            if (userInitiated) setForeground(foregroundInfo(currentStep, null, null))
-            val repo = MoneyApp.repo
-            suspend fun update(step: String, done: Int? = null, total: Int? = null) {
-                currentStep = step
-                val data = AiBackgroundWork.progress(step, startedAt, done, total)
-                setProgress(data)
-                if (userInitiated) setForeground(foregroundInfo(step, done, total))
-            }
-            when (kind) {
+        setProgress(AiBackgroundWork.progress("等待其他 AI 工作完成…", 0))
+        return AiBackgroundWork.withAiExecution {
+            val startedAt = System.currentTimeMillis()
+            var currentStep = "準備中…"
+            try {
+                if (!GroqAi.enabled) throw IllegalStateException("AI 已停用或尚未設定可用金鑰。")
+                setProgress(AiBackgroundWork.progress(currentStep, startedAt))
+                if (userInitiated) setForeground(foregroundInfo(currentStep, null, null))
+                val repo = MoneyApp.repo
+                suspend fun update(step: String, done: Int? = null, total: Int? = null) {
+                    currentStep = step
+                    val data = AiBackgroundWork.progress(step, startedAt, done, total)
+                    setProgress(data)
+                    if (userInitiated) setForeground(foregroundInfo(step, done, total))
+                }
+                when (kind) {
                 "review" -> {
                     val span = inputData.getString("span")?.let { ReviewSpan.valueOf(it) }
-                        ?: return Result.failure(workDataOf("error" to "缺少檢討期間。"))
+                        ?: return@withAiExecution Result.failure(workDataOf("error" to "缺少檢討期間。"))
                     val offset = inputData.getInt("offset", 0)
                     val periodKey = inputData.getString("periodKey").orEmpty()
                     update("整理收支資料…")
                     val data = repo.spendingReview(span, offset)
-                    if (data.key != periodKey) return Result.failure(workDataOf("error" to "檢討期間已變更，請重新產生。"))
+                    if (data.key != periodKey) return@withAiExecution Result.failure(workDataOf("error" to "檢討期間已變更，請重新產生。"))
                     val settings = repo.settings.value
                     val (text, transactions) = data.aiInput(
                         settings.baseCurrency,
@@ -207,15 +221,16 @@ class AiBackgroundWorker(context: Context, params: WorkerParameters) : Coroutine
                     if (count == 0 && GroqAi.lastError != null) throw IllegalStateException(GroqAi.lastError!!)
                     complete("自動整理完成", startedAt)
                 }
-                else -> return Result.failure(workDataOf("error" to "未知的 AI 工作類型。"))
+                else -> return@withAiExecution Result.failure(workDataOf("error" to "未知的 AI 工作類型。"))
+                }
+                Result.success(workDataOf("message" to currentStep))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val error = e.message ?: e.javaClass.simpleName
+                postCompletion("AI 工作失敗", error)
+                Result.failure(workDataOf("error" to error))
             }
-            Result.success(workDataOf("message" to currentStep))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            val error = e.message ?: e.javaClass.simpleName
-            postCompletion("AI 工作失敗", error)
-            Result.failure(workDataOf("error" to error))
         }
     }
 
