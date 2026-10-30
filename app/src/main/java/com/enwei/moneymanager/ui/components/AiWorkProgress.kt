@@ -70,6 +70,11 @@ fun AiWorkProgress(status: AiWorkStatus?, modifier: Modifier = Modifier) {
             modifier = modifier,
         )
     } else {
-        Text("等待網路或背景排程。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
+        val waitingText = if (status.step == "等待其他 AI 工作完成…") {
+            "前面還有 AI 工作；完成後會自動接續。"
+        } else {
+            "等待網路或背景排程。"
+        }
+        Text(waitingText, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
     }
 }

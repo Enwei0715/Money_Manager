@@ -62,39 +62,42 @@ class WalletAiWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val fileName = inputData.getString("fileName").orEmpty()
         val file = File(applicationContext.cacheDir, fileName)
         val notificationId = 850_000 + (scanTime % 100_000).toInt()
-        val startedAt = System.currentTimeMillis()
         if (scanTime <= 0 || packageName.isBlank() || !fileName.matches(Regex("wallet-ai-\\d+\\.txt"))) {
             return Result.failure(workDataOf("error" to "錢包 AI 工作資料無效。"))
         }
 
-        return try {
-            setProgress(AiBackgroundWork.progress("讀取錢包交易文字…", startedAt))
-            val texts = withContext(Dispatchers.IO) {
-                if (!file.isFile) throw IllegalStateException("暫存畫面資料已不存在，請重新開啟錢包交易紀錄。")
-                file.readLines()
+        setProgress(AiBackgroundWork.progress("等待其他 AI 工作完成…", 0))
+        return AiBackgroundWork.withAiExecution {
+            val startedAt = System.currentTimeMillis()
+            try {
+                setProgress(AiBackgroundWork.progress("讀取錢包交易文字…", startedAt))
+                val texts = withContext(Dispatchers.IO) {
+                    if (!file.isFile) throw IllegalStateException("暫存畫面資料已不存在，請重新開啟錢包交易紀錄。")
+                    file.readLines()
+                }
+                val records = GroqAi.parseScreen(texts, LocalDate.now())
+                if (records.isEmpty()) throw IllegalStateException(GroqAi.lastError ?: "AI 沒有辨識出交易紀錄。")
+                setProgress(AiBackgroundWork.progress("匯入辨識出的交易…", startedAt, 0, records.size))
+                val result = MoneyApp.repo.ingestScreenRecords(packageName, records, dryRun = dryRun)
+                val message = if (result.wallet == null) {
+                    "辨識出 ${result.total} 筆，但找不到對應的電子支付帳戶。"
+                } else {
+                    "AI 辨識 ${result.total} 筆；新增 ${result.created} 筆、已存在 ${result.existing} 筆。"
+                }
+                updateScan(scanTime, packageName, lineCount, records, result, status = "AI 判讀完成")
+                if (!dryRun && result.created > 0) WalletScreenReader.notifyWalletImported(applicationContext, result.created)
+                postCompletion(notificationId, message)
+                withContext(Dispatchers.IO) { file.delete() }
+                Result.success()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val message = "AI 錢包判讀失敗：${e.message ?: e.javaClass.simpleName}"
+                updateScan(scanTime, packageName, lineCount, emptyList(), null, problem = message)
+                postCompletion(notificationId, message)
+                withContext(Dispatchers.IO) { file.delete() }
+                Result.failure(workDataOf("error" to message))
             }
-            val records = GroqAi.parseScreen(texts, LocalDate.now())
-            if (records.isEmpty()) throw IllegalStateException(GroqAi.lastError ?: "AI 沒有辨識出交易紀錄。")
-            setProgress(AiBackgroundWork.progress("匯入辨識出的交易…", startedAt, 0, records.size))
-            val result = MoneyApp.repo.ingestScreenRecords(packageName, records, dryRun = dryRun)
-            val message = if (result.wallet == null) {
-                "辨識出 ${result.total} 筆，但找不到對應的電子支付帳戶。"
-            } else {
-                "AI 辨識 ${result.total} 筆；新增 ${result.created} 筆、已存在 ${result.existing} 筆。"
-            }
-            updateScan(scanTime, packageName, lineCount, records, result, status = "AI 判讀完成")
-            if (!dryRun && result.created > 0) WalletScreenReader.notifyWalletImported(applicationContext, result.created)
-            postCompletion(notificationId, message)
-            withContext(Dispatchers.IO) { file.delete() }
-            Result.success()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            val message = "AI 錢包判讀失敗：${e.message ?: e.javaClass.simpleName}"
-            updateScan(scanTime, packageName, lineCount, emptyList(), null, problem = message)
-            postCompletion(notificationId, message)
-            withContext(Dispatchers.IO) { file.delete() }
-            Result.failure(workDataOf("error" to message))
         }
     }
 

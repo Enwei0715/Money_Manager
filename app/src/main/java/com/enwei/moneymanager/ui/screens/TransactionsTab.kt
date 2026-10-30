@@ -61,6 +61,7 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import com.enwei.moneymanager.ui.components.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text as MaterialText
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -76,9 +77,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -557,7 +561,7 @@ private fun CalendarView(
                             .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
                             .clickable { sheetDay = date },
                     ) {
-                        val label = if (date.dayOfMonth == 1) "${date.monthValue}.1" else "${date.dayOfMonth}"
+                        val label = date.dayOfMonth.toString()
                         val isToday = date == today
                         // 假日以符號標示，完整名稱在點擊日期後顯示。
                         val offDay = !com.enwei.moneymanager.core.TaiwanHolidays.isBusinessDay(date)
@@ -565,6 +569,7 @@ private fun CalendarView(
                         val dayName = com.enwei.moneymanager.core.TaiwanHolidays.label(date)
                         val makeupWorkday = dayName?.let { "補行上班" in it || "補班" in it } == true
                         val events = cardEvents[date].orEmpty()
+                        val markerPrimary = MaterialTheme.colorScheme.primary
                         Column(Modifier.fillMaxWidth().height(32.dp)) {
                             Row(
                                 Modifier.fillMaxWidth().height(18.dp)
@@ -586,28 +591,35 @@ private fun CalendarView(
                                     MemoDot(ms.first().color, Modifier.size(8.dp).alpha(alpha))
                                 }
                             }
-                            Row(
-                                Modifier.fillMaxWidth().height(14.dp).padding(horizontal = 2.dp),
-                                horizontalArrangement = Arrangement.spacedBy(1.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                if (holiday != null) CalendarDayMarker("休", SundayColor.copy(alpha = alpha))
-                                if (makeupWorkday) CalendarDayMarker("班", IncomeColor.copy(alpha = alpha))
+                            val markers = buildAnnotatedString {
+                                fun marker(label: String, color: Color) {
+                                    withStyle(SpanStyle(color = color)) { append(label) }
+                                }
+                                if (holiday != null) marker("休", SundayColor.copy(alpha = alpha))
+                                if (makeupWorkday) marker("班", IncomeColor.copy(alpha = alpha))
                                 if (events.any { it.kind == CardCalendarEventKind.STATEMENT }) {
-                                    CalendarDayMarker("結", MaterialTheme.colorScheme.primary.copy(alpha = alpha))
+                                    marker("結", markerPrimary.copy(alpha = alpha))
                                 }
                                 if (events.any { it.kind == CardCalendarEventKind.DUE }) {
-                                    CalendarDayMarker("繳", ExpenseColor.copy(alpha = alpha))
+                                    marker("繳", ExpenseColor.copy(alpha = alpha))
                                 }
                                 if (events.any { it.kind == CardCalendarEventKind.AUTOPAY }) {
-                                    CalendarDayMarker("扣", TransferColor.copy(alpha = alpha))
+                                    marker("扣", TransferColor.copy(alpha = alpha))
                                 }
                             }
+                            MaterialText(
+                                markers,
+                                modifier = Modifier.fillMaxWidth().height(14.dp).padding(horizontal = 2.dp),
+                                fontSize = 8.sp,
+                                lineHeight = 10.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                            )
                         }
                         val lines = listOf(
-                            (if (t.income > 0) Money.full(t.income) else "") to IncomeColor,
-                            (if (t.expense > 0) Money.full(t.expense) else "") to ExpenseColor,
-                            (if (t.income > 0 && t.expense > 0) Money.full(t.total) else "") to MaterialTheme.colorScheme.onSurface,
+                            (if (t.income > 0) "+${formatCalendarAmount(t.income)}" else "") to IncomeColor,
+                            (if (t.expense > 0) "-${formatCalendarAmount(t.expense)}" else "") to ExpenseColor,
                         )
                         Column(
                             Modifier.fillMaxWidth().padding(top = 3.dp, start = 2.dp, end = 2.dp),
@@ -691,9 +703,15 @@ private enum class CardCalendarEventKind(val label: String) {
 
 private data class CardCalendarEvent(val accountName: String, val kind: CardCalendarEventKind)
 
-@Composable
-private fun CalendarDayMarker(label: String, color: Color) {
-    Text(label, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 1, color = color)
+private fun formatCalendarAmount(amountMinor: Long): String {
+    val amount = amountMinor / 100.0
+    val (scale, unit) = when {
+        amount >= 100_000_000 -> 100_000_000.0 to "億"
+        amount >= 10_000 -> 10_000.0 to "萬"
+        amount >= 1_000 -> 1_000.0 to "千"
+        else -> return java.text.DecimalFormat("#,##0").format(amount)
+    }
+    return java.text.DecimalFormat("0.#").format(amount / scale) + unit
 }
 
 @Composable

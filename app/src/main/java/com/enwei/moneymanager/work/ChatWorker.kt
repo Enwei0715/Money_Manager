@@ -116,32 +116,35 @@ object ChatJob {
 class ChatWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val question = inputData.getString("q").orEmpty()
-        val startedAt = System.currentTimeMillis()
-        setProgress(AiBackgroundWork.progress("AI 正在整理你的投資問題…", startedAt))
-        setForeground(
-            ForegroundInfo(
-                9342,
-                androidx.core.app.NotificationCompat.Builder(applicationContext, MoneyApp.CHANNEL_RECORDS)
-                    .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                    .setContentTitle(tr("股票助理正在回覆"))
-                    .setContentText(question.take(80))
-                    .setProgress(0, 0, true)
-                    .setOngoing(true)
-                    .setOnlyAlertOnce(true)
-                    .setContentIntent(
-                        android.app.PendingIntent.getActivity(
-                            applicationContext,
-                            9342,
-                            Intent(applicationContext, com.enwei.moneymanager.ui.MainActivity::class.java)
-                                .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "advisor"),
-                            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-                        ),
-                    )
-                    .build(),
-            ),
-        )
-        ChatJob.run(applicationContext, question)
-        val error = ChatJob.state.value?.error
-        return if (error == null) Result.success() else Result.failure(androidx.work.workDataOf("error" to error))
+        setProgress(AiBackgroundWork.progress("等待其他 AI 工作完成…", 0))
+        return AiBackgroundWork.withAiExecution {
+            val startedAt = System.currentTimeMillis()
+            setProgress(AiBackgroundWork.progress("AI 正在整理你的投資問題…", startedAt))
+            setForeground(
+                ForegroundInfo(
+                    9342,
+                    androidx.core.app.NotificationCompat.Builder(applicationContext, MoneyApp.CHANNEL_RECORDS)
+                        .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
+                        .setContentTitle(tr("股票助理正在回覆"))
+                        .setContentText(question.take(80))
+                        .setProgress(0, 0, true)
+                        .setOngoing(true)
+                        .setOnlyAlertOnce(true)
+                        .setContentIntent(
+                            android.app.PendingIntent.getActivity(
+                                applicationContext,
+                                9342,
+                                Intent(applicationContext, com.enwei.moneymanager.ui.MainActivity::class.java)
+                                    .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "advisor"),
+                                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+                            ),
+                        )
+                        .build(),
+                ),
+            )
+            ChatJob.run(applicationContext, question)
+            val error = ChatJob.state.value?.error
+            if (error == null) Result.success() else Result.failure(androidx.work.workDataOf("error" to error))
+        }
     }
 }
