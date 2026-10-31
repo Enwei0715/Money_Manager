@@ -217,7 +217,7 @@ private fun AiSuggestionSection(lk: Lookups) {
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val aiWork = com.enwei.moneymanager.ui.components.rememberAiWorkStatus(com.enwei.moneymanager.work.AiBackgroundWork.UNKNOWN_NAME)
+    val unknownProgress by com.enwei.moneymanager.work.AiBackgroundWork.unknownProgress.collectAsStateWithLifecycle()
     var unknown by remember { mutableStateOf(0) }
     LaunchedEffect(all, settings.aiSuggestions) { unknown = repo.unknownCount() }
     val open = settings.aiSuggestions.filter { !it.rejected }
@@ -232,11 +232,11 @@ private fun AiSuggestionSection(lk: Lookups) {
         if (aiOn && unknown > 0) {
             Text("有 $unknown 筆不明或未分類的收支",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(enabled = aiWork?.running != true, onClick = {
-                com.enwei.moneymanager.work.AiBackgroundWork.unknown(context)
-            }) { Text(if (aiWork?.running == true) "整理中…" else "用 AI 整理不明花費") }
+            OutlinedButton(enabled = !unknownProgress.running, onClick = {
+                scope.launch { com.enwei.moneymanager.work.AiBackgroundWork.runUnknownSort() }
+            }) { Text(if (unknownProgress.running) "整理中…" else "用 AI 整理不明花費") }
         }
-        com.enwei.moneymanager.ui.components.AiWorkProgress(aiWork, Modifier.fillMaxWidth())
+        com.enwei.moneymanager.ui.components.AiWorkProgress(unknownProgress, Modifier.fillMaxWidth())
     }
     open.forEach { sg ->
         val t = byId[sg.txnId] ?: return@forEach
@@ -266,8 +266,8 @@ private fun DuplicateSection(lk: Lookups) {
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val aiWork = com.enwei.moneymanager.ui.components.rememberAiWorkStatus(com.enwei.moneymanager.work.AiBackgroundWork.DUPLICATES_NAME)
-    val tidyWork = com.enwei.moneymanager.ui.components.rememberAiWorkStatus(com.enwei.moneymanager.work.AiBackgroundWork.AUTO_TIDY_NAME)
+    val dupProgress by com.enwei.moneymanager.work.AiBackgroundWork.duplicatesProgress.collectAsStateWithLifecycle()
+    val tidyProgress by com.enwei.moneymanager.work.AiBackgroundWork.autoTidyProgress.collectAsStateWithLifecycle()
     var pairs by remember { mutableStateOf<List<com.enwei.moneymanager.data.Repository.DupPair>>(emptyList()) }
     // AI 的判斷會記住（自動整理或按下判斷時存起來）
     val verdicts = settings.dupVerdicts
@@ -276,7 +276,9 @@ private fun DuplicateSection(lk: Lookups) {
     LaunchedEffect(all, settings.dupDismissed) { pairs = repo.findDuplicates() }
     // 打開待確認頁時，順便請 AI 整理還沒判斷過的重複
     LaunchedEffect(aiOn, settings.aiAutoTidy) {
-        if (aiOn && settings.aiAutoTidy) com.enwei.moneymanager.work.AiBackgroundWork.autoTidy(context)
+        if (aiOn && settings.aiAutoTidy) {
+            com.enwei.moneymanager.work.AiBackgroundWork.runAutoTidy()
+        }
     }
     if (settings.aiTidyLog.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Text(
@@ -286,7 +288,7 @@ private fun DuplicateSection(lk: Lookups) {
         if (showLog) settings.aiTidyLog.take(10).forEach { Text("• $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     if (pairs.isEmpty()) {
-        com.enwei.moneymanager.ui.components.AiWorkProgress(tidyWork, Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+        com.enwei.moneymanager.ui.components.AiWorkProgress(tidyProgress, Modifier.fillMaxWidth().padding(horizontal = 16.dp))
         return
     }
     fun line(t: com.enwei.moneymanager.data.TxnEntity): String {
@@ -303,11 +305,11 @@ private fun DuplicateSection(lk: Lookups) {
                 scope.launch { sure.forEach { p -> verdicts[p.key].let { v -> repo.mergeDuplicate(p, v?.name, v?.categoryId) } } }
             }) { Text("合併 AI 判定的 ${sure.size} 組") }
         }
-        if (aiOn) OutlinedButton(enabled = aiWork?.running != true, onClick = {
-            com.enwei.moneymanager.work.AiBackgroundWork.duplicates(context)
-        }) { Text(if (aiWork?.running == true) "判斷中…" else "請 AI 判斷並整理名稱") }
-        com.enwei.moneymanager.ui.components.AiWorkProgress(aiWork, Modifier.fillMaxWidth())
-        com.enwei.moneymanager.ui.components.AiWorkProgress(tidyWork, Modifier.fillMaxWidth())
+        if (aiOn) OutlinedButton(enabled = !dupProgress.running, onClick = {
+            scope.launch { com.enwei.moneymanager.work.AiBackgroundWork.runDuplicatesCheck() }
+        }) { Text(if (dupProgress.running) "判斷中…" else "請 AI 判斷並整理名稱") }
+        com.enwei.moneymanager.ui.components.AiWorkProgress(dupProgress, Modifier.fillMaxWidth())
+        com.enwei.moneymanager.ui.components.AiWorkProgress(tidyProgress, Modifier.fillMaxWidth())
     }
     pairs.forEach { p ->
         val v = verdicts[p.key]

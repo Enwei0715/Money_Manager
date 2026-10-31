@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.enwei.moneymanager.ui.components.AiAllTasksProgress
 import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.Text
 
@@ -32,6 +33,7 @@ fun AiHubScreen(nav: NavController) {
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            AiAllTasksProgress()
             Text(
                 if (ready) "AI 已啟用" else "AI 尚未設定完成",
                 color = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,

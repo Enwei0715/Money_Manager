@@ -33,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.net.GroqAi
 import com.enwei.moneymanager.net.GroqAi.Provider
+import com.enwei.moneymanager.ui.components.AiAllTasksProgress
 import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.Text
 import kotlinx.coroutines.launch
@@ -47,6 +48,7 @@ fun AiSettingsScreen(nav: NavController) {
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            AiAllTasksProgress()
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SwitchRow("啟用 AI", "判讀通知、整理名稱與分類、檢討與股票分析", s.aiEnabled, s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()) { v ->

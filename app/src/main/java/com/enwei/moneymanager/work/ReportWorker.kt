@@ -180,12 +180,12 @@ class ReportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     override suspend fun doWork(): Result {
         val refreshOnly = inputData.getBoolean("refreshOnly", false)
         val userInitiated = inputData.getBoolean("userInitiated", false)
-        val queued = ReportJob.State("等待其他 AI 工作完成…", 0, refreshOnly = refreshOnly)
+        val queued = ReportJob.State("準備中…", System.currentTimeMillis(), refreshOnly = refreshOnly)
         ReportJob.state.value = queued
         setProgress(ReportJob.workProgress(queued))
         try {
-            AiBackgroundWork.withAiExecution {
-                val running = queued.copy(step = "準備中…", startedAt = System.currentTimeMillis())
+            run {
+                val running = queued.copy(step = "準備中…")
                 ReportJob.state.value = running
                 setProgress(ReportJob.workProgress(running))
                 if (userInitiated) setForeground(ReportJob.foregroundInfo(applicationContext, running))

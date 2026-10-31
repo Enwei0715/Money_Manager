@@ -35,17 +35,14 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             setProgressAsync(progress)
         }
         try {
-            update("等待其他 AI 工作完成…")
-            AiBackgroundWork.withAiExecution {
-                startedAt = System.currentTimeMillis()
-                update("準備蒐集新聞…")
-                repo.refreshNews(
-                    ds,
-                    onStep = { step -> update(step) },
-                    onBatch = { i, n -> update("AI 標註新聞 ${i + 1}/$n 批…", i + 1, n) },
-                    onDigest = { i, n -> update("整理新聞重點 ${i + 1}/$n…", i + 1, n) },
-                )
-            }
+            startedAt = System.currentTimeMillis()
+            update("準備蒐集新聞…")
+            repo.refreshNews(
+                ds,
+                onStep = { step -> update(step) },
+                onBatch = { i, n -> update("AI 標註新聞 ${i + 1}/$n 批…", i + 1, n) },
+                onDigest = { i, n -> update("整理新聞重點 ${i + 1}/$n…", i + 1, n) },
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

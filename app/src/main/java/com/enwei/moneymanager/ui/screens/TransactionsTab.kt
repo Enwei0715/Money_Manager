@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -548,7 +549,7 @@ private fun CalendarView(
             }
         }
         for (w in 0 until weeks) {
-            Row(Modifier.fillMaxWidth().height(88.dp)) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 90.dp)) {
                 for (d in 0 until 7) {
                     val date = start.plusDays((w * 7 + d).toLong())
                     val inMonth = inRange(date, range)
@@ -570,7 +571,7 @@ private fun CalendarView(
                         val makeupWorkday = dayName?.let { "補行上班" in it || "補班" in it } == true
                         val events = cardEvents[date].orEmpty()
                         val markerPrimary = MaterialTheme.colorScheme.primary
-                        Column(Modifier.fillMaxWidth().height(32.dp)) {
+                        Column(Modifier.fillMaxWidth().heightIn(min = 30.dp, max = 34.dp)) {
                             Row(
                                 Modifier.fillMaxWidth().height(18.dp)
                                     .background(if (isToday) NavyHighlight else Color.Transparent)
@@ -618,24 +619,32 @@ private fun CalendarView(
                             )
                         }
                         val lines = listOf(
-                            (if (t.income > 0) "+${formatCalendarAmount(t.income)}" else "") to IncomeColor,
-                            (if (t.expense > 0) "-${formatCalendarAmount(t.expense)}" else "") to ExpenseColor,
+                            (if (t.income > 0) formatCalendarAmount(t.income) else "") to IncomeColor,
+                            (if (t.expense > 0) formatCalendarAmount(t.expense) else "") to ExpenseColor,
                         )
-                        Column(
-                            Modifier.fillMaxWidth().padding(top = 3.dp, start = 2.dp, end = 2.dp),
-                            verticalArrangement = Arrangement.spacedBy(1.dp),
+                        BoxWithConstraints(
+                            Modifier.fillMaxWidth().padding(top = 2.dp, start = 2.dp, end = 2.dp),
                         ) {
-                            lines.forEach { (text, c) ->
-                                Text(
-                                    text,
-                                    fontSize = 9.sp,
-                                    lineHeight = 11.sp,
-                                    color = c.copy(alpha = alpha),
-                                    maxLines = 1,
-                                    textAlign = TextAlign.End,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth().height(13.dp).padding(end = 1.dp),
-                                )
+                            val cellFontSize = if (maxWidth < 46.dp) 8.sp else 9.sp
+                            val cellLineHeight = if (maxWidth < 46.dp) 10.sp else 11.sp
+                            Column(
+                                Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(1.dp),
+                            ) {
+                                lines.forEach { (text, c) ->
+                                    if (text.isNotEmpty()) {
+                                        Text(
+                                            text,
+                                            fontSize = cellFontSize,
+                                            lineHeight = cellLineHeight,
+                                            color = c.copy(alpha = alpha),
+                                            maxLines = 1,
+                                            textAlign = TextAlign.End,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.fillMaxWidth().height(13.dp).padding(end = 1.dp),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -708,7 +717,6 @@ private fun formatCalendarAmount(amountMinor: Long): String {
     val (scale, unit) = when {
         amount >= 100_000_000 -> 100_000_000.0 to "億"
         amount >= 10_000 -> 10_000.0 to "萬"
-        amount >= 1_000 -> 1_000.0 to "千"
         else -> return java.text.DecimalFormat("#,##0").format(amount)
     }
     return java.text.DecimalFormat("0.#").format(amount / scale) + unit

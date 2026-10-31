@@ -23,8 +23,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val repo = MoneyApp.repo
         repo.runRecurring()
         repo.runFeeRebates()
-        // AI 自動整理重複的交易（改由可追蹤的背景工作執行）
-        AiBackgroundWork.autoTidy(applicationContext, userInitiated = false)
+        // AI 自動整理重複的交易（直接在協程中呼叫輕量任務）
+        AiBackgroundWork.runAutoTidy()
         runCatching { warnFunding(applicationContext, repo) }
         runCatching { warnLoans(applicationContext, repo) }
         runCatching { StockAlertWorker.checkUpdate(applicationContext) }

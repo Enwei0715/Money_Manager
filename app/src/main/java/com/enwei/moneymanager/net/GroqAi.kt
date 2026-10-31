@@ -126,7 +126,9 @@ object GroqAi {
                 Provider.GEMINI -> callGemini(s.geminiKey.trim(), r.model, system, user,
                     // Gemini 的思考也算在輸出長度裡：大模型多留空間
                     maxOf(2048, maxTokens * 4).let { if (r.big) maxOf(it, 12_000) else it }, timeoutSec = if (r.big) 90 else 45)
-                Provider.GROQ -> groqJson(s, system, user, maxTokens, r.big || hard, cap, if (r.big) effort else "low", forceModel = r.model)
+                Provider.GROQ -> com.enwei.moneymanager.work.AiBackgroundWork.withApiLock {
+                    groqJson(s, system, user, maxTokens, r.big || hard, cap, if (r.big) effort else "low", forceModel = r.model)
+                }
             }
             if (out != null) return@withContext out
             // 額度用完或沒回應：這個模型先暫停，之後的呼叫直接用下一個

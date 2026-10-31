@@ -35,9 +35,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
@@ -83,6 +85,8 @@ fun ReviewContent(
     onSpan: (ReviewSpan) -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val reviewProgress by AiBackgroundWork.reviewProgress.collectAsStateWithLifecycle()
     val lk = rememberLookups()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
@@ -117,7 +121,6 @@ fun ReviewContent(
                 }
             }
             val d = data ?: return@Column
-            val aiWork = rememberAiWorkStatus(AiBackgroundWork.reviewName(d.key))
             // 交易頁上方已顯示期間，避免重複顯示年月或季度。
             if (period == null) Text(d.title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
 
@@ -220,11 +223,15 @@ fun ReviewContent(
                         Text("AI 檢討與建議", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         val cached = settings.reviews[d.key]
                         if (GroqAi.enabled) OutlinedButton(
-                            enabled = aiWork?.running != true && d.txnCount > 0,
-                            onClick = { AiBackgroundWork.review(context, span, offset, d.key) },
-                        ) { Text(if (aiWork?.running == true) "產生中…" else if (cached == null) "產生" else "重新產生") }
+                            enabled = !reviewProgress.running && d.txnCount > 0,
+                            onClick = {
+                                scope.launch {
+                                    AiBackgroundWork.runReview(span, offset, d.key)
+                                }
+                            },
+                        ) { Text(if (reviewProgress.running) "產生中…" else if (cached == null) "產生" else "重新產生") }
                     }
-                    AiWorkProgress(aiWork, Modifier.fillMaxWidth())
+                    AiWorkProgress(reviewProgress, Modifier.fillMaxWidth())
                     val r = settings.reviews[d.key]
                     when {
                         r != null -> AiReviewBody(r, ::m, d, lk, settings.txnNecessity, nav)
