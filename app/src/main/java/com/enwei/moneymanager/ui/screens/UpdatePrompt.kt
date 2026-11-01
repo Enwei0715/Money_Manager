@@ -95,10 +95,15 @@ fun UpdatePrompt() {
         confirmButton = {
             Button(enabled = progress == null, onClick = {
                 error = null
+                if (!Updater.canInstall(ctx)) {
+                    error = "請允許「安裝不明應用程式」後再按一次更新"
+                    Updater.openInstallPermission(ctx)
+                    return@Button
+                }
                 scope.launch {
                     progress = 0f
                     runCatching { Updater.download(ctx, r, repo.settings.value.githubToken) { p -> progress = p } }
-                        .onSuccess { id -> progress = null; Updater.openDownloaded(ctx, id); error = "下載完成：點 Ledgerly APK 即可安裝" }
+                        .onSuccess { f -> progress = null; Updater.install(ctx, f) }
                         .onFailure { progress = null; error = "下載失敗：${it.message}" }
                 }
             }) { Text("立即更新") }
