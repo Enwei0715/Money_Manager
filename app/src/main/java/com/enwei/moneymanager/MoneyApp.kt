@@ -69,6 +69,14 @@ class MoneyApp : Application() {
         // 打開 App 時也檢查一次颱風停班公告
         appScope.launch { runCatching { SyncWorker.refreshTyphoon(repo) } }
         com.enwei.moneymanager.work.NewsWorker.schedule(this)
+        // 恢復網路時：重新判讀沒網路時收到、規則看不懂的通知
+        runCatching {
+            getSystemService(android.net.ConnectivityManager::class.java).registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    appScope.launch { kotlinx.coroutines.delay(3000); repo.retryOfflineNotifications() }
+                }
+            })
+        }
         com.enwei.moneymanager.work.StockAlertWorker.schedule(this)
         com.enwei.moneymanager.work.BackupWorker.schedule(this)
         // 資料有變動就更新桌面小工具

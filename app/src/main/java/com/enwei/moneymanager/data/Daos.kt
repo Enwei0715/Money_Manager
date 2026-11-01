@@ -249,4 +249,7 @@ interface NotificationLogDao {
 
     @Query("DELETE FROM notification_log WHERE postedAt < :before")
     suspend fun prune(before: Long)
+
+    @Query("UPDATE notification_log SET result = :result WHERE id = :id")
+    suspend fun setResult(id: Long, result: String)
 }

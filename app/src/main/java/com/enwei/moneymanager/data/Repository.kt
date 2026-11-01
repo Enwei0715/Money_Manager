@@ -98,7 +98,7 @@ private const val TRANSFER_TAG = "#轉帳"
 private const val GMAIL_PACKAGE = "com.google.android.gm"
 private const val AI_TAG = "#AI"
 
-data class IngestResult(val kind: String, val txnId: Long? = null, val message: String)
+data class IngestResult(val kind: String, val txnId: Long? = null, val message: String, val pending: Boolean = false)
 
 class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     val accounts = db.accounts().observeAll()
@@ -849,6 +849,21 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
     }
 
+    /** 沒網路時排隊的通知：恢復網路後重新判讀（結果放「待確認」並通知）。 */
+    suspend fun retryOfflineNotifications() {
+        if (!com.enwei.moneymanager.net.GroqAi.enabled) return
+        if (com.enwei.moneymanager.work.AiHealth.networkProblem(background = false) != null) return
+        val since = System.currentTimeMillis() - 48L * 3600 * 1000
+        val queued = db.notificationLog().all().filter { it.result == "OFFLINE" && it.postedAt >= since }.sortedBy { it.postedAt }
+        queued.forEach { e ->
+            db.notificationLog().setResult(e.id, "RETRIED")
+            val r = runCatching { ingestNotification(e.packageName, e.title, e.text, e.postedAt, force = true, offlineRetry = true) }.getOrNull()
+            if (r != null && r.kind == "RECORDED") {
+                com.enwei.moneymanager.notify.QuickActions.notifyRecorded(com.enwei.moneymanager.MoneyApp.instance, r.txnId, r.message, true)
+            }
+        }
+    }
+
     suspend fun ingestNotificationBatch(notices: List<NotificationInput>): List<IngestResult?> {
         if (notices.isEmpty()) return emptyList()
         val ai = classifyNotificationBatch(notices)
@@ -883,6 +898,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         pkg: String, title: String?, text: String?, postedAt: Long, force: Boolean = false,
         aiOverride: com.enwei.moneymanager.core.ParsedTransaction? = null,
         aiHandled: Boolean = false,
+        /** 沒網路時排隊、恢復網路後重新判讀的通知：一律放「待確認」 */
+        offlineRetry: Boolean = false,
     ): IngestResult? {
         // LINE：只處理「LINE錢包」付款通知（LINE Bank Money／LINE Pay），聊天訊息一律略過；不需另外勾選 LINE
         val isLine = pkg == LINE_PACKAGE
@@ -913,8 +930,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             parsed = com.enwei.moneymanager.net.GroqAi.parseNotification(title, text)
             aiParsed = parsed != null
         }
+        // 有沒有網路：沒網路時 AI 不能判讀，規則看不懂的先排隊，恢復網路後再判讀
+        val online = com.enwei.moneymanager.work.AiHealth.networkProblem(background = false) == null
         if (fill == null && parsed == null) {
-            if (enabled) log.insert(logAs("UNPARSED"))
+            if (enabled) log.insert(logAs(if (!online && com.enwei.moneymanager.net.GroqAi.enabled && !isRedacted(text)) "OFFLINE" else "UNPARSED"))
             return null
         }
         if (!enabled) {
@@ -973,7 +992,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             }.groupBy { it.date }.values.map { l -> Money.toMinor(l.sumOf { it.cashAmount }) }
             if (autoDiv.any { kotlin.math.abs(it - p.amountMinor) <= 100 }) { log.insert(logAs("DUPLICATE")); return null }
         }
-        val status = if (s.notifAutoConfirm && !aiParsed) TxnStatus.CONFIRMED else TxnStatus.PENDING
+        // 有網路：直接記帳（AI 判讀要有把握、而且找得到帳戶）；沒網路或不確定：放「待確認」
+        val status = when {
+            !online || offlineRetry -> TxnStatus.PENDING
+            account == null -> TxnStatus.PENDING
+            aiParsed && !p.confident -> TxnStatus.PENDING
+            else -> TxnStatus.CONFIRMED
+        }
         val raw = listOfNotNull(title, text).joinToString("\n")
         val window = 10 * 60_000L
         val nearby = db.txns().all().filter {
@@ -985,13 +1010,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             if (id <= 0) { log.insert(logAs("DUPLICATE")); return null }
             log.insert(logAs(result, id))
             log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
-            return IngestResult("RECORDED", id, message)
+            return IngestResult("RECORDED", id, message, pending = t.status == TxnStatus.PENDING)
         }
         suspend fun merged(existing: TxnEntity, updated: TxnEntity, message: String): IngestResult {
             // 合併時保留這則通知原文，之後同一則通知再跳出時可辨識為重複
             db.txns().upsert(updated.copy(rawText = listOfNotNull(updated.rawText, raw).joinToString("\n—\n")))
             log.insert(logAs("MERGED", existing.id))
-            return IngestResult("RECORDED", existing.id, message)
+            return IngestResult("RECORDED", existing.id, message, pending = updated.status == TxnStatus.PENDING)
         }
         fun wallet(): AccountEntity? {
             val wallets = accounts.filter { it.type == AccountType.EWALLET }

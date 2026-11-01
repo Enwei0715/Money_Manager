@@ -408,7 +408,8 @@ object GroqAi {
         val system = "你是台灣記帳 App 的通知判讀器。判斷這則銀行或支付 App 的通知是否代表一筆已完成的金錢進出" +
             "（驗證碼、登入、行銷、優惠、帳單提醒、未完成的交易都不是）。只回 JSON：" +
             "{\"is_transaction\": boolean, \"type\": \"expense\"|\"income\"|\"transfer_out\"|\"transfer_in\", " +
-            "\"amount\": number, \"currency\": \"TWD\"等三碼代碼, \"merchant\": string|null, \"datetime\": \"yyyy-MM-dd HH:mm\"|null}。" +
+            "\"amount\": number, \"currency\": \"TWD\"等三碼代碼, \"merchant\": string|null, \"datetime\": \"yyyy-MM-dd HH:mm\"|null, " +
+            "\"sure\": boolean（金額、收支方向、商家或對象都清楚才填 true，有任何猜測填 false）}。" +
             "轉出到別的帳戶用 transfer_out，從別的帳戶轉入用 transfer_in。今天是 ${now.toLocalDate()}。"
         val r = chatJson(system, full, task = AiTask.NOTIFY) ?: return null
         if (r.str("is_transaction") != "true") return null
@@ -425,6 +426,7 @@ object GroqAi {
         return ParsedTransaction(
             type = type, amountMinor = Math.round(amount * 100), currency = r.str("currency")?.uppercase()?.take(3) ?: "TWD",
             merchant = r.str("merchant")?.take(40), cardLast4 = null, kind = kind, occurredAt = at,
+            confident = r.str("sure") == "true",
         )
     }
 
@@ -464,7 +466,8 @@ object GroqAi {
                 "利用彼此資訊辨別自己的帳戶轉帳：同金額、時間接近且一出一入時，兩則都標記為 transfer_out/transfer_in。" +
                 "登入、驗證碼、廣告、帳單提醒、未完成交易不得列入。索引必須使用原通知編號，不可漏掉能判斷的交易。只回 JSON：" +
                 "{\"items\":[{\"index\":number,\"is_transaction\":boolean,\"type\":\"expense\"|\"income\"|\"transfer_out\"|\"transfer_in\"," +
-                "\"amount\":number,\"currency\":\"TWD\",\"merchant\":string|null,\"datetime\":\"yyyy-MM-dd HH:mm\"|null}]}。今天是 ${now.toLocalDate()}。"
+                "\"amount\":number,\"currency\":\"TWD\",\"merchant\":string|null,\"datetime\":\"yyyy-MM-dd HH:mm\"|null," +
+                "\"sure\":boolean（金額、方向、商家或對象都清楚才 true，有任何猜測 false）}]}。今天是 ${now.toLocalDate()}。"
             val response = chatJson(system, body, maxTokens = 900, task = AiTask.NOTIFY) ?: continue
             val items = response["items"] as? kotlinx.serialization.json.JsonArray ?: continue
             items.forEach { element ->
@@ -496,6 +499,7 @@ object GroqAi {
                     cardLast4 = null,
                     kind = typeAndKind.second,
                     occurredAt = at,
+                    confident = item.str("sure") == "true",
                 )
                 handled += index
             }

@@ -18,6 +18,8 @@ data class ParsedTransaction(
     val occurredAt: LocalDateTime? = null,
     /** 內文提到的電子支付名稱（例如「街口」），用來對應錢包帳戶 */
     val walletHint: String? = null,
+    /** AI 判讀時是否有把握（金額、方向、對象都清楚）；規則判讀一律為 true */
+    val confident: Boolean = true,
 )
 
 data class ParsedStockFill(

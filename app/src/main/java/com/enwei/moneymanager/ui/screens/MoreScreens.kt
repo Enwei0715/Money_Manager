@@ -384,13 +384,10 @@ fun NotificationSettingsScreen(nav: NavController) {
             }
             item {
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("直接入帳（不經確認）")
-                            Text("關閉時會先放在「待確認」", style = MaterialTheme.typography.bodySmall)
-                        }
-                        Switch(settings.notifAutoConfirm, { v -> repo.settings.update { it.copy(notifAutoConfirm = v) } })
-                    }
+                    // 入帳方式：有網路就直接記帳（AI 判讀要有把握、找得到帳戶）；沒網路或不確定才放「待確認」
+                    Text("有網路時：規則或 AI 判讀後直接記帳並通知；AI 沒把握或找不到帳戶時放「待確認」。\n" +
+                        "沒網路時：全部放「待確認」；規則看不懂的通知會先排隊，恢復網路後自動用 AI 判讀。",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     DropdownField(
                         "無法對應卡號時記入的帳戶", lk.accounts.filter { !it.archived }, lk.account(settings.defaultAccountId),
                         { it.name }, { a -> repo.settings.update { it.copy(defaultAccountId = a.id) } },
