@@ -49,6 +49,7 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             ReportJob.state.value = st
             ReportJob.progressNotice(applicationContext, st, now - startedAt)
         }
+        val before = ds.coverage(ds.load())
         try {
             startedAt = System.currentTimeMillis()
             update("準備蒐集新聞…")
@@ -79,10 +80,12 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         when {
             // 時間用完：已完成的區塊都已寫入，排一輪接續剩下的新聞
             stopped != null -> { continueSoon(applicationContext); finish("暫停：$stopped") }
-            // 還有沒讀完的新聞卻停下：AI 沒有回應或被限流
+            // 還沒整理完：這一輪有進展就接著跑（不算失敗）；完全沒進展才算失敗（多半是 AI 額度或回應問題）
             cov.pending > 0 || cov.digested < cov.recent -> {
-                AiHealth.record(false, GroqAi.lastError ?: "AI 沒有完成所有新聞")
-                finish("還有 ${cov.pending} 則待讀、${cov.recent - cov.digested} 則待整理：${GroqAi.lastError ?: "稍後繼續"}")
+                val progressed = cov.digested > before.digested || cov.pending < before.pending
+                if (progressed) { AiHealth.record(true); continueSoon(applicationContext) }
+                else AiHealth.record(false, GroqAi.lastError ?: "新聞整理沒有進展")
+                finish(if (progressed) null else "還有 ${cov.pending} 則待讀、${cov.recent - cov.digested} 則待整理：${GroqAi.lastError ?: "稍後繼續"}")
             }
             else -> { AiHealth.record(true); finish(null) }
         }

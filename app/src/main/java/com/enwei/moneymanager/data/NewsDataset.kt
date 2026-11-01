@@ -296,7 +296,7 @@ class NewsDataset(context: Context) {
     }
 
     private fun progressOf(s: NewsStore): GridProgress {
-        val since = (System.currentTimeMillis() / 1000 - 3 * 86_400L)
+        val since = recentSince(3)
         val recent = blocksOf(NewsStore(items = s.items.filter { it.epochSec >= since }, digests = emptyMap()))
             .map { b -> b.copy(article = s.digests[b.key]) }
         return GridProgress(
@@ -378,6 +378,14 @@ class NewsDataset(context: Context) {
     }
 
     companion object {
+        /**
+         * 「近 [days] 天」的起點：台北時間今天往前 days-1 天的 0 點。用整天計算，
+         * 同一天同一題材的區塊一定完整落在範圍內，不會隨時間經過被切掉一半而一直顯示「未整理完」。
+         */
+        fun recentSince(days: Int): Long {
+            val zone = java.time.ZoneId.of("Asia/Taipei")
+            return java.time.LocalDate.now(zone).minusDays((days - 1).coerceAtLeast(0).toLong()).atStartOfDay(zone).toEpochSecond()
+        }
         const val KEEP_DAYS = 14
         const val MAX_ITEMS = 12000
     }
@@ -480,12 +488,15 @@ class NewsDataset(context: Context) {
             if (batch.isEmpty()) break
             onProgress(i, maxOf(total, i + 1))
             val ids = batch.map { it.id }.toHashSet()
-            var tags = GroqAi.tagNews(batch)
+            // 已有的題材名稱給 AI 參考：意思相同就沿用，避免同一件事分成很多個題材
+            val known = load().items.asSequence().filter { it.tagged && it.theme.isNotBlank() }.groupingBy { it.theme }.eachCount()
+                .entries.sortedByDescending { it.value }.take(80).map { it.key }
+            var tags = GroqAi.tagNews(batch, known)
             if (big && tags?.keys?.containsAll(ids) != true) {
                 val retried = LinkedHashMap<String, GroqAi.NewsTag>()
                 val parts = chunkNews(batch, 2_500)
                 for (part in parts) {
-                    val result = GroqAi.tagNews(part)
+                    val result = GroqAi.tagNews(part, known)
                     if (result == null || !result.keys.containsAll(part.map { it.id })) {
                         retried.clear()
                         break
@@ -522,7 +533,8 @@ class NewsDataset(context: Context) {
         val st = load()
         val zone = java.time.ZoneId.of("Asia/Taipei")
         fun dayOf(n: NewsItem) = java.time.Instant.ofEpochSecond(n.epochSec).atZone(zone).toLocalDate().toString()
-        val groups = recent(st, 3).filter { it.theme.isNotBlank() }.groupBy { dayOf(it) to it.theme }
+        // 包含題材空白的舊資料，否則那些區塊永遠不會完整
+        val groups = recent(st, 3).groupBy { dayOf(it) to it.theme }
             .filter { (k, l) ->
                 val old = st.digests["${k.first}|${k.second}"]
                 old == null || old.contentHash != groupContentHash(l) ||
@@ -532,47 +544,65 @@ class NewsDataset(context: Context) {
         val maxChars = if (big) 18_000 else 2_500
         var calls = 0
         var done = 0
-        for ((i, e) in groups.withIndex()) {
+        fun store(k: Pair<String, String>, list: List<NewsItem>, points: List<DigestPoint>, s: NewsStore) =
+            s.digests + ("${k.first}|${k.second}" to ThemeDigest(k.first, k.second, list.size, points, System.currentTimeMillis(), groupContentHash(list)))
+        fun keepRecent(m: Map<String, ThemeDigest>) = m.filterValues { d ->
+            runCatching { java.time.LocalDate.parse(d.day) }.getOrNull()?.isAfter(java.time.LocalDate.now().minusDays(KEEP_DAYS.toLong())) == true
+        }
+        // 只有 1～2 則的區塊不必叫 AI（標題就是重點）：一次全部寫入，區塊馬上完整
+        val small = groups.filter { it.value.size < 3 }
+        if (small.isNotEmpty()) {
+            update { s ->
+                var m = s.digests
+                small.forEach { (k, list) ->
+                    val pts = list.sortedByDescending { it.importance }
+                        .map { DigestPoint(it.note.ifBlank { it.title }.take(80), it.symbols, it.sentiment, it.duplicateCount, listOf(it.id)) }
+                    m = store(k, list, pts, s.copy(digests = m))
+                }
+                s.copy(digests = keepRecent(m))
+            }
+            done += small.size
+        }
+        val large = groups.filter { it.value.size >= 3 }
+        var failures = 0
+        for ((i, e) in large.withIndex()) {
             if (stop()) return done
+            // 連續 3 組都失敗（多半是額度用完）才停，單一組失敗跳過、下次再試
+            if (failures >= 3) return done
             val (k, list) = e
             val sorted = list.sortedByDescending { it.importance }
-            val points: List<DigestPoint> = if (list.size < 3) {
-                sorted.map { DigestPoint(it.note.ifBlank { it.title }.take(80), it.symbols, it.sentiment, it.duplicateCount, listOf(it.id)) }
-            } else {
-                val parts = chunkNews(sorted, maxChars)
-                if (calls + parts.size > maxCalls) continue
-                onProgress(i, groups.size)
-                val got = ArrayList<DigestPoint>()
-                for ((pi, part) in parts.withIndex()) {
-                    calls++
-                    var result = GroqAi.digestTheme(k.second, k.first, part)
-                    if (!covers(result, part) && big) {
-                        val retryParts = chunkNews(part, 2_500)
-                        if (calls + retryParts.size > maxCalls) return done
-                        val retried = ArrayList<DigestPoint>()
-                        for (retryPart in retryParts) {
-                            val retryResult = GroqAi.digestTheme(k.second, k.first, retryPart)
-                            if (!covers(retryResult, retryPart)) return done
-                            retried += retryResult.orEmpty()
-                            calls++
-                        }
-                        result = mergePoints(retried)
+            val parts = chunkNews(sorted, maxChars)
+            if (calls + parts.size > maxCalls) continue
+            onProgress(i, large.size)
+            val got = ArrayList<DigestPoint>()
+            var ok = true
+            for ((pi, part) in parts.withIndex()) {
+                calls++
+                var result = GroqAi.digestTheme(k.second, k.first, part)
+                if (!covers(result, part) && big) {
+                    val retryParts = chunkNews(part, 2_500)
+                    if (calls + retryParts.size > maxCalls) { ok = false; break }
+                    val retried = ArrayList<DigestPoint>()
+                    for (retryPart in retryParts) {
+                        val retryResult = GroqAi.digestTheme(k.second, k.first, retryPart)
+                        calls++
+                        if (!covers(retryResult, retryPart)) { ok = false; break }
+                        retried += retryResult.orEmpty()
                     }
-                    if (!covers(result, part)) return done
-                    got += result.orEmpty()
-                    if (pi < parts.lastIndex) delay(if (big) 5_000 else 12_000)
+                    if (!ok) break
+                    result = mergePoints(retried)
                 }
-                val merged = mergePoints(got)
-                val covered = merged.flatMap { it.sourceIds }
-                if (covered.toSet() != sorted.map { it.id }.toSet() || covered.size != sorted.size) return done
-                merged
+                if (!covers(result, part)) { ok = false; break }
+                got += result.orEmpty()
+                if (pi < parts.lastIndex) delay(if (big) 5_000 else 12_000)
             }
-            update { s -> s.copy(digests = (s.digests + ("${k.first}|${k.second}" to ThemeDigest(
-                k.first, k.second, list.size, points, System.currentTimeMillis(), groupContentHash(list),
-            )))
-                .filterValues { d -> runCatching { java.time.LocalDate.parse(d.day) }.getOrNull()?.isAfter(java.time.LocalDate.now().minusDays(KEEP_DAYS.toLong())) == true }) }
+            val merged = if (ok) mergePoints(got) else emptyList()
+            val covered = merged.flatMap { it.sourceIds }
+            if (!ok || covered.toSet() != sorted.map { it.id }.toSet() || covered.size != sorted.size) { failures++; continue }
+            failures = 0
+            update { s -> s.copy(digests = keepRecent(store(k, list, merged, s))) }
             done++
-            if (list.size >= 3 && i < groups.lastIndex) delay(if (big) 5_000 else 12_000)
+            if (i < large.lastIndex) delay(if (big) 5_000 else 12_000)
         }
         return done
     }
@@ -595,7 +625,7 @@ class NewsDataset(context: Context) {
     data class Coverage(val recent: Int, val pending: Int, val digested: Int)
 
     fun coverage(st: NewsStore): Coverage {
-        val since = System.currentTimeMillis() / 1000 - 3 * 86_400L
+        val since = recentSince(3)
         val current = st.items.filter { it.epochSec >= since }
         val zone = java.time.ZoneId.of("Asia/Taipei")
         val groups = current.filter { it.tagged }.groupBy {
@@ -630,7 +660,7 @@ class NewsDataset(context: Context) {
         .filter { it.importance >= 4 }.sortedWith(compareByDescending<NewsItem> { it.importance }.thenByDescending { it.epochSec }).take(limit)
 
     fun recent(st: NewsStore, days: Int): List<NewsItem> {
-        val since = System.currentTimeMillis() / 1000 - days * 86_400L
+        val since = recentSince(days)
         return st.items.filter { it.tagged && it.epochSec >= since }
     }
 

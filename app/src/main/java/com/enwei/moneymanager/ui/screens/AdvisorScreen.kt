@@ -6,6 +6,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -545,6 +548,7 @@ private data class NewsStats(
 )
 
 /** 新聞資料集：蒐集狀態、整理進度、題材熱度、重點，以及可多條件篩選的全部新聞（清單會即時更新）。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun NewsTab(nav: NavController, store: NewsStore) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -561,8 +565,8 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
     val stats by androidx.compose.runtime.produceState(NewsStats(), System.identityHashCode(store)) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             NewsStats(
-                store.items.count { it.tagged }, ds.themes(store), ds.important(store, 3, 30), ds.symbols(store, 3).take(20),
-                store.items.filter { it.source.isNotBlank() }.groupingBy { it.source }.eachCount().entries.sortedByDescending { it.value }.take(15).map { it.key to it.value },
+                store.items.count { it.tagged }, ds.themes(store), ds.important(store, 3, 30), ds.symbols(store, 3),
+                store.items.filter { it.source.isNotBlank() }.groupingBy { it.source }.eachCount().entries.sortedByDescending { it.value }.map { it.key to it.value },
                 ds.coverage(store),
             )
         }
@@ -657,40 +661,35 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 FilterChip(filtersOpen || activeCount > 0, { filtersOpen = !filtersOpen },
                     label = { Text(if (activeCount > 0) "篩選 $activeCount" else "篩選") })
             }
-            if (filtersOpen) Column(Modifier.heightIn(max = 330.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            ChipRow("時間") {
-                listOf(0 to "全部", 1 to "今天", 3 to "3 天", 7 to "7 天").forEach { (d, l) -> FilterChip(days == d, { days = d; shown = 100 }, label = { Text(l) }) }
+            // 已套用的條件：一個一個列出來，點 ✕ 就移除（不用打開篩選或滑回上方）
+            val activeChips = buildList<Pair<String, () -> Unit>> {
+                if (days != 0) add((if (days == 1) "今天" else "$days 天內") to { days = 0 })
+                if (sent != 0) add(listOf("", "利多", "利空", "中性")[sent] to { sent = 0 })
+                if (onlyImportant) add("只看重要" to { onlyImportant = false })
+                if (onlyMine) add("我的持股" to { onlyMine = false })
+                if (sort != 0) add(listOf("", "最重要", "多空最強")[sort] + "排序" to { sort = 0 })
+                theme?.let { add("題材：$it" to { theme = null }) }
+                symbol?.let { add("個股：$it" to { symbol = null }) }
+                source?.let { add("來源：$it" to { source = null }) }
             }
-            ChipRow("多空") {
-                listOf("全部", "利多", "利空", "中性").forEachIndexed { i, l -> FilterChip(sent == i, { sent = i; shown = 100 }, label = { Text(l) }) }
-                FilterChip(onlyImportant, { onlyImportant = !onlyImportant; shown = 100 }, label = { Text("只看重要") })
-                if (mine.isNotEmpty()) FilterChip(onlyMine, { onlyMine = !onlyMine; shown = 100 }, label = { Text("我的持股") })
-            }
-            ChipRow("排序") {
-                listOf("最新", "最重要", "多空最強").forEachIndexed { i, l -> FilterChip(sort == i, { sort = i; shown = 100 }, label = { Text(l) }) }
-            }
-            if (themes.isNotEmpty()) ChipRow("題材") {
-                themes.forEach { t -> FilterChip(theme == t.key, { theme = if (theme == t.key) null else t.key; shown = 100 }, label = { Text("${t.key} ${t.count}") }) }
-            }
-            if (stats.symbols.isNotEmpty()) ChipRow("個股") {
-                stats.symbols.forEach { t ->
-                    FilterChip(symbol == t.key, { symbol = if (symbol == t.key) null else t.key; shown = 100 }, label = { Text("${t.key} ${t.count}") })
+            if (activeChips.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                activeChips.forEach { (label, remove) ->
+                    InputChip(true, { remove(); shown = 100 }, label = { Text(label, fontSize = 12.sp) },
+                        trailingIcon = { Icon(Icons.Filled.Close, "移除", Modifier.size(16.dp)) })
                 }
-            }
-            if (stats.sources.isNotEmpty()) ChipRow("來源") {
-                stats.sources.forEach { (src, n) -> FilterChip(source == src, { source = if (source == src) null else src; shown = 100 }, label = { Text("$src $n") }) }
-            }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text((if (filteredOrNull == null) "整理中…" else "符合 ${filtered.size} 則") + (theme?.let { "　題材：$it" } ?: "") + (symbol?.let { "　個股：$it" } ?: "") + (source?.let { "　來源：$it" } ?: ""),
                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                if (anyFilter || sort != 0) TextButton(onClick = {
+                if (activeChips.isNotEmpty() || query.isNotBlank()) TextButton(onClick = {
                     query = ""; days = 0; sent = 0; onlyImportant = false; onlyMine = false; sort = 0; theme = null; symbol = null; source = null; shown = 100
                 }) { Text("清除篩選") }
                 else TextButton(onClick = { scope.launch { listState.animateScrollToItem(overviewCount) } }) { Text("跳到新聞列表") }
             }
         }
-        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = listState, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // 換條件後清單回到最上面，直接看到結果
+        LaunchedEffect(query, days, sent, onlyImportant, onlyMine, sort, theme, symbol, source) { listState.scrollToItem(0) }
+        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!anyFilter) item {
                 Section("資料集（${store.items.size} 則）", collapsible = true, initiallyOpen = false) {
                     Text("共 ${store.items.size} 則（近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天），已標註 ${stats.tagged} 則", fontSize = 14.sp)
@@ -739,7 +738,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             if (themes.isNotEmpty() && !anyFilter) item {
                 Section("題材熱度（點選篩選）", collapsible = true) {
                     val max = themes.maxOf { it.count }.coerceAtLeast(1)
-                    themes.take(15).forEach { t ->
+                    themes.take(12).forEach { t ->
                         Column(Modifier.clickable { theme = if (theme == t.key) null else t.key; shown = 100 }) {
                             Row {
                                 Text((if (theme == t.key) "● " else "") + t.key, fontSize = 14.sp, modifier = Modifier.weight(1f))
@@ -751,6 +750,8 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                             }
                         }
                     }
+                    // 全部題材在篩選面板裡（可搜尋）
+                    if (themes.size > 12) TextButton(onClick = { filtersOpen = true }) { Text("看全部 ${themes.size} 個題材 ›") }
                 }
             }
             // 新聞重點庫：每個題材最新一天整理好的重點（同一事件只列一次）
@@ -759,7 +760,11 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             if (digests.isNotEmpty() && !anyFilter) item {
                 Section("新聞重點（${digests.size} 個題材）", collapsible = true) {
                     // 每個題材像資料夾：預設只看第一個重點，點開看全部
-                    digests.take(if (theme == null) 15 else 1).forEach { d -> DigestFolder(d) }
+                    val allDigests = com.enwei.moneymanager.ui.components.rememberFold("advisor.allDigests", false)
+                    digests.take(if (allDigests.open) digests.size else 12).forEach { d -> DigestFolder(d) }
+                    if (digests.size > 12) TextButton(onClick = { allDigests.toggle() }) {
+                        Text(if (allDigests.open) "只看前 12 個" else "看全部 ${digests.size} 個題材的重點 ›")
+                    }
                 }
             }
             if (stats.important.isNotEmpty() && !anyFilter) item {
@@ -768,13 +773,69 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             if (!anyFilter) item { Text("全部新聞", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
             if (filteredOrNull == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             else if (filtered.isEmpty()) item { Text("沒有符合條件的新聞", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            items(filtered.take(shown), key = { "n" + it.id }) { n ->
-                Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) { Box(Modifier.padding(horizontal = 10.dp)) { NewsLine(n) } }
+            // 依日期分組（排序為「最新」時），每天一個標題
+            val zoneTw = java.time.ZoneId.of("Asia/Taipei")
+            val todayTw = java.time.LocalDate.now(zoneTw)
+            fun dayOf(n: com.enwei.moneymanager.data.NewsItem) = java.time.Instant.ofEpochSecond(n.epochSec).atZone(zoneTw).toLocalDate()
+            val page = filtered.take(shown)
+            val dayCounts = if (sort == 0) filtered.groupingBy { dayOf(it) }.eachCount() else emptyMap()
+            page.forEachIndexed { i, n ->
+                val d = dayOf(n)
+                if (sort == 0 && (i == 0 || dayOf(page[i - 1]) != d)) item(key = "d$d") {
+                    Text(
+                        (when (d) { todayTw -> "今天 · "; todayTw.minusDays(1) -> "昨天 · "; else -> "" }) +
+                            "${d.monthValue}/${d.dayOfMonth}（${com.enwei.moneymanager.core.Recurrence.weekdayName(d.dayOfWeek)}）· ${dayCounts[d] ?: 0} 則",
+                        fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                item(key = "n" + n.id) {
+                    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) { Box(Modifier.padding(horizontal = 10.dp)) { NewsLine(n) } }
+                }
             }
             if (filtered.size > shown) item {
                 TextButton(onClick = { shown += 100 }, modifier = Modifier.fillMaxWidth()) { Text("顯示更多（還有 ${filtered.size - shown} 則）") }
             }
             item { Spacer(Modifier.height(24.dp)) }
+        }
+        if (filtersOpen) androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { filtersOpen = false }, containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            var themeQuery by remember { mutableStateOf("") }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("篩選新聞" + (if (filteredOrNull != null) "（符合 ${filtered.size} 則）" else ""), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { days = 0; sent = 0; onlyImportant = false; onlyMine = false; sort = 0; theme = null; symbol = null; source = null; shown = 100 }) { Text("全部清除") }
+                    TextButton(onClick = { filtersOpen = false }) { Text("完成") }
+                }
+                @Composable fun group(label: String, body: @Composable () -> Unit) {
+                    Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { body() }
+                }
+                group("時間") { listOf(0 to "全部", 1 to "今天", 3 to "3 天", 7 to "7 天").forEach { (d, l) -> FilterChip(days == d, { days = d; shown = 100 }, label = { Text(l) }) } }
+                group("多空") {
+                    listOf("全部", "利多", "利空", "中性").forEachIndexed { i, l -> FilterChip(sent == i, { sent = i; shown = 100 }, label = { Text(l) }) }
+                    FilterChip(onlyImportant, { onlyImportant = !onlyImportant; shown = 100 }, label = { Text("只看重要") })
+                    if (mine.isNotEmpty()) FilterChip(onlyMine, { onlyMine = !onlyMine; shown = 100 }, label = { Text("我的持股") })
+                }
+                group("排序") { listOf("最新", "最重要", "多空最強").forEachIndexed { i, l -> FilterChip(sort == i, { sort = i; shown = 100 }, label = { Text(l) }) } }
+                if (themes.isNotEmpty()) {
+                    Text("題材（共 ${themes.size} 個，依則數排序）", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(themeQuery, { themeQuery = it }, placeholder = { Text("搜尋題材") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        themes.filter { themeQuery.isBlank() || it.key.contains(themeQuery.trim(), true) }.forEach { t ->
+                            FilterChip(theme == t.key, { theme = if (theme == t.key) null else t.key; shown = 100 }, label = { Text("${t.key} ${t.count}") })
+                        }
+                    }
+                }
+                if (stats.symbols.isNotEmpty()) group("個股（共 ${stats.symbols.size} 檔）") {
+                    stats.symbols.forEach { t -> FilterChip(symbol == t.key, { symbol = if (symbol == t.key) null else t.key; shown = 100 }, label = { Text("${t.key} ${t.count}") }) }
+                }
+                if (stats.sources.isNotEmpty()) group("來源（共 ${stats.sources.size} 個）") {
+                    stats.sources.forEach { (src, n) -> FilterChip(source == src, { source = if (source == src) null else src; shown = 100 }, label = { Text("$src $n") }) }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
         }
         if (confirmClearDatabase) AlertDialog(
             onDismissRequest = { if (!clearingDatabase) confirmClearDatabase = false },

@@ -141,10 +141,19 @@ object ReportJob {
                 reportStep = step
                 update(step)
             }
-            if (r == null) {
-                val msg = if (reportStep.startsWith("近 3 天新聞") || reportStep.endsWith("暫不產生報告。")) {
-                    reportStep
-                } else "產生失敗：${GroqAi.lastError ?: "沒有回應"}"
+            val notReady = reportStep.startsWith("近 3 天新聞")
+            if (r == null && notReady) {
+                // 不是失敗：新聞還在整理，報告要等資料完整才產生。這一輪有進展就稍後自動接續，不發「失敗」通知
+                val after = ds.coverage(ds.load())
+                val progressed = after.digested > coverage.digested || after.pending < coverage.pending
+                val msg = "資料整理中：還有 ${after.pending} 則待標註、${after.recent - after.digested} 則待整理重點；" +
+                    (if (progressed) "會自動繼續，完成後產生報告。" else "AI 這一輪沒有進展（${GroqAi.lastError ?: "可能是額度用完"}），稍後再試。")
+                state.value = State(msg, start, running = false, background = !userInitiated)
+                if (notifyProgress) cancelProgress(context)
+                if (progressed) continueLater(context, refreshOnly, userInitiated)
+                else if (!userInitiated) AiHealth.record(false, GroqAi.lastError ?: "新聞整理沒有進展")
+            } else if (r == null) {
+                val msg = if (reportStep.endsWith("暫不產生報告。")) reportStep else "產生失敗：${GroqAi.lastError ?: "沒有回應"}"
                 state.value = State(msg, start, running = false, error = msg, background = !userInitiated)
                 if (!userInitiated) AiHealth.record(false, msg)
                 doneNotice(context, tr("投資報告產生失敗"), msg)

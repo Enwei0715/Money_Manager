@@ -691,13 +691,15 @@ object GroqAi {
     data class NewsTag(val symbols: List<String>, val theme: String, val sentiment: Int, val importance: Int, val note: String)
 
     /** 逐則標註新聞；模型只可依新聞來源提供的標題／內文判斷。 */
-    suspend fun tagNews(items: List<com.enwei.moneymanager.data.NewsItem>): Map<String, NewsTag>? {
+    suspend fun tagNews(items: List<com.enwei.moneymanager.data.NewsItem>, known: List<String> = emptyList()): Map<String, NewsTag>? {
         if (!enabled || items.isEmpty()) return emptyMap()
         val system = "你是台股新聞標註員。逐則判斷：相關的台股代號（4～6 碼，只填你確定的，例如台積電 2330；不確定就空陣列）、" +
             "題材請依內容自行歸納成簡短名稱，不得套用固定題材清單；對相關台股的多空 m（-2 大利空、-1 利空、0 中性、1 利多、2 大利多）、" +
             "重要性 p（1～5，5 是會影響大盤或主流題材的重大消息，一般個股新聞 2～3，業配與無關新聞 1）；p 為 4 以上時用 n 寫 20 字內重點。" +
             "內容標成「標題」時不得假設你已讀到正文；僅依輸入內容判斷。逐筆都要輸出，不能省略。" +
-            "只回 JSON：{\"r\": [{\"i\": 編號, \"s\": [代號], \"t\": 題材, \"m\": 數字, \"p\": 數字, \"n\": 字串或空}]}"
+            "只回 JSON：{\"r\": [{\"i\": 編號, \"s\": [代號], \"t\": 題材, \"m\": 數字, \"p\": 數字, \"n\": 字串或空}]}" +
+            (if (known.isNotEmpty()) "已經用過的題材名稱（不是固定清單）：${known.joinToString("、")}。新聞屬於其中某個題材時請用完全相同的名稱；" +
+                "都不合適才自己歸納新的簡短名稱（6 字內），不要只因用字不同就另開題材。" else "")
         val user = items.mapIndexed { i, item ->
             buildString {
                 append("$i. [${item.contentLevel}] ${item.title}")
