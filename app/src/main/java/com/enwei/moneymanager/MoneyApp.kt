@@ -20,11 +20,30 @@ class MoneyApp : Application() {
     /** 投資助理的新聞資料集 */
     lateinit var news: com.enwei.moneymanager.data.NewsDataset
         private set
-    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /**
+     * App 層級的背景工作。任何一個工作出錯只記錄下來，不讓整個 App 閃退
+     * （沒有這個處理器時，背景 coroutine 的例外會直接讓 App 結束）。
+     */
+    val appScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default +
+            kotlinx.coroutines.CoroutineExceptionHandler { _, e -> android.util.Log.e("MoneyApp", "Background task failed", e) },
+    )
 
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // 閃退時把原因存起來，下次開 App 顯示（可以複製給開發者），再交給系統原本的處理
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            runCatching {
+                java.io.File(filesDir, CRASH_FILE).writeText(
+                    "版本 ${packageManager.getPackageInfo(packageName, 0).versionName} · Android ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT}) · " +
+                        java.text.SimpleDateFormat("yyyy/M/d HH:mm:ss", java.util.Locale.TAIWAN).format(java.util.Date()) +
+                        " · 執行緒 ${t.name}\n\n" + android.util.Log.getStackTraceString(e).take(6000),
+                )
+            }
+            previous?.uncaughtException(t, e)
+        }
         repo = Repository(AppDatabase.build(this), SettingsStore(this))
         news = com.enwei.moneymanager.data.NewsDataset(this)
         com.enwei.moneymanager.ui.I18n.init(this, repo.settings.value.language)
@@ -61,6 +80,7 @@ class MoneyApp : Application() {
     }
 
     companion object {
+        const val CRASH_FILE = "last_crash.txt"
         const val CHANNEL_RECORDS = "records"
         const val CHANNEL_ALERTS = "alerts"
         const val CHANNEL_PROGRESS = "progress"

@@ -76,6 +76,9 @@ fun isDarkTheme(themeMode: Int): Boolean = when (themeMode) {
     else -> isSystemInDarkTheme()
 }
 
+/** 「標準（100%）」實際的縮放：系統大小的 88%，與參考影片的密度一致；其他選項以此為基準 */
+const val BASE_UI_SCALE = 0.88f
+
 /**
  * [uiScale] 等比例縮放整個介面（dp 與 sp 一起縮放），讓所有畫面的大小一致調整，
  * 不必逐一修改各元件的字級與間距。
@@ -83,7 +86,7 @@ fun isDarkTheme(themeMode: Int): Boolean = when (themeMode) {
 @Composable
 fun MoneyTheme(dark: Boolean = isSystemInDarkTheme(), uiScale: Float = 1f, content: @Composable () -> Unit) {
     val base = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale, base.fontScale)) {
+    CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale * BASE_UI_SCALE, base.fontScale)) {
         MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
     }
 }

@@ -40,6 +40,9 @@ import com.enwei.moneymanager.ui.components.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -134,6 +137,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     AppScaffold(nav)
                     // 開啟 App 時檢查新版，有的話跳出更新視窗（可略過這版）
                     com.enwei.moneymanager.ui.screens.UpdatePrompt()
+                    CrashReportDialog()
                 }
             }
         }
@@ -345,4 +349,32 @@ private fun AppScaffold(nav: NavHostController) {
             composable("stock/{symbol}") { e -> StockDetailScreen(nav, e.arguments?.getString("symbol").orEmpty()) }
         }
     }
+}
+
+/** 上次閃退的原因：開 App 時顯示一次，可以複製下來回報。 */
+@Composable
+private fun CrashReportDialog() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val file = remember { java.io.File(ctx.filesDir, MoneyApp.CRASH_FILE) }
+    var text by remember { mutableStateOf(runCatching { file.takeIf { it.exists() }?.readText() }.getOrNull()) }
+    val t = text ?: return
+    fun dismiss() { runCatching { file.delete() }; text = null }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = ::dismiss,
+        title = { Text("上次 App 意外關閉") },
+        text = {
+            androidx.compose.foundation.layout.Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("以下是錯誤紀錄，按「複製」後貼給開發者可以幫助修正。", fontSize = 13.sp)
+                Text(t, fontSize = 10.sp, lineHeight = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", t))
+                dismiss()
+            }) { Text("複製") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = ::dismiss) { Text("關閉") } },
+    )
 }

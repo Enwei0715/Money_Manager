@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
-import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -106,7 +105,7 @@ object ReportJob {
                 val msg = "暫停：$why；已完成的部分已保存，稍後自動接續"
                 state.value = State(msg, start, running = false, refreshOnly = refreshOnly, background = !userInitiated)
                 if (notifyProgress) cancelProgress(context)
-                continueLater(context, refreshOnly)
+                continueLater(context, refreshOnly, userInitiated)
                 return null
             }
             if (refreshOnly) {
@@ -145,11 +144,11 @@ object ReportJob {
     }
 
     /** 這一輪時間用完：1 分鐘後接續（排在目前這輪之後）。 */
-    fun continueLater(context: Context, refreshOnly: Boolean) {
+    fun continueLater(context: Context, refreshOnly: Boolean, userInitiated: Boolean) {
         WorkManager.getInstance(context).enqueueUniqueWork(
             "report-continue", ExistingWorkPolicy.APPEND_OR_REPLACE,
             OneTimeWorkRequestBuilder<ReportWorker>()
-                .setInputData(androidx.work.workDataOf("refreshOnly" to refreshOnly, "userInitiated" to false))
+                .setInputData(androidx.work.workDataOf("refreshOnly" to refreshOnly, "userInitiated" to userInitiated))
                 .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build(),
         )
@@ -167,8 +166,6 @@ object ReportJob {
     /** 收起進度通知。 */
     fun cancelProgress(context: Context) = context.getSystemService(android.app.NotificationManager::class.java).cancel(NOTICE_ID)
 
-    fun foregroundInfo(context: Context, state: State) =
-        ForegroundInfo(NOTICE_ID, progressNotification(context, state, elapsed = 0))
 
     fun workProgress(state: State) = AiBackgroundWork.progress(state.step, state.startedAt, state.done, state.total)
 
@@ -235,19 +232,17 @@ class ReportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 val running = queued.copy(step = "準備中…")
                 ReportJob.state.value = running
                 setProgress(ReportJob.workProgress(running))
-                // 前景服務只在 App 顯示在畫面上時啟動：Android 12 以上從背景啟動會被系統拒絕（之前閃退的原因之一）；
-                // 不是前景服務時仍會顯示一般的進度通知
-                val foreground = userInitiated && appVisible() &&
-                    runCatching { setForeground(ReportJob.foregroundInfo(applicationContext, running)) }.isSuccess
+                // 不使用前景服務：WorkManager 啟動前景服務是在另一個系統元件裡執行，Android 14/15 的限制一出錯就會讓整個 App 閃退，
+                // 這裡的 try/catch 攔不到。改用一般的進度通知，並把工作切成每輪 8 分鐘、時間到自動接續。
                 ReportJob.execute(
                     applicationContext,
                     notifyProgress = true,
                     refreshOnly = refreshOnly,
-                    // 前景服務沒有 10 分鐘的限制；一般背景工作留 8 分鐘，超過就分段接續
-                    budgetMs = if (foreground) 40 * 60_000L else 8 * 60_000L,
+                    // 背景工作約 10 分鐘會被系統停止：每輪 8 分鐘，超過就分段接續
+                    budgetMs = 8 * 60_000L,
                     userInitiated = userInitiated,
                     onProgress = { state ->
-                        // 進度通知用同一個編號更新（前景服務的通知也會一起更新），不必每次重新設定前景服務
+                        // 進度通知由 execute 以同一個編號更新
                         setProgressAsync(ReportJob.workProgress(state))
                     },
                 )
