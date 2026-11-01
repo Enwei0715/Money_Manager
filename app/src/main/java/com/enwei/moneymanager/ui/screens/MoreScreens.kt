@@ -7,6 +7,11 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -112,47 +117,150 @@ private val timeFmt = SimpleDateFormat("M/d HH:mm", Locale.TAIWAN)
 
 @Composable
 fun MoreScreen(nav: NavController) {
-    val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    val tools = ToolCatalog.items
-    val orderedTools = settings.toolOrder.mapNotNull { id -> tools.find { it.id == id } }
-        .plus(tools.filter { it.id !in settings.toolOrder })
-        .filter { it.id !in settings.hiddenTools }
+    val shown = ToolCatalog.shown(settings.toolOrder, settings.hiddenTools)
+    val available = ToolCatalog.available(settings.toolOrder, settings.hiddenTools)
+    // 編輯模式：長按任一格或按右上「編輯」進入；可以移動、切換寬窄、隱藏、從清單加入
+    var editing by remember { mutableStateOf(false) }
+    val summary = rememberToolSummaries()
+    fun setOrder(ids: List<String>) = repo.settings.update { it.copy(toolOrder = ids, hiddenTools = it.hiddenTools - ids.toSet()) }
+    fun move(id: String, by: Int) {
+        val ids = shown.map { it.id }.toMutableList()
+        val i = ids.indexOf(id); val j = (i + by).coerceIn(0, ids.lastIndex)
+        if (i < 0 || i == j) return
+        ids.add(j, ids.removeAt(i)); setOrder(ids)
+    }
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             androidx.compose.material3.TopAppBar(
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 title = { Text("工具") },
                 actions = {
-                    TextButton(onClick = { nav.navigate("tool-order") }) { Text("排序") }
+                    TextButton(onClick = { editing = !editing }) { Text(if (editing) "完成" else "編輯") }
                     IconButton(onClick = { nav.navigate("config") }) { Icon(Icons.Outlined.Settings, "設定") }
                 },
             )
         },
     ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
-            if (orderedTools.isEmpty()) {
-                Text("尚未選擇工具。點右上角「排序」新增工具。", modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (shown.isEmpty()) Text("還沒有工具，按右上「編輯」從下方清單加入。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(14.dp))
+            // 三欄格狀：小格佔一欄，寬格佔兩欄並顯示摘要；一列放不下就換下一列
+            val rows = ArrayList<MutableList<ToolItem>>()
+            var used = 3
+            shown.forEach { t ->
+                val span = if (t.id in settings.wideTools) 2 else 1
+                if (used + span > 3) { rows += mutableListOf<ToolItem>(); used = 0 }
+                rows.last() += t; used += span
             }
-            orderedTools.chunked(3).forEach { row ->
-                Row(Modifier.fillMaxWidth()) {
-                    row.forEach { tool ->
-                        Column(
-                            Modifier.weight(1f).height(112.dp).clickable { nav.navigate(tool.route) }.padding(top = 18.dp, start = 4.dp, end = 4.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Top,
-                        ) {
-                            androidx.compose.material3.BadgedBox(badge = {
-                                if (tool.id == "pending" && pending.isNotEmpty()) Badge { Text("${pending.size}") }
-                            }) { Icon(tool.icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(34.dp)) }
-                            Spacer(Modifier.height(10.dp))
-                            Text(tool.label, fontSize = 15.sp, lineHeight = 18.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                        }
+            rows.forEach { row ->
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { t ->
+                        val wide = t.id in settings.wideTools
+                        ToolTile(
+                            t, wide, summary[t.id], editing, Modifier.weight(if (wide) 2f else 1f).fillMaxHeight(),
+                            onOpen = { if (editing) Unit else nav.navigate(t.route) },
+                            onLongPress = { editing = true },
+                            onLeft = { move(t.id, -1) }, onRight = { move(t.id, 1) },
+                            onToggleWide = { repo.settings.update { st -> st.copy(wideTools = if (wide) st.wideTools - t.id else st.wideTools + t.id) } },
+                            onHide = { setOrder(shown.map { it.id } - t.id) },
+                        )
                     }
-                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    val left = 3 - row.sumOf { if (it.id in settings.wideTools) 2 else 1 }
+                    if (left > 0) Spacer(Modifier.weight(left.toFloat()))
+                }
+            }
+            // 可加入的工具：編輯時才顯示
+            if (editing && available.isNotEmpty()) {
+                Text("可加入的工具", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 12.dp))
+                available.forEach { t ->
+                    Row(
+                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
+                            .clickable { setOrder(shown.map { it.id } + t.id) }.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(t.icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                        Text(t.label, fontSize = 15.sp, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                        Text("＋ 加入", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+            if (editing) Text("長按任一格也可以進入編輯；寬格會顯示摘要。", fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(4.dp))
+        }
+    }
+}
+
+/** 一格工具：小格是圖示＋名稱；寬格多一行摘要。編輯時下方出現移動、寬窄、隱藏按鈕。 */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun ToolTile(
+    t: ToolItem, wide: Boolean, summary: String?, editing: Boolean, modifier: Modifier,
+    onOpen: () -> Unit, onLongPress: () -> Unit, onLeft: () -> Unit, onRight: () -> Unit, onToggleWide: () -> Unit, onHide: () -> Unit,
+) {
+    androidx.compose.material3.Surface(
+        shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface,
+        border = if (editing) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)) else null,
+        modifier = modifier.heightIn(min = 96.dp).combinedClickable(onClick = onOpen, onLongClick = onLongPress),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (wide) Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(t.icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(30.dp))
+                Column(Modifier.padding(start = 10.dp)) {
+                    Text(t.label, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
+                    Text(summary ?: "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                }
+            } else Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(t.icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(32.dp))
+                Spacer(Modifier.height(8.dp))
+                Text(t.label, fontSize = 14.sp, lineHeight = 17.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+            if (editing) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                listOf("◀" to onLeft, (if (wide) "窄" else "寬") to onToggleWide, "▶" to onRight, "✕" to onHide).forEach { (l, f) ->
+                    Text(l, fontSize = 13.sp, color = if (l == "✕") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable(onClick = f).padding(horizontal = 4.dp, vertical = 2.dp))
                 }
             }
         }
+    }
+}
+
+/** 各工具寬格顯示的摘要（待確認筆數、下一筆週期交易、匯率、上次備份、AI 狀態…）。 */
+@Composable
+private fun rememberToolSummaries(): Map<String, String> {
+    val lk = rememberLookups()
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
+    val recurring by repo.recurring.collectAsStateWithLifecycle(emptyList())
+    val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
+    val txns by repo.transactions.collectAsStateWithLifecycle(emptyList())
+    val report by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
+    val news by com.enwei.moneymanager.MoneyApp.news.flow.collectAsStateWithLifecycle()
+    val fmt = SimpleDateFormat("M/d HH:mm", Locale.TAIWAN)
+    val today = java.time.LocalDate.now()
+    val monthRange = com.enwei.moneymanager.core.Periods.month(com.enwei.moneymanager.core.Periods.monthOf(today, settings.monthStartDay), settings.monthStartDay)
+    val monthExpense = remember(txns, monthRange) {
+        totalsOf(txns.filter { t ->
+            val d = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            !d.isBefore(monthRange.first) && !d.isAfter(monthRange.second)
+        }, lk.fx).expense
+    }
+    val next = remember(recurring) {
+        recurring.filter { it.enabled }.map { it to repo.nextOccurrence(it, today) }.minByOrNull { it.second }
+    }
+    return buildMap {
+        put("pending", if (pending.isEmpty()) "沒有待確認的交易" else "${pending.size} 筆待確認")
+        put("recurring", next?.let { (r, d) -> "下一筆 ${d.monthValue}/${d.dayOfMonth} ${r.name}" } ?: "沒有週期交易")
+        if (settings.subCurrency != lk.base) put("fx", "1 ${settings.subCurrency} ≈ ${Money.format(lk.fx.convert(100, settings.subCurrency), lk.base)} ${lk.base}")
+        put("backup", if (settings.lastAutoBackup > 0) "上次備份 ${fmt.format(Date(settings.lastAutoBackup))}" else "尚未設定自動備份")
+        put("ai-hub", report?.takeIf { it.running }?.step ?: if (com.enwei.moneymanager.net.GroqAi.enabled) "AI 待命中" else "尚未設定 AI 金鑰")
+        put("advisor", news?.report?.let { "報告 ${fmt.format(Date(it.createdAt))}" } ?: "還沒有報告")
+        put("review", "本月支出 ${Money.withSymbol(monthExpense, lk.base)}")
+        settings.budgets[0L]?.let { b -> put("budget", "本月已用 ${if (b > 0) monthExpense * 100 / b else 0}%（${Money.withSymbol(monthExpense, lk.base)} / ${Money.withSymbol(b, lk.base)}）") }
+        put("totalstats", "淨資產 ${Money.withSymbol(balances.filter { it.account.includeInNetWorth && !it.account.archived }.sumOf { lk.fx.convert(it.balance, it.account.currency) }, lk.base)}")
+        put("notif", "監聽 ${settings.notifPackages.size} 個 App")
+        put("walletreader", "讀取 ${settings.screenPackages.size} 個錢包 App")
+        put("settings", if (settings.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.0.${settings.updateAvailable}" else "目前 ${BuildConfig.VERSION_NAME}")
     }
 }
 

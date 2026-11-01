@@ -33,23 +33,42 @@ import com.enwei.moneymanager.ui.components.ReorderableColumn
 
 data class ToolItem(val id: String, val label: String, val route: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 
+/**
+ * 工具頁可以放的工具。新增工具只要在這裡加一項（id、名稱、要開的畫面、圖示）；
+ * 寬格顯示的摘要寫在 MoreScreens 的 toolSummary。
+ */
 object ToolCatalog {
+    private val L = com.enwei.moneymanager.ui.components.LineIcons
     val items = listOf(
-        ToolItem("pending", "待確認", "pending", com.enwei.moneymanager.ui.components.LineIcons.Inbox),
-        ToolItem("recurring", "週期交易", "recurring", com.enwei.moneymanager.ui.components.LineIcons.Recurring),
-        ToolItem("fx", "匯率", "fx", com.enwei.moneymanager.ui.components.LineIcons.Exchange),
-        ToolItem("backup", "備份", "backup", com.enwei.moneymanager.ui.components.LineIcons.Backup),
-        ToolItem("ai-hub", "AI 中心", "ai-hub", com.enwei.moneymanager.ui.components.LineIcons.Advisor),
+        ToolItem("pending", "待確認", "pending", L.Inbox),
+        ToolItem("recurring", "週期交易", "recurring", L.Recurring),
+        ToolItem("fx", "匯率", "fx", L.Exchange),
+        ToolItem("backup", "備份", "backup", L.Backup),
+        ToolItem("ai-hub", "AI 中心", "ai-hub", L.Advisor),
+        ToolItem("advisor", "股票助理", "advisor", L.Stocks),
+        ToolItem("review", "收支檢討", "review", L.Review),
+        ToolItem("budget", "預算", "budget", L.Review),
+        ToolItem("totalstats", "資產走勢", "totalstats", L.Stocks),
+        ToolItem("notif", "通知記帳", "notif", L.Notification),
+        ToolItem("walletreader", "錢包讀取", "walletreader", L.Wallet),
+        ToolItem("stockfees", "手續費與月退", "stockfees", L.Stocks),
+        ToolItem("settings", "App 更新", "settings", L.Update),
     )
+
+    /** 工具頁目前顯示的工具（依使用者排的順序）。不在順序裡的工具放在「可加入的工具」。 */
+    fun shown(order: List<String>, hidden: Set<String>) = order.mapNotNull { id -> items.find { it.id == id } }.filter { it.id !in hidden }
+
+    fun available(order: List<String>, hidden: Set<String>): List<ToolItem> {
+        val shownIds = shown(order, hidden).map { it.id }.toSet()
+        return items.filter { it.id !in shownIds }
+    }
 }
 
 @Composable
 fun ToolSettingsScreen(nav: NavController) {
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    val order = settings.toolOrder.mapNotNull { id -> ToolCatalog.items.find { it.id == id } }
-        .plus(ToolCatalog.items.filter { it.id !in settings.toolOrder })
-    val visible = order.filter { it.id !in settings.hiddenTools }
-    val hidden = order.filter { it.id in settings.hiddenTools }
+    val visible = ToolCatalog.shown(settings.toolOrder, settings.hiddenTools)
+    val hidden = ToolCatalog.available(settings.toolOrder, settings.hiddenTools)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -92,7 +111,7 @@ fun ToolSettingsScreen(nav: NavController) {
                         Icon(item.icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(item.label, Modifier.weight(1f).padding(start = 12.dp))
                         TextButton(onClick = {
-                            repo.settings.update { it.copy(hiddenTools = it.hiddenTools - item.id) }
+                            repo.settings.update { it.copy(hiddenTools = it.hiddenTools - item.id, toolOrder = (it.toolOrder + item.id).distinct()) }
                         }) {
                             Icon(Icons.Rounded.Add, null, modifier = Modifier.size(18.dp))
                             Text("顯示")

@@ -263,6 +263,8 @@ data class AppSettings(
     val toolOrder: List<String> = listOf("pending", "recurring", "fx", "backup", "ai-hub"),
     /** 工具首頁隱藏的入口 id。 */
     val hiddenTools: Set<String> = emptySet(),
+    /** 工具頁用寬格（兩格寬、顯示摘要）的工具 */
+    val wideTools: Set<String> = setOf("pending", "ai-hub"),
     /** 帳戶群組順序（AccountType 名稱） */
     val accountGroupOrder: List<String> = emptyList(),
     /** 帳戶群組自訂名稱 */
@@ -472,6 +474,7 @@ class SettingsStore(context: Context) {
         toolOrder = if (prefs.contains("toolOrder")) prefs.getString("toolOrder", "")!!.split(',').filter { it.isNotBlank() }
             else AppSettings().toolOrder,
         hiddenTools = prefs.getStringSet("hiddenTools", emptySet())!!.toSet(),
+        wideTools = prefs.getStringSet("wideTools", null)?.toSet() ?: AppSettings().wideTools,
         accountGroupOrder = prefs.getString("accountGroupOrder", "")!!.split(',').filter { it.isNotBlank() },
         seedCleaned = prefs.getBoolean("seedCleaned", false),
         language = prefs.getInt("language", 1),
@@ -634,6 +637,7 @@ class SettingsStore(context: Context) {
             .putInt("widgetOpacity", s.widgetOpacity)
             .putString("toolOrder", s.toolOrder.joinToString(","))
             .putStringSet("hiddenTools", s.hiddenTools)
+            .putStringSet("wideTools", s.wideTools)
             .putString("accountGroupOrder", s.accountGroupOrder.joinToString(","))
             .putString("accountGroupNames", json.encodeToString(strMapSerializer, s.accountGroupNames))
             .putString("learnedSources", json.encodeToString(learnedSerializer, s.learnedSources))
