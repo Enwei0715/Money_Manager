@@ -257,7 +257,25 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
             }
         }
     }
-    if (r.allocation.isNotBlank()) Section("資金分配", collapsible = true) { CitedText(r.allocation, r.cites, newsById) }
+    if (r.allocation.isNotBlank() || r.alloc.isNotEmpty()) Section("資金分配", collapsible = true) {
+        // 比例條＋圖例，文字只留一句
+        if (r.alloc.isNotEmpty()) {
+            val total = r.alloc.sumOf { it.pct }.takeIf { it > 0 } ?: 1.0
+            val palette = listOf(Color(0xFF3C82E6), Color(0xFFF0605A), Color(0xFFFFA000), Color(0xFF2E9E57), Color(0xFF7E57C2), Color(0xFF9E9E9E))
+            Row(Modifier.fillMaxWidth().height(14.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(7.dp))) {
+                r.alloc.forEachIndexed { i, a -> Box(Modifier.weight((a.pct / total).toFloat().coerceAtLeast(0.01f)).height(14.dp).background(palette[i % palette.size])) }
+            }
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                r.alloc.forEachIndexed { i, a ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).background(palette[i % palette.size], RoundedCornerShape(4.dp)))
+                        Text(" ${a.name} ${"%.0f".format(a.pct / total * 100)}%", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        if (r.allocation.isNotBlank()) CitedText(r.allocation, r.cites, newsById)
+    }
     if (r.checklist.isNotEmpty() || r.warnings.isNotEmpty()) Section("下單前檢查", collapsible = true, initiallyOpen = false) {
         r.checklist.forEach { Text("☐ $it", fontSize = 13.sp) }
         r.warnings.forEach { Text("! $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }

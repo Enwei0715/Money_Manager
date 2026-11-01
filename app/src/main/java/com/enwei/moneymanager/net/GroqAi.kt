@@ -795,7 +795,7 @@ object GroqAi {
             "\"picks\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\", \"business\": 公司做什麼 30 字內, \"strength\": \"強勢\"或\"中性\"或\"弱勢\", " +
             "\"reason\": 30 字內, \"entry\": 進場條件, \"stop\": 停損條件, \"amount\": 建議投入元}]（6～10 檔）, " +
             "\"holdings\": [{\"symbol\": 代號, \"action\": 動作, \"stop\": 數字或 null, \"reason\": 30 字內}], " +
-            "\"news\": [{\"n\": 新聞編號, \"why\": 30 字內}], \"allocation\": 80 字內, \"checklist\": [3～5 項], \"warnings\": [1～3 項]}"
+            "\"news\": [{\"n\": 新聞編號, \"why\": 30 字內}], \"alloc\": [{\"k\": 類別（例如現金、長線、短線、債券）, \"p\": 百分比}]（合計 100）, \"allocation\": 40 字內, \"checklist\": [3～5 項], \"warnings\": [1～3 項]}"
         val r = chatJson(system, user, 3500, hard = true, cap = 6000, effort = "low", task = AiTask.REPORT) ?: return null
         fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(120) }.orEmpty()
         fun objs(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
@@ -803,6 +803,11 @@ object GroqAi {
         return com.enwei.moneymanager.data.DailyReport(
             trend = r.str("trend")?.take(120).orEmpty(), stage = r.str("stage")?.take(20).orEmpty(), themes = list("themes"),
             summary = r.str("summary")?.take(240).orEmpty(),
+            alloc = objs("alloc").mapNotNull { o ->
+                val k = o.str("k")?.take(10) ?: return@mapNotNull null
+                val p = o.str("p")?.trimEnd('%')?.toDoubleOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
+                com.enwei.moneymanager.data.AllocSlice(k, p)
+            }.take(6),
             picks = objs("picks").mapNotNull { parsePick(it, sym) }.distinctBy { it.symbol }.take(10),
             holdings = objs("holdings").mapNotNull { o ->
                 val code = o.str("symbol")?.let { sym.find(it)?.value } ?: return@mapNotNull null

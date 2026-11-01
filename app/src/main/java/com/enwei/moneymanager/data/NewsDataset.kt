@@ -104,7 +104,13 @@ data class DailyReport(
     val warnings: List<String> = emptyList(),
     /** 報告文字裡 [1][2]… 對應的新聞 id */
     val cites: List<String> = emptyList(),
+    /** 資金分配比例（畫成比例條） */
+    val alloc: List<AllocSlice> = emptyList(),
 )
+
+/** 資金分配的一塊：名稱與百分比。 */
+@Serializable
+data class AllocSlice(val name: String, val pct: Double)
 
 /** 對話回覆裡的圖表：[kind] 種類，[items] 代號或題材名稱。 */
 @Serializable
