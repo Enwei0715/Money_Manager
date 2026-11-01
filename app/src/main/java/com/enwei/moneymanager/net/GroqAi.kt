@@ -875,6 +875,29 @@ object GroqAi {
     /**
      * 新聞重點整理：同一天、同一題材的所有標題整理成不重複的重點（同一事件只寫一次，附相關代號、多空與幾則新聞提到）。
      */
+    /**
+     * 合併題材：把標註時各批取的題材名稱（同一件事常有不同說法）對應到少數標準題材。
+     * 回傳「原題材 → 標準題材」，沒有回覆時為 null。
+     */
+    suspend fun mergeThemes(themes: List<Pair<String, Int>>, canonical: List<String>): Map<String, String>? {
+        if (!enabled || themes.isEmpty()) return emptyMap()
+        val system = "你是台股新聞題材的分類員。把下列題材名稱（後面是則數）合併成不超過 40 個標準題材。規則：" +
+            "產業、產品、技術、供應鏈類用簡短的產業名稱（例如 被動元件、AI 伺服器、記憶體、低軌衛星、散熱、重電），意思相同或只是說法不同的一律合併；" +
+            "大盤漲跌、盤勢、指數一律為「大盤」；總體經濟、利率匯率、政策、關稅為「總經」；個股的一般消息（個股動態、討論、概覽、股價表現）為「個股消息」；" +
+            "法人買賣超、外資動向為「法人籌碼」；財報、營收、獲利、基本面為「財報營收」。" +
+            (if (canonical.isNotEmpty()) "已經使用的標準題材（優先沿用）：${canonical.joinToString("、")}。" else "") +
+            "每個原題材都要對應到一個標準題材，不能遺漏。只回 JSON：{\"map\": {\"原題材\": \"標準題材\"}}"
+        val out = LinkedHashMap<String, String>()
+        // 題材很多時分段送（每段約 120 個）
+        for (part in themes.chunked(120)) {
+            val user = part.joinToString("\n") { (t, n) -> "$t（$n）" }
+            val r = chatJson(system, user, 40 * part.size + 200, task = AiTask.DIGEST) ?: return out.takeIf { it.isNotEmpty() }
+            val m = r["map"] as? JsonObject ?: return out.takeIf { it.isNotEmpty() }
+            m.forEach { (k, v) -> (v as? JsonPrimitive)?.contentOrNull?.trim()?.take(12)?.takeIf { it.isNotBlank() }?.let { out[k.trim()] = it } }
+        }
+        return out
+    }
+
     suspend fun digestTheme(theme: String, day: String, items: List<com.enwei.moneymanager.data.NewsItem>): List<com.enwei.moneymanager.data.DigestPoint>? {
         if (!enabled || items.isEmpty()) return emptyList()
         val system = "你是台股新聞編輯。以下是 $day「$theme」題材的新聞，每筆包含來源提供的內容範圍與內容。" +

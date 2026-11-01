@@ -581,6 +581,8 @@ private fun JobProgress(
                 kotlinx.coroutines.delay(1000)
             }
         }
+        // 排程的每個步驟：做完 ✓、進行中 ●、還沒到 ○
+        PipelineSteps(step, refreshOnly = job?.refreshOnly == true)
         Text(step, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
         if (done != null && total != null && total > 0) {
             LinearProgressIndicator(progress = { (done.toFloat() / total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
@@ -706,7 +708,13 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             if (!running) TextButton(enabled = GroqAi.enabled, onClick = { com.enwei.moneymanager.work.ReportJob.startNow(ctx, refreshOnly = true) }) { Text("立即更新", fontSize = 12.sp) }
             TextButton(onClick = { infoOpen = true }) { Text("詳情", fontSize = 12.sp) }
         }
-        if (job?.running == true) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+        if (job?.running == true) {
+            LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+            // 新聞頁上方也顯示排程步驟
+            Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 14.dp, vertical = 4.dp)) {
+                PipelineSteps(job?.step.orEmpty(), refreshOnly = job?.refreshOnly == true)
+            }
+        }
         // 搜尋與篩選固定在最上方
         Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1488,4 +1496,30 @@ private fun HoldingCard(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwe
         ai?.let { AiHoldLine(it) }
     }
     androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+
+/** 新聞排程的步驟與目前進度。 */
+@Composable
+private fun PipelineSteps(step: String, refreshOnly: Boolean) {
+    val steps = listOf("蒐集新聞", "AI 標註", "合併題材", "整理重點") + if (refreshOnly) emptyList() else listOf("產生報告")
+    val cur = when {
+        step.contains("蒐集") || step.contains("準備") -> 0
+        step.contains("標註") -> 1
+        step.contains("合併題材") -> 2
+        step.contains("整理新聞重點") || step.contains("重點") -> 3
+        step.contains("分析資料集") || step.contains("大盤") || step.contains("代號") || step.contains("報告") -> 4
+        else -> 0
+    }.coerceAtMost(steps.lastIndex)
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+        steps.forEachIndexed { i, s ->
+            val (mark, col) = when {
+                i < cur -> "✓" to MaterialTheme.colorScheme.primary
+                i == cur -> "●" to MaterialTheme.colorScheme.primary
+                else -> "○" to MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Text("$mark $s", fontSize = 12.sp, color = col, fontWeight = if (i == cur) FontWeight.SemiBold else FontWeight.Normal)
+            if (i < steps.lastIndex) Text("  →  ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }

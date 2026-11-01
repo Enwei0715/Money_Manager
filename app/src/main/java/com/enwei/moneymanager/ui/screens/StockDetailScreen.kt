@@ -36,6 +36,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -105,6 +106,13 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     val name = held.firstNotNullOfOrNull { it.name } ?: bars?.name
     // K 線上的參考線：均價、停利價、減碼價、提醒的目標價與停損價
     val levels = buildList {
+        // 近 60 日的高點（壓力）與低點（支撐）
+        bars?.let { bb ->
+            if (bb.close.size >= 20) {
+                add(Triple(bb.high.takeLast(60).max(), Color(0xFFAB47BC), "壓力"))
+                add(Triple(bb.low.takeLast(60).min(), Color(0xFF26A69A), "支撐"))
+            }
+        }
         if (held.isNotEmpty()) {
             val sh = held.sumOf { it.shares }
             add(Triple(held.sumOf { it.avgCost * it.shares } / sh, Color(0xFF607D8B), "均價"))
@@ -248,6 +256,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         )
                     }
                 }
+                RevenueCard(symbol)
+                ProjectionCard(c)
                 if (held.isNotEmpty() && settings.investPlan.disciplineOn) Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         val shares = held.sumOf { it.shares }
@@ -424,6 +434,9 @@ private fun CandleChart(
     levels: List<Pair<Double, Color>> = emptyList(), selected: Int? = null, onTap: (Float) -> Unit = {},
 ) {
     val bb = remember(System.identityHashCode(b)) { Technicals.bollinger(b.close) }
+    // 月線、季線（畫交叉標記用）
+    val ma20 = remember(System.identityHashCode(b)) { b.close.indices.map { Technicals.sma(b.close, 20, it + 1) } }
+    val ma60 = remember(System.identityHashCode(b)) { b.close.indices.map { Technicals.sma(b.close, 60, it + 1) } }
     val maSeries = remember(System.identityHashCode(b), mas) { mas.associateWith { len -> b.close.indices.map { i -> Technicals.sma(b.close, len, i + 1) } } }
     val up = StockUp
     val down = StockDown
@@ -493,6 +506,21 @@ private fun CandleChart(
         // 均價、停利價、減碼價、提醒價：虛線（在畫面價格範圍內才畫）
         val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
         levels.forEach { (v, col) -> if (v in lo..hi) drawLine(col, Offset(0f, y(v)), Offset(size.width, y(v)), 2f, pathEffect = dash) }
+        // 月線與季線交叉：▲ 黃金交叉（K 棒下方）、▼ 死亡交叉（K 棒上方）
+        for (i in 1 until n) {
+            val j = from + i
+            val a0 = ma20[j - 1]; val b0 = ma60[j - 1]; val a1 = ma20[j]; val b1 = ma60[j]
+            if (a0 == null || b0 == null || a1 == null || b1 == null) continue
+            val cx = i * cw + cw / 2
+            val s = minOf(cw * 0.9f, 14f).coerceAtLeast(7f)
+            if (a0 <= b0 && a1 > b1) {
+                val yy = (y(b.low[j]) + 6f).coerceAtMost(priceH - 2f)
+                drawPath(Path().apply { moveTo(cx, yy); lineTo(cx - s / 2, yy + s); lineTo(cx + s / 2, yy + s); close() }, up)
+            } else if (a0 >= b0 && a1 < b1) {
+                val yy = (y(b.high[j]) - 6f).coerceAtLeast(2f)
+                drawPath(Path().apply { moveTo(cx, yy); lineTo(cx - s / 2, yy - s); lineTo(cx + s / 2, yy - s); close() }, down)
+            }
+        }
         // 點選的 K 棒：直線標示
         selected?.takeIf { it in from until to }?.let { j ->
             val x = (j - from) * cw + cw / 2
@@ -695,6 +723,110 @@ internal fun PriceLadder(points: List<Triple<String, Double, Color>>) {
                     Text(" $label ${"%.2f".format(v)}", fontSize = 11.sp)
                 }
             }
+        }
+    }
+}
+
+
+/** 月營收：近 13 個月營收長條（億元），顏色依年增率；附最新一個月的年增、月增。 */
+@Composable
+private fun RevenueCard(symbol: String) {
+    val rev by produceState<List<com.enwei.moneymanager.net.TwData.MonthRevenue>?>(null, symbol) {
+        value = runCatching { com.enwei.moneymanager.net.TwData.monthRevenue(symbol) }.getOrDefault(emptyList())
+    }
+    val list = rev ?: return
+    if (list.isEmpty()) return
+    val show = list.takeLast(13)
+    val last = show.last()
+    val max = show.maxOf { it.revenue }.takeIf { it > 0 } ?: 1.0
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("月營收", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                "${last.year}/${last.month}：${"%,.1f".format(last.revenue / 1e8)} 億" +
+                    (last.yoy?.let { "　年增 ${"%+.1f".format(it)}%" } ?: "") + (last.mom?.let { "　月增 ${"%+.1f".format(it)}%" } ?: ""),
+                fontSize = 13.sp, color = if ((last.yoy ?: 0.0) >= 0) StockUp else StockDown,
+            )
+            val track = MaterialTheme.colorScheme.onSurfaceVariant
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(110.dp)) {
+                val w = size.width / show.size
+                show.forEachIndexed { i, m ->
+                    val h = (m.revenue / max * size.height * 0.92).toFloat()
+                    val col = when { m.yoy == null -> track; m.yoy >= 0 -> StockUp; else -> StockDown }
+                    drawRect(col.copy(alpha = if (i == show.lastIndex) 1f else 0.6f), Offset(w * i + w * 0.15f, size.height - h), Size(w * 0.7f, h))
+                }
+            }
+            Row {
+                Text("${show.first().year % 100}/${show.first().month}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text("紅＝年增、綠＝年減", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.weight(1f))
+                Text("${last.year % 100}/${last.month}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            // 年增率走勢（近 13 個月）
+            val yoys = show.mapNotNull { it.yoy }
+            if (yoys.size >= 3) Text(
+                "近 ${yoys.size} 個月年增率：平均 ${"%+.1f".format(yoys.average())}%，" +
+                    (if (yoys.takeLast(3).average() > yoys.average()) "最近三個月高於平均（成長加速）" else "最近三個月低於平均（成長放緩）"),
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * 趨勢推估：用近 120 日收盤價的對數線性回歸算出趨勢，加上近期波動算出未來 20 個交易日的 1 個標準差區間。
+ * 只是統計推估，不是預測或投資建議。
+ */
+@Composable
+private fun ProjectionCard(close: List<Double>) {
+    val hist = close.takeLast(120)
+    if (hist.size < 40) return
+    val ys = hist.map { kotlin.math.ln(it) }
+    val n = ys.size
+    val xm = (n - 1) / 2.0
+    val ym = ys.average()
+    val slope = ys.indices.sumOf { (it - xm) * (ys[it] - ym) } / ys.indices.sumOf { (it - xm) * (it - xm) }
+    val rets = ys.zipWithNext { a, b -> b - a }.takeLast(60)
+    val vol = kotlin.math.sqrt(rets.map { (it - rets.average()) * (it - rets.average()) }.average())
+    val ahead = 20
+    val last = hist.last()
+    val mid = (1..ahead).map { k -> last * kotlin.math.exp(slope * k) }
+    val upB = (1..ahead).map { k -> last * kotlin.math.exp(slope * k + vol * kotlin.math.sqrt(k.toDouble())) }
+    val loB = (1..ahead).map { k -> last * kotlin.math.exp(slope * k - vol * kotlin.math.sqrt(k.toDouble())) }
+    val show = hist.takeLast(60)
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("趨勢推估（未來 20 個交易日）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            val trendPct = (kotlin.math.exp(slope * ahead) - 1) * 100
+            Text(
+                "依近 ${n} 日趨勢約 ${"%+.1f".format(trendPct)}%，區間 ${"%.2f".format(loB.last())}～${"%.2f".format(upB.last())}",
+                fontSize = 13.sp, color = if (trendPct >= 0) StockUp else StockDown,
+            )
+            val lineCol = MaterialTheme.colorScheme.onSurface
+            val bandCol = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+            val midCol = MaterialTheme.colorScheme.primary
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(130.dp)) {
+                val all = show + upB + loB
+                val hi = all.max(); val lo = all.min(); val r = (hi - lo).takeIf { it > 0 } ?: 1.0
+                val total = show.size + ahead
+                val w = size.width / (total - 1)
+                fun y(v: Double) = ((hi - v) / r * size.height).toFloat()
+                // 區間
+                val band = Path().apply {
+                    moveTo(w * (show.size - 1), y(last))
+                    upB.forEachIndexed { k, v -> lineTo(w * (show.size + k), y(v)) }
+                    for (k in loB.indices.reversed()) lineTo(w * (show.size + k), y(loB[k]))
+                    close()
+                }
+                drawPath(band, bandCol)
+                // 歷史
+                for (i in 1 until show.size) drawLine(lineCol, Offset(w * (i - 1), y(show[i - 1])), Offset(w * i, y(show[i])), 2.5f)
+                // 推估中線（虛線）
+                val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
+                var px = w * (show.size - 1); var py = y(last)
+                mid.forEachIndexed { k, v -> val nx = w * (show.size + k); val ny = y(v); drawLine(midCol, Offset(px, py), Offset(nx, ny), 2.5f, pathEffect = dash); px = nx; py = ny }
+            }
+            Text("統計推估（近期趨勢＋波動），不是預測或投資建議。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

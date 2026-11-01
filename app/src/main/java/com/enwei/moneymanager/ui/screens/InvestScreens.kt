@@ -259,19 +259,17 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
         item { Spacer(Modifier.height(32.dp)) }
     }
     if (addWatch) {
-        var code by remember { mutableStateOf("") }
+        // 打名稱或代號搜尋，點結果加入
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { addWatch = false },
             title = { Text("加入觀察清單") },
             text = {
-                androidx.compose.material3.OutlinedTextField(code, { code = it.trim().uppercase().take(8) }, label = { Text("台股代號，例如 2330") }, singleLine = true)
-            },
-            confirmButton = {
-                TextButton(enabled = code.matches(Regex("[0-9A-Z]{4,6}")), onClick = {
-                    repo.settings.update { it.copy(watchlist = (it.watchlist + code).distinct()) }
+                com.enwei.moneymanager.ui.components.StockSearch({ s ->
+                    repo.settings.update { it.copy(watchlist = (it.watchlist + s.code).distinct()) }
                     addWatch = false
-                }) { Text("加入") }
+                })
             },
+            confirmButton = {},
             dismissButton = { TextButton(onClick = { addWatch = false }) { Text("取消") } },
         )
     }

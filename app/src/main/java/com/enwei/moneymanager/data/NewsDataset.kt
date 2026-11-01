@@ -145,6 +145,8 @@ data class NewsStore(
     val history: List<DailyReport> = emptyList(),
     /** 報告保留天數；0 表示不自動刪除 */
     val historyKeepDays: Int = 30,
+    /** 合併後的標準題材（標註新聞時優先沿用） */
+    val themeCanon: List<String> = emptyList(),
 )
 
 /** 依保留天數刪掉太舊的報告。 */
@@ -196,6 +198,8 @@ data class NewsGrid(
     val history: List<DailyReport> = emptyList(),
     val business: Map<String, String> = emptyMap(),
     val historyKeepDays: Int = 30,
+    /** 合併後的標準題材 */
+    val themeCanon: List<String> = emptyList(),
     /** 未讀（待標註）的新聞則數 */
     val inbox: Int = 0,
     val blocks: List<BlockInfo> = emptyList(),
@@ -284,6 +288,7 @@ class NewsDataset(context: Context) {
                 digests = blocks.mapNotNull { b -> b.article?.let { b.key to it } }.toMap(),
                 history = g.history,
                 historyKeepDays = g.historyKeepDays,
+                themeCanon = g.themeCanon,
             )
         }
         store.also { cache = it; _flow.value = it; _grid.value = progressOf(it) }
@@ -355,7 +360,7 @@ class NewsDataset(context: Context) {
         val prevInfo = savedGrid?.blocks.orEmpty().associateBy { it.key }
         val grid = NewsGrid(
             lastCollect = s.lastCollect, report = s.report, history = s.history, business = s.business,
-            historyKeepDays = s.historyKeepDays, inbox = inbox.size,
+            historyKeepDays = s.historyKeepDays, inbox = inbox.size, themeCanon = s.themeCanon,
             blocks = blocks.sortedWith(compareByDescending<NewsBlock> { it.day }.thenByDescending { it.threads }).map { b ->
                 val info = BlockInfo(b.key, "blocks/" + fileOf(b.key), b.status, b.threads, b.read)
                 val prev = prevInfo[b.key]
@@ -394,7 +399,7 @@ class NewsDataset(context: Context) {
 
     companion object {
         /** 市場、總經類（不是產業題材）的名稱 */
-        val MACRO = Regex("大盤|台股|股市|美股|陸股|港股|日股|指數|加權|經濟|總經|景氣|通膨|利率|升息|降息|央行|聯準會|匯率|新台幣|關稅|政策|選舉|外資|法人|重挫|大漲|大跌|收盤|盤勢|盤後|行情|市場")
+        val MACRO = Regex("個股消息|法人籌碼|財報營收|個股|法人|財報|營收|獲利|基本面|技術面|大盤|台股|股市|美股|陸股|港股|日股|指數|加權|經濟|總經|景氣|通膨|利率|升息|降息|央行|聯準會|匯率|新台幣|關稅|政策|選舉|外資|法人|重挫|大漲|大跌|收盤|盤勢|盤後|行情|市場")
 
         /**
          * 「近 [days] 天」的起點：台北時間今天往前 days-1 天的 0 點。用整天計算，
@@ -507,8 +512,9 @@ class NewsDataset(context: Context) {
             onProgress(i, maxOf(total, i + 1))
             val ids = batch.map { it.id }.toHashSet()
             // 已有的題材名稱給 AI 參考：意思相同就沿用，避免同一件事分成很多個題材
-            val known = load().items.asSequence().filter { it.tagged && it.theme.isNotBlank() }.groupingBy { it.theme }.eachCount()
-                .entries.sortedByDescending { it.value }.take(80).map { it.key }
+            val st0 = load()
+            val known = (st0.themeCanon + st0.items.asSequence().filter { it.tagged && it.theme.isNotBlank() }.groupingBy { it.theme }.eachCount()
+                .entries.sortedByDescending { it.value }.take(80).map { it.key }).distinct().take(80)
             var tags = GroqAi.tagNews(batch, known)
             if (big && tags?.keys?.containsAll(ids) != true) {
                 val retried = LinkedHashMap<String, GroqAi.NewsTag>()
@@ -623,6 +629,33 @@ class NewsDataset(context: Context) {
             if (i < large.lastIndex) delay(if (big) 5_000 else 12_000)
         }
         return done
+    }
+
+    /**
+     * 合併題材：近 7 天的題材超過 40 個時，請 AI 把同義、說法不同的題材對應到標準題材，
+     * 改寫新聞的題材並刪掉被合併掉的舊重點（下一步重新整理）。回傳合併掉的題材數。
+     */
+    suspend fun consolidateThemes(stop: () -> Boolean = { false }): Int {
+        val st = load()
+        val since = recentSince(7)
+        val counts = st.items.filter { it.tagged && it.epochSec >= since && it.theme.isNotBlank() }.groupingBy { it.theme }.eachCount()
+        if (counts.size <= 40 || stop()) return 0
+        val canonical = st.themeCanon
+        val todo = counts.entries.filter { it.key !in canonical }.sortedByDescending { it.value }.map { it.key to it.value }
+        if (todo.isEmpty()) return 0
+        val map = GroqAi.mergeThemes(todo, canonical) ?: return 0
+        val changed = map.filter { (k, v) -> k != v }
+        update { s ->
+            val items = s.items.map { n -> map[n.theme]?.let { t -> if (t != n.theme) n.copy(theme = t) else n } ?: n }
+            val alive = items.filter { it.tagged }.map { "${it.day()}|${it.theme}" }.toSet()
+            s.copy(
+                items = items,
+                // 舊題材的重點已不對應任何新聞：刪掉，合併後的題材會重新整理
+                digests = s.digests.filterKeys { it in alive },
+                themeCanon = (s.themeCanon + map.values).distinct().take(80),
+            )
+        }
+        return changed.size
     }
 
     /** 分段整理出的重點合併：只有整理文字相同時才合併，避免同代號的不同事件被混成一點。 */

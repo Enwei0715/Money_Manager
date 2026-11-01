@@ -333,6 +333,29 @@ private fun fitDigest(ds: NewsDataset, st: NewsStore, room: Int, big: Boolean): 
     return r.first.take((room - 20).coerceAtLeast(0)) to r.second
 }
 
+/**
+ * 依使用者的問題從資料集找相關新聞：問題裡的代號、公司名稱（股票清單）、提到持股時的持股代號、
+ * 題材名稱與中文關鍵詞（兩字詞），近 7 天、依關聯度與重要性排序。
+ */
+private fun relatedNews(ds: NewsDataset, st: NewsStore, q: String, holdings: Set<String>, limit: Int): List<NewsItem> {
+    val codes = HashSet<String>()
+    Regex("[0-9]{4,6}[A-Z]?").findAll(q).forEach { codes += it.value }
+    com.enwei.moneymanager.net.TwData.cached().forEach { s -> if (s.name.length >= 2 && q.contains(s.name)) codes += s.code }
+    if (listOf("持股", "我的股票", "手上", "庫存").any { q.contains(it) }) codes += holdings
+    val stop = setOf("今天", "什麼", "怎麼", "可以", "現在", "適合", "我的", "應該", "是否", "如何", "哪些", "一下", "目前", "要不", "不要", "還是", "這個", "那個", "股票", "建議", "請問")
+    val cjk = q.filter { it in '一'..'鿿' }
+    val grams = (0 until (cjk.length - 1).coerceAtLeast(0)).map { cjk.substring(it, it + 2) }.filter { it !in stop }.toSet()
+    if (codes.isEmpty() && grams.isEmpty()) return emptyList()
+    return ds.recent(st, 7).asSequence().map { n ->
+        var score = 0.0
+        if (n.symbols.any { it in codes }) score += 5
+        if (n.theme.isNotBlank() && (q.contains(n.theme) || grams.any { n.theme.contains(it) })) score += 3
+        score += grams.count { n.title.contains(it) || n.note.contains(it) } * 1.0
+        n to score
+    }.filter { it.second > 0 }.sortedWith(compareByDescending<Pair<NewsItem, Double>> { it.second }.thenByDescending { it.first.importance }.thenByDescending { it.first.epochSec })
+        .take(limit).map { it.first }.toList()
+}
+
 /** 背景蒐集與標註新聞（每天數次）；回傳新增則數。 */
 suspend fun Repository.refreshNews(
     ds: NewsDataset, onStep: (String) -> Unit = {}, onBatch: (Int, Int) -> Unit = { _, _ -> }, onDigest: (Int, Int) -> Unit = { _, _ -> },
@@ -351,6 +374,9 @@ suspend fun Repository.refreshNews(
         val stop = { budget?.shouldStop() == true }
         // thread：逐批讀取（標註）新聞，讀完的新聞歸入「日期|題材」區塊
         ds.tag(stop) { i, n -> onBatch(i, n); onStep("AI 標註新聞 ${i + 1}/$n 批…") }
+        // 題材合併：各批取的名稱常不一樣，請 AI 對應到標準題材，避免同一件事分成很多題材
+        onStep("AI 合併題材分類…")
+        runCatching { ds.consolidateThemes(stop) }
         // block：把每個區塊的全部新聞整理成重點文章，區塊就完整了
         ds.digest(stop = stop) { i, n -> onDigest(i, n); onStep("整理新聞重點 ${i + 1}/$n…") }
         budget?.stopReason?.let { onStep("暫停：$it") }
@@ -413,15 +439,29 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
     val big = com.enwei.moneymanager.net.GroqAi.bigContext(com.enwei.moneymanager.net.GroqAi.AiTask.CHAT)
     val today = st.report?.let { r -> "今日報告：${r.trend}；推薦 " + r.picks.joinToString("、") { "${it.symbol}${it.name}（${it.style}）" } } ?: ""
     // 資料太多時自動精簡（題材、個股、重點新聞的數量逐步減少）直到放得下，不讓使用者自己刪字
-    val reserved = situation(snap).length + today.length + 2
-    val (digest, imp) = fitDigest(ds, st, com.enwei.moneymanager.net.GroqAi.chatContextLimit() - reserved, big)
+    // 依問題從新聞資料集找相關新聞（代號、公司名稱、持股、題材、關鍵字），讓 AI 根據實際新聞回答
+    runCatching { com.enwei.moneymanager.net.TwData.stockList(com.enwei.moneymanager.MoneyApp.instance) }
+    val limit = com.enwei.moneymanager.net.GroqAi.chatContextLimit()
+    val holdSyms = snap.holdings.map { it.symbol }.toSet()
+    val related0 = relatedNews(ds, st, question, holdSyms, if (big) 25 else 6)
+    val reserved0 = situation(snap).length + today.length + 2
+    val (digest, imp) = fitDigest(ds, st, limit - reserved0 - related0.sumOf { it.title.length + it.note.length + 30 }, big)
+    val related = related0.filter { r -> imp.none { it.id == r.id } }
+    val relText = if (related.isEmpty()) "" else buildString {
+        appendLine("與問題相關的新聞（App 依代號、公司、題材與關鍵字從資料集找出；引用時用編號）：")
+        related.forEachIndexed { k, n ->
+            appendLine("[${imp.size + k}] ${n.title.take(60)}" + (n.note.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: "") +
+                (if (n.symbols.isNotEmpty()) "｜${n.symbols.joinToString(",")}" else "") + "｜多空 ${n.sentiment}")
+        }
+    }
+    val sources = imp + related
     val history = st.chat.takeLast(6).map { it.fromUser to it.text }
-    val reply = com.enwei.moneymanager.net.GroqAi.advisorChat(situation(snap) + "\n" + today + "\n" + digest, history, question) ?: return null
+    val reply = com.enwei.moneymanager.net.GroqAi.advisorChat(situation(snap) + "\n" + today + "\n" + digest + "\n" + relText, history, question) ?: return null
     // 回覆裡的 [19, 35] 是資料集的新聞編號：換成 [1][2]，對應附在回覆下方的新聞
     val ids = ArrayList<String>()
-    val text = renumberCites(reply.text, imp, ids)
-    val points = reply.points.map { renumberCites(it, imp, ids) }
-    reply.newsIds.mapNotNull { it.toIntOrNull() }.mapNotNull { imp.getOrNull(it)?.id }.forEach { if (it !in ids) ids += it }
+    val text = renumberCites(reply.text, sources, ids)
+    val points = reply.points.map { renumberCites(it, sources, ids) }
+    reply.newsIds.mapNotNull { it.toIntOrNull() }.mapNotNull { sources.getOrNull(it)?.id }.forEach { if (it !in ids) ids += it }
     // 卡片的代號查報價確認（查得到才算確認，並帶上現價與名稱）
     val quotes = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(reply.cards.map { Market.TW to it.symbol }) }
         .getOrDefault(emptyList()).associateBy { it.key }

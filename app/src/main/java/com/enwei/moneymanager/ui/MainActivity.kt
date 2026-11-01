@@ -281,6 +281,14 @@ private fun AppScaffold(nav: NavHostController) {
             composable("config") { ConfigScreen(nav) }
             composable("tool-order") { ToolSettingsScreen(nav) }
             composable("ai-hub") { AiHubScreen(nav) }
+            // 股票搜尋：名稱或代號
+            composable("stocksearch") {
+                androidx.compose.material3.Scaffold(topBar = { com.enwei.moneymanager.ui.components.BackTopBar("搜尋股票", { nav.popBackStack() }) }) { pad ->
+                    androidx.compose.foundation.layout.Box(Modifier.padding(pad).padding(16.dp)) {
+                        com.enwei.moneymanager.ui.components.StockSearch({ s -> nav.navigate("stock/${s.code}") }, maxHeight = 2000.dp)
+                    }
+                }
+            }
             composable("totalstats") { TotalStatsScreen(nav) }
             composable("accountorder") { AccountOrderScreen(nav) }
             composable("acct/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->

@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -157,8 +158,9 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     if (showBack) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
                 },
                 actions = {
-                  if (section == 2) Unit
+                  if (section == 2) IconButton(onClick = { nav.navigate("stocksearch") }) { Icon(Icons.Outlined.Search, "搜尋股票") }
                   else if (section == 1) {
+                    IconButton(onClick = { nav.navigate("stocksearch") }) { Icon(Icons.Outlined.Search, "搜尋股票") }
                     IconButton(onClick = { refreshTick++ }) { Icon(Icons.Filled.Refresh, "更新股價") }
                     IconButton(onClick = { nav.navigate("stockfees") }) { Icon(Icons.Outlined.Settings, "手續費與月退") }
                     IconButton(onClick = { nav.navigate("trade/0") }) { Icon(Icons.Filled.Add, "新增股票交易") }
