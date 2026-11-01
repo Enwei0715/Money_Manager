@@ -116,11 +116,11 @@ fun ChartFilterPage(
         all.filter { it.status == TxnStatus.CONFIRMED && ChartFilter(month).inPeriod(it, startDay) }
     }
     fun conv(t: TxnEntity) = lk.fx.convert(t.amount, t.currency)
-    val totalIncome = inPeriod.filter { it.type == TxnType.INCOME }.sumOf(::conv)
-    val totalExpense = inPeriod.filter { it.type == TxnType.EXPENSE }.sumOf(::conv)
+    val totalIncome = inPeriod.filter { it.type == TxnType.INCOME }.sumOf { conv(it) }
+    val totalExpense = inPeriod.filter { it.type == TxnType.EXPENSE }.sumOf { conv(it) }
     val matched = inPeriod.filter { draft.active && draft.matches(it, lk) }
-    val selIncome = matched.filter { it.type == TxnType.INCOME }.sumOf(::conv)
-    val selExpense = matched.filter { it.type == TxnType.EXPENSE }.sumOf(::conv)
+    val selIncome = matched.filter { it.type == TxnType.INCOME }.sumOf { conv(it) }
+    val selExpense = matched.filter { it.type == TxnType.EXPENSE }.sumOf { conv(it) }
     val gray = MaterialTheme.colorScheme.onSurfaceVariant
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
@@ -177,7 +177,7 @@ fun ChartFilterPage(
                 fun set(v: Set<Long>) { if (tab == 0) incomeSel = v else expenseSel = v }
                 // 大分類（子分類合計進來），依金額排序；沒有分類的交易算「未分類」
                 val byCat = inPeriod.filter { it.type == type }.groupBy { lk.rootId(it.categoryId) ?: 0L }
-                    .mapValues { (_, l) -> l.sumOf(::conv) }.entries.sortedByDescending { it.value }
+                    .mapValues { (_, l) -> l.sumOf { conv(it) } }.entries.sortedByDescending { it.value }
                 val ids = (byCat.map { it.key } + lk.categories.filter { it.kind == type && it.parentId == null && !it.archived }.map { it.id }).distinct()
                 val amounts = byCat.associate { it.key to it.value }
                 FilterHeader(sel.size == ids.size && ids.isNotEmpty(), { set(if (it) ids.toSet() else emptySet()) }) {
@@ -210,11 +210,11 @@ fun ChartFilterPage(
                                 modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, top = 10.dp, bottom = 4.dp))
                         }
                         items(group, key = { "a${it.id}" }) { a ->
-                            val inc = inPeriod.filter { it.type == TxnType.INCOME && it.accountId == a.id }.sumOf(::conv)
-                            val exp = inPeriod.filter { it.type == TxnType.EXPENSE && it.accountId == a.id }.sumOf(::conv)
+                            val inc = inPeriod.filter { it.type == TxnType.INCOME && it.accountId == a.id }.sumOf { conv(it) }
+                            val exp = inPeriod.filter { it.type == TxnType.EXPENSE && it.accountId == a.id }.sumOf { conv(it) }
                             val tIn = inPeriod.filter { it.type == TxnType.TRANSFER && it.toAccountId == a.id }
                                 .sumOf { t -> lk.fx.convert(t.toAmount ?: t.amount, lk.account(t.toAccountId)?.currency ?: t.currency) }
-                            val tOut = inPeriod.filter { it.type == TxnType.TRANSFER && it.accountId == a.id }.sumOf(::conv)
+                            val tOut = inPeriod.filter { it.type == TxnType.TRANSFER && it.accountId == a.id }.sumOf { conv(it) }
                             FilterRow(a.name, a.id in accSel, { accSel = if (it) accSel + a.id else accSel - a.id }) {
                                 if (inc + exp + tIn + tOut > 0) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Column(horizontalAlignment = Alignment.End) {
