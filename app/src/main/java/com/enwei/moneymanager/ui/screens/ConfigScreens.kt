@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.data.spendingReview
+import com.enwei.moneymanager.data.budgetSuggestions
 import com.enwei.moneymanager.data.TxnType
 import com.enwei.moneymanager.data.hashPasscode
 import com.enwei.moneymanager.net.FxService
@@ -348,12 +349,23 @@ fun BudgetScreen(nav: NavController) {
         val used = if (id == 0L) d.expense else d.categories.find { it.id == id }?.amount ?: 0L
         val pct = used.toFloat() / cap.coerceAtLeast(1)
         val col = when { pct >= 1f -> MaterialTheme.colorScheme.error; pct >= 0.8f -> Color(0xFFFFA000); else -> MaterialTheme.colorScheme.primary }
-        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp)) {
             Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
                 Box(Modifier.fillMaxWidth(pct.coerceIn(0f, 1f)).height(6.dp).background(col, RoundedCornerShape(3.dp)))
             }
             Text("這個月已用 ${Money.withSymbol(used, lk.base)} / ${Money.withSymbol(cap, lk.base)}（${(pct * 100).toInt()}%）", fontSize = 11.sp, color = col)
         }
+    }
+    // 建議值：前三個月的平均月支出
+    var suggest by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
+    LaunchedEffect(Unit) { suggest = runCatching { repo.budgetSuggestions() }.getOrDefault(emptyMap()) }
+    @Composable
+    fun hint(id: Long) {
+        val v = suggest[id] ?: return
+        if (s.budgets.containsKey(id)) Text("前三個月平均 ${Money.withSymbol(v, lk.base)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, bottom = 6.dp))
+        else Text("前三個月平均 ${Money.withSymbol(v, lk.base)}・點這裡帶入", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { set(id, Money.fromMinor(v).stripTrailingZeros().toPlainString()) }.padding(start = 16.dp, bottom = 6.dp))
     }
     Scaffold(containerColor = MaterialTheme.colorScheme.surface, topBar = { BackTopBar("預算設定", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad)) {
@@ -366,10 +378,16 @@ fun BudgetScreen(nav: NavController) {
                 }
                 FormLine("總預算") { FormInput(fields.value[0L].orEmpty(), { set(0L, it) }, "0", number = true) }
                 usage(0L)
+                hint(0L)
+                if (suggest.isNotEmpty()) TextButton(onClick = {
+                    // 只填還沒設定的項目，已設定的不動
+                    suggest.forEach { (id, v) -> if (!s.budgets.containsKey(id) && (id == 0L || v >= 50_000)) set(id, Money.fromMinor(v).stripTrailingZeros().toPlainString()) }
+                }, modifier = Modifier.padding(start = 8.dp)) { Text("依前三個月平均，填入還沒設定的預算") }
             }
             items(lk.categories.filter { it.kind == TxnType.EXPENSE && !it.archived && it.parentId == null }, key = { it.id }) { c ->
                 FormLine(c.name) { FormInput(fields.value[c.id].orEmpty(), { set(c.id, it) }, "", number = true) }
                 usage(c.id)
+                hint(c.id)
             }
             item { Spacer(Modifier.height(32.dp)) }
         }

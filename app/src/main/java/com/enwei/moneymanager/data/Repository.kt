@@ -204,6 +204,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val r = db.txns().upsert(t)
         if (t.status == TxnStatus.CONFIRMED) learnMerchant(t)
         if (before?.status == TxnStatus.PENDING && t.status == TxnStatus.CONFIRMED) learnFromConfirmed(t)
+        // 預算跨過 80%／100% 時提醒
+        if (before == null || before.status != TxnStatus.CONFIRMED || before.amount != t.amount || before.categoryId != t.categoryId)
+            runCatching { checkBudgetAlert(t) }
         return if (t.id == 0L) r else t.id
     }
 

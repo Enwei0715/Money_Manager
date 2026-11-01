@@ -232,6 +232,8 @@ data class AppSettings(
     val budgets: Map<Long, Long> = emptyMap(),
     /** 儲蓄率目標（%）；null 為不設定 */
     val savingsGoal: Double? = null,
+    /** 已發過的預算提醒（「月份:分類:門檻」） */
+    val budgetAlerted: Set<String> = emptySet(),
     /** 通知來源 App → 記入的帳戶 */
     val notifAccountMap: Map<String, Long> = emptyMap(),
     /** 讀取交易紀錄畫面的錢包 App */
@@ -465,6 +467,7 @@ class SettingsStore(context: Context) {
         memos = runCatching { json.decodeFromString(memoSerializer, prefs.getString("memos", "[]")!!) }.getOrDefault(emptyList()),
         budgets = runCatching { json.decodeFromString(budgetSerializer, prefs.getString("budgets", "{}")!!) }.getOrDefault(emptyMap()),
         savingsGoal = prefs.getFloat("savingsGoal", -1f).takeIf { it >= 0f }?.toDouble(),
+        budgetAlerted = prefs.getStringSet("budgetAlerted", emptySet()).orEmpty().toSet(),
         notifAccountMap = runCatching { json.decodeFromString(pkgMapSerializer, prefs.getString("notifAccountMap", "{}")!!) }.getOrDefault(emptyMap()),
         screenPackages = prefs.getStringSet("screenPackages", emptySet())!!.toSet(),
         screenReadSince = runCatching { json.decodeFromString(pkgMapSerializer, prefs.getString("screenReadSince", "{}")!!) }.getOrDefault(emptyMap()),
@@ -633,6 +636,7 @@ class SettingsStore(context: Context) {
             .putString("memos", json.encodeToString(memoSerializer, s.memos))
             .putString("budgets", json.encodeToString(budgetSerializer, s.budgets))
             .putFloat("savingsGoal", s.savingsGoal?.toFloat() ?: -1f)
+            .putStringSet("budgetAlerted", s.budgetAlerted)
             .putString("notifAccountMap", json.encodeToString(pkgMapSerializer, s.notifAccountMap))
             .putStringSet("screenPackages", s.screenPackages)
             .putString("screenReadSince", json.encodeToString(pkgMapSerializer, s.screenReadSince))

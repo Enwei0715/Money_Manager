@@ -89,6 +89,7 @@ import com.enwei.moneymanager.data.AccountEntity
 import com.enwei.moneymanager.data.TxnEntity
 import com.enwei.moneymanager.data.TxnSource
 import com.enwei.moneymanager.data.TxnStatus
+import com.enwei.moneymanager.data.budgetUse
 import com.enwei.moneymanager.data.TxnType
 import com.enwei.moneymanager.data.toLocalDate
 import com.enwei.moneymanager.ui.ExpenseColor
@@ -188,6 +189,13 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         val sg = repo.suggestCategory(merchant.ifBlank { null }, type, System.currentTimeMillis(), amountMinor ?: 0, accountId)
         catSuggest = sg
         if (sg != null && id == 0L && (categoryId == null || catAuto)) { categoryId = sg.categoryId; catAuto = true }
+    }
+
+    // 預算：選了分類後顯示這個月這個大分類（與總預算）還剩多少、記這筆之後剩多少
+    var budget by remember { mutableStateOf<List<com.enwei.moneymanager.data.BudgetUse>>(emptyList()) }
+    LaunchedEffect(categoryId, type, date, settings.budgets) {
+        budget = if (type != TxnType.EXPENSE || settings.budgets.isEmpty()) emptyList()
+        else runCatching { repo.budgetUse(categoryId, date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(), excludeId = original?.id) }.getOrDefault(emptyList())
     }
 
     // 依金額推測：過去同類型、金額相近的交易（同時段、最近、同帳戶加分），推測分類與內容
@@ -374,6 +382,24 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 } else {
                     FormRow("分類", color, panel == Panel.CATEGORY, onClick = { focusManager.clearFocus(); panel = Panel.CATEGORY }) {
                         PlaceholderText(lk.catLabel(categoryId), "")
+                    }
+                    // 預算提醒：這個月還剩多少、記這筆之後剩多少（超過時紅色）
+                    budget.forEach { u ->
+                        val add = if (currency == lk.base) (amountMinor ?: 0) else lk.fx.convert(amountMinor ?: 0, currency)
+                        val after = u.left - add
+                        val pctAfter = ((u.used + add) * 100 / u.cap.coerceAtLeast(1)).toInt()
+                        val col = when { after < 0 -> MaterialTheme.colorScheme.error; pctAfter >= 80 -> Color(0xFFFFA000); else -> MaterialTheme.colorScheme.onSurfaceVariant }
+                        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 4.dp)) {
+                            Text(
+                                "${u.name} 預算：本月剩 ${Money.withSymbol(u.left, lk.base)}" +
+                                    (if (add > 0) "，記這筆後" + (if (after >= 0) "剩 ${Money.withSymbol(after, lk.base)}" else "超出 ${Money.withSymbol(-after, lk.base)}") else "") +
+                                    "（$pctAfter%）",
+                                fontSize = 12.sp, color = col,
+                            )
+                            Box(Modifier.fillMaxWidth().padding(top = 2.dp).height(4.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(2.dp))) {
+                                Box(Modifier.fillMaxWidth((pctAfter / 100f).coerceIn(0f, 1f)).height(4.dp).background(if (after < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
+                            }
+                        }
                     }
                     FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
                         PlaceholderText(lk.account(accountId)?.name, "")

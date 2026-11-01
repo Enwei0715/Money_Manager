@@ -8,6 +8,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
 import com.enwei.moneymanager.MoneyApp
+import com.enwei.moneymanager.data.budgetUse
 import com.enwei.moneymanager.R
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.data.TxnType
@@ -72,7 +73,11 @@ object QuickActions {
             tr("帳戶") + "：" + account,
             t.merchant?.takeIf { it.isNotBlank() }?.let { tr("內容") + "：" + it },
             t.note?.takeIf { it.isNotBlank() }?.let { tr("說明") + "：" + it },
-        )
+        ) + runCatching { repo.budgetUse(t.categoryId, t.date) }.getOrDefault(emptyList()).take(1).map { u ->
+            tr("預算") + "：" + u.name + " " + tr("已用") + " ${u.pct}%" +
+                if (u.left >= 0) "，" + tr("剩") + " " + Money.withSymbol(u.left, repo.settings.value.baseCurrency)
+                else "，" + tr("超出") + " " + Money.withSymbol(-u.left, repo.settings.value.baseCurrency)
+        }
         b.setContentTitle("${tr(t.type.label)} $amount · " + tr(if (pending) "待確認" else "已自動記帳"))
             .setContentText(listOfNotNull(t.merchant?.takeIf { it.isNotBlank() }, cat?.let(::tr), account).joinToString(" · "))
             .setStyle(NotificationCompat.BigTextStyle().bigText(lines.joinToString("\n")))
