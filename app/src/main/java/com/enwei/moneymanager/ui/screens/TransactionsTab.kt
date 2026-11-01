@@ -75,6 +75,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.DisposableEffect
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -160,6 +163,14 @@ private fun inRange(d: LocalDate, r: Pair<LocalDate, LocalDate>) = !d.isBefore(r
 private val subTabs = listOf("每日", "日曆", "檢討")
 private val NavyHighlight = Color(0xFF3F4570)
 
+/** 交易列表的多選：長按一筆開始選取，之後點一下切換；[enabled] 由交易頁的「每日」開啟。 */
+object TxnSelect {
+    var enabled by mutableStateOf(false)
+    var ids by mutableStateOf(setOf<Long>())
+    val active get() = enabled && ids.isNotEmpty()
+    fun toggle(id: Long) { ids = if (id in ids) ids - id else ids + id }
+}
+
 @Composable
 fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     val lk = rememberLookups()
@@ -200,10 +211,30 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     val base = totalsOf(inPeriod, lk.fx)
     val totals = base
 
+    // 多選只在「每日」使用；離開這頁或換分頁時清除
+    DisposableEffect(tab) {
+        TxnSelect.enabled = tab == 0
+        onDispose { TxnSelect.enabled = false; TxnSelect.ids = emptySet() }
+    }
+    BackHandler(enabled = TxnSelect.active) { TxnSelect.ids = emptySet() }
+    val scope = rememberCoroutineScope()
+    var batchCat by remember { mutableStateOf(false) }
+    var batchAcc by remember { mutableStateOf(false) }
+    var batchDelete by remember { mutableStateOf(false) }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
+            if (TxnSelect.active) TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                navigationIcon = { IconButton(onClick = { TxnSelect.ids = emptySet() }) { Icon(Icons.Filled.Close, "取消選取") } },
+                title = { Text("已選 ${TxnSelect.ids.size} 筆", fontSize = 16.sp) },
+                actions = {
+                    TextButton(onClick = { TxnSelect.ids = inPeriod.map { it.id }.toSet() }) { Text("全選") }
+                    TextButton(onClick = { batchCat = true }) { Text("分類") }
+                    TextButton(onClick = { batchAcc = true }) { Text("帳戶") }
+                    TextButton(onClick = { batchDelete = true }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
+                },
+            ) else TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(x = (-12).dp)) {
@@ -298,6 +329,57 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         }
     }
     memoEditing?.let { m -> MemoDialog(m) { memoEditing = null } }
+    // 批次操作
+    val chosen = all.filter { it.id in TxnSelect.ids }
+    if (batchDelete) AlertDialog(
+        onDismissRequest = { batchDelete = false },
+        title = { Text("刪除 ${chosen.size} 筆交易？") },
+        text = { Text("合計 ${Money.full(chosen.sumOf { lk.fx.convert(it.amount, it.currency) })}，刪除後無法復原。") },
+        confirmButton = {
+            TextButton(onClick = {
+                val ids = chosen.map { it.id }
+                scope.launch { ids.forEach { repo.deleteTxn(it) } }
+                TxnSelect.ids = emptySet(); batchDelete = false
+            }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(onClick = { batchDelete = false }) { Text("取消") } },
+    )
+    if (batchCat) {
+        // 只列和選取交易同類型的分類（都是支出或都是收入）
+        val kinds = chosen.map { it.type }.filter { it != TxnType.TRANSFER }.distinct()
+        AlertDialog(
+            onDismissRequest = { batchCat = false },
+            title = { Text("改成哪個分類？") },
+            text = {
+                if (kinds.size != 1) Text("選取的交易要都是支出或都是收入（轉帳沒有分類）。")
+                else androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    items(lk.categories.filter { it.kind == kinds.first() && !it.archived }.sortedBy { lk.catLabel(it.id) }, key = { it.id }) { c ->
+                        Text(lk.catLabel(c.id) ?: c.name, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().clickable {
+                            val list = chosen.filter { it.type == kinds.first() }
+                            scope.launch { list.forEach { repo.saveTxn(it.copy(categoryId = c.id)) } }
+                            TxnSelect.ids = emptySet(); batchCat = false
+                        }.padding(vertical = 10.dp))
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { batchCat = false }) { Text("取消") } },
+        )
+    }
+    if (batchAcc) AlertDialog(
+        onDismissRequest = { batchAcc = false },
+        title = { Text("改成哪個帳戶？") },
+        text = {
+            androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                items(lk.accounts.filter { !it.archived }, key = { it.id }) { a ->
+                    Text(a.name, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().clickable {
+                        scope.launch { chosen.forEach { repo.saveTxn(it.copy(accountId = a.id)) } }
+                        TxnSelect.ids = emptySet(); batchAcc = false
+                    }.padding(vertical = 10.dp))
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { batchAcc = false }) { Text("取消") } },
+    )
 }
 
 @Composable
@@ -485,6 +567,7 @@ fun TradeRow(tr: com.enwei.moneymanager.data.StockTradeEntity, lk: Lookups, acco
 }
 
 /** 一筆交易：左分類、中內容與帳戶、右金額。 */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () -> Unit) {
     val cat = lk.category(t.categoryId)
@@ -494,8 +577,16 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
     val color = when (t.type) { TxnType.INCOME -> IncomeColor; TxnType.EXPENSE -> ExpenseColor; TxnType.TRANSFER -> MaterialTheme.colorScheme.onSurface }
     val title = t.merchant?.takeIf { it.isNotBlank() }
     val accountText = if (t.type == TxnType.TRANSFER) "${acc?.name ?: "?"} → ${lk.account(t.toAccountId)?.name ?: "?"}" else acc?.name.orEmpty()
+    val selecting = TxnSelect.active
+    val picked = selecting && t.id in TxnSelect.ids
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
+        Modifier.fillMaxWidth()
+            .background(if (picked) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .combinedClickable(
+                onClick = { if (selecting) TxnSelect.toggle(t.id) else onClick() },
+                onLongClick = if (TxnSelect.enabled) ({ TxnSelect.toggle(t.id) }) else null,
+            )
+            .padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.width(80.dp)) {

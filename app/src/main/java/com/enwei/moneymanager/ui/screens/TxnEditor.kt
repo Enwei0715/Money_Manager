@@ -190,6 +190,37 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         if (sg != null && id == 0L && (categoryId == null || catAuto)) { categoryId = sg.categoryId; catAuto = true }
     }
 
+    // 依金額推測：過去同類型、金額相近的交易（同時段、最近、同帳戶加分），推測分類與內容
+    var merchantAuto by remember { mutableStateOf(false) }
+    data class Guess(val categoryId: Long, val merchant: String?, val score: Double, val count: Int)
+    val guesses = remember(amountMinor, type, history, accountId) {
+        val amt = amountMinor
+        if (amt == null || type == TxnType.TRANSFER || id != 0L) emptyList() else {
+            val hourNow = LocalTime.now().hour
+            val now = System.currentTimeMillis()
+            history.asSequence()
+                .filter { it.type == type && it.categoryId != null && it.status == TxnStatus.CONFIRMED && now - it.date < 365L * 86_400_000 }
+                .filter { kotlin.math.abs(it.amount - amt) <= maxOf(amt / 10, 100) }
+                .groupBy { it.categoryId!! to it.merchant?.trim()?.ifBlank { null } }
+                .map { (k, l) ->
+                    val score = l.sumOf { t ->
+                        val h = Instant.ofEpochMilli(t.date).atZone(ZoneId.systemDefault()).hour
+                        val dh = minOf(kotlin.math.abs(h - hourNow), 24 - kotlin.math.abs(h - hourNow))
+                        1.0 + (if (t.amount == amt) 2.0 else 0.0) + (if (dh <= 2) 1.5 else 0.0) +
+                            (if (t.accountId == accountId) 1.0 else 0.0) + (if (now - t.date < 60L * 86_400_000) 1.0 else 0.0)
+                    }
+                    Guess(k.first, k.second, score, l.size)
+                }
+                .sortedByDescending { it.score }.take(3)
+        }
+    }
+    // 還沒選分類、內容還沒填時，直接帶入最可能的一組（之後手動改就不再覆蓋）
+    LaunchedEffect(guesses) {
+        val g = guesses.firstOrNull() ?: return@LaunchedEffect
+        if (categoryId == null || catAuto) { categoryId = g.categoryId; catAuto = true }
+        if (g.merchant != null && (merchant.isBlank() || merchantAuto)) { merchant = g.merchant; merchantAuto = true }
+    }
+
     fun build(): TxnEntity? {
         val minor = amountMinor ?: return null
         val base = original ?: TxnEntity(type = type, amount = 0, date = 0)
@@ -305,6 +336,22 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         }
                     }
                 }
+                // 依金額推測的分類與內容：點一下套用
+                if (guesses.isNotEmpty()) Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("猜你是", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    guesses.forEach { g ->
+                        val sel = categoryId == g.categoryId && (g.merchant == null || merchant == g.merchant)
+                        androidx.compose.material3.FilterChip(sel, {
+                            categoryId = g.categoryId; catAuto = false
+                            if (g.merchant != null) { merchant = g.merchant; merchantAuto = false }
+                        }, label = {
+                            Text(listOfNotNull(g.merchant, lk.catLabel(g.categoryId)).joinToString(" · ") + "（${g.count} 次）", fontSize = 12.sp, maxLines = 1)
+                        })
+                    }
+                }
                 if (type == TxnType.TRANSFER && showFee) {
                     FormRow("手續費", color, panel == Panel.FEE, onClick = { focusManager.clearFocus(); panel = Panel.FEE }) {
                         Text(feeExpr, fontSize = 14.sp)
@@ -334,7 +381,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
 
                 }
                 FormRow("內容", color, merchantFocused, onClick = {}) {
-                    UnderlineField(merchant, { merchant = it }, "",
+                    UnderlineField(merchant, { merchant = it; merchantAuto = false }, "",
                         Modifier.onFocusChanged { merchantFocused = it.isFocused; if (it.isFocused) panel = Panel.NONE })
                 }
                 // 自動完成：依過去紀錄建議，點選時一併帶入分類與帳戶
