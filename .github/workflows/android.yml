@@ -73,7 +73,9 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           if [ -n "$SECRET_KEYSTORE_PASSWORD" ]; then export KEYSTORE_PASSWORD="$SECRET_KEYSTORE_PASSWORD"; fi
-          ./gradlew :app:assembleGithubRelease :app:bundlePlayRelease --no-daemon
+          # 兩個版本分開建置：同時建置時會一起寫 Room 的 schema 檔而互相干擾
+          ./gradlew :app:assembleGithubRelease --no-daemon
+          ./gradlew :app:bundlePlayRelease --no-daemon
 
       - name: Rename APK
         run: |

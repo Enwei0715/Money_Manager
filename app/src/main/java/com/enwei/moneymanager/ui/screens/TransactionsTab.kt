@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -234,7 +235,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         },
         floatingActionButton = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (tab < 2) FloatingActionButton(
+                // 日曆不放＋按鈕（會擋住日期格）：改成長按日期記帳
+                if (tab == 0) FloatingActionButton(
                     onClick = { nav.navigate("txn/0") }, shape = CircleShape, modifier = Modifier.size(64.dp),
                     containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White,
                 ) { Icon(Icons.Filled.Add, "記一筆", modifier = Modifier.size(32.dp)) }
@@ -273,8 +275,9 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     memos = settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }
                 1 -> Column(Modifier.fillMaxSize()) {
                     // 月／季／年切換
-                    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 4.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(2.dp)) {
+                    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.weight(1f).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(2.dp)) {
                         listOf("月", "季", "年").forEachIndexed { i, l ->
                             val sel = calSpan == i
                             Box(
@@ -283,6 +286,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                                 contentAlignment = Alignment.Center,
                             ) { Text(l, fontSize = 12.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
                         }
+                    }
+                    Text("長按日期記一筆", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp))
                     }
                     when (calSpan) {
                         0 -> CalendarView(range, all, accounts, settings, lk, nav, DayOfWeek.of(settings.weekStartDay), carry, settings.memos) { memoEditing = it }
@@ -523,6 +528,7 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
 
 // ---------------- 日曆 ----------------
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun CalendarView(
     range: Pair<LocalDate, LocalDate>, all: List<TxnEntity>, accounts: List<AccountEntity>, settings: AppSettings,
@@ -630,7 +636,8 @@ private fun CalendarView(
                         Modifier.weight(1f).fillMaxHeight().then(if (fit) Modifier.clipToBounds() else Modifier.heightIn(min = cellMin))
                             .background(if (inMonth) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.background)
                             .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
-                            .clickable { sheetDay = date }
+                            // 點一下看當天明細；長按直接在這天記一筆
+                            .combinedClickable(onClick = { sheetDay = date }, onLongClick = { nav.navigate("txn/0?date=${date.toEpochDay()}") })
                             .padding(bottom = 3.dp),
                     ) {
                         // 日期（每月 1 號顯示「月.1」）；今天反白
