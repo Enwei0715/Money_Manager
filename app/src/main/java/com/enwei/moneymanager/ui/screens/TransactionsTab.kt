@@ -79,6 +79,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
@@ -174,9 +175,13 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     // 「檢討」分頁的期間（月／季／年）：上方的期間切換直接控制檢討，不在下方再放一組
     var reviewSpan by rememberSaveable { mutableStateOf(com.enwei.moneymanager.data.ReviewSpan.MONTH) }
     val yearly = false
+    // 日曆的範圍：0 月、1 季、2 年
+    var calSpan by rememberSaveable { mutableStateOf(0) }
     fun step(n: Long) {
         month = when {
             yearly -> month.plusYears(n)
+            tab == 1 && calSpan == 1 -> month.plusMonths(3 * n)
+            tab == 1 && calSpan == 2 -> month.plusYears(n)
             tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.QUARTER -> month.plusMonths(3 * n)
             tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> month.plusYears(n)
             else -> month.plusMonths(n)
@@ -184,8 +189,12 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     }
     val startDay = settings.monthStartDay
 
-    val range = if (yearly) Periods.month(YearMonth.of(month.year, 1), startDay).first to Periods.month(YearMonth.of(month.year, 12), startDay).second
-    else Periods.month(month, startDay)
+    val quarterStart = YearMonth.of(month.year, (month.monthValue - 1) / 3 * 3 + 1)
+    val range = when {
+        yearly || (tab == 1 && calSpan == 2) -> Periods.month(YearMonth.of(month.year, 1), startDay).first to Periods.month(YearMonth.of(month.year, 12), startDay).second
+        tab == 1 && calSpan == 1 -> Periods.month(quarterStart, startDay).first to Periods.month(quarterStart.plusMonths(2), startDay).second
+        else -> Periods.month(month, startDay)
+    }
     val inPeriod = remember(all, range) { all.filter { inRange(it.date.toLocalDate(), range) } }
 
     // 不做「上期結轉」：每期只看這期的收支，帳戶餘額本來就會延續
@@ -204,6 +213,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         Text(
                             when {
                                 yearly -> "${month.year}"
+                                tab == 1 && calSpan == 1 -> "${month.year}年Q${(month.monthValue - 1) / 3 + 1}"
+                                tab == 1 && calSpan == 2 -> "${month.year}年"
                                 tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.QUARTER -> "${month.year}年Q${(month.monthValue - 1) / 3 + 1}"
                                 tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> "${month.year}年"
                                 else -> "${month.year}年${month.monthValue}月"
@@ -260,7 +271,25 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
             when (tab) {
                 0 -> DailyView(inPeriod, lk, nav, range, carry, recurring, trades.filter { inRange(LocalDate.ofEpochDay(it.date), range) },
                     memos = settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }
-                1 -> CalendarView(range, all, accounts, settings, lk, nav, DayOfWeek.of(settings.weekStartDay), carry, settings.memos) { memoEditing = it }
+                1 -> Column(Modifier.fillMaxSize()) {
+                    // 月／季／年切換
+                    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 4.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(2.dp)) {
+                        listOf("月", "季", "年").forEachIndexed { i, l ->
+                            val sel = calSpan == i
+                            Box(
+                                Modifier.weight(1f).background(if (sel) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(6.dp))
+                                    .clickable { calSpan = i }.padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center,
+                            ) { Text(l, fontSize = 12.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
+                        }
+                    }
+                    when (calSpan) {
+                        0 -> CalendarView(range, all, accounts, settings, lk, nav, DayOfWeek.of(settings.weekStartDay), carry, settings.memos) { memoEditing = it }
+                        1 -> QuarterCalendar(quarterStart, all, lk, startDay, DayOfWeek.of(settings.weekStartDay)) { ym -> month = ym; calSpan = 0 }
+                        else -> YearCalendar(month.year, all, lk, startDay) { ym -> month = ym; calSpan = 0 }
+                    }
+                }
                 // 收支檢討（月、季、年；AI 逐筆檢查並提問）
                 else -> ReviewContent(nav, reviewSpan to month) { reviewSpan = it }
             }
@@ -396,12 +425,16 @@ fun DayBlock(
             memos.sortedWith(compareByDescending<Memo> { it.pinned }.thenBy { it.id }).forEach { m -> MemoLine(m) { onMemo(m) } }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
+        // 交易之間加細分隔線，左邊的分類、中間內容與右邊金額比較好對齊
+        val divider = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+        var first = true
+        @Composable fun sep() { if (!first) HorizontalDivider(Modifier.padding(start = 14.dp), thickness = 0.5.dp, color = divider); first = false }
         if (ledger != null) ledger.forEach { e ->
-            e.txn?.let { MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
-            e.trade?.let { tr -> TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
+            e.txn?.let { sep(); MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
+            e.trade?.let { tr -> sep(); TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
         } else {
-            txns.sortedByDescending { it.date }.forEach { MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
-            trades.sortedByDescending { it.id }.forEach { tr -> TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
+            txns.sortedByDescending { it.date }.forEach { sep(); MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
+            trades.sortedByDescending { it.id }.forEach { tr -> sep(); TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
@@ -547,9 +580,11 @@ private fun CalendarView(
 
     // 格子高度依畫面平均分配：整個月剛好填滿畫面，下方不留大片空白（內容多的週會再自動加高）
     BoxWithConstraints(Modifier.fillMaxSize()) {
-    val headerH = if (settings.calendarDots) 44.dp else 28.dp
+    val headerH = if (settings.calendarDots) 46.dp else 30.dp
     val cellMin = ((maxHeight - headerH) / weeks).coerceAtLeast(60.dp)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).background(MaterialTheme.colorScheme.surface)) {
+    // 每週平分剩下的高度，整個月剛好放滿、不用上下滑；畫面太矮（每格不到 64dp）時才改成可捲動
+    val fit = (maxHeight - headerH) / weeks >= 64.dp
+    Column(Modifier.fillMaxSize().then(if (fit) Modifier else Modifier.verticalScroll(rememberScrollState())).background(MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(vertical = 6.dp)) {
             headers.forEach { d ->
                 Text("週${Recurrence.weekdayName(d)}", Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 13.sp, color = weekdayColor(d, gray))
@@ -569,7 +604,7 @@ private fun CalendarView(
         }
         for (w in 0 until weeks) {
             // 一週一列：高度跟著這週內容最多的那格（日期、標示、最多三行金額），不寫死，日期不會被下方擋到
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            Row(Modifier.fillMaxWidth().then(if (fit) Modifier.weight(1f) else Modifier.height(IntrinsicSize.Min))) {
                 for (d in 0 until 7) {
                     val date = start.plusDays((w * 7 + d).toLong())
                     val inMonth = inRange(date, range)
@@ -592,7 +627,7 @@ private fun CalendarView(
                         }
                     }
                     Column(
-                        Modifier.weight(1f).fillMaxHeight().heightIn(min = cellMin)
+                        Modifier.weight(1f).fillMaxHeight().then(if (fit) Modifier.clipToBounds() else Modifier.heightIn(min = cellMin))
                             .background(if (inMonth) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.background)
                             .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
                             .clickable { sheetDay = date }
@@ -846,4 +881,141 @@ fun MemoDialog(memo: Memo, onSaved: () -> Unit = {}, onDismiss: () -> Unit) {
             }
         },
     )
+}
+
+
+/** 一天的支出（基準幣別）。 */
+private fun dailyExpense(all: List<TxnEntity>, lk: Lookups, from: LocalDate, to: LocalDate): Map<LocalDate, Long> =
+    all.asSequence().filter { it.type == TxnType.EXPENSE && it.status == com.enwei.moneymanager.data.TxnStatus.CONFIRMED }
+        .map { it.date.toLocalDate() to lk.fx.convert(it.amount, it.currency) }
+        .filter { (d, _) -> !d.isBefore(from) && !d.isAfter(to) }
+        .groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }
+
+/** 支出熱度：越紅花越多（0 為沒有支出）。 */
+@Composable
+private fun heatColor(v: Long, max: Long): Color =
+    if (v <= 0) Color.Transparent else ExpenseColor.copy(alpha = (0.12f + 0.6f * (v.toFloat() / max.coerceAtLeast(1))).coerceAtMost(0.72f))
+
+/**
+ * 季日曆：三個月的小日曆上下排，每天的底色表示當天支出多寡，格子裡有日期與支出金額；
+ * 每個月標題附收入、支出、合計，點月份或日期回到那個月的月曆。
+ */
+@Composable
+private fun QuarterCalendar(start: YearMonth, all: List<TxnEntity>, lk: Lookups, startDay: Int, weekStart: DayOfWeek, onMonth: (YearMonth) -> Unit) {
+    val months = (0L..2L).map { start.plusMonths(it) }
+    val first = Periods.month(months.first(), startDay).first
+    val last = Periods.month(months.last(), startDay).second
+    val daily = remember(all, first, last) { dailyExpense(all, lk, first, last) }
+    val max = daily.values.maxOrNull() ?: 1L
+    val today = LocalDate.now()
+    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+        months.forEach { ym ->
+            val r = Periods.month(ym, startDay)
+            item(key = "q$ym") {
+                val t = totalsOf(all.filter { inRange(it.date.toLocalDate(), r) }, lk.fx)
+                Column(Modifier.fillMaxWidth().clickable { onMonth(ym) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("${ym.monthValue}月", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text(Money.full(t.income), fontSize = 12.sp, color = IncomeColor)
+                        Text("  " + Money.full(t.expense), fontSize = 12.sp, color = ExpenseColor)
+                        Text("  " + Money.full(t.total), fontSize = 12.sp)
+                    }
+                    Row(Modifier.padding(top = 4.dp)) {
+                        (0 until 7).map { weekStart.plus(it.toLong()) }.forEach { d ->
+                            Text("週${Recurrence.weekdayName(d)}", Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 10.sp,
+                                color = weekdayColor(d, MaterialTheme.colorScheme.onSurfaceVariant))
+                        }
+                    }
+                    val gStart = r.first.with(TemporalAdjusters.previousOrSame(weekStart))
+                    val gEnd = r.second.with(TemporalAdjusters.nextOrSame(weekStart.minus(1)))
+                    val weeks = ((ChronoUnit.DAYS.between(gStart, gEnd) + 1) / 7).toInt()
+                    for (w in 0 until weeks) Row(Modifier.fillMaxWidth().height(40.dp)) {
+                        for (k in 0 until 7) {
+                            val d = gStart.plusDays((w * 7 + k).toLong())
+                            val inM = inRange(d, r)
+                            val v = if (inM) daily[d] ?: 0L else 0L
+                            Column(
+                                Modifier.weight(1f).fillMaxHeight().padding(1.dp)
+                                    .background(if (inM) heatColor(v, max) else Color.Transparent, RoundedCornerShape(4.dp))
+                                    .then(if (d == today) Modifier.border(1.dp, MaterialTheme.colorScheme.onSurface, RoundedCornerShape(4.dp)) else Modifier),
+                                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                            ) {
+                                if (inM) {
+                                    Text("${d.dayOfMonth}", fontSize = 11.sp, color = weekdayColor(d.dayOfWeek, MaterialTheme.colorScheme.onSurface))
+                                    if (v > 0) FitAmount(Money.full(v), MaterialTheme.colorScheme.onSurface)
+                                }
+                            }
+                        }
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
+        item { Spacer(Modifier.height(88.dp)) }
+    }
+}
+
+/**
+ * 年曆：12 個月的格子，每格有收入、支出、合計與每天支出的小熱度圖，點了進入該月月曆。
+ * 下方列出全年合計與支出最多的月份。
+ */
+@Composable
+private fun YearCalendar(year: Int, all: List<TxnEntity>, lk: Lookups, startDay: Int, onMonth: (YearMonth) -> Unit) {
+    val months = (1..12).map { YearMonth.of(year, it) }
+    val first = Periods.month(months.first(), startDay).first
+    val last = Periods.month(months.last(), startDay).second
+    val daily = remember(all, first, last) { dailyExpense(all, lk, first, last) }
+    val totals = remember(all, year, startDay) {
+        months.associateWith { ym -> val r = Periods.month(ym, startDay); totalsOf(all.filter { inRange(it.date.toLocalDate(), r) }, lk.fx) }
+    }
+    val max = daily.values.maxOrNull() ?: 1L
+    val now = YearMonth.now()
+    val year0 = totals.values.fold(0L) { a, t -> a + t.expense }
+    val income0 = totals.values.fold(0L) { a, t -> a + t.income }
+    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        val cellH = ((maxHeight - 40.dp) / 4).coerceAtLeast(110.dp)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 6.dp)) {
+            months.chunked(3).forEach { row ->
+                Row(Modifier.fillMaxWidth().height(cellH)) {
+                    row.forEach { ym ->
+                        val t = totals[ym]!!
+                        val r = Periods.month(ym, startDay)
+                        Column(
+                            Modifier.weight(1f).fillMaxHeight().padding(3.dp)
+                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                                .then(if (ym == now) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
+                                .clickable { onMonth(ym) }.padding(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(1.dp),
+                        ) {
+                            Text("${ym.monthValue}月", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            FitAmount(Money.full(t.income), IncomeColor)
+                            FitAmount(Money.full(t.expense), ExpenseColor)
+                            FitAmount(Money.full(t.total), MaterialTheme.colorScheme.onSurface)
+                            Spacer(Modifier.weight(1f))
+                            // 每天支出的小熱度圖（一格一天，7 天一行）
+                            val days = generateSequence(r.first) { it.plusDays(1) }.takeWhile { !it.isAfter(r.second) }.toList()
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                days.chunked(7).forEach { wk ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                                        wk.forEach { d ->
+                                            val v = daily[d] ?: 0L
+                                            Box(Modifier.weight(1f).height(4.dp).background(
+                                                if (v > 0) heatColor(v, max) else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(1.dp)))
+                                        }
+                                        repeat(7 - wk.size) { Spacer(Modifier.weight(1f)) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            val top = totals.maxByOrNull { it.value.expense }?.takeIf { it.value.expense > 0 }
+            Text(
+                "全年收入 ${Money.full(income0)}　支出 ${Money.full(year0)}" + (top?.let { "　支出最多：${it.key.monthValue}月" } ?: ""),
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp),
+            )
+            Spacer(Modifier.height(80.dp))
+        }
+    }
 }
