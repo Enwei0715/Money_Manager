@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
@@ -234,7 +235,7 @@ private fun AppScaffold(nav: NavHostController) {
     // 只有分頁的最上層才顯示底部分頁列；從其他畫面疊上來的（例如記帳時開「帳戶」）不顯示，避免按分頁把正在編輯的內容丟掉
     // 鍵盤打開時收起底部分頁列（否則輸入框和鍵盤之間會留一大塊空白）
     @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-    val imeOpen = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+    val imeOpen = WindowInsets.isImeVisible
     val showBar = !imeOpen && tabs.any { it.route == current } &&
         nav.previousBackStackEntry?.destination?.route.let { prev -> prev == null || tabs.any { it.route == prev } }
     val startScreen = remember { MoneyApp.repo.settings.value.startScreen }
