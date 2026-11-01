@@ -55,6 +55,8 @@ import com.enwei.moneymanager.data.AccountType
 import com.enwei.moneymanager.data.TxnEntity
 import com.enwei.moneymanager.data.TxnStatus
 import com.enwei.moneymanager.data.TxnType
+import com.enwei.moneymanager.data.groupLabel
+import com.enwei.moneymanager.data.groupOrder
 import com.enwei.moneymanager.ui.ExpenseColor
 import com.enwei.moneymanager.ui.IncomeColor
 import com.enwei.moneymanager.ui.components.Text
@@ -64,7 +66,7 @@ import java.time.ZoneId
 
 /**
  * 搜尋的圖表勾選篩選：期間（月份或全部）＋勾選的收入分類、支出分類、帳戶。
- * 分類以大分類比對（子分類算在大分類裡）；不同分頁的條件同時成立才算符合。
+ * 分類可勾大分類（含所有子分類）或個別子分類；不同分頁的條件同時成立才算符合。
  */
 data class ChartFilter(
     val month: YearMonth? = null,
@@ -85,14 +87,14 @@ data class ChartFilter(
     /** 符合勾選的分類與帳戶（不含期間）。 */
     fun matches(t: TxnEntity, lk: Lookups): Boolean {
         val cats = incomeCats + expenseCats
-        val catOk = cats.isEmpty() || (t.type != TxnType.TRANSFER && (lk.rootId(t.categoryId) ?: 0L) in cats)
+        val catOk = cats.isEmpty() || (t.type != TxnType.TRANSFER && ((lk.rootId(t.categoryId) ?: 0L) in cats || (t.categoryId != null && t.categoryId in cats)))
         val accOk = accounts.isEmpty() || t.accountId in accounts || t.toAccountId in accounts
         return catOk && accOk
     }
 
     /** 底部列顯示的已選項目名稱。 */
     fun label(lk: Lookups): String = (
-        incomeCats.map { lk.category(it)?.name ?: "未分類" } + expenseCats.map { lk.category(it)?.name ?: "未分類" } +
+        (incomeCats + expenseCats).map { lk.category(it)?.name ?: "未分類" } +
             accounts.mapNotNull { lk.account(it)?.name }
         ).joinToString("、")
 }
@@ -110,6 +112,7 @@ fun ChartFilterPage(
     var incomeSel by remember { mutableStateOf(initial.incomeCats) }
     var expenseSel by remember { mutableStateOf(initial.expenseCats) }
     var accSel by remember { mutableStateOf(initial.accounts) }
+    var expanded by remember { mutableStateOf(emptySet<Long>()) }
     var tab by remember { mutableStateOf(if (initial.accounts.isNotEmpty() && initial.incomeCats.isEmpty() && initial.expenseCats.isEmpty()) 2 else 1) }
     val draft = ChartFilter(month, incomeSel, expenseSel, accSel)
     val inPeriod = remember(all, month, startDay) {
@@ -178,11 +181,33 @@ fun ChartFilterPage(
                 FilterHeader(sel.size == ids.size && ids.isNotEmpty(), { set(if (it) ids.toSet() else emptySet()) }) {
                     Text(type.label, fontSize = 12.sp, color = if (type == TxnType.INCOME) IncomeColor else ExpenseColor)
                 }
+                // 子分類：點大分類右邊的「›」展開，可以只勾其中幾個子分類
+                val subAmounts = inPeriod.filter { it.type == type && it.categoryId != null }.groupBy { it.categoryId!! }
+                    .mapValues { (_, l) -> l.sumOf { conv(it) } }
+                val color = if (type == TxnType.INCOME) IncomeColor else ExpenseColor
                 LazyColumn(Modifier.fillMaxSize()) {
-                    items(ids, key = { "c$it" }) { id ->
-                        FilterRow(lk.category(id)?.name ?: "未分類", id in sel, { set(if (it) sel + id else sel - id) }) {
-                            Text(amounts[id]?.let { Money.withSymbol(it, lk.base) } ?: "", fontSize = 13.sp,
-                                color = if (type == TxnType.INCOME) IncomeColor else ExpenseColor)
+                    ids.forEach { id ->
+                        val subs = lk.categories.filter { it.parentId == id && !it.archived }
+                            .sortedByDescending { subAmounts[it.id] ?: 0L }
+                        val subIds = subs.map { it.id }.toSet()
+                        val partial = id !in sel && subIds.any { it in sel }
+                        item(key = "c$id") {
+                            FilterRow(lk.category(id)?.name ?: "未分類", id in sel, { on -> set(if (on) sel - subIds + id else sel - id - subIds) },
+                                partial = partial,
+                                expand = if (subs.isEmpty()) null else (id in expanded) to { expanded = if (id in expanded) expanded - id else expanded + id }) {
+                                Text(amounts[id]?.let { Money.withSymbol(it, lk.base) } ?: "", fontSize = 13.sp, color = color)
+                            }
+                        }
+                        if (id in expanded) items(subs, key = { "s${it.id}" }) { c ->
+                            val on = id in sel || c.id in sel
+                            FilterRow(c.name, on, { v ->
+                                // 大分類已勾時取消一個子分類：改成勾其餘子分類；子分類全勾時合併回大分類
+                                val cur = if (id in sel) sel - id + subIds else sel
+                                val next = if (v) cur + c.id else cur - c.id
+                                set(if (subIds.isNotEmpty() && subIds.all { it in next }) next - subIds + id else next)
+                            }, indent = true) {
+                                Text(subAmounts[c.id]?.let { Money.withSymbol(it, lk.base) } ?: "", fontSize = 12.sp, color = color.copy(alpha = 0.85f))
+                            }
                         }
                     }
                 }
@@ -197,11 +222,12 @@ fun ChartFilterPage(
                     }
                 }
                 LazyColumn(Modifier.fillMaxSize()) {
-                    AccountType.entries.forEach { type ->
+                    val st = com.enwei.moneymanager.MoneyApp.repo.settings.value
+                    st.groupOrder().let { o -> o + AccountType.entries.filter { it !in o } }.forEach { type ->
                         val group = accs.filter { it.type == type }
                         if (group.isEmpty()) return@forEach
                         item(key = "g$type") {
-                            Text(type.label, fontSize = 12.sp, color = gray,
+                            Text(st.groupLabel(type), fontSize = 12.sp, color = gray,
                                 modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, top = 10.dp, bottom = 4.dp))
                         }
                         items(group, key = { "a${it.id}" }) { a ->
@@ -246,13 +272,27 @@ private fun FilterHeader(allOn: Boolean, onAll: (Boolean) -> Unit, right: @Compo
 
 /** 一列勾選項目：勾選框、名稱、右邊金額。 */
 @Composable
-private fun FilterRow(name: String, checked: Boolean, onCheck: (Boolean) -> Unit, right: @Composable () -> Unit) {
+private fun FilterRow(
+    name: String, checked: Boolean, onCheck: (Boolean) -> Unit,
+    partial: Boolean = false, indent: Boolean = false,
+    /** 有子分類時：是否展開、點「›」切換 */
+    expand: Pair<Boolean, () -> Unit>? = null,
+    right: @Composable () -> Unit,
+) {
     Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { onCheck(!checked) }.padding(end = 16.dp).height(46.dp),
+        Modifier.fillMaxWidth().background(if (indent) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surface)
+            .clickable { onCheck(!checked) }.padding(start = if (indent) 24.dp else 0.dp, end = 16.dp).height(if (indent) 40.dp else 46.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Checkbox(checked, onCheck, colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary))
-        Text(name, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
+        if (partial) androidx.compose.material3.TriStateCheckbox(androidx.compose.ui.state.ToggleableState.Indeterminate, { onCheck(true) },
+            colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary))
+        else Checkbox(checked, onCheck, colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary))
+        Text(name, fontSize = if (indent) 13.sp else 14.sp, maxLines = 1)
+        if (expand != null) Text(
+            if (expand.first) " ⌄" else " ›", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.clickable(onClick = expand.second).padding(horizontal = 10.dp, vertical = 8.dp),
+        )
+        Spacer(Modifier.weight(1f))
         right()
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))

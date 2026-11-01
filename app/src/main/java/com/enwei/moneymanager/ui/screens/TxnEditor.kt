@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import com.enwei.moneymanager.data.groupLabel
+import com.enwei.moneymanager.data.groupOrder
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -718,8 +720,18 @@ private fun BottomPanel(
                 }
             }
             else -> {
-                val accs = lk.accounts.filter { !it.archived && it.id != excludeAccount }
-                LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(280.dp)) {
+                // 依帳戶頁的群組順序分組（信用卡放在一起、銀行放在一起…），群組內照帳戶排序
+                val st = repo.settings.value
+                val rank = st.groupOrder()
+                val groups = lk.accounts.filter { !it.archived && it.id != excludeAccount }
+                    .groupBy { it.type }.toList().sortedBy { (t, _) -> rank.indexOf(t).let { i -> if (i < 0) 99 else i } }
+                    .map { (t, l) -> t to l.sortedWith(compareBy({ it.sortOrder }, { it.id })) }
+                LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(300.dp)) {
+                    groups.forEach { (type, accs) ->
+                    item(key = "h${type.name}", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                        Text(st.groupLabel(type), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow).padding(horizontal = 12.dp, vertical = 4.dp))
+                    }
                     items(accs, key = { it.id }) { a ->
                         val sel = a.id == selectedAccount
                         Box(
@@ -727,6 +739,7 @@ private fun BottomPanel(
                                 .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { onAccount(a) }.padding(4.dp),
                             contentAlignment = Alignment.Center,
                         ) { Text(a.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    }
                     }
                 }
             }
