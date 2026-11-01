@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -60,7 +62,7 @@ fun currencyOptions(lk: Lookups): List<String> =
     (listOf(lk.base) + lk.accounts.map { it.currency } + com.enwei.moneymanager.net.FxService.common).distinct()
 
 @Composable
-fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
+fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMonth: java.time.YearMonth? = null) {
     val lk = rememberLookups()
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     var q by rememberSaveable { mutableStateOf("") }
@@ -69,7 +71,10 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
     val chartStyle = settings.filterStyle == 0
     var showFilter by rememberSaveable { mutableStateOf(startWithFilter && !chartStyle) }
     var chartOpen by remember { mutableStateOf(startWithFilter && chartStyle) }
-    var chart by remember { mutableStateOf(ChartFilter(month = com.enwei.moneymanager.core.Periods.monthOf(java.time.LocalDate.now(), repo.settings.value.monthStartDay))) }
+    // 搜尋與篩選共用同一個期間：預設是交易頁正在看的月份；點月份可切換「全部期間」
+    var period by rememberSaveable { mutableStateOf<String?>((startMonth ?: com.enwei.moneymanager.core.Periods.monthOf(java.time.LocalDate.now(), repo.settings.value.monthStartDay)).toString()) }
+    val month = period?.let { java.time.YearMonth.parse(it) }
+    var chart by remember { mutableStateOf(ChartFilter(month = month)) }
     var chartApplied by remember { mutableStateOf(false) }
     var from by rememberSaveable { mutableStateOf<java.time.LocalDate?>(null) }
     var to by rememberSaveable { mutableStateOf<java.time.LocalDate?>(null) }
@@ -84,10 +89,15 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
     val maxMinor = Money.parseMinor(max)
     val chartOn = chartApplied && chart.active
     val active = q.isNotBlank() || from != null || accountId != null || categoryId != null || minMinor != null || maxMinor != null || chartOn
-    val result = remember(q, all, lk, from, to, accountId, categoryId, minMinor, maxMinor, chart, chartOn) {
-        if (!active) emptyList() else all.filter { t ->
+    // 自訂日期區間優先；否則用上方的月份（全部期間時不限）
+    val periodFilter = ChartFilter(month = month)
+    // 沒有任何條件又是全部期間時不列出全部交易（太多），請先輸入或選月份
+    val showList = active || month != null
+    val result = remember(q, all, lk, from, to, accountId, categoryId, minMinor, maxMinor, chart, chartOn, month) {
+        if (!showList) emptyList() else all.filter { t ->
             val d = t.date.toLocalDate()
-            (!chartOn || (chart.inPeriod(t, settings.monthStartDay) && chart.matches(t, lk))) &&
+            (from != null || periodFilter.inPeriod(t, settings.monthStartDay)) &&
+            (!chartOn || chart.matches(t, lk)) &&
             (q.isBlank() || listOfNotNull(t.merchant, t.note, lk.category(t.categoryId)?.name, lk.account(t.accountId)?.name, lk.account(t.toAccountId)?.name)
                 .any { it.contains(q, true) } || Money.full(t.amount).replace(",", "").contains(q.replace(",", ""))) &&
                 (from == null || !d.isBefore(from)) && (to == null || !d.isAfter(to)) &&
@@ -99,7 +109,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            BackTopBar("搜尋", { nav.popBackStack() }) {
+            BackTopBar("搜尋與篩選", { nav.popBackStack() }) {
                 IconButton(onClick = { if (chartStyle) chartOpen = true else showFilter = !showFilter }) { Icon(Icons.Outlined.Tune, "篩選") }
             }
         },
@@ -123,6 +133,30 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
                         }
                     },
                 )
+                // 期間列：搜尋與篩選共用（自訂日期區間時顯示區間，點一下清除）
+                Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(enabled = from == null && month != null, onClick = { period = month?.minusMonths(1)?.toString(); chart = chart.copy(month = month?.minusMonths(1)) }) {
+                        Icon(Icons.Filled.ChevronLeft, "上一期")
+                    }
+                    Text(
+                        when {
+                            from != null -> "$from ~ ${to ?: from}  ✕"
+                            month != null -> "${month.year}年${month.monthValue}月"
+                            else -> "全部期間"
+                        },
+                        fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.weight(1f).clickable {
+                            if (from != null) { from = null; to = null }
+                            else {
+                                val next = if (month == null) com.enwei.moneymanager.core.Periods.monthOf(java.time.LocalDate.now(), settings.monthStartDay) else null
+                                period = next?.toString(); chart = chart.copy(month = next)
+                            }
+                        }.padding(vertical = 8.dp),
+                    )
+                    IconButton(enabled = from == null && month != null, onClick = { period = month?.plusMonths(1)?.toString(); chart = chart.copy(month = month?.plusMonths(1)) }) {
+                        Icon(Icons.Filled.ChevronRight, "下一期")
+                    }
+                }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 if (showFilter) {
                     FormLine("期間", onClick = { pickRange = true }) {
@@ -157,9 +191,9 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
                         modifier = Modifier.padding(start = 8.dp)) { Text("清除篩選") }
                 }
             }
-            if (active) SummaryBar(totalsOf(result, lk.fx), lk.base)
+            if (showList) SummaryBar(totalsOf(result, lk.fx), lk.base)
             LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-                if (active && result.isEmpty()) item { NoData("找不到符合的交易") }
+                if (showList && result.isEmpty()) item { NoData("找不到符合的交易") }
                 result.groupBy { it.date.toLocalDate() }.toSortedMap(Comparator.reverseOrder()).forEach { (day, txns) ->
                     item(key = "s$day") { DayBlock(day, txns, lk, nav) }
                 }
@@ -170,7 +204,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    (chart.month?.let { "${it.monthValue}月 · " } ?: "") + chart.label(lk), fontSize = 14.sp, maxLines = 1,
+                    chart.label(lk), fontSize = 14.sp, maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = { chartApplied = false }) { Text("清除") }
@@ -185,8 +219,9 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
         ) {
             ChartFilterPage(
-                lk, all, settings.monthStartDay, chart,
-                onApply = { chart = it; chartApplied = true; chartOpen = false },
+                lk, all, settings.monthStartDay, chart.copy(month = month),
+                // 篩選頁換的月份也帶回搜尋（兩邊同一個期間）
+                onApply = { chart = it; period = it.month?.toString(); from = null; to = null; chartApplied = true; chartOpen = false },
                 onClose = { chartOpen = false; if (startWithFilter && !chartApplied) nav.popBackStack() },
             )
         }

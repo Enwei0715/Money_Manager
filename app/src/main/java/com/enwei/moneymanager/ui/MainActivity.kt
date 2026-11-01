@@ -262,9 +262,16 @@ private fun AppScaffold(nav: NavHostController) {
             composable("invest") { AccountsTab(nav, showBack = true, initialTab = 1) }
             composable("more") { MoreScreen(nav) }
             composable(
-                "search?filter={filter}",
-                arguments = listOf(navArgument("filter") { type = NavType.BoolType; defaultValue = false }),
-            ) { e -> SearchScreen(nav, e.arguments!!.getBoolean("filter")) }
+                "search?filter={filter}&month={month}",
+                arguments = listOf(
+                    navArgument("filter") { type = NavType.BoolType; defaultValue = false },
+                    // 從交易頁進來時帶入正在看的月份（yyyy-MM），搜尋與篩選就從那個月開始
+                    navArgument("month") { type = NavType.StringType; defaultValue = "" },
+                ),
+            ) { e ->
+                SearchScreen(nav, e.arguments!!.getBoolean("filter"),
+                    runCatching { java.time.YearMonth.parse(e.arguments!!.getString("month")) }.getOrNull())
+            }
             composable("budget") { BudgetScreen(nav) }
             composable("walletreader") { WalletReaderScreen(nav) }
             composable("config") { ConfigScreen(nav) }

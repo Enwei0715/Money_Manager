@@ -217,7 +217,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     if (pending.isNotEmpty()) IconButton(onClick = { nav.navigate("pending") }) {
                         BadgedBox(badge = { Badge { Text("${pending.size}") } }) { Icon(Icons.Filled.NotificationsActive, "待確認") }
                     }
-                    IconButton(onClick = { nav.navigate("search") }) { Icon(Icons.Outlined.Search, "搜尋") }
+                    IconButton(onClick = { nav.navigate("search?month=$month") }) { Icon(Icons.Outlined.Search, "搜尋") }
                 },
             )
         },
