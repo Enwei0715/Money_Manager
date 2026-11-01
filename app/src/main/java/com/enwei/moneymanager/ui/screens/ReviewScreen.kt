@@ -282,6 +282,28 @@ private fun AiReviewBody(
         Spacer(Modifier.width(12.dp))
         Text(r.headline, fontSize = 14.sp, modifier = Modifier.weight(1f))
     }
+    // 圖表（用實際記帳資料畫；AI 只決定要標示哪幾個分類）
+    val focus = r.focus.filter { it.isNotBlank() }
+    val rows = d.categories.sortedByDescending { it.amount }.take(6).map { Triple(it.name, it.amount, it.prev) }
+    val hot = rows.map { it.first }.filter { n -> focus.any { f -> n.contains(f) || f.contains(n) } }.toSet()
+    if (rows.isNotEmpty()) {
+        Text("分類支出（本期 vs 上期）" + (if (hot.isNotEmpty()) "　● 為 AI 建議留意" else ""), fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 8.dp))
+        com.enwei.moneymanager.ui.components.CompareBars(rows, hot, m, ExpenseColor)
+    }
+    val daily = remember(d) {
+        val last = minOf(d.end, java.time.LocalDate.now())
+        val n = (java.time.temporal.ChronoUnit.DAYS.between(d.start, last) + 1).toInt().coerceAtLeast(1)
+        val byDay = LongArray(n)
+        d.expenses.forEach { t ->
+            val i = java.time.temporal.ChronoUnit.DAYS.between(d.start, java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()).toInt()
+            if (i in 0 until n) byDay[i] += lk.fx.convert(t.amount, t.currency)
+        }
+        // 季、年太多天：改成每週加總
+        if (n > 62) byDay.toList().chunked(7).map { it.sum() } else byDay.toList()
+    }
+    com.enwei.moneymanager.ui.components.DailyBarsChart(daily, m, ExpenseColor, Modifier.padding(top = 8.dp),
+        weekly = java.time.temporal.ChronoUnit.DAYS.between(d.start, minOf(d.end, java.time.LocalDate.now())) + 1 > 62)
     // 每一段像資料夾：點標題展開／收起（預設展開「想跟你確認的幾筆」與「行動建議」，其他收起）
     @Composable
     fun fold(title: String, count: Int, initiallyOpen: Boolean, body: @Composable () -> Unit) {

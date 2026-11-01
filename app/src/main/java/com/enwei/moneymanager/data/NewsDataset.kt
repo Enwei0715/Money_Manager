@@ -110,7 +110,10 @@ data class DailyReport(
 @Serializable
 data class ChatMsg(
     val fromUser: Boolean,
+    /** AI 回覆的結論（一兩句） */
     val text: String,
+    /** AI 回覆的重點條列（依語氣設定的格式） */
+    val points: List<String> = emptyList(),
     val time: Long = System.currentTimeMillis(),
     val cards: List<StockPick> = emptyList(),
     val newsIds: List<String> = emptyList(),

@@ -3,16 +3,15 @@ package com.enwei.moneymanager.net
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
-import android.provider.Settings
-import androidx.core.content.FileProvider
+import android.app.DownloadManager
+import android.os.Environment
 import com.enwei.moneymanager.BuildConfig
 import com.enwei.moneymanager.core.VersionUtil
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import okhttp3.Request
-import java.io.File
 import java.io.IOException
 
 data class ReleaseInfo(
@@ -57,17 +56,16 @@ object Updater {
 
     fun isNewer(r: ReleaseInfo) = r.versionCode > BuildConfig.VERSION_CODE
 
-    /** 下載新版；帶 Token 下載失敗時改用公開下載網址。 */
-    suspend fun download(context: Context, r: ReleaseInfo, token: String, onProgress: (Float) -> Unit): File =
+    /**
+     * 用系統的下載管理員下載新版（通知列顯示進度）；帶 Token 失敗時改用公開下載網址。
+     * App 不直接安裝 APK（不需要「安裝不明應用程式」權限）：下載完成後打開「下載」，點 APK 由系統安裝。
+     */
+    suspend fun download(context: Context, r: ReleaseInfo, token: String, onProgress: (Float) -> Unit): Long =
         if (token.isBlank()) downloadWith(context, r, "", onProgress)
         else runCatching { downloadWith(context, r, token, onProgress) }.getOrElse { downloadWith(context, r, "", onProgress) }
 
-    private suspend fun downloadWith(context: Context, r: ReleaseInfo, token: String, onProgress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
-        val dir = File(context.cacheDir, "updates").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-        val target = File(dir, "MoneyManager-${r.tag}.apk")
-
-        // 私人庫：先以 API 取得簽名下載網址（302），再不帶 Token 下載，避免 S3 拒絕
+    private suspend fun downloadWith(context: Context, r: ReleaseInfo, token: String, onProgress: (Float) -> Unit): Long = withContext(Dispatchers.IO) {
+        // 私人庫：先以 API 取得簽名下載網址（302），下載時不帶 Token，避免 S3 拒絕
         val url = if (token.isNotBlank()) {
             val noRedirect = Http.client.newBuilder().followRedirects(false).followSslRedirects(false).build()
             val req = Request.Builder().url(r.assetApiUrl)
@@ -76,57 +74,49 @@ object Updater {
                 .header("User-Agent", Http.USER_AGENT)
                 .build()
             noRedirect.newCall(req).execute().use { resp ->
-                when {
-                    resp.isRedirect -> resp.header("Location") ?: throw IOException("缺少下載位置")
-                    resp.isSuccessful -> {
-                        writeBody(resp.body!!, target, r.sizeBytes, onProgress)
-                        return@withContext target
-                    }
-                    else -> throw IOException("下載失敗 HTTP ${resp.code}")
-                }
+                if (resp.isRedirect) resp.header("Location") ?: throw IOException("缺少下載位置") else throw IOException("下載失敗 HTTP ${resp.code}")
             }
         } else r.assetBrowserUrl
-
-        Http.client.newCall(Request.Builder().url(url).header("User-Agent", Http.USER_AGENT).build()).execute().use { resp ->
-            if (!resp.isSuccessful) throw IOException("下載失敗 HTTP ${resp.code}")
-            writeBody(resp.body!!, target, r.sizeBytes, onProgress)
+        val dm = context.getSystemService(DownloadManager::class.java)
+        val id = dm.enqueue(
+            DownloadManager.Request(Uri.parse(url))
+                .setTitle("帳理 ${r.tag}")
+                .setDescription("下載完成後點這裡安裝")
+                .setMimeType("application/vnd.android.package-archive")
+                .addRequestHeader("User-Agent", Http.USER_AGENT)
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "Ledgerly-${r.tag}.apk"),
+        )
+        while (true) {
+            val (status, done, total) = dm.query(DownloadManager.Query().setFilterById(id)).use { c ->
+                if (!c.moveToFirst()) throw IOException("下載已取消")
+                Triple(
+                    c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)),
+                    c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)),
+                    c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)),
+                )
+            }
+            val size = total.takeIf { it > 0 } ?: r.sizeBytes
+            if (size > 0) onProgress((done.toFloat() / size).coerceIn(0f, 1f))
+            when (status) {
+                DownloadManager.STATUS_SUCCESSFUL -> return@withContext id
+                DownloadManager.STATUS_FAILED -> throw IOException("下載失敗")
+            }
+            delay(500)
         }
-        target
+        @Suppress("UNREACHABLE_CODE") id
     }
 
-    private fun writeBody(body: okhttp3.ResponseBody, target: File, expected: Long, onProgress: (Float) -> Unit) {
-        val total = body.contentLength().takeIf { it > 0 } ?: expected
-        body.byteStream().use { input ->
-            target.outputStream().use { out ->
-                val buf = ByteArray(64 * 1024)
-                var read = 0L
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    out.write(buf, 0, n)
-                    read += n
-                    if (total > 0) onProgress(read.toFloat() / total)
-                }
+    /** 下載完成：打開這個下載檔（由系統的下載／檔案 App 交給安裝程式）；不行時打開「下載」清單。 */
+    fun openDownloaded(context: Context, id: Long) {
+        val dm = context.getSystemService(DownloadManager::class.java)
+        runCatching {
+            context.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure {
+            dm.getUriForDownloadedFile(id)?.let { uri ->
+                context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, dm.getMimeTypeForDownloadedFile(id))
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
             }
         }
-    }
-
-    fun canInstall(context: Context) =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.packageManager.canRequestPackageInstalls()
-
-    fun openInstallPermission(context: Context) {
-        context.startActivity(
-            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
-    }
-
-    fun install(context: Context, apk: File) {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", apk)
-        context.startActivity(
-            Intent(Intent.ACTION_VIEW)
-                .setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
     }
 }

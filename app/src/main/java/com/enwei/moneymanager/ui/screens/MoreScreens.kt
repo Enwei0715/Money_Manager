@@ -882,7 +882,7 @@ fun SettingsScreen(nav: NavController) {
     var release by remember { mutableStateOf<ReleaseInfo?>(null) }
     var updateStatus by remember { mutableStateOf<String?>(null) }
     var progress by remember { mutableStateOf<Float?>(null) }
-    var apk by remember { mutableStateOf<File?>(null) }
+    var apk by remember { mutableStateOf<Long?>(null) }
 
     fun check() = scope.launch {
         repo.settings.update { it.copy(githubToken = token.trim()) }
@@ -907,11 +907,10 @@ fun SettingsScreen(nav: NavController) {
         }
     }
 
-    fun install(file: File) {
-        if (!Updater.canInstall(ctx)) {
-            updateStatus = "請允許「安裝不明應用程式」後再按一次安裝"
-            Updater.openInstallPermission(ctx)
-        } else Updater.install(ctx, file)
+    // 下載完成後打開「下載」，點 APK 由系統安裝（App 本身不需要安裝其他 App 的權限）
+    fun install(id: Long) {
+        updateStatus = "下載完成：在「下載」或通知列點 Ledgerly APK 即可安裝"
+        Updater.openDownloaded(ctx, id)
     }
 
     Scaffold(topBar = { BackTopBar("App 更新", { nav.popBackStack() }) }) { pad ->

@@ -624,7 +624,8 @@ object GroqAi {
             "\"analysis\": [{\"title\": 角度名稱, \"text\": 60 字內分析}]（4～5 項）, \"good\": [1～3 點], \"improve\": [2～3 點，含數字], " +
             "\"questions\": [{\"t\": [交易編號], \"q\": 想確認的事（30 字內）, \"why\": 確認後能幫上什麼（25 字內）}], " +
             "\"actions\": [{\"action\": 25 字內具體行動, \"saving\": 每月可省金額整數或 null}]（3 點）, " +
-            "\"expense_cap\": 下期支出上限整數, \"savings_target\": 下期儲蓄率數字, \"goals\": [1～3 項]}"
+            "\"expense_cap\": 下期支出上限整數, \"savings_target\": 下期儲蓄率數字, \"goals\": [1～3 項], " +
+            "\"focus\": [圖表要標示、最值得注意的 1～3 個分類名稱，用資料裡的分類名]}"
         val r = chatJson(system, input, 1500, hard = true, cap = 4000, effort = "low", task = AiTask.REVIEW) ?: return null
         fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(100) }.orEmpty()
         fun objs(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
@@ -646,6 +647,7 @@ object GroqAi {
             createdAt = System.currentTimeMillis(),
             analysis = objs("analysis").mapNotNull { o -> o.str("title")?.let { t -> com.enwei.moneymanager.data.ReviewAngle(t.take(12), o.str("text")?.take(120).orEmpty()) } },
             questions = questions,
+            focus = list("focus").take(3),
         )
     }
 
@@ -735,7 +737,8 @@ object GroqAi {
      * AI 語氣（設定 → AI 語氣）：收支檢討、投資報告與股票助理共用。
      * [review] 放在收支檢討的開頭，[advisor] 接在投資助理的角色說明後面。
      */
-    enum class AiTone(val label: String, val desc: String, val review: String, val advisor: String) {
+    /** [chat] 為對話回覆的寫法：結論怎麼寫、重點條列放什麼。 */
+    enum class AiTone(val label: String, val desc: String, val review: String, val advisor: String, val chat: String) {
         GENTLE(
             "溫和教練", "先肯定、提供替代方案，不質問",
             "你是溫和、具建設性的個人理財教練，目標是陪使用者一起把錢花得更安心，而不是評判他。" +
@@ -743,6 +746,7 @@ object GroqAi {
                 "先寫做得好的地方，再寫可以調整的地方；建議用「可以考慮…」「如果想…可以試試…」並提供替代方案。" +
                 "想確認用途的交易用邀請的語氣（例如「想跟你確認這筆的用途，之後分析會更準」），不要反問必要性。",
             "語氣溫和、具建設性：用「可以觀察」「可以考慮」「如果想保守一點」提出建議並說明理由與風險，不用命令句、不催促交易。",
+            "reply 先用一句同理或肯定使用者的狀況，再給結論；points 2～4 點，每點是「可以考慮的做法＋理由」，附數字（價位、比例、金額）。",
         ),
         ANALYST(
             "理性顧問", "中立的報告口吻，列出選項與取捨",
@@ -750,12 +754,14 @@ object GroqAi {
                 "每一點採「現況 → 影響 → 選項」：先寫數字與變化，再說明對儲蓄率的影響，最後給兩個可選做法與各自的取捨。" +
                 "想確認用途的交易以「待補充資訊」的語氣陳述需要補充什麼。",
             "語氣中立、條理分明：每個建議都附「依據、風險、觀察條件」，不帶情緒、不用命令句。",
+            "reply 一句中立結論；points 2～4 點，每點寫成「選項：依據｜風險｜觀察條件」，數字要具體。",
         ),
         DIRECT(
             "簡潔直接", "短句直接講重點與數字",
             "你是直接、精簡的理財教練，用短句直接指出重點與數字，建議具體可執行；可以直白，但不羞辱、不說教。" +
                 "想確認用途的交易直接寫出想知道什麼。",
             "語氣簡潔直接：用短句講重點、數字與條件，不寫客套話。",
+            "reply 一句直接結論（20 字內）；points 2～3 點，只寫動作與數字，例如「2330 回測 980 再分批，停損 940」。",
         ),
     }
 
@@ -806,15 +812,17 @@ object GroqAi {
             lastError = "AI 對話資料超過安全上下文上限（${context.length}/$contextLimit 字元），未截斷或送出；請稍後重試"
             return null
         }
-        val system = advisorRole() + "以下是資料與使用者狀況，請回答他的問題，300 字內。提到具體股票時放進 cards；引用新聞時在句子後面用 [編號] 標出，並把編號放進 news。" +
-            "只回 JSON：{\"reply\": 回答, \"cards\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\"或空, \"business\": 公司做什麼, \"strength\": 強勢/中性/弱勢, \"reason\": 40 字內}], \"news\": [編號]}\n\n" +
+        val system = advisorRole() + "以下是資料與使用者狀況，請回答他的問題。回覆分成結論 reply（60 字內）與重點 points（每點 45 字內）；" +
+            tone().chat + "提到具體股票時放進 cards（App 會在卡片上畫近期 K 線，文字不必描述走勢圖）；引用新聞時在句子後面用 [編號] 標出，並把編號放進 news。" +
+            "只回 JSON：{\"reply\": 結論, \"points\": [重點], \"cards\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\"或空, \"business\": 公司做什麼, \"strength\": 強勢/中性/弱勢, \"reason\": 40 字內}], \"news\": [編號]}\n\n" +
             context
         val convo = history.takeLast(6).joinToString("\n") { (u, t) -> (if (u) "使用者：" else "助理：") + t.take(300) }
         val r = chatJson(system, (if (convo.isNotBlank()) "先前對話：\n$convo\n\n" else "") + "問題：$question", 1200, hard = true, cap = 3000, effort = "low", task = AiTask.CHAT) ?: return null
         val sym = Regex("[0-9]{4,6}[A-Z]?")
         val cards = (r["cards"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonObject)?.let { o -> parsePick(o, sym) } }.orEmpty().take(5)
         val news = (r["news"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt()?.toString() }.orEmpty()
-        return com.enwei.moneymanager.data.ChatMsg(false, r.str("reply")?.take(1200) ?: return null, cards = cards, newsIds = news)
+        val points = (r["points"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.take(120)?.takeIf { s -> s.isNotEmpty() } }.orEmpty().take(5)
+        return com.enwei.moneymanager.data.ChatMsg(false, r.str("reply")?.take(600) ?: return null, points = points, cards = cards, newsIds = news)
     }
 
     /** 對話可以帶的資料量（字元）：Gemini 可讀大量資料，Groq 每分鐘 token 有限。 */

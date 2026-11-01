@@ -151,6 +151,8 @@ data class AiReview(
     val analysis: List<ReviewAngle> = emptyList(),
     /** AI 對特定交易的疑問 */
     val questions: List<ReviewQuestion> = emptyList(),
+    /** 圖表要標示的分類（AI 認為最值得注意的 1～3 個分類名稱） */
+    val focus: List<String> = emptyList(),
 )
 
 @Serializable

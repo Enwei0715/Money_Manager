@@ -334,6 +334,8 @@ fun PickCard(
             }
             p.price?.let { Text("現價 ${"%.2f".format(it)}", fontSize = 13.sp) }
                 ?: Text("代號未確認，請自行查證", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+            // 近期 K 線：一眼看出走勢，不必點進去
+            com.enwei.moneymanager.ui.components.MiniKLine(p.symbol)
             if (p.business.isNotBlank()) Text(p.business, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (p.reason.isNotBlank()) CitedText(p.reason, cites, newsById)
             if (p.entry.isNotBlank()) Text("進場：${p.entry}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -485,7 +487,18 @@ private fun Bubble(m: ChatMsg, newsById: Map<String, com.enwei.moneymanager.data
                 color = if (m.fromUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { menu = true }),
-            ) { CitedText(m.text, m.newsIds, newsById, modifier = Modifier.padding(10.dp)) }
+            ) {
+                // AI 回覆：結論＋重點條列（格式依「設定 → AI 語氣」）
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CitedText(m.text, m.newsIds, newsById)
+                    m.points.forEach { p ->
+                        Row {
+                            Text("•", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 6.dp))
+                            CitedText(p, m.newsIds, newsById)
+                        }
+                    }
+                }
+            }
             // 長按：複製、刪除這則
             androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
                 androidx.compose.material3.DropdownMenuItem(text = { Text("複製") }, onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(text)); menu = false })

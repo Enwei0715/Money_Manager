@@ -112,12 +112,25 @@ class WalletScreenReader : AccessibilityService() {
 
     override fun onInterrupt() = Unit
 
+    private var watchJob: Job? = null
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         connected = true
+        // 讓系統只把勾選的錢包 App 的畫面事件送過來；沒有勾選時只看自己（等於不讀任何 App）
+        watchJob = MoneyApp.instance.appScope.launch {
+            MoneyApp.repo.settings.flow.collect { s -> restrictTo(s.screenPackages) }
+        }
+    }
+
+    private fun restrictTo(pkgs: Collection<String>) {
+        runCatching {
+            serviceInfo = serviceInfo.apply { packageNames = (pkgs.ifEmpty { listOf(packageName) }).toTypedArray() }
+        }
     }
 
     override fun onDestroy() {
+        watchJob?.cancel()
         connected = false
         super.onDestroy()
     }

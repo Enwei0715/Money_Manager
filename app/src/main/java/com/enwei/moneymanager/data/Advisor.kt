@@ -414,8 +414,9 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
     // 回覆裡的 [19, 35] 是資料集的新聞編號：換成 [1][2]，對應附在回覆下方的新聞
     val ids = ArrayList<String>()
     val text = renumberCites(reply.text, imp, ids)
+    val points = reply.points.map { renumberCites(it, imp, ids) }
     reply.newsIds.mapNotNull { it.toIntOrNull() }.mapNotNull { imp.getOrNull(it)?.id }.forEach { if (it !in ids) ids += it }
-    val fixed = reply.copy(text = text, newsIds = ids)
+    val fixed = reply.copy(text = text, points = points, newsIds = ids)
     // 使用者按了停止：不把回覆加進對話
     kotlinx.coroutines.yield()
     ds.update { it.copy(chat = (it.chat + fixed).takeLast(40), business = it.business + fixed.cards.filter { c -> c.business.isNotBlank() }.associate { c -> c.symbol to c.business }) }
