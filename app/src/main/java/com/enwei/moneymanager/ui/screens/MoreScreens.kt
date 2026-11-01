@@ -166,7 +166,7 @@ fun MoreScreen(nav: NavController) {
                             onHide = { setOrder(shown.map { it.id } - t.id) },
                         )
                     }
-                    val left = 3 - row.sumOf { if (it.id in settings.wideTools) 2 else 1 }
+                    val left = 3 - row.fold(0) { acc, t -> acc + if (t.id in settings.wideTools) 2 else 1 }
                     if (left > 0) Spacer(Modifier.weight(left.toFloat()))
                 }
             }
