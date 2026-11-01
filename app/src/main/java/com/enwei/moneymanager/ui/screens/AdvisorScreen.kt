@@ -219,12 +219,23 @@ private fun reportText(r: DailyReport): String = buildString {
 private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>, nav: NavController) {
     Section("大盤") {
         StageChip(r.stage.ifBlank { "趨勢" }, com.enwei.moneymanager.data.stripCites(r.trend))
-        if (r.themes.isNotEmpty()) Text(r.themes.joinToString("　") { "#$it" }, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+        // 加權指數近 60 個交易日 K 線
+        com.enwei.moneymanager.ui.components.MiniKLine("^TWII", days = 60)
         if (r.summary.isNotBlank()) CitedText(r.summary, r.cites, newsById)
     }
+    // 題材熱度：資料集裡報告提到的題材（則數與平均多空）
+    Section("資金追逐的題材") { ChatChartView(com.enwei.moneymanager.data.ChatChart("themes", r.themes)) }
     if (r.picks.isNotEmpty()) {
-        Text("今天可以考慮", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        r.picks.forEach { PickCard(it, r.cites, newsById) { nav.navigate("stock/${it.symbol}") } }
+        Text("今天可以考慮（${r.picks.size} 檔）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        // 推薦個股走勢比較（前 5 檔）
+        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+            Box(Modifier.padding(12.dp)) { com.enwei.moneymanager.ui.components.CompareChart(r.picks.take(5).map { it.symbol }) }
+        }
+        // 長線、短線分開列
+        r.picks.groupBy { it.style.ifBlank { "其他" } }.toSortedMap(compareBy { listOf("短線", "長線").indexOf(it).let { i -> if (i < 0) 9 else i } }).forEach { (style, list) ->
+            Text("$style（${list.size}）", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+            list.forEach { PickCard(it, r.cites, newsById) { nav.navigate("stock/${it.symbol}") } }
+        }
     }
     if (r.keyNews.isNotEmpty()) Section("一定要看的新聞（${r.keyNews.size}）", collapsible = true) {
         r.keyNews.forEach { k ->
@@ -235,6 +246,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         }
     }
     if (r.holdings.isNotEmpty()) Section("持股動作（${r.holdings.size}）", collapsible = true) {
+        ChatChartView(com.enwei.moneymanager.data.ChatChart("holdings"))
         r.holdings.forEach { h ->
             Row(Modifier.fillMaxWidth().clickable { nav.navigate("stock/${h.symbol}") }.padding(vertical = 2.dp)) {
                 Text(h.symbol, fontSize = 14.sp, modifier = Modifier.widthIn(min = 56.dp))
