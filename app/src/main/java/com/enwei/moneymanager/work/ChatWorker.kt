@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
  * 不在對話畫面時回覆完成會通知。
  */
 object ChatJob {
-    data class State(val question: String, val startedAt: Long, val running: Boolean = true, val error: String? = null)
+    data class State(val question: String, val startedAt: Long, val running: Boolean = true, val error: String? = null, val step: String = "")
 
     val state = MutableStateFlow<State?>(null)
 
@@ -51,7 +51,7 @@ object ChatJob {
         val start = state.value?.startedAt ?: System.currentTimeMillis()
         state.value = State(question, start)
         val r = try {
-            MoneyApp.repo.askAdvisor(MoneyApp.news, question)
+            MoneyApp.repo.askAdvisor(MoneyApp.news, question) { s -> state.value = state.value?.takeIf { it.running }?.copy(step = s) ?: state.value }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -64,7 +64,7 @@ object ChatJob {
             state.value = State(question, start, running = false, error = error)
             return
         }
-        state.value = State(question, start, running = false)
+        state.value = State(question, start, running = false, step = "已回覆" + r.basis.takeIf { it.isNotBlank() }?.let { "（$it）" }.orEmpty())
         if (!visible) notifyReply(context, r.text)
     }
 

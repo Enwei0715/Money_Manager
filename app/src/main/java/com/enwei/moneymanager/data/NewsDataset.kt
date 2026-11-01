@@ -136,6 +136,8 @@ data class ChatMsg(
     val time: Long = System.currentTimeMillis(),
     val cards: List<StockPick> = emptyList(),
     val newsIds: List<String> = emptyList(),
+    /** 回答的依據：搜尋到幾則相關新聞、讀了幾篇全文 */
+    val basis: String = "",
 )
 
 @Serializable

@@ -476,7 +476,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                 if (busy) item {
                     com.enwei.moneymanager.ui.components.AiWorkProgress(
                         chatWork ?: job?.takeIf { it.running }?.let {
-                            com.enwei.moneymanager.work.AiWorkStatus(true, "AI 正在整理你的投資問題…", it.startedAt, null, null)
+                            com.enwei.moneymanager.work.AiWorkStatus(true, it.step.ifBlank { "AI 正在整理你的投資問題…" }, it.startedAt, null, null)
                         },
                     )
                 }
@@ -553,6 +553,7 @@ private fun Bubble(m: ChatMsg, newsById: Map<String, com.enwei.moneymanager.data
                             CitedText(p, m.newsIds, newsById)
                         }
                     }
+                    if (m.basis.isNotBlank()) Text(m.basis, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             // 長按：複製、刪除這則
@@ -1409,7 +1410,17 @@ private fun NewsScheduleInfo() {
         if (health.failures > 0 && !health.paused(now)) add("最近連續失敗 ${health.failures} 次：${health.pauseReason ?: "沒有回應"}")
     }
     val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
+    val chatJob by com.enwei.moneymanager.work.ChatJob.state.collectAsStateWithLifecycle()
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // 問 AI 的對話流程：搜尋新聞 → 讀全文 → AI 回答 → 確認代號
+        chatJob?.let { c ->
+            if (c.running) {
+                Text("AI 對話程序：「${c.question.take(16)}${if (c.question.length > 16) "…" else ""}」", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                ChatSteps(c.step)
+                Text(c.step.ifBlank { "準備中…" } + " · 已 ${((now - c.startedAt) / 1000).coerceAtLeast(0)} 秒", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+            } else if (now - c.startedAt < 6 * 3600_000L) Text("上一次對話（${hm.format(java.util.Date(c.startedAt))}）：${c.error ?: c.step.ifBlank { "已回覆" }}", fontSize = 12.sp,
+                color = if (c.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         // 目前的排程程序（執行中時顯示步驟與進度；結束後顯示上一輪的結果）
         job?.let { j ->
             if (j.running) {
@@ -1541,6 +1552,33 @@ private fun HoldingCard(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwe
 
 
 /** 新聞排程的步驟與目前進度。 */
+@Composable
+private fun ChatSteps(step: String) {
+    val cur = when {
+        step.contains("確認代號") -> 4
+        step.startsWith("AI") -> 3
+        step.contains("全文") -> 2
+        step.contains("搜尋") -> 1
+        else -> 0
+    }
+    StepRow(listOf("持股與大盤", "搜尋新聞", "讀取全文", "AI 回答", "確認代號"), cur)
+}
+
+@Composable
+private fun StepRow(steps: List<String>, cur: Int) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+        steps.forEachIndexed { i, s ->
+            val (mark, col) = when {
+                i < cur -> "✓" to MaterialTheme.colorScheme.primary
+                i == cur -> "●" to MaterialTheme.colorScheme.primary
+                else -> "○" to MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Text("$mark $s", fontSize = 12.sp, color = col, fontWeight = if (i == cur) FontWeight.SemiBold else FontWeight.Normal)
+            if (i < steps.lastIndex) Text("  →  ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
 @Composable
 private fun PipelineSteps(step: String, refreshOnly: Boolean) {
     val steps = listOf("蒐集新聞", "AI 標註", "合併題材", "整理重點") + if (refreshOnly) emptyList() else listOf("產生報告")

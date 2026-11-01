@@ -35,6 +35,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.enwei.moneymanager.ui.ExpenseColor
+import com.enwei.moneymanager.ui.IncomeColor
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.border
@@ -191,7 +193,29 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
                         modifier = Modifier.padding(start = 8.dp)) { Text("清除篩選") }
                 }
             }
-            if (showList) SummaryBar(totalsOf(result, lk.fx), lk.base)
+            // 有搜尋或篩選條件時：收入、支出圓環顯示符合的金額占這段期間的比例；沒有條件時顯示一般合計
+            if (showList && active) {
+                val part = remember(result, lk) { totalsOf(result, lk.fx) }
+                val whole = remember(all, lk, from, to, month) {
+                    totalsOf(all.filter { t ->
+                        val d = t.date.toLocalDate()
+                        (from != null || periodFilter.inPeriod(t, settings.monthStartDay)) && (from == null || !d.isBefore(from)) && (to == null || !d.isAfter(to))
+                    }, lk.fx)
+                }
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Donut("收入", part.income, whole.income, IncomeColor, Modifier.weight(1f), ring = 58.dp)
+                    Donut("支出", part.expense, whole.expense, ExpenseColor, Modifier.weight(1f), ring = 58.dp)
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("合計", fontSize = 13.sp)
+                        Text(Money.withSymbol(part.total, lk.base), fontSize = 14.sp, maxLines = 1)
+                        Text("${result.size} 筆", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            } else if (showList) SummaryBar(totalsOf(result, lk.fx), lk.base)
             LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 if (showList && result.isEmpty()) item { NoData("找不到符合的交易") }
                 result.groupBy { it.date.toLocalDate() }.toSortedMap(Comparator.reverseOrder()).forEach { (day, txns) ->

@@ -149,20 +149,14 @@ fun ChartFilterPage(
                 modifier = Modifier.padding(start = 8.dp).clickable { onApply(draft) },
             ) { Text("篩選", color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) }
         }
-        // 收入、支出圓環與合計
-        Row(
-            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Donut("收入", selIncome, totalIncome, IncomeColor, Modifier.weight(1f))
-            Donut("支出", selExpense, totalExpense, ExpenseColor, Modifier.weight(1f))
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("合計", fontSize = 13.sp)
-                Text(
-                    Money.withSymbol(if (draft.active) selIncome - selExpense else totalIncome - totalExpense, lk.base),
-                    fontSize = 14.sp, maxLines = 1,
-                )
-            }
+        // 已選項目的金額（圓環比例在按「篩選」後顯示於搜尋結果上方）
+        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("收入 ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(Money.full(if (draft.active) selIncome else totalIncome), fontSize = 13.sp, color = IncomeColor, maxLines = 1, modifier = Modifier.weight(1f))
+            Text("支出 ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(Money.full(if (draft.active) selExpense else totalExpense), fontSize = 13.sp, color = ExpenseColor, maxLines = 1, modifier = Modifier.weight(1f))
+            Text("合計 ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(Money.withSymbol(if (draft.active) selIncome - selExpense else totalIncome - totalExpense, lk.base), fontSize = 13.sp, maxLines = 1)
         }
         val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
         TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
@@ -268,14 +262,14 @@ private fun FilterRow(name: String, checked: Boolean, onCheck: (Boolean) -> Unit
  * 圓環：勾選項目占總額的比例。第一次出現從 0 度轉到該有的位置，之後勾選改變時從目前位置轉到新的比例。
  */
 @Composable
-fun Donut(label: String, part: Long, total: Long, color: Color, modifier: Modifier = Modifier) {
+fun Donut(label: String, part: Long, total: Long, color: Color, modifier: Modifier = Modifier, ring: androidx.compose.ui.unit.Dp = 76.dp) {
     val target = if (total > 0) (part.toFloat() / total).coerceIn(0f, 1f) else 0f
     val anim = remember { Animatable(0f) }
     LaunchedEffect(target) { anim.animateTo(target, tween(700, easing = FastOutSlowInEasing)) }
     val track = color.copy(alpha = 0.22f)
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, fontSize = 13.sp)
-        Box(Modifier.padding(vertical = 6.dp).size(76.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.padding(vertical = 6.dp).size(ring), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
                 val w = 9.dp.toPx()
                 val d = size.minDimension - w

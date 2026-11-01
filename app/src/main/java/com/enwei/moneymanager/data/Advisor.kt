@@ -334,26 +334,51 @@ private fun fitDigest(ds: NewsDataset, st: NewsStore, room: Int, big: Boolean): 
 }
 
 /**
- * 依使用者的問題從資料集找相關新聞：問題裡的代號、公司名稱（股票清單）、提到持股時的持股代號、
- * 題材名稱與中文關鍵詞（兩字詞），近 7 天、依關聯度與重要性排序。
+ * 依使用者的問題搜尋資料集裡的新聞（BM25 排序）：問題切成代號、公司名稱、題材與中文兩字詞，
+ * 在標題、重點與內文裡計分；代號、公司與題材命中另外加權，越新、越重要的新聞略為加分。
+ * 先找近 7 天，結果太少時放寬到資料集保存的 14 天。
  */
 private fun relatedNews(ds: NewsDataset, st: NewsStore, q: String, holdings: Set<String>, limit: Int): List<NewsItem> {
     val codes = HashSet<String>()
     Regex("[0-9]{4,6}[A-Z]?").findAll(q).forEach { codes += it.value }
-    com.enwei.moneymanager.net.TwData.cached().forEach { s -> if (s.name.length >= 2 && q.contains(s.name)) codes += s.code }
+    val names = HashSet<String>()
+    com.enwei.moneymanager.net.TwData.cached().forEach { s -> if (s.name.length >= 2 && q.contains(s.name)) { codes += s.code; names += s.name } }
     if (listOf("持股", "我的股票", "手上", "庫存").any { q.contains(it) }) codes += holdings
-    val stop = setOf("今天", "什麼", "怎麼", "可以", "現在", "適合", "我的", "應該", "是否", "如何", "哪些", "一下", "目前", "要不", "不要", "還是", "這個", "那個", "股票", "建議", "請問")
+    val stop = setOf("今天", "什麼", "怎麼", "可以", "現在", "適合", "我的", "應該", "是否", "如何", "哪些", "一下", "目前", "要不", "不要", "還是", "這個", "那個", "股票", "建議", "請問", "最近", "新聞", "消息", "分析", "看法", "一個", "有沒", "沒有", "會不", "不會")
     val cjk = q.filter { it in '一'..'鿿' }
     val grams = (0 until (cjk.length - 1).coerceAtLeast(0)).map { cjk.substring(it, it + 2) }.filter { it !in stop }.toSet()
-    if (codes.isEmpty() && grams.isEmpty()) return emptyList()
-    return ds.recent(st, 7).asSequence().map { n ->
-        var score = 0.0
-        if (n.symbols.any { it in codes }) score += 5
-        if (n.theme.isNotBlank() && (q.contains(n.theme) || grams.any { n.theme.contains(it) })) score += 3
-        score += grams.count { n.title.contains(it) || n.note.contains(it) } * 1.0
-        n to score
-    }.filter { it.second > 0 }.sortedWith(compareByDescending<Pair<NewsItem, Double>> { it.second }.thenByDescending { it.first.importance }.thenByDescending { it.first.epochSec })
-        .take(limit).map { it.first }.toList()
+    val words = Regex("[A-Za-z]{2,}").findAll(q).map { it.value.lowercase() }.toSet()
+    if (codes.isEmpty() && grams.isEmpty() && words.isEmpty()) return emptyList()
+    fun search(days: Int): List<Pair<NewsItem, Double>> {
+        val docs = ds.recent(st, days)
+        if (docs.isEmpty()) return emptyList()
+        val texts = docs.map { (it.title + " " + it.note + " " + it.content.take(600)).lowercase() }
+        val avg = texts.map { it.length }.average().coerceAtLeast(1.0)
+        val terms = grams + words
+        val df = terms.associateWith { t -> texts.count { it.contains(t) } }
+        val n = docs.size.toDouble()
+        val now = System.currentTimeMillis() / 1000
+        return docs.mapIndexed { i, d ->
+            val text = texts[i]
+            var score = 0.0
+            for (t in terms) {
+                val f = Regex(Regex.escape(t)).findAll(text).count().toDouble()
+                if (f == 0.0) continue
+                val idf = kotlin.math.ln(1 + (n - df.getValue(t) + 0.5) / (df.getValue(t) + 0.5))
+                score += idf * f * 2.2 / (f + 1.2 * (0.25 + 0.75 * text.length / avg))
+                if (d.title.lowercase().contains(t)) score += idf * 0.5
+            }
+            if (d.symbols.any { it in codes }) score += 6
+            if (names.any { d.title.contains(it) }) score += 4
+            if (d.theme.isNotBlank() && (q.contains(d.theme) || grams.any { d.theme.contains(it) })) score += 2.5
+            if (score > 0) score += d.importance * 0.3 + (if (now - d.epochSec < 86_400) 0.8 else 0.0)
+            d to score
+        }.filter { it.second > 1.0 }.sortedByDescending { it.second }
+    }
+    val hits = search(7).let { if (it.size < 3) search(14) else it }
+    // 同一事件的多則報導只留最相關的一則
+    val seen = HashSet<String>()
+    return hits.filter { seen.add(it.first.title.filter { c -> c.isLetterOrDigit() }.take(14)) }.take(limit).map { it.first }
 }
 
 /** 背景蒐集與標註新聞（每天數次）；回傳新增則數。 */
@@ -441,38 +466,59 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
     return report
 }
 
-/** 投資助理對話：帶入使用者狀況與資料集摘要，回覆可附股票卡片與新聞。 */
-suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
+/**
+ * 投資助理對話：先用搜尋（BM25）從新聞資料集找出和問題相關的新聞；相關新聞不多時，
+ * 再抓這幾篇的網頁全文，讓 AI 根據具體內容回答，結論用股票卡片、圖表與新聞編號呈現。
+ */
+suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (String) -> Unit = {}): ChatMsg? {
     val st = ds.load()
     // 重試同一個問題時不重複加進對話
     ds.update { st -> if (st.chat.lastOrNull()?.let { it.fromUser && it.text == question } == true) st else st.copy(chat = (st.chat + ChatMsg(true, question)).takeLast(40)) }
+    onStep("讀取持股與大盤…")
     val snap = advisorSnapshot(fetch = true)
     val big = com.enwei.moneymanager.net.GroqAi.bigContext(com.enwei.moneymanager.net.GroqAi.AiTask.CHAT)
     val today = st.report?.let { r -> "今日報告：${r.trend}；推薦 " + r.picks.joinToString("、") { "${it.symbol}${it.name}（${it.style}）" } } ?: ""
-    // 資料太多時自動精簡（題材、個股、重點新聞的數量逐步減少）直到放得下，不讓使用者自己刪字
-    // 依問題從新聞資料集找相關新聞（代號、公司名稱、持股、題材、關鍵字），讓 AI 根據實際新聞回答
     runCatching { com.enwei.moneymanager.net.TwData.stockList(com.enwei.moneymanager.MoneyApp.instance) }
     val limit = com.enwei.moneymanager.net.GroqAi.chatContextLimit()
     val holdSyms = snap.holdings.map { it.symbol }.toSet()
-    val related0 = relatedNews(ds, st, question, holdSyms, if (big) 25 else 6)
+    // 1. 搜尋：依代號、公司名稱、題材與關鍵詞找出相關新聞
+    onStep("搜尋相關新聞…")
+    val related0 = relatedNews(ds, st, question, holdSyms, if (big) 20 else 8)
     val reserved0 = situation(snap).length + today.length + 2
-    val (digest, imp) = fitDigest(ds, st, limit - reserved0 - related0.sumOf { it.title.length + it.note.length + 30 }, big)
+    // 2. 相關新聞不多（範圍明確）時，抓前幾篇的全文
+    val focused = related0.isNotEmpty() && related0.size <= (if (big) 10 else 6)
+    val readN = if (!focused) 0 else if (big) 5 else 2
+    val relRoom = ((limit - reserved0) * (if (focused) 0.65 else 0.4)).toInt().coerceAtLeast(0)
+    val perBody = if (readN == 0) 0 else ((relRoom - related0.size * 90) / readN).coerceIn(0, if (big) 3000 else 600)
+    val bodies: Map<String, String> = if (readN > 0 && perBody >= 150) {
+        onStep("讀取 ${minOf(readN, related0.size)} 篇新聞全文…")
+        kotlinx.coroutines.coroutineScope {
+            related0.take(readN).map { n ->
+                async { n.id to (com.enwei.moneymanager.net.Article.text(n.url, perBody) ?: n.content.takeIf { n.contentLevel == "正文" && it.length > 80 }?.take(perBody)) }
+            }.map { it.await() }
+        }.mapNotNull { (id, t) -> t?.let { id to it } }.toMap()
+    } else emptyMap()
+    fun relLine(k: Int, n: NewsItem) = "[$k] ${n.title.take(60)}" + (n.note.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: "") +
+        (if (n.symbols.isNotEmpty()) "｜${n.symbols.joinToString(",")}" else "") + "｜多空 ${n.sentiment}" +
+        (bodies[n.id]?.let { "\n  全文摘錄：$it" } ?: "")
+    val relSize = related0.withIndex().sumOf { (k, n) -> relLine(k, n).length + 1 }
+    // 3. 其餘空間放資料集摘要（太多時自動精簡）
+    onStep(if (bodies.isNotEmpty()) "AI 依 ${bodies.size} 篇全文與 ${related0.size} 則相關新聞回答…" else "AI 整理回覆…")
+    val (digest, imp) = fitDigest(ds, st, limit - reserved0 - relSize - 80, big)
     val related = related0.filter { r -> imp.none { it.id == r.id } }
     val relText = if (related.isEmpty()) "" else buildString {
-        appendLine("與問題相關的新聞（App 依代號、公司、題材與關鍵字從資料集找出；引用時用編號）：")
-        related.forEachIndexed { k, n ->
-            appendLine("[${imp.size + k}] ${n.title.take(60)}" + (n.note.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: "") +
-                (if (n.symbols.isNotEmpty()) "｜${n.symbols.joinToString(",")}" else "") + "｜多空 ${n.sentiment}")
-        }
+        appendLine("與問題相關的新聞（App 搜尋資料集找出，依相關度排序；有「全文摘錄」的是已讀取的新聞內文；引用時用編號）：")
+        related.forEachIndexed { k, n -> appendLine(relLine(imp.size + k, n)) }
     }
     val sources = imp + related
     val history = st.chat.takeLast(6).map { it.fromUser to it.text }
-    val reply = com.enwei.moneymanager.net.GroqAi.advisorChat(situation(snap) + "\n" + today + "\n" + digest + "\n" + relText, history, question) ?: return null
+    val reply = com.enwei.moneymanager.net.GroqAi.advisorChat(situation(snap) + "\n" + today + "\n" + digest + "\n" + relText, history, question, focused = related.isNotEmpty()) ?: return null
     // 回覆裡的 [19, 35] 是資料集的新聞編號：換成 [1][2]，對應附在回覆下方的新聞
     val ids = ArrayList<String>()
     val text = renumberCites(reply.text, sources, ids)
     val points = reply.points.map { renumberCites(it, sources, ids) }
     reply.newsIds.mapNotNull { it.toIntOrNull() }.mapNotNull { sources.getOrNull(it)?.id }.forEach { if (it !in ids) ids += it }
+    onStep("確認代號與報價…")
     // 卡片的代號查報價確認（查得到才算確認，並帶上現價與名稱）
     val quotes = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(reply.cards.map { Market.TW to it.symbol }) }
         .getOrDefault(emptyList()).associateBy { it.key }
@@ -490,7 +536,22 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
         charts += com.enwei.moneymanager.data.ChatChart("revenue", targets)
     if (listOf("走勢", "比較", "強弱").any { question.contains(it) } && charts.none { it.kind == "compare" } && targets.size >= 2)
         charts += com.enwei.moneymanager.data.ChatChart("compare", targets.take(5))
-    val fixed = reply.copy(text = text, points = points, newsIds = ids, cards = cards, charts = charts.take(3))
+    // AI 沒有附卡片時，用相關新聞裡最常出現的個股做卡片，理由放新聞重點
+    val cards2 = if (cards.isNotEmpty() || related0.isEmpty()) cards else {
+        val top = related0.take(6).flatMap { n -> n.symbols.map { it to n } }.groupBy({ it.first }, { it.second })
+            .entries.sortedByDescending { it.value.size }.take(3)
+        val q2 = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(top.map { Market.TW to it.key }) }.getOrDefault(emptyList()).associateBy { it.key }
+        top.mapNotNull { (sym, ns) ->
+            val q = q2[quoteKey(Market.TW, sym)] ?: return@mapNotNull null
+            val n = ns.first()
+            StockPick(sym, name = q.name.orEmpty().ifBlank { com.enwei.moneymanager.net.TwData.nameOf(sym).orEmpty() }, price = q.price,
+                strength = when { n.sentiment > 0 -> "強勢"; n.sentiment < 0 -> "弱勢"; else -> "中性" }, reason = n.note.ifBlank { n.title }.take(60))
+        }
+    }
+    // 讀過全文的新聞一定附在回覆下方
+    related0.filter { it.id in bodies }.forEach { if (it.id !in ids) ids += it.id }
+    val basis = if (related0.isEmpty()) "" else "依據：搜尋到 ${related0.size} 則相關新聞" + (if (bodies.isNotEmpty()) "，讀了 ${bodies.size} 篇全文" else "")
+    val fixed = reply.copy(text = text, points = points, newsIds = ids, cards = cards2, charts = charts.take(3), basis = basis)
     // 使用者按了停止：不把回覆加進對話
     kotlinx.coroutines.yield()
     ds.update { it.copy(chat = (it.chat + fixed).takeLast(40), business = it.business + fixed.cards.filter { c -> c.business.isNotBlank() }.associate { c -> c.symbol to c.business }) }

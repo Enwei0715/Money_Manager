@@ -837,7 +837,7 @@ object GroqAi {
     }
 
     /** 投資助理對話：依資料集與使用者狀況回答，需要時附股票卡片與新聞編號。 */
-    suspend fun advisorChat(context: String, history: List<Pair<Boolean, String>>, question: String): com.enwei.moneymanager.data.ChatMsg? {
+    suspend fun advisorChat(context: String, history: List<Pair<Boolean, String>>, question: String, focused: Boolean = false): com.enwei.moneymanager.data.ChatMsg? {
         if (!enabled) return null
         val contextLimit = chatContextLimit()
         if (context.length > contextLimit) {
@@ -849,6 +849,8 @@ object GroqAi {
             "需要比較或呈現時加 charts（App 用實際資料畫）：{\"kind\": \"compare\", \"items\": [2～5 個代號]} 比較走勢、" +
             "{\"kind\": \"themes\", \"items\": [題材名稱]} 題材熱度與多空、{\"kind\": \"revenue\", \"items\": [2～6 個代號]} 月營收年增率比較、{\"kind\": \"holdings\", \"items\": []} 使用者持股損益；" +
             "引用新聞時在句子後面用 [編號] 標出，並把編號放進 news。" +
+            (if (focused) "這題有 App 搜尋到的相關新聞（部分附全文摘錄）：結論與每個重點都要根據這些新聞的具體內容（事件、數字、日期、公司），不要寫泛泛的看法；" +
+                "新聞提到的個股都做成 cards，reason 寫新聞裡的具體依據並附 [編號]；新聞沒有提到的就說資料不足，不要猜。" else "") +
             "只回 JSON：{\"reply\": 結論, \"points\": [重點], \"charts\": [圖表], \"cards\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\"或空, \"business\": 公司做什麼, \"strength\": 強勢/中性/弱勢, \"reason\": 40 字內}], \"news\": [編號]}\n\n" +
             context
         val convo = history.takeLast(6).joinToString("\n") { (u, t) -> (if (u) "使用者：" else "助理：") + t.take(300) }
