@@ -505,6 +505,12 @@ private fun Bubble(m: ChatMsg, newsById: Map<String, com.enwei.moneymanager.data
                 androidx.compose.material3.DropdownMenuItem(text = { Text("刪除", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; onDelete() })
             }
         }
+        // 回覆附的圖表：用實際資料畫（走勢比較、題材熱度、持股損益）
+        m.charts.forEach { ch ->
+            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.padding(top = 6.dp).fillMaxWidth()) {
+                Box(Modifier.padding(10.dp)) { ChatChartView(ch) }
+            }
+        }
         m.cards.forEach { c -> Box(Modifier.padding(top = 6.dp)) { PickCard(c, m.newsIds, newsById) { nav.navigate("stock/${c.symbol}") } } }
         // 引用的新聞：編號和回覆裡的 [1][2] 對應
         val ns = m.newsIds.mapIndexedNotNull { i, id -> newsById[id]?.let { i + 1 to it } }
@@ -1348,5 +1354,34 @@ private fun NewsScheduleInfo() {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         lines.forEach { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (health.paused(now)) TextButton(onClick = { com.enwei.moneymanager.work.AiHealth.resume() }) { Text("恢復背景更新") }
+    }
+}
+
+
+/** 對話回覆裡的一張圖表。 */
+@Composable
+private fun ChatChartView(ch: com.enwei.moneymanager.data.ChatChart) {
+    when (ch.kind) {
+        "compare" -> com.enwei.moneymanager.ui.components.CompareChart(ch.items)
+        "themes" -> {
+            val store by MoneyApp.news.flow.collectAsStateWithLifecycle()
+            val st = store ?: return
+            val all = remember(System.identityHashCode(st)) { MoneyApp.news.themes(st) }
+            val picked = if (ch.items.isEmpty()) all.take(8)
+            else all.filter { t -> ch.items.any { it.contains(t.key) || t.key.contains(it) } }.take(10).ifEmpty { all.take(8) }
+            com.enwei.moneymanager.ui.components.SignedBars(
+                "題材熱度（長條＝平均多空，右側為則數）",
+                picked.map { Triple(it.key, it.avgSentiment, "${it.count} 則") },
+            )
+        }
+        "holdings" -> {
+            val holdings by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
+            val rows = holdings.values.flatten().filter { it.shares > 0.0001 && it.price != null }.map { h ->
+                val cost = h.avgCost * h.shares
+                val pnl = h.marketValue - cost
+                Triple("${h.symbol} ${h.name.orEmpty()}".trim(), if (cost > 0) pnl / cost * 100 else 0.0, "%+.1f%%".format(if (cost > 0) pnl / cost * 100 else 0.0))
+            }.sortedByDescending { it.second }
+            com.enwei.moneymanager.ui.components.SignedBars("持股損益（%）", rows)
+        }
     }
 }

@@ -157,3 +157,82 @@ fun DailyBarsChart(values: List<Long>, fmt: (Long) -> String, color: Color = Mat
         }
     }
 }
+
+/** 從快取或網路取得近 3 個月日線。 */
+private suspend fun cachedBars(symbol: String): DailyBars? {
+    MiniBarsCache.map[symbol]?.let { if (System.currentTimeMillis() - it.first < 30 * 60_000L) return it.second }
+    val b = runCatching { InvestData.bars(symbol, range = "3mo") }.getOrNull()?.takeIf { it.close.isNotEmpty() } ?: return null
+    MiniBarsCache.map[symbol] = System.currentTimeMillis() to b
+    return b
+}
+
+private val SeriesColors = listOf(Color(0xFF3C82E6), Color(0xFFF0605A), Color(0xFF2E9E57), Color(0xFFFFA000), Color(0xFF7E57C2))
+
+/** 多檔個股走勢比較：近 [days] 個交易日，以第一天為 0% 的漲跌幅折線。 */
+@Composable
+fun CompareChart(symbols: List<String>, days: Int = 60, modifier: Modifier = Modifier) {
+    val data by produceState<List<Pair<String, List<Double>>>?>(null, symbols) {
+        value = symbols.mapNotNull { s ->
+            val b = cachedBars(s) ?: return@mapNotNull null
+            val c = b.close.takeLast(days)
+            val base = c.firstOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
+            "$s ${b.name.orEmpty()}".trim() to c.map { (it - base) / base * 100 }
+        }
+    }
+    val series = data ?: return
+    if (series.isEmpty()) return
+    val grid = MaterialTheme.colorScheme.outlineVariant
+    Column(modifier.fillMaxWidth()) {
+        Text("走勢比較（近 $days 個交易日，%）", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Canvas(Modifier.fillMaxWidth().height(120.dp).padding(vertical = 4.dp)) {
+            val all = series.flatMap { it.second }
+            val hi = maxOf(all.max(), 0.0)
+            val lo = minOf(all.min(), 0.0)
+            val span = (hi - lo).takeIf { it > 0 } ?: 1.0
+            fun y(v: Double) = ((hi - v) / span * size.height).toFloat()
+            drawLine(grid, Offset(0f, y(0.0)), Offset(size.width, y(0.0)), 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
+            series.forEachIndexed { si, (_, v) ->
+                val step = size.width / (v.size - 1).coerceAtLeast(1)
+                for (i in 1 until v.size) drawLine(SeriesColors[si % SeriesColors.size], Offset(step * (i - 1), y(v[i - 1])), Offset(step * i, y(v[i])), 3f)
+            }
+        }
+        series.forEachIndexed { si, (name, v) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.width(12.dp).height(3.dp).background(SeriesColors[si % SeriesColors.size]))
+                Text(" $name", fontSize = 11.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val last = v.last()
+                Text((if (last >= 0) "+" else "") + "%.1f%%".format(last), fontSize = 11.sp, color = if (last >= 0) StockUp else StockDown)
+            }
+        }
+    }
+}
+
+/**
+ * 正負長條：每列一個項目，數值為正往右（[pos] 色）、為負往左（[neg] 色），[label] 為右側顯示文字。
+ * 用在題材多空熱度、持股損益。
+ */
+@Composable
+fun SignedBars(title: String, rows: List<Triple<String, Double, String>>, pos: Color = StockUp, neg: Color = StockDown, modifier: Modifier = Modifier) {
+    if (rows.isEmpty()) return
+    val max = rows.maxOf { kotlin.math.abs(it.second) }.takeIf { it > 0 } ?: 1.0
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        rows.forEach { (name, v, label) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(88.dp))
+                Row(Modifier.weight(1f).height(10.dp).background(track, RoundedCornerShape(3.dp))) {
+                    val f = (kotlin.math.abs(v) / max).toFloat().coerceIn(0.02f, 1f)
+                    // 左半邊放負值、右半邊放正值
+                    Box(Modifier.weight(1f).height(10.dp)) {
+                        if (v < 0) Box(Modifier.align(Alignment.CenterEnd).fillMaxWidth(f).height(10.dp).background(neg, RoundedCornerShape(3.dp)))
+                    }
+                    Box(Modifier.weight(1f).height(10.dp)) {
+                        if (v >= 0) Box(Modifier.fillMaxWidth(f).height(10.dp).background(pos, RoundedCornerShape(3.dp)))
+                    }
+                }
+                Text(" $label", fontSize = 11.sp, color = if (v >= 0) pos else neg, modifier = Modifier.width(72.dp), maxLines = 1)
+            }
+        }
+    }
+}

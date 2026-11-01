@@ -391,7 +391,10 @@ fun NotificationSettingsScreen(nav: NavController) {
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Spacer(Modifier.height(8.dp))
-                        Button(onClick = { TxnNotificationListener.openSettings(ctx) }) { Text(if (enabled) "通知存取設定" else "前往開啟") }
+                        // 開啟前先說明讀取什麼、做什麼用並取得同意（已開啟時直接到設定）
+                        var disclose by remember { mutableStateOf(false) }
+                        Button(onClick = { if (enabled) TxnNotificationListener.openSettings(ctx) else disclose = true }) { Text(if (enabled) "通知存取設定" else "前往開啟") }
+                        if (disclose) com.enwei.moneymanager.ui.components.AccessDisclosure(0, { TxnNotificationListener.openSettings(ctx) }) { disclose = false }
                     }
                 }
             }
@@ -875,6 +878,7 @@ fun BackupScreen(nav: NavController) {
 
 @Composable
 fun SettingsScreen(nav: NavController) {
+    if (!com.enwei.moneymanager.BuildConfig.SELF_UPDATE) { PlayUpdateScreen(nav); return }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
@@ -991,9 +995,11 @@ fun WalletReaderScreen(nav: NavController) {
                             "無法開啟時：設定 → 應用程式 → 帳理 → ⋮ →「允許受限制的設定」。",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Button(onClick = { com.enwei.moneymanager.notify.WalletScreenReader.openSettings(ctx) }) {
+                        var disclose by remember { mutableStateOf(false) }
+                        Button(onClick = { if (enabled) com.enwei.moneymanager.notify.WalletScreenReader.openSettings(ctx) else disclose = true }) {
                             Text(if (enabled) "無障礙設定" else "前往開啟")
                         }
+                        if (disclose) com.enwei.moneymanager.ui.components.AccessDisclosure(1, { com.enwei.moneymanager.notify.WalletScreenReader.openSettings(ctx) }) { disclose = false }
                     }
                 }
             }
@@ -1161,6 +1167,24 @@ fun WalletReaderScreen(nav: NavController) {
                     }
                 }
             }
+        }
+    }
+}
+
+
+/** Google Play 版的「App 更新」：版本資訊與前往 Play 商店（更新由 Google Play 自動處理）。 */
+@Composable
+private fun PlayUpdateScreen(nav: NavController) {
+    val ctx = LocalContext.current
+    Scaffold(topBar = { BackTopBar("App 更新", { nav.popBackStack() }) }) { pad ->
+        Column(Modifier.padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("目前版本 ${com.enwei.moneymanager.BuildConfig.VERSION_NAME}（build ${com.enwei.moneymanager.BuildConfig.VERSION_CODE}）", fontSize = 14.sp)
+            Text("這個版本從 Google Play 安裝，新版會由 Google Play 自動更新。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = {
+                val id = ctx.packageName
+                runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$id"))) }
+                    .onFailure { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=$id"))) }
+            }) { Text("在 Google Play 查看") }
         }
     }
 }

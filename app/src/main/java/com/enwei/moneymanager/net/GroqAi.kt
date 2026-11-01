@@ -620,8 +620,9 @@ object GroqAi {
             "從多個角度整理（消費習慣與頻率、時段（深夜／週末）、分類趨勢與上期／去年比較、固定支出），所有結論都要引用資料裡的數字或交易，不可編造。" +
             "每個建議都要具體可執行，並寫出大約能省多少，讓使用者自己決定。" +
             "挑 3～5 筆（或一組）想跟使用者確認用途的交易，用交易編號；使用者已標記過的交易要尊重他的回答，不要再問同一筆。金額單位為 $base 元。" +
-            "只回 JSON：{\"score\": 0～100 整數, \"headline\": 30 字內總評, " +
-            "\"analysis\": [{\"title\": 角度名稱, \"text\": 60 字內分析}]（4～5 項）, \"good\": [1～3 點], \"improve\": [2～3 點，含數字], " +
+            "App 會用圖表呈現分類比較與每日支出，文字只寫結論，不要重複列出圖表上的數字，每段都要短。" +
+            "只回 JSON：{\"score\": 0～100 整數, \"headline\": 20 字內總評, " +
+            "\"analysis\": [{\"title\": 角度名稱, \"text\": 35 字內分析}]（3～4 項）, \"good\": [1～2 點，各 20 字內], \"improve\": [1～2 點，各 25 字內], " +
             "\"questions\": [{\"t\": [交易編號], \"q\": 想確認的事（30 字內）, \"why\": 確認後能幫上什麼（25 字內）}], " +
             "\"actions\": [{\"action\": 25 字內具體行動, \"saving\": 每月可省金額整數或 null}]（3 點）, " +
             "\"expense_cap\": 下期支出上限整數, \"savings_target\": 下期儲蓄率數字, \"goals\": [1～3 項], " +
@@ -778,22 +779,23 @@ object GroqAi {
     suspend fun dailyReport(user: String): com.enwei.moneymanager.data.DailyReport? {
         if (!enabled) return null
         val system = advisorRole() + "請產生今天的投資報告，條理分明、容易閱讀：先用一句話說明今天的市場氣氛，再寫大盤趨勢與階段、目前市場資金追逐的題材（依資料集熱度與多空）、整體看法；" +
-            "今天可以考慮的 2～4 檔股票（標明長線或短線、這家公司在做什麼、目前強勢／中性／弱勢、理由、進場條件、停損條件、依資金計畫建議投入金額）；" +
+            "今天可以考慮的 6～10 檔股票：從資料集裡新聞多、偏多且有具體題材的個股挑選，分散在不同題材，長線與短線都要有" +
+            "（標明長線或短線、這家公司在做什麼、目前強勢／中性／弱勢、理由、進場條件、停損條件、依資金計畫建議投入金額）；文字精簡，理由 30 字內；" +
             "逐檔持股動作（只能是「續抱」「長抱」「分批停利 1/3」「減碼 1/3」「停損出場」「觀察」，參考提供的規則停損價）；" +
             "挑 3～6 則使用者一定要看的重點新聞（用新聞編號）並說明為什麼重要；資金分配建議；交易前檢查清單；依他過去錯誤的提醒。" +
             "只回 JSON：{\"trend\": 一句話, \"stage\": 階段, \"themes\": [題材 2～4 項], \"summary\": 100 字內, " +
             "\"picks\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\", \"business\": 公司做什麼 30 字內, \"strength\": \"強勢\"或\"中性\"或\"弱勢\", " +
-            "\"reason\": 50 字內, \"entry\": 進場條件, \"stop\": 停損條件, \"amount\": 建議投入元}], " +
+            "\"reason\": 30 字內, \"entry\": 進場條件, \"stop\": 停損條件, \"amount\": 建議投入元}]（6～10 檔）, " +
             "\"holdings\": [{\"symbol\": 代號, \"action\": 動作, \"stop\": 數字或 null, \"reason\": 30 字內}], " +
             "\"news\": [{\"n\": 新聞編號, \"why\": 30 字內}], \"allocation\": 80 字內, \"checklist\": [3～5 項], \"warnings\": [1～3 項]}"
-        val r = chatJson(system, user, 2000, hard = true, cap = 3800, effort = "low", task = AiTask.REPORT) ?: return null
+        val r = chatJson(system, user, 3500, hard = true, cap = 6000, effort = "low", task = AiTask.REPORT) ?: return null
         fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(120) }.orEmpty()
         fun objs(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
         val sym = Regex("[0-9]{4,6}[A-Z]?")
         return com.enwei.moneymanager.data.DailyReport(
             trend = r.str("trend")?.take(120).orEmpty(), stage = r.str("stage")?.take(20).orEmpty(), themes = list("themes"),
             summary = r.str("summary")?.take(240).orEmpty(),
-            picks = objs("picks").mapNotNull { parsePick(it, sym) }.take(4),
+            picks = objs("picks").mapNotNull { parsePick(it, sym) }.distinctBy { it.symbol }.take(10),
             holdings = objs("holdings").mapNotNull { o ->
                 val code = o.str("symbol")?.let { sym.find(it)?.value } ?: return@mapNotNull null
                 com.enwei.moneymanager.data.AdvisorHolding(code, o.str("action")?.take(12).orEmpty(), o.str("stop")?.toDoubleOrNull(), o.str("reason")?.take(80).orEmpty())
@@ -812,17 +814,26 @@ object GroqAi {
             lastError = "AI 對話資料超過安全上下文上限（${context.length}/$contextLimit 字元），未截斷或送出；請稍後重試"
             return null
         }
-        val system = advisorRole() + "以下是資料與使用者狀況，請回答他的問題。回覆分成結論 reply（60 字內）與重點 points（每點 45 字內）；" +
-            tone().chat + "提到具體股票時放進 cards（App 會在卡片上畫近期 K 線，文字不必描述走勢圖）；引用新聞時在句子後面用 [編號] 標出，並把編號放進 news。" +
-            "只回 JSON：{\"reply\": 結論, \"points\": [重點], \"cards\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\"或空, \"business\": 公司做什麼, \"strength\": 強勢/中性/弱勢, \"reason\": 40 字內}], \"news\": [編號]}\n\n" +
+        val system = advisorRole() + "以下是資料與使用者狀況，請回答他的問題。字要少、多用圖表：結論 reply 40 字內，重點 points 最多 3 點、每點 30 字內；" +
+            tone().chat + "提到具體股票時放進 cards（App 會在卡片上畫近期 K 線，文字不必描述走勢）；" +
+            "需要比較或呈現時加 charts（App 用實際資料畫）：{\"kind\": \"compare\", \"items\": [2～5 個代號]} 比較走勢、" +
+            "{\"kind\": \"themes\", \"items\": [題材名稱]} 題材熱度與多空、{\"kind\": \"holdings\", \"items\": []} 使用者持股損益；" +
+            "引用新聞時在句子後面用 [編號] 標出，並把編號放進 news。" +
+            "只回 JSON：{\"reply\": 結論, \"points\": [重點], \"charts\": [圖表], \"cards\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\"或空, \"business\": 公司做什麼, \"strength\": 強勢/中性/弱勢, \"reason\": 40 字內}], \"news\": [編號]}\n\n" +
             context
         val convo = history.takeLast(6).joinToString("\n") { (u, t) -> (if (u) "使用者：" else "助理：") + t.take(300) }
         val r = chatJson(system, (if (convo.isNotBlank()) "先前對話：\n$convo\n\n" else "") + "問題：$question", 1200, hard = true, cap = 3000, effort = "low", task = AiTask.CHAT) ?: return null
         val sym = Regex("[0-9]{4,6}[A-Z]?")
-        val cards = (r["cards"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonObject)?.let { o -> parsePick(o, sym) } }.orEmpty().take(5)
+        val cards = (r["cards"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonObject)?.let { o -> parsePick(o, sym) } }.orEmpty().distinctBy { it.symbol }.take(8)
+        val charts = (r["charts"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val kind = o.str("kind")?.takeIf { it in setOf("compare", "themes", "holdings") } ?: return@mapNotNull null
+            val items = (o["items"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.take(40) }.orEmpty()
+            com.enwei.moneymanager.data.ChatChart(kind, if (kind == "compare") items.mapNotNull { sym.find(it)?.value }.distinct().take(5) else items.take(10))
+        }.orEmpty().take(3)
         val news = (r["news"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt()?.toString() }.orEmpty()
         val points = (r["points"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.take(120)?.takeIf { s -> s.isNotEmpty() } }.orEmpty().take(5)
-        return com.enwei.moneymanager.data.ChatMsg(false, r.str("reply")?.take(600) ?: return null, points = points, cards = cards, newsIds = news)
+        return com.enwei.moneymanager.data.ChatMsg(false, r.str("reply")?.take(300) ?: return null, points = points.take(3), charts = charts, cards = cards, newsIds = news)
     }
 
     /** 對話可以帶的資料量（字元）：Gemini 可讀大量資料，Groq 每分鐘 token 有限。 */

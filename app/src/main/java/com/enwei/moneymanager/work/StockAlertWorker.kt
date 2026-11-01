@@ -130,7 +130,7 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
         suspend fun checkUpdate(context: Context) {
             val repo = MoneyApp.repo
             val s = repo.settings.value
-            if (!s.notifyUpdates) return
+            if (!s.notifyUpdates || !com.enwei.moneymanager.BuildConfig.SELF_UPDATE) return
             val r = runCatching { com.enwei.moneymanager.net.Updater.latest(s.githubToken) }.getOrNull() ?: return
             if (!com.enwei.moneymanager.net.Updater.isNewer(r) || r.versionCode <= s.updateNotified || r.versionCode == s.updateSkipped) return
             repo.settings.update { it.copy(updateNotified = r.versionCode) }

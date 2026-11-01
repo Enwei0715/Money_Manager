@@ -36,6 +36,8 @@ private var lastCheck = 0L
  */
 @Composable
 fun UpdatePrompt() {
+    // Google Play 版的更新由 Play 負責
+    if (!com.enwei.moneymanager.BuildConfig.SELF_UPDATE) return
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var release by remember { mutableStateOf<ReleaseInfo?>(null) }

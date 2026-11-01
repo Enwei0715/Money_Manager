@@ -35,6 +35,19 @@ android {
         }
     }
 
+    // 兩種發佈方式：github（APK，App 內更新）與 play（上架 Google Play，更新交給 Play，不含自行下載更新的功能）
+    flavorDimensions += "dist"
+    productFlavors {
+        create("github") {
+            dimension = "dist"
+            buildConfigField("Boolean", "SELF_UPDATE", "true")
+        }
+        create("play") {
+            dimension = "dist"
+            buildConfigField("Boolean", "SELF_UPDATE", "false")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true

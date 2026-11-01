@@ -106,6 +106,10 @@ data class DailyReport(
     val cites: List<String> = emptyList(),
 )
 
+/** 對話回覆裡的圖表：[kind] 種類，[items] 代號或題材名稱。 */
+@Serializable
+data class ChatChart(val kind: String, val items: List<String> = emptyList())
+
 /** 投資助理對話的一則訊息；AI 的回覆可附帶股票卡片與新聞。 */
 @Serializable
 data class ChatMsg(
@@ -114,6 +118,8 @@ data class ChatMsg(
     val text: String,
     /** AI 回覆的重點條列（依語氣設定的格式） */
     val points: List<String> = emptyList(),
+    /** 回覆附的圖表（App 依實際資料畫）：compare 個股走勢比較、themes 題材熱度、holdings 持股損益 */
+    val charts: List<ChatChart> = emptyList(),
     val time: Long = System.currentTimeMillis(),
     val cards: List<StockPick> = emptyList(),
     val newsIds: List<String> = emptyList(),
