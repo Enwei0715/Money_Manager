@@ -869,7 +869,7 @@ object GroqAi {
     }
 
     /** 對話可以帶的資料量（字元）：Gemini 可讀大量資料，Groq 每分鐘 token 有限。 */
-    fun chatContextLimit(): Int = if (bigContext(AiTask.CHAT)) 80_000 else 2500
+    fun chatContextLimit(): Int = if (bigContext(AiTask.CHAT)) 80_000 else 3500
 
     /** 一句話說明這家公司在做什麼（股票資訊頁用，結果會快取）。 */
     suspend fun describeCompany(symbol: String, name: String): String? {

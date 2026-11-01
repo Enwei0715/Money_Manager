@@ -476,6 +476,12 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                     Bubble(m, newsById, nav) { scope.launch { MoneyApp.news.update { st -> st.copy(chat = st.chat.filterNot { it.time == m.time && it.fromUser == m.fromUser }) } } }
                 }
                 if (busy) item {
+                    // 對話生成流程：持股與大盤 → 搜尋新聞 → 讀取全文 → AI 回答 → 確認代號
+                    job?.takeIf { it.running }?.let { j ->
+                        Column(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            ChatSteps(j.step)
+                        }
+                    }
                     com.enwei.moneymanager.ui.components.AiWorkProgress(
                         chatWork ?: job?.takeIf { it.running }?.let {
                             com.enwei.moneymanager.work.AiWorkStatus(true, it.step.ifBlank { "AI 正在整理你的投資問題…" }, it.startedAt, null, null)

@@ -483,27 +483,38 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
     val holdSyms = snap.holdings.map { it.symbol }.toSet()
     // 1. 搜尋：依代號、公司名稱、題材與關鍵詞找出相關新聞
     onStep("搜尋相關新聞…")
-    val related0 = relatedNews(ds, st, question, holdSyms, if (big) 20 else 8)
-    val reserved0 = situation(snap).length + today.length + 2
-    // 2. 相關新聞不多（範圍明確）時，抓前幾篇的全文
-    val focused = related0.isNotEmpty() && related0.size <= (if (big) 10 else 6)
-    val readN = if (!focused) 0 else if (big) 5 else 2
-    val relRoom = ((limit - reserved0) * (if (focused) 0.65 else 0.4)).toInt().coerceAtLeast(0)
-    val perBody = if (readN == 0) 0 else ((relRoom - related0.size * 90) / readN).coerceIn(0, if (big) 3000 else 600)
-    val bodies: Map<String, String> = if (readN > 0 && perBody >= 150) {
-        onStep("讀取 ${minOf(readN, related0.size)} 篇新聞全文…")
+    val related0 = relatedNews(ds, st, question, holdSyms, if (big) 20 else 5)
+    // 有找到相關新聞時，資料以新聞為主：小模型把持股／大盤狀況與今日報告縮短，空間留給新聞全文
+    val sit = situation(snap).let { if (!big && related0.isNotEmpty()) it.take(700) else it }
+    val today2 = if (!big && related0.isNotEmpty()) today.take(160) else today
+    val reserved0 = sit.length + today2.length + 2
+    // 2. 讀取最相關的前幾篇新聞全文（Groq 2 篇、Gemini 5 篇）
+    val readN = if (related0.isEmpty()) 0 else minOf(related0.size, if (big) 5 else 2)
+    val lineCost = related0.size * 110 + 160
+    val perBody = if (readN == 0) 0 else ((limit - reserved0 - lineCost - (if (big) 4000 else 150)) / readN).coerceIn(0, if (big) 3000 else 800)
+    val bodies = HashMap<String, String>()
+    val summaries = HashMap<String, String>()
+    if (readN > 0 && perBody >= 200) {
+        onStep("讀取 $readN 篇新聞全文…")
         kotlinx.coroutines.coroutineScope {
-            related0.take(readN).map { n ->
-                async { n.id to (com.enwei.moneymanager.net.Article.text(n.url, perBody) ?: n.content.takeIf { n.contentLevel == "正文" && it.length > 80 }?.take(perBody)) }
-            }.map { it.await() }
-        }.mapNotNull { (id, t) -> t?.let { id to it } }.toMap()
-    } else emptyMap()
+            related0.take(readN).map { n -> async { n to com.enwei.moneymanager.net.Article.text(n.url, perBody) } }.map { it.await() }
+        }.forEach { (n, t) ->
+            when {
+                t != null -> bodies[n.id] = t
+                n.content.length > 40 -> summaries[n.id] = n.content.take(perBody)   // 抓不到網頁時用 RSS 提供的摘要
+            }
+        }
+    }
     fun relLine(k: Int, n: NewsItem) = "[$k] ${n.title.take(60)}" + (n.note.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: "") +
         (if (n.symbols.isNotEmpty()) "｜${n.symbols.joinToString(",")}" else "") + "｜多空 ${n.sentiment}" +
-        (bodies[n.id]?.let { "\n  全文摘錄：$it" } ?: "")
+        (bodies[n.id]?.let { "\n  全文摘錄：$it" } ?: summaries[n.id]?.let { "\n  摘要：$it" } ?: "")
     val relSize = related0.withIndex().sumOf { (k, n) -> relLine(k, n).length + 1 }
     // 3. 其餘空間放資料集摘要（太多時自動精簡）
-    onStep(if (bodies.isNotEmpty()) "AI 依 ${bodies.size} 篇全文與 ${related0.size} 則相關新聞回答…" else "AI 整理回覆…")
+    onStep(when {
+        bodies.isNotEmpty() -> "AI 依 ${bodies.size} 篇全文與 ${related0.size} 則相關新聞回答…"
+        related0.isNotEmpty() -> "AI 依 ${related0.size} 則相關新聞回答…（全文沒有讀到，改用標題與摘要）"
+        else -> "AI 依資料集摘要回答…（沒有找到直接相關的新聞）"
+    })
     val (digest, imp) = fitDigest(ds, st, limit - reserved0 - relSize - 80, big)
     val related = related0.filter { r -> imp.none { it.id == r.id } }
     val relText = if (related.isEmpty()) "" else buildString {
@@ -512,7 +523,7 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
     }
     val sources = imp + related
     val history = st.chat.takeLast(6).map { it.fromUser to it.text }
-    val reply = com.enwei.moneymanager.net.GroqAi.advisorChat(situation(snap) + "\n" + today + "\n" + digest + "\n" + relText, history, question, focused = related.isNotEmpty()) ?: return null
+    val reply = com.enwei.moneymanager.net.GroqAi.advisorChat(sit + "\n" + today2 + "\n" + digest + "\n" + relText, history, question, focused = related.isNotEmpty()) ?: return null
     // 回覆裡的 [19, 35] 是資料集的新聞編號：換成 [1][2]，對應附在回覆下方的新聞
     val ids = ArrayList<String>()
     val text = renumberCites(reply.text, sources, ids)
@@ -550,7 +561,7 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
     }
     // 讀過全文的新聞一定附在回覆下方
     related0.filter { it.id in bodies }.forEach { if (it.id !in ids) ids += it.id }
-    val basis = if (related0.isEmpty()) "" else "依據：搜尋到 ${related0.size} 則相關新聞" + (if (bodies.isNotEmpty()) "，讀了 ${bodies.size} 篇全文" else "")
+    val basis = if (related0.isEmpty()) "" else "依據：搜尋到 ${related0.size} 則相關新聞" + (if (bodies.isNotEmpty()) "，讀了 ${bodies.size} 篇全文" else "，全文沒有讀到（用標題與摘要）")
     val fixed = reply.copy(text = text, points = points, newsIds = ids, cards = cards2, charts = charts.take(3), basis = basis)
     // 使用者按了停止：不把回覆加進對話
     kotlinx.coroutines.yield()

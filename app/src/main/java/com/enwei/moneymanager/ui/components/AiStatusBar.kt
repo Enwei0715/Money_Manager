@@ -89,7 +89,13 @@ fun AiStatusBar(nav: NavController, onOpen: (String) -> Unit = { nav.navigate(it
                 add(AiLine(r.error, if (r.refreshOnly) "advisor:2" else "advisor:0", false, warn = true, action = "知道了" to { ReportJob.state.value = null }))
             }
         }
-        chat?.takeIf { it.running }?.let { add(AiLine(it.step.ifBlank { "股票助理回覆中…" }, "advisor:1", true)) }
+        chat?.takeIf { it.running }?.let {
+            // 對話流程：讀取持股 → 搜尋新聞 → 讀取全文 → AI 回答 → 確認代號
+            val n = when {
+                it.step.contains("確認代號") -> 5; it.step.startsWith("AI") -> 4; it.step.contains("全文") -> 3; it.step.contains("搜尋") -> 2; else -> 1
+            }
+            add(AiLine("對話 步驟 $n/5 · " + it.step.ifBlank { "股票助理回覆中…" }, "advisor:1", true, progress = n / 5f))
+        }
         if (review.running) add(AiLine(review.step.ifBlank { "收支檢討中…" }, "review", true, progress(review.done, review.total)))
         listOf(unknown, dups, tidy).filter { it.running }.forEach { add(AiLine(it.step.ifBlank { "AI 整理中…" }, "ai-hub", true, progress(it.done, it.total))) }
         if (health.paused(now)) {
