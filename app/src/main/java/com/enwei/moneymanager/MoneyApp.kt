@@ -31,10 +31,14 @@ class MoneyApp : Application() {
         com.enwei.moneymanager.core.TaiwanHolidays.update(com.enwei.moneymanager.data.HolidayCache.decode(repo.settings.value.holidayCache))
         com.enwei.moneymanager.core.TaiwanHolidays.setExtra(com.enwei.moneymanager.data.TyphoonDays.decode(repo.settings.value.typhoonDays))
         com.enwei.moneymanager.ui.applyAppLocale(this, repo.settings.value.language)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL_RECORDS, "自動記帳", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "從通知自動建立交易時提示"
-            },
+        // 通知分成四類，使用者可以在系統設定分別開關
+        getSystemService(NotificationManager::class.java).createNotificationChannels(
+            listOf(
+                NotificationChannel(CHANNEL_RECORDS, "自動記帳", NotificationManager.IMPORTANCE_LOW).apply { description = "從通知自動建立交易時提示" },
+                NotificationChannel(CHANNEL_ALERTS, "提醒", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "股價、卡費、借貸提醒，報告完成或失敗，助理回覆" },
+                NotificationChannel(CHANNEL_PROGRESS, "AI 進度", NotificationManager.IMPORTANCE_LOW).apply { description = "新聞更新與報告產生的進度" },
+                NotificationChannel(CHANNEL_UPDATES, "App 更新", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "有新版本時通知" },
+            ),
         )
         appScope.launch {
             repo.ensureSeedData()
@@ -58,6 +62,9 @@ class MoneyApp : Application() {
 
     companion object {
         const val CHANNEL_RECORDS = "records"
+        const val CHANNEL_ALERTS = "alerts"
+        const val CHANNEL_PROGRESS = "progress"
+        const val CHANNEL_UPDATES = "updates"
         lateinit var instance: MoneyApp
             private set
         val repo get() = instance.repo

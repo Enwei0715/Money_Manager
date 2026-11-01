@@ -78,26 +78,5 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             WorkManager.getInstance(context).enqueueUniquePeriodicWork("news", ExistingPeriodicWorkPolicy.KEEP, req)
         }
 
-        private fun notifyReport(context: Context, picks: String, trend: String) {
-            val nm = context.getSystemService(android.app.NotificationManager::class.java)
-            if (!nm.areNotificationsEnabled()) return
-            val open = android.app.PendingIntent.getActivity(
-                context, 9320,
-                android.content.Intent(context, com.enwei.moneymanager.ui.MainActivity::class.java)
-                    .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "advisor"),
-                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            nm.notify(
-                9320,
-                androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
-                    .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                    .setContentTitle(com.enwei.moneymanager.ui.tr("今日投資報告已更新"))
-                    .setContentText(if (picks.isNotBlank()) picks else trend)
-                    .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText("$trend\n$picks"))
-                    .setContentIntent(open)
-                    .setAutoCancel(true)
-                    .build(),
-            )
-        }
     }
 }

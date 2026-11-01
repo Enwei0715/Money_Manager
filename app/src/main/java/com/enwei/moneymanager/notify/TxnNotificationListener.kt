@@ -113,24 +113,5 @@ class TxnNotificationListener : NotificationListenerService() {
         fun openSettings(context: Context) {
             context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
-
-        private fun notifyRecorded(context: Context, message: String, kind: String) {
-            val nm = context.getSystemService(NotificationManager::class.java)
-            if (!nm.areNotificationsEnabled()) return
-            val pending = MoneyApp.repo.settings.value.notifAutoConfirm.not() && kind == "RECORDED"
-            val intent = PendingIntent.getActivity(
-                context, 0,
-                Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_ROUTE, if (pending) "pending" else "home"),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            val n = NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
-                .setSmallIcon(R.drawable.ic_stat_ledger)
-                .setContentTitle(if (pending) "已記下，待確認" else "已自動記帳")
-                .setContentText(message)
-                .setContentIntent(intent)
-                .setAutoCancel(true)
-                .build()
-            nm.notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), n)
-        }
     }
 }

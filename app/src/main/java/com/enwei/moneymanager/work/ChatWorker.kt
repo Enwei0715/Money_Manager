@@ -79,7 +79,7 @@ object ChatJob {
         )
         nm.notify(
             9340,
-            androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
+            androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_ALERTS)
                 .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
                 .setContentTitle(tr("股票助理回覆了"))
                 .setContentText(text.take(80))

@@ -28,7 +28,11 @@ object QuickActions {
 
     private fun notifId(txnId: Long) = (txnId % 100_000).toInt() + 20_000
 
-    suspend fun notifyRecorded(context: Context, txnId: Long?, message: String, pending: Boolean) {
+    /**
+     * 每一筆自動記帳都發一則通知，內容和帳理裡記下的一樣：日期、金額、分類、帳戶、內容（與說明）。
+     * 支出、收入可直接在通知上改分類或輸入說明；改完會用同一則通知更新內容。
+     */
+    suspend fun notifyRecorded(context: Context, txnId: Long?, message: String, pending: Boolean, silent: Boolean = false) {
         val nm = context.getSystemService(NotificationManager::class.java)
         if (!nm.areNotificationsEnabled()) return
         val repo = MoneyApp.repo
@@ -41,21 +45,39 @@ object QuickActions {
         )
         val b = NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
             .setSmallIcon(R.drawable.ic_stat_ledger)
-            .setContentTitle(tr(if (pending) "已記下，待確認" else "已自動記帳"))
             .setContentIntent(open)
             .setAutoCancel(true)
-        if (t == null || t.type == TxnType.TRANSFER) {
-            b.setContentText(message)
+            .setOnlyAlertOnce(silent)
+        if (t == null) {
+            // 股票成交等不是一般交易的紀錄：只顯示訊息
+            b.setContentTitle(tr(if (pending) "已記下，待確認" else "已自動記帳")).setContentText(message)
             nm.notify(notifId(txnId ?: System.currentTimeMillis()), b.build())
             return
         }
-        val cats = repo.frequentCategories(t.type, 2, t.categoryId)
-        val current = t.categoryId?.let { id -> MoneyApp.repo.db.categories().all().find { it.id == id }?.name }
-        b.setContentText("${Money.withSymbol(t.amount, t.currency)} ${t.merchant.orEmpty()} · ${tr("分類：")}${current?.let(::tr) ?: tr("未分類")}")
-            .setStyle(NotificationCompat.BigTextStyle().bigText(
-                "${Money.withSymbol(t.amount, t.currency)} ${t.merchant.orEmpty()}\n${tr("分類：")}${current?.let(::tr) ?: tr("未分類")}\n" +
-                    tr("可直接點下方改分類或輸入說明"),
-            ))
+        val cats = repo.db.categories().all().associateBy { it.id }
+        val accs = repo.db.accounts().all().associateBy { it.id }
+        val cat = t.categoryId?.let { id -> cats[id]?.let { c -> listOfNotNull(c.parentId?.let { cats[it]?.name }, c.name).joinToString("／") } }
+        val account = when (t.type) {
+            TxnType.TRANSFER -> "${accs[t.accountId]?.name ?: "?"} → ${accs[t.toAccountId]?.name ?: "?"}"
+            else -> accs[t.accountId]?.name ?: tr("未指定")
+        }
+        val dt = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault())
+        val date = "%d/%d/%d（%s）%02d:%02d".format(dt.year, dt.monthValue, dt.dayOfMonth,
+            com.enwei.moneymanager.core.Recurrence.weekdayName(dt.dayOfWeek), dt.hour, dt.minute)
+        val amount = Money.withSymbol(t.amount, t.currency)
+        val lines = listOfNotNull(
+            tr("日期") + "：" + date,
+            tr("金額") + "：" + amount,
+            if (t.type != TxnType.TRANSFER) tr("分類") + "：" + (cat?.let(::tr) ?: tr("未分類")) else null,
+            tr("帳戶") + "：" + account,
+            t.merchant?.takeIf { it.isNotBlank() }?.let { tr("內容") + "：" + it },
+            t.note?.takeIf { it.isNotBlank() }?.let { tr("說明") + "：" + it },
+        )
+        b.setContentTitle("${tr(t.type.label)} $amount · " + tr(if (pending) "待確認" else "已自動記帳"))
+            .setContentText(listOfNotNull(t.merchant?.takeIf { it.isNotBlank() }, cat?.let(::tr), account).joinToString(" · "))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(lines.joinToString("\n")))
+            .setWhen(t.date).setShowWhen(true)
+        if (t.type == TxnType.TRANSFER) { nm.notify(notifId(t.id), b.build()); return }
         // 輸入說明（通知上直接回覆）
         val noteIntent = PendingIntent.getBroadcast(
             context, notifId(t.id) * 10 + 9,
@@ -67,7 +89,7 @@ object QuickActions {
                 .addRemoteInput(RemoteInput.Builder(KEY_NOTE).setLabel(tr("這筆是什麼？")).build())
                 .build(),
         )
-        cats.forEachIndexed { i, c ->
+        repo.frequentCategories(t.type, 2, t.categoryId).forEachIndexed { i, c ->
             val pi = PendingIntent.getBroadcast(
                 context, notifId(t.id) * 10 + i,
                 Intent(context, TxnActionReceiver::class.java).setAction(ACTION_CATEGORY).putExtra(EXTRA_TXN, t.id).putExtra(EXTRA_CAT, c.id),
@@ -92,23 +114,9 @@ object QuickActions {
                             MoneyApp.repo.quickUpdateTxn(id, note = text)
                         }
                     }
-                    // 更新通知內容（顯示新的分類／說明）
+                    // 用同一則通知更新成新的分類／說明（不另外發一則「已更新」）
                     val t = MoneyApp.repo.getTxn(id)
-                    val cat = t?.categoryId?.let { c -> MoneyApp.repo.db.categories().all().find { it.id == c }?.name }
-                    val nm = context.getSystemService(NotificationManager::class.java)
-                    nm.notify(
-                        notifId(id),
-                        NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
-                            .setSmallIcon(R.drawable.ic_stat_ledger)
-                            .setContentTitle(tr("已更新"))
-                            .setContentText(
-                                listOfNotNull(t?.let { Money.withSymbol(it.amount, it.currency) }, t?.merchant, cat?.let { tr("分類：") + tr(it) }, t?.note)
-                                    .joinToString(" · "),
-                            )
-                            .setTimeoutAfter(4000)
-                            .setAutoCancel(true)
-                            .build(),
-                    )
+                    notifyRecorded(context, id, "", t?.status == com.enwei.moneymanager.data.TxnStatus.PENDING, silent = true)
                 } finally { pending.finish() }
             }
         }

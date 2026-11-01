@@ -156,7 +156,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             )
             nm.notify(
                 9300,
-                androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
+                androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_ALERTS)
                     .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
                     .setContentTitle(com.enwei.moneymanager.ui.tr("「${w.from.name}」餘額不足，卡費可能扣款失敗"))
                     .setContentText(
@@ -185,7 +185,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             )
             nm.notify(
                 9310,
-                androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
+                androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_ALERTS)
                     .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
                     .setContentTitle(com.enwei.moneymanager.ui.tr("借貸提醒"))
                     .setContentText(list.first())

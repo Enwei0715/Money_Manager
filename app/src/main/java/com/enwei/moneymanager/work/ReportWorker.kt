@@ -146,7 +146,7 @@ object ReportJob {
     fun notificationId() = NOTICE_ID
 
     private fun progressNotification(context: Context, state: State, elapsed: Long) =
-        androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
+        androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_PROGRESS)
             .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
             .setContentTitle(tr(if (state.refreshOnly) "更新新聞中" else "產生投資報告中"))
             .setContentText(
@@ -168,7 +168,7 @@ object ReportJob {
         if (!nm.areNotificationsEnabled()) return
         nm.notify(
             COMPLETION_NOTICE_ID,
-            androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
+            androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_ALERTS)
                 .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
                 .setContentTitle(title)
                 .setContentText(text)
