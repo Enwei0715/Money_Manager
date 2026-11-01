@@ -138,6 +138,15 @@ fun ConfigScreen(nav: NavController) {
                 ConfigRow("起始畫面（每日／日曆）", if (s.startScreen == 1) "日曆" else "每日") {
                     ask("起始畫面", listOf(0 to "每日", 1 to "日曆"), s.startScreen) { v -> repo.settings.update { it.copy(startScreen = v) } }
                 }
+                ConfigRow("日曆標示", if (s.calendarDots) "顏色小點" else "文字") {
+                    ask("日曆標示", listOf(false to "文字（休、結、繳、扣）", true to "顏色小點"), s.calendarDots,
+                        "放在日曆日期與金額之間；點日期可以看完整名稱。") { v -> repo.settings.update { it.copy(calendarDots = v) } }
+                }
+                ConfigRow("搜尋的篩選方式", if (s.filterStyle == 0) "圖表勾選" else "欄位篩選") {
+                    ask("搜尋的篩選方式", listOf(0 to "圖表勾選（收入／支出圓環、勾選分類與帳戶）", 1 to "欄位篩選（期間、帳戶、分類、金額）"), s.filterStyle) { v ->
+                        repo.settings.update { it.copy(filterStyle = v) }
+                    }
+                }
                 ConfigRow("每月起始日", "每月 ${s.monthStartDay} 日") {
                     ask("每月起始日", (1..28).map { it to "每月 $it 日" }, s.monthStartDay, "例如發薪日是 5 號，設成 5 日就會以 5 號到下月 4 號為一個月。") { v ->
                         repo.settings.update { it.copy(monthStartDay = v) }

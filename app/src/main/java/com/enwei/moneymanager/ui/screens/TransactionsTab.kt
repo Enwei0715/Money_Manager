@@ -13,10 +13,13 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -548,105 +551,84 @@ private fun CalendarView(
                 Text("週${Recurrence.weekdayName(d)}", Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 13.sp, color = weekdayColor(d, gray))
             }
         }
+        // 標示用顏色小點時，在星期列下方放一行圖例
+        if (settings.calendarDots) Row(
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            calendarMarks(SundayColor, IncomeColor, MaterialTheme.colorScheme.primary, ExpenseColor, TransferColor).forEach { (label, c) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(6.dp).background(c, CircleShape))
+                    Text(" $label", fontSize = 10.sp, color = gray)
+                }
+            }
+        }
         for (w in 0 until weeks) {
-            Row(Modifier.fillMaxWidth().heightIn(min = 90.dp)) {
+            // 一週一列：高度跟著這週內容最多的那格（日期、標示、最多三行金額），不寫死，日期不會被下方擋到
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
                 for (d in 0 until 7) {
                     val date = start.plusDays((w * 7 + d).toLong())
                     val inMonth = inRange(date, range)
-                    val t0 = totalsOf(byDay[date].orEmpty(), lk.fx)
-                    val t = if (date == range.first && carry != 0L) Totals(t0.income + maxOf(0, carry), t0.expense + maxOf(0, -carry)) else t0
+                    val t = totalsOf(byDay[date].orEmpty(), lk.fx)
                     val alpha = if (inMonth) 1f else 0.45f
+                    val isToday = date == today
+                    val offDay = !com.enwei.moneymanager.core.TaiwanHolidays.isBusinessDay(date)
+                    val dayName = com.enwei.moneymanager.core.TaiwanHolidays.label(date)
+                    val holiday = dayName?.takeIf { offDay }
+                    val makeupWorkday = dayName?.let { "補行上班" in it || "補班" in it } == true
+                    val events = cardEvents[date].orEmpty()
+                    // 這天有的標示：休、班、結、繳、扣（完整名稱在點日期後的下方面板）
+                    val marks = calendarMarks(SundayColor, IncomeColor, MaterialTheme.colorScheme.primary, ExpenseColor, TransferColor).filter { (label, _) ->
+                        when (label) {
+                            "休" -> holiday != null && date.dayOfWeek != DayOfWeek.SATURDAY && date.dayOfWeek != DayOfWeek.SUNDAY
+                            "班" -> makeupWorkday
+                            "結" -> events.any { it.kind == CardCalendarEventKind.STATEMENT }
+                            "繳" -> events.any { it.kind == CardCalendarEventKind.DUE }
+                            else -> events.any { it.kind == CardCalendarEventKind.AUTOPAY }
+                        }
+                    }
                     Column(
-                        Modifier.weight(1f).fillMaxSize()
+                        Modifier.weight(1f).fillMaxHeight().heightIn(min = 84.dp)
                             .background(if (inMonth) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.background)
                             .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
-                            .clickable { sheetDay = date },
+                            .clickable { sheetDay = date }
+                            .padding(bottom = 3.dp),
                     ) {
-                        val label = date.dayOfMonth.toString()
-                        val isToday = date == today
-                        // 假日以符號標示，完整名稱在點擊日期後顯示。
-                        val offDay = !com.enwei.moneymanager.core.TaiwanHolidays.isBusinessDay(date)
-                        val holiday = com.enwei.moneymanager.core.TaiwanHolidays.label(date)?.takeIf { offDay }
-                        val dayName = com.enwei.moneymanager.core.TaiwanHolidays.label(date)
-                        val makeupWorkday = dayName?.let { "補行上班" in it || "補班" in it } == true
-                        val events = cardEvents[date].orEmpty()
-                        val markerPrimary = MaterialTheme.colorScheme.primary
-                        Column(Modifier.fillMaxWidth().heightIn(min = 30.dp, max = 34.dp)) {
-                            Row(
-                                Modifier.fillMaxWidth().height(18.dp)
-                                    .background(if (isToday) NavyHighlight else Color.Transparent)
-                                    .padding(horizontal = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    label, fontSize = 13.sp,
-                                    color = when {
-                                        isToday -> Color.White
-                                        holiday != null -> SundayColor.copy(alpha = alpha)
-                                        !offDay -> MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
-                                        else -> weekdayColor(date.dayOfWeek, MaterialTheme.colorScheme.onSurface).copy(alpha = alpha)
-                                    },
-                                )
-                                memoDays[date]?.let { ms ->
-                                    Spacer(Modifier.weight(1f))
-                                    MemoDot(ms.first().color, Modifier.size(8.dp).alpha(alpha))
-                                }
-                            }
-                            val markers = buildAnnotatedString {
-                                fun marker(label: String, color: Color) {
-                                    withStyle(SpanStyle(color = color)) { append(label) }
-                                }
-                                if (holiday != null) marker("休", SundayColor.copy(alpha = alpha))
-                                if (makeupWorkday) marker("班", IncomeColor.copy(alpha = alpha))
-                                if (events.any { it.kind == CardCalendarEventKind.STATEMENT }) {
-                                    marker("結", markerPrimary.copy(alpha = alpha))
-                                }
-                                if (events.any { it.kind == CardCalendarEventKind.DUE }) {
-                                    marker("繳", ExpenseColor.copy(alpha = alpha))
-                                }
-                                if (events.any { it.kind == CardCalendarEventKind.AUTOPAY }) {
-                                    marker("扣", TransferColor.copy(alpha = alpha))
-                                }
-                            }
-                            MaterialText(
-                                markers,
-                                modifier = Modifier.fillMaxWidth().height(14.dp).padding(horizontal = 2.dp),
-                                fontSize = 8.sp,
-                                lineHeight = 10.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center,
+                        // 日期（每月 1 號顯示「月.1」）；今天反白
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                if (date.dayOfMonth == 1) "${date.monthValue}.1" else "${date.dayOfMonth}",
+                                fontSize = 13.sp, maxLines = 1, softWrap = false,
+                                color = when {
+                                    isToday -> MaterialTheme.colorScheme.surface
+                                    holiday != null -> SundayColor.copy(alpha = alpha)
+                                    !offDay -> MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
+                                    else -> weekdayColor(date.dayOfWeek, MaterialTheme.colorScheme.onSurface).copy(alpha = alpha)
+                                },
+                                modifier = Modifier.background(if (isToday) MaterialTheme.colorScheme.onSurface else Color.Transparent)
+                                    .padding(horizontal = 4.dp, vertical = 1.dp),
                             )
-                        }
-                        val lines = listOf(
-                            (if (t.income > 0) formatCalendarAmount(t.income) else "") to IncomeColor,
-                            (if (t.expense > 0) formatCalendarAmount(t.expense) else "") to ExpenseColor,
-                        )
-                        BoxWithConstraints(
-                            Modifier.fillMaxWidth().padding(top = 2.dp, start = 2.dp, end = 2.dp),
-                        ) {
-                            val cellFontSize = if (maxWidth < 46.dp) 8.sp else 9.sp
-                            val cellLineHeight = if (maxWidth < 46.dp) 10.sp else 11.sp
-                            Column(
-                                Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(1.dp),
-                            ) {
-                                lines.forEach { (text, c) ->
-                                    if (text.isNotEmpty()) {
-                                        Text(
-                                            text,
-                                            fontSize = cellFontSize,
-                                            lineHeight = cellLineHeight,
-                                            color = c.copy(alpha = alpha),
-                                            maxLines = 1,
-                                            textAlign = TextAlign.End,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.fillMaxWidth().height(13.dp).padding(end = 1.dp),
-                                        )
-                                    }
-                                }
+                            memoDays[date]?.let { ms ->
+                                Spacer(Modifier.weight(1f))
+                                MemoDot(ms.first().color, Modifier.padding(end = 3.dp).size(7.dp).alpha(alpha))
                             }
                         }
+                        // 日期與金額之間：休／班／結／繳／扣（文字或顏色小點，可在設定切換）
+                        if (marks.isNotEmpty()) Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(if (settings.calendarDots) 3.dp else 1.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            marks.forEach { (label, c) ->
+                                if (settings.calendarDots) Box(Modifier.size(6.dp).background(c.copy(alpha = alpha), CircleShape))
+                                else Text(label, fontSize = 9.sp, lineHeight = 10.sp, color = c.copy(alpha = alpha), maxLines = 1, softWrap = false)
+                            }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        // 收入、支出、合計：完整千分位金額，靠右；放不下時自動縮小字級，不縮寫成「萬」
+                        if (t.income > 0) FitAmount(Money.full(t.income), IncomeColor.copy(alpha = alpha))
+                        if (t.expense > 0) FitAmount(Money.full(t.expense), ExpenseColor.copy(alpha = alpha))
+                        if (t.income > 0 && t.expense > 0) FitAmount(Money.full(t.total), MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
                     }
                 }
             }
@@ -712,14 +694,24 @@ private enum class CardCalendarEventKind(val label: String) {
 
 private data class CardCalendarEvent(val accountName: String, val kind: CardCalendarEventKind)
 
-private fun formatCalendarAmount(amountMinor: Long): String {
-    val amount = amountMinor / 100.0
-    val (scale, unit) = when {
-        amount >= 100_000_000 -> 100_000_000.0 to "億"
-        amount >= 10_000 -> 10_000.0 to "萬"
-        else -> return java.text.DecimalFormat("#,##0").format(amount)
-    }
-    return java.text.DecimalFormat("0.#").format(amount / scale) + unit
+/** 日曆標示：（字, 顏色）——休假、補班、結帳、繳款、扣款。 */
+private fun calendarMarks(holiday: Color, workday: Color, statement: Color, due: Color, autopay: Color) = listOf(
+    "休" to holiday, "班" to workday, "結" to statement, "繳" to due, "扣" to autopay,
+)
+
+/**
+ * 日曆格裡的一行金額：靠右、一行顯示完整數字；格子太窄放不下時逐步縮小字級（最小 6sp），
+ * 不會截掉也不縮寫。用 onTextLayout 調整，不需要額外量測元件（可放在高度自適應的列裡）。
+ */
+@Composable
+private fun FitAmount(text: String, color: Color) {
+    var size by remember(text) { mutableStateOf(10f) }
+    var ready by remember(text) { mutableStateOf(false) }
+    Text(
+        text, color = color, fontSize = size.sp, lineHeight = (size + 2).sp, maxLines = 1, softWrap = false, textAlign = TextAlign.End,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp).drawWithContent { if (ready) drawContent() },
+        onTextLayout = { r -> if (r.didOverflowWidth && size > 6f) size -= 0.5f else ready = true },
+    )
 }
 
 @Composable
