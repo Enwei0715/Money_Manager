@@ -545,6 +545,10 @@ private fun CalendarView(
     val headers = (0 until 7).map { weekStart.plus(it.toLong()) }
     val gray = MaterialTheme.colorScheme.onSurfaceVariant
 
+    // 格子高度依畫面平均分配：整個月剛好填滿畫面，下方不留大片空白（內容多的週會再自動加高）
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val headerH = if (settings.calendarDots) 44.dp else 28.dp
+    val cellMin = ((maxHeight - headerH) / weeks).coerceAtLeast(60.dp)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).background(MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(vertical = 6.dp)) {
             headers.forEach { d ->
@@ -588,7 +592,7 @@ private fun CalendarView(
                         }
                     }
                     Column(
-                        Modifier.weight(1f).fillMaxHeight().heightIn(min = 84.dp)
+                        Modifier.weight(1f).fillMaxHeight().heightIn(min = cellMin)
                             .background(if (inMonth) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.background)
                             .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
                             .clickable { sheetDay = date }
@@ -633,7 +637,7 @@ private fun CalendarView(
                 }
             }
         }
-        Spacer(Modifier.height(96.dp))
+    }
     }
     sheetDay?.let { day ->
         ModalBottomSheet(onDismissRequest = { sheetDay = null }, containerColor = MaterialTheme.colorScheme.surface) {

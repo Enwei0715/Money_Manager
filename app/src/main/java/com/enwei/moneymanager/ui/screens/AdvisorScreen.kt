@@ -529,7 +529,7 @@ private fun JobProgress(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     } else {
-        val error = work?.error ?: job?.error
+        val error = job?.error
         error?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
     }
 }

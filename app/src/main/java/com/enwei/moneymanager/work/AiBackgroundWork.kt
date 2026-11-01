@@ -181,7 +181,9 @@ object AiBackgroundWork {
             ?.firstOrNull { !it.state.isFinished }
             ?: infos?.lastOrNull()
             ?: return null
-        if (info.state.isFinished && info.state != WorkInfo.State.FAILED) return null
+        // 已結束的工作不再顯示：WorkManager 會一直保留最後一次的結果，舊的失敗紀錄會讓畫面一直顯示「背景工作失敗」；
+        // 這一次執行的錯誤由 ReportJob.state 與通知顯示
+        if (info.state.isFinished) return null
         if (uniqueName == "news" && info.state == WorkInfo.State.ENQUEUED) return null
         val data = info.progress
         val startedAt = data.getLong(PROGRESS_STARTED, 0)

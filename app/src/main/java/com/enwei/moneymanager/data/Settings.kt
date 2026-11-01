@@ -241,7 +241,7 @@ data class AppSettings(
     /** 0 跟隨系統、1 淺色、2 深色 */
     val themeMode: Int = 0,
     /** 介面縮放比例（整體文字、間距、圖示等比例） */
-    val uiScale: Float = 0.9f,
+    val uiScale: Float = 1f,
     /** 舊版欄位；現行版本固定啟用子分類。 */
     val subcategoryOn: Boolean = true,
     /** 交易頁顯示「新增備註」按鈕 */
@@ -463,7 +463,7 @@ class SettingsStore(context: Context) {
         screenReadSince = runCatching { json.decodeFromString(pkgMapSerializer, prefs.getString("screenReadSince", "{}")!!) }.getOrDefault(emptyMap()),
         cashCounts = runCatching { json.decodeFromString(cashSerializer, prefs.getString("cashCounts", "{}")!!) }.getOrDefault(emptyMap()),
         themeMode = prefs.getInt("themeMode", 0),
-        uiScale = prefs.getFloat("uiScale", 0.9f),
+        uiScale = prefs.getFloat("uiScale2", 1f),
         subcategoryOn = true,
         noteButton = prefs.getBoolean("noteButton", true),
         swipe = prefs.getInt("swipe", 0),
@@ -628,7 +628,7 @@ class SettingsStore(context: Context) {
             .putString("screenReadSince", json.encodeToString(pkgMapSerializer, s.screenReadSince))
             .putString("cashCounts", json.encodeToString(cashSerializer, s.cashCounts))
             .putInt("themeMode", s.themeMode)
-            .putFloat("uiScale", s.uiScale)
+            .putFloat("uiScale2", s.uiScale)
             .putBoolean("subcategoryOn", true)
             .putBoolean("noteButton", s.noteButton)
             .putInt("swipe", s.swipe)

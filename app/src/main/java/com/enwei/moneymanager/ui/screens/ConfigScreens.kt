@@ -58,11 +58,11 @@ import com.enwei.moneymanager.ui.components.FormLine
 import java.time.DayOfWeek
 
 private fun uiScaleLabel(v: Float) = when {
-    v <= 0.8f -> "較小"
-    v <= 0.85f -> "小"
-    v <= 0.9f -> "標準"
-    v <= 1f -> "原始"
-    else -> "大"
+    v <= 0.85f -> "較小（85%）"
+    v <= 0.92f -> "小（92%）"
+    v <= 1f -> "標準（100%）"
+    v <= 1.1f -> "大（110%）"
+    else -> "特大（120%）"
 }
 
 @Composable
@@ -183,7 +183,7 @@ fun ConfigScreen(nav: NavController) {
                     }
                 }
                 ConfigRow("介面大小", uiScaleLabel(s.uiScale)) {
-                    ask("介面大小", listOf(0.8f to "較小（80%）", 0.85f to "小（85%）", 0.9f to "標準（90%）", 1f to "原始（100%）", 1.1f to "大（110%）"), s.uiScale) { v ->
+                    ask("介面大小", listOf(0.85f to "較小（85%）", 0.92f to "小（92%）", 1f to "標準（100%）", 1.1f to "大（110%）", 1.2f to "特大（120%）"), s.uiScale) { v ->
                         repo.settings.update { it.copy(uiScale = v) }
                     }
                 }

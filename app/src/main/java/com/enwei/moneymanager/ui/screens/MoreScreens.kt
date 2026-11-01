@@ -203,12 +203,16 @@ private fun ToolTile(
         border = if (editing) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)) else null,
         modifier = modifier.heightIn(min = 96.dp).combinedClickable(onClick = onOpen, onLongClick = onLongPress),
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (wide) Row(verticalAlignment = Alignment.CenterVertically) {
+        // 內容上下、左右置中（寬格的圖示＋名稱＋摘要整組置中）
+        Column(
+            Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (wide) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 Icon(t.icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(30.dp))
-                Column(Modifier.padding(start = 10.dp)) {
+                Column(Modifier.padding(start = 10.dp).weight(1f, fill = false)) {
                     Text(t.label, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
-                    Text(summary ?: "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                    if (!summary.isNullOrBlank()) Text(summary, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                 }
             } else Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(t.icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(32.dp))
