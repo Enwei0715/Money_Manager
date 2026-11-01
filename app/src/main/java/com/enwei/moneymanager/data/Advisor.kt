@@ -315,6 +315,8 @@ private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: 
 /** 背景蒐集與標註新聞（每天數次）；回傳新增則數。 */
 suspend fun Repository.refreshNews(
     ds: NewsDataset, onStep: (String) -> Unit = {}, onBatch: (Int, Int) -> Unit = { _, _ -> }, onDigest: (Int, Int) -> Unit = { _, _ -> },
+    /** 時間預算與網路檢查：用完就在批次之間停下，下一輪接續 */
+    budget: com.enwei.moneymanager.work.WorkBudget? = null,
 ): Int {
     val holdings = holdingsByBroker.first().values.flatten().filter { it.market == Market.TW && it.shares > 0.0001 }
     val watch = ds.load().report?.picks.orEmpty().map { "${it.symbol} ${it.name}" }
@@ -325,9 +327,12 @@ suspend fun Repository.refreshNews(
     val added = ds.collect(extra)
     com.enwei.moneymanager.net.InvestData.lastHeadlineError?.let(onStep)
     if (com.enwei.moneymanager.net.GroqAi.enabled) {
-        ds.tag { i, n -> onBatch(i, n); onStep("AI 標註新聞 ${i + 1}/$n 批…") }
-        // 把全部新聞整理成每天、每個題材的重點
-        ds.digest { i, n -> onDigest(i, n); onStep("整理新聞重點 ${i + 1}/$n…") }
+        val stop = { budget?.shouldStop() == true }
+        // thread：逐批讀取（標註）新聞，讀完的新聞歸入「日期|題材」區塊
+        ds.tag(stop) { i, n -> onBatch(i, n); onStep("AI 標註新聞 ${i + 1}/$n 批…") }
+        // block：把每個區塊的全部新聞整理成重點文章，區塊就完整了
+        ds.digest(stop = stop) { i, n -> onDigest(i, n); onStep("整理新聞重點 ${i + 1}/$n…") }
+        budget?.stopReason?.let { onStep("暫停：$it") }
     }
     return added
 }

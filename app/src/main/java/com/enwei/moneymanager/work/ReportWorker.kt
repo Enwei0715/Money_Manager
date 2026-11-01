@@ -31,6 +31,8 @@ object ReportJob {
         val total: Int? = null,
         /** 預估完成時間（毫秒）；依這一階段每批實際花的時間推算，算不出來時為 null */
         val etaAt: Long? = null,
+        /** 背景排程自動執行（不是使用者按的） */
+        val background: Boolean = false,
     )
 
     val state = MutableStateFlow<State?>(null)
@@ -57,8 +59,12 @@ object ReportJob {
         context: Context,
         notifyProgress: Boolean,
         refreshOnly: Boolean = false,
+        /** 這一輪可以執行多久；用完就在批次之間停下，稍後接續 */
+        budgetMs: Long = 8 * 60_000L,
+        userInitiated: Boolean = true,
         onProgress: (State) -> Unit = {},
     ): DailyReport? {
+        val budget = WorkBudget(budgetMs, background = !userInitiated)
         val repo = MoneyApp.repo
         val ds = MoneyApp.news
         val start = System.currentTimeMillis()
@@ -71,7 +77,7 @@ object ReportJob {
             if (key != phase) { phase = key; phaseStart = now }
             val eta = if (done != null && total != null && done > 1 && total > done)
                 now + (now - phaseStart) / (done - 1) * (total - done + 1) else null
-            val next = State(step, start, refreshOnly = refreshOnly, done = done, total = total, etaAt = eta)
+            val next = State(step, start, refreshOnly = refreshOnly, done = done, total = total, etaAt = eta, background = !userInitiated)
             state.value = next
             onProgress(next)
             if (notifyProgress) progressNotice(context, next, now - start)
@@ -91,8 +97,17 @@ object ReportJob {
                     onStep = { step -> update(step) },
                     onBatch = { i, n -> update("AI 標註新聞 ${i + 1}/$n 批…", i + 1, n) },
                     onDigest = { i, n -> update("整理新聞重點 ${i + 1}/$n…", i + 1, n) },
+                    budget = budget,
                 )
                 st = ds.load()
+            }
+            budget.stopReason?.let { why ->
+                // 時間用完或網路不符：已讀完的區塊都已寫入，稍後從斷點接續（不算失敗）
+                val msg = "暫停：$why；已完成的部分已保存，稍後自動接續"
+                state.value = State(msg, start, running = false, refreshOnly = refreshOnly, background = !userInitiated)
+                if (notifyProgress) cancelProgress(context)
+                continueLater(context, refreshOnly)
+                return null
             }
             if (refreshOnly) {
                 state.value = State("資料集已更新：共 ${st.items.size} 則", start, running = false, refreshOnly = true)
@@ -108,10 +123,12 @@ object ReportJob {
                 val msg = if (reportStep.startsWith("近 3 天新聞") || reportStep.endsWith("暫不產生報告。")) {
                     reportStep
                 } else "產生失敗：${GroqAi.lastError ?: "沒有回應"}"
-                state.value = State(msg, start, running = false, error = msg)
+                state.value = State(msg, start, running = false, error = msg, background = !userInitiated)
+                if (!userInitiated) AiHealth.record(false, msg)
                 doneNotice(context, tr("投資報告產生失敗"), msg)
             } else {
-                state.value = State("完成", start, running = false)
+                state.value = State("完成", start, running = false, background = !userInitiated)
+                AiHealth.record(true)
                 doneNotice(context, tr("今日投資報告已更新"), r.picks.joinToString("、") { "${it.symbol} ${it.name}" }.ifBlank { r.trend })
             }
             r
@@ -120,10 +137,22 @@ object ReportJob {
             throw e
         } catch (e: Exception) {
             val msg = "${if (refreshOnly) "更新失敗" else "產生失敗"}：${e.message ?: e.javaClass.simpleName}"
-            state.value = State(msg, start, running = false, error = msg)
+            state.value = State(msg, start, running = false, error = msg, background = !userInitiated)
+            if (!userInitiated) AiHealth.record(false, msg)
             doneNotice(context, tr(if (refreshOnly) "新聞資料集更新失敗" else "投資報告產生失敗"), msg)
             null
         }
+    }
+
+    /** 這一輪時間用完：1 分鐘後接續（排在目前這輪之後）。 */
+    fun continueLater(context: Context, refreshOnly: Boolean) {
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "report-continue", ExistingWorkPolicy.APPEND_OR_REPLACE,
+            OneTimeWorkRequestBuilder<ReportWorker>()
+                .setInputData(androidx.work.workDataOf("refreshOnly" to refreshOnly, "userInitiated" to false))
+                .setInitialDelay(1, java.util.concurrent.TimeUnit.MINUTES)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build(),
+        )
     }
 
     private const val NOTICE_ID = 9321
@@ -196,6 +225,8 @@ class ReportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     override suspend fun doWork(): Result {
         val refreshOnly = inputData.getBoolean("refreshOnly", false)
         val userInitiated = inputData.getBoolean("userInitiated", false)
+        // 背景自動執行：連續失敗暫停中、或網路不符（只用 Wi-Fi）時先不跑
+        if (!userInitiated && (AiHealth.backgroundPaused() || AiHealth.networkProblem() != null)) return Result.success()
         val queued = ReportJob.State("準備中…", System.currentTimeMillis(), refreshOnly = refreshOnly)
         ReportJob.state.value = queued
         setProgress(ReportJob.workProgress(queued))
@@ -206,11 +237,15 @@ class ReportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 setProgress(ReportJob.workProgress(running))
                 // 前景服務只在 App 顯示在畫面上時啟動：Android 12 以上從背景啟動會被系統拒絕（之前閃退的原因之一）；
                 // 不是前景服務時仍會顯示一般的進度通知
-                if (userInitiated && appVisible()) runCatching { setForeground(ReportJob.foregroundInfo(applicationContext, running)) }
+                val foreground = userInitiated && appVisible() &&
+                    runCatching { setForeground(ReportJob.foregroundInfo(applicationContext, running)) }.isSuccess
                 ReportJob.execute(
                     applicationContext,
                     notifyProgress = true,
                     refreshOnly = refreshOnly,
+                    // 前景服務沒有 10 分鐘的限制；一般背景工作留 8 分鐘，超過就分段接續
+                    budgetMs = if (foreground) 40 * 60_000L else 8 * 60_000L,
+                    userInitiated = userInitiated,
                     onProgress = { state ->
                         // 進度通知用同一個編號更新（前景服務的通知也會一起更新），不必每次重新設定前景服務
                         setProgressAsync(ReportJob.workProgress(state))

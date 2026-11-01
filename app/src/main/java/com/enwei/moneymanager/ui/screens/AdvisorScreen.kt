@@ -702,6 +702,14 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    // grid/block/thread：每個「日期|題材」區塊的新聞都讀完並整理成重點，區塊才算完整
+                    val grid by com.enwei.moneymanager.MoneyApp.news.grid.collectAsStateWithLifecycle()
+                    if (grid.blocks > 0) Text(
+                        "近 3 天 ${grid.blocks} 個區塊（日期×題材），完整 ${grid.complete} 個" +
+                            (if (grid.unread > 0) "；待讀 ${grid.unread} 則" else "") +
+                            (if (grid.done) "；資料集完整" else ""),
+                        fontSize = 12.sp, color = if (grid.done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Text(
                         "上次蒐集：" + (if (store.lastCollect > 0) java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(store.lastCollect)) else "還沒有") +
                             "，背景每 3 小時更新一次。",

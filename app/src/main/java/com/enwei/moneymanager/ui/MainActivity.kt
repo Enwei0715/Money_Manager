@@ -236,7 +236,11 @@ private fun AppScaffold(nav: NavHostController) {
         // 外層只負責底部分頁列；狀態列與導覽列的留白交給各頁自己的標題列處理，才會依手機實際高度自動調整
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (showBar) BottomTabs(current) { route -> nav.openTab(route) }
+            if (showBar) Column {
+                // AI 狀態列：正在進行的 AI 工作、進度與暫停原因（沒有事情時不佔空間）
+                com.enwei.moneymanager.ui.components.AiStatusBar(nav)
+                BottomTabs(current) { route -> nav.openTab(route) }
+            }
         },
     ) { inner ->
         NavHost(

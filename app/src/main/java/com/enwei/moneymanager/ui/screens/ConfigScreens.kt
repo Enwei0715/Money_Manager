@@ -207,6 +207,12 @@ fun ConfigScreen(nav: NavController) {
                         "收支檢討、投資報告與股票助理的口吻；下次產生的內容開始套用。",
                     ) { v -> repo.settings.update { it.copy(aiTone = v) } }
                 }
+                ConfigRow("背景 AI 只用 Wi-Fi", onOff(s.aiWifiOnly)) {
+                    askOnOff("背景 AI 只用 Wi-Fi", s.aiWifiOnly, "開啟後，新聞標註、重點整理與每日報告只在 Wi-Fi 等不計量網路時於背景執行；手動按「立即更新」與對話不受影響。") { v ->
+                        repo.settings.update { it.copy(aiWifiOnly = v) }
+                        com.enwei.moneymanager.work.NewsWorker.schedule(ctx, replace = true)
+                    }
+                }
 
                 SectionHeader("股票")
                 ConfigRow("手續費與月退") { nav.navigate("stockfees") }

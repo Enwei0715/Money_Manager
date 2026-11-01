@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.json.Json
 import java.io.File
 
@@ -142,17 +143,85 @@ fun NewsStore.prunedHistory(): NewsStore {
 data class TopicStat(val key: String, val count: Int, val avgSentiment: Double, val important: Int)
 
 /**
+ * 資料集的檔案格式（grid / block / thread）：
+ * - thread：一則新聞的讀取與標註（[NewsItem]）。還沒讀的放在 inbox.json。
+ * - block：某一天、某個題材的所有新聞＋整理好的重點文章（[NewsBlock]，一個區塊一個檔案）。
+ *   區塊裡每一則新聞都讀完、重點文章也涵蓋了全部新聞時，這個區塊才算完整。
+ * - grid：整個資料集的索引（grid.json），列出每個區塊的狀態，加上報告、公司說明等。
+ * 只重寫有變動的檔案，標註一批新聞只會寫到 inbox 與相關的幾個區塊，不必每次重寫整個資料集。
+ * 所有檔案都是欄位名稱清楚的 JSON，人與 AI 都讀得懂。
+ */
+@Serializable
+data class NewsBlock(
+    /** 「日期|題材」 */
+    val key: String,
+    val day: String,
+    val theme: String,
+    /** reading：還有新聞沒整理進重點；complete：所有新聞都已讀完並整理 */
+    val status: String = "reading",
+    /** 這個區塊的新聞則數（thread 數） */
+    val threads: Int = 0,
+    /** 已整理進重點文章的則數 */
+    val read: Int = 0,
+    /** 這個區塊的重點文章 */
+    val article: ThemeDigest? = null,
+    val items: List<NewsItem> = emptyList(),
+)
+
+/** 區塊索引的一列。 */
+@Serializable
+data class BlockInfo(val key: String, val file: String, val status: String, val threads: Int, val read: Int, val updatedAt: Long = 0)
+
+@Serializable
+data class NewsGrid(
+    val format: String = "grid/block/thread v1：blocks/ 每檔一個「日期|題材」區塊（items＝新聞、article＝重點文章）；inbox.json＝尚未讀取的新聞；chat.json＝對話",
+    val version: Int = 1,
+    val lastCollect: Long = 0,
+    val report: DailyReport? = null,
+    val history: List<DailyReport> = emptyList(),
+    val business: Map<String, String> = emptyMap(),
+    val historyKeepDays: Int = 30,
+    /** 未讀（待標註）的新聞則數 */
+    val inbox: Int = 0,
+    val blocks: List<BlockInfo> = emptyList(),
+)
+
+@Serializable
+private data class Inbox(val note: String = "尚未讀取（標註）的新聞", val items: List<NewsItem> = emptyList())
+
+/** 資料集的完整度：區塊完成數、總區塊數、待讀新聞。 */
+data class GridProgress(val complete: Int, val blocks: Int, val unread: Int) {
+    val done get() = blocks > 0 && complete == blocks && unread == 0
+}
+
+/** 新聞的日期（台北時間），區塊依這個日期分。 */
+fun NewsItem.day(): String = java.time.Instant.ofEpochSecond(epochSec).atZone(java.time.ZoneId.of("Asia/Taipei")).toLocalDate().toString()
+
+/**
  * 新聞資料集：背景定期從 Google 新聞 RSS 抓市場與個人持股相關內容，請 AI 逐則標註，
  * 累積近 14 天的資料再統整成題材與個股熱度，給每日選股與對話使用。存在 App 的私有檔案。
  */
 class NewsDataset(context: Context) {
-    private val file = File(context.filesDir, "news_dataset.json")
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
+    private val dir = File(context.filesDir, "news")
+    private val blockDir = File(dir, "blocks")
+    /** 舊版的單一大檔（讀到時轉成區塊格式） */
+    private val legacy = File(context.filesDir, "news_dataset.json")
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = false }
     private val lock = Mutex()
     @Volatile private var cache: NewsStore? = null
     private val _flow = kotlinx.coroutines.flow.MutableStateFlow<NewsStore?>(null)
     /** 資料集的最新內容：背景蒐集、標註、產生報告時畫面會即時更新 */
     val flow: kotlinx.coroutines.flow.StateFlow<NewsStore?> = _flow
+
+    /** 上次寫入時各檔案的內容（只重寫有變動的檔案） */
+    private var savedBlocks: Map<String, NewsBlock> = emptyMap()
+    private var savedInbox: List<NewsItem>? = null
+    private var savedChat: List<ChatMsg>? = null
+    private var savedGrid: NewsGrid? = null
+
+    private val _grid = kotlinx.coroutines.flow.MutableStateFlow(GridProgress(0, 0, 0))
+    /** 區塊完成度（狀態列顯示用） */
+    val grid: kotlinx.coroutines.flow.StateFlow<GridProgress> = _grid
 
     // 已經讀進記憶體時直接回傳，不必等正在寫檔的背景工作（對話、畫面不會被新聞分析卡住）
     suspend fun load(): NewsStore = cache ?: lock.withLock { loadUnlocked() }
@@ -160,21 +229,93 @@ class NewsDataset(context: Context) {
     /** 上次讀檔失敗的原因（畫面顯示提示用；讀檔失敗不再丟出例外，避免畫面閃退） */
     val loadError = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
+    private fun <T> readOr(file: File, ser: kotlinx.serialization.KSerializer<T>, fallback: T): T {
+        if (!file.exists()) return fallback
+        return runCatching { json.decodeFromString(ser, file.readText()) }.getOrElse { e ->
+            // 單一檔案壞掉只影響那個區塊：另存壞檔，其他區塊照常使用，缺的新聞下次背景更新會補回
+            runCatching { file.renameTo(File(file.parentFile, file.name + ".bad-" + System.currentTimeMillis())) }
+            loadError.value = "新聞資料集的「${file.name}」讀取失敗，已略過這個區塊（${e.javaClass.simpleName}）"
+            fallback
+        }
+    }
+
     private suspend fun loadUnlocked(): NewsStore = cache ?: withContext(Dispatchers.IO) {
-        val store = if (file.exists()) {
-            runCatching { json.decodeFromString(NewsStore.serializer(), file.readText()) }.getOrElse { e ->
-                // 檔案壞掉或太大讀不進來：另存一份壞檔，改用空的資料集，下次背景更新會重新蒐集
-                runCatching { file.renameTo(File(file.parentFile, file.name + ".bad-" + System.currentTimeMillis())) }
+        val store = if (!File(dir, "grid.json").exists() && legacy.exists()) {
+            // 舊版單一大檔：讀進來後改存成區塊格式
+            val old = runCatching { json.decodeFromString(NewsStore.serializer(), legacy.readText()) }.getOrElse { e ->
                 loadError.value = "新聞資料集讀取失敗，已重新建立（${e.javaClass.simpleName}）"
                 NewsStore()
             }
-        } else NewsStore()
-        store.also { cache = it; _flow.value = it }
+            writeFiles(old)
+            runCatching { legacy.renameTo(File(legacy.parentFile, legacy.name + ".migrated")) }
+            old
+        } else {
+            val g = readOr(File(dir, "grid.json"), NewsGrid.serializer(), NewsGrid())
+            val inbox = readOr(File(dir, "inbox.json"), Inbox.serializer(), Inbox()).items
+            val chat = readOr(File(dir, "chat.json"), kotlinx.serialization.builtins.ListSerializer(ChatMsg.serializer()), emptyList())
+            // 依實際的區塊檔案讀（不只看索引），寫到一半中斷時也不會漏掉已寫好的區塊
+            val blocks = (blockDir.listFiles { f -> f.isFile && f.name.endsWith(".json") } ?: emptyArray())
+                .mapNotNull { f -> readOr(f, NewsBlock.serializer().nullable, null) }
+            savedBlocks = blocks.associateBy { it.key }
+            savedInbox = inbox
+            savedChat = chat
+            savedGrid = g
+            NewsStore(
+                items = (inbox + blocks.flatMap { it.items }).distinctBy { it.id }.sortedByDescending { it.epochSec },
+                lastCollect = g.lastCollect,
+                report = g.report,
+                chat = chat,
+                business = g.business,
+                digests = blocks.mapNotNull { b -> b.article?.let { b.key to it } }.toMap(),
+                history = g.history,
+                historyKeepDays = g.historyKeepDays,
+            )
+        }
+        store.also { cache = it; _flow.value = it; _grid.value = progressOf(it) }
     }
 
-    private suspend fun save(s: NewsStore) = withContext(Dispatchers.IO) {
+    /** 把資料集拆成區塊。 */
+    private fun blocksOf(s: NewsStore): List<NewsBlock> {
+        val groups = s.items.filter { it.tagged }.groupBy { "${it.day()}|${it.theme}" }
+        val keys = groups.keys + s.digests.keys
+        return keys.map { key ->
+            val items = groups[key].orEmpty().sortedByDescending { it.epochSec }
+            val article = s.digests[key]
+            val read = if (article != null && articleCovers(article, items)) items.size else 0
+            NewsBlock(
+                key = key, day = key.substringBefore('|'), theme = key.substringAfter('|'),
+                status = if (items.isNotEmpty() && read == items.size || items.isEmpty() && article != null) "complete" else "reading",
+                threads = items.size, read = read, article = article, items = items,
+            )
+        }
+    }
+
+    private fun articleCovers(d: ThemeDigest, items: List<NewsItem>): Boolean {
+        val ids = d.points.flatMap { it.sourceIds }
+        return d.contentHash == groupContentHash(items) && ids.toSet() == items.map { it.id }.toSet() && ids.size == items.size
+    }
+
+    private fun progressOf(s: NewsStore): GridProgress {
+        val since = (System.currentTimeMillis() / 1000 - 3 * 86_400L)
+        val recent = blocksOf(NewsStore(items = s.items.filter { it.epochSec >= since }, digests = emptyMap()))
+            .map { b -> b.copy(article = s.digests[b.key]) }
+        return GridProgress(
+            complete = recent.count { b -> b.article != null && articleCovers(b.article, b.items) },
+            blocks = recent.size,
+            unread = s.items.count { !it.tagged && it.epochSec >= since },
+        )
+    }
+
+    private fun fileOf(key: String): String {
+        val h = java.security.MessageDigest.getInstance("SHA-1").digest(key.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }.take(12)
+        return key.substringBefore('|').filter { it.isDigit() || it == '-' }.ifBlank { "day" } + "_" + h + ".json"
+    }
+
+    private fun writeAtomic(file: File, text: String) {
+        file.parentFile?.mkdirs()
         val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeText(json.encodeToString(NewsStore.serializer(), s))
+        tmp.writeText(text)
         try {
             java.nio.file.Files.move(
                 tmp.toPath(), file.toPath(),
@@ -184,8 +325,40 @@ class NewsDataset(context: Context) {
         } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
             java.nio.file.Files.move(tmp.toPath(), file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
         }
+    }
+
+    /** 只寫有變動的區塊、inbox、對話；索引最後寫（代表這次寫入完成）。 */
+    private fun writeFiles(s: NewsStore) {
+        val blocks = blocksOf(s)
+        val now = System.currentTimeMillis()
+        val byKey = blocks.associateBy { it.key }
+        for (b in blocks) if (savedBlocks[b.key] != b) writeAtomic(File(blockDir, fileOf(b.key)), json.encodeToString(NewsBlock.serializer(), b))
+        for (k in savedBlocks.keys - byKey.keys) File(blockDir, fileOf(k)).delete()
+        val inbox = s.items.filter { !it.tagged }
+        if (savedInbox != inbox) writeAtomic(File(dir, "inbox.json"), json.encodeToString(Inbox.serializer(), Inbox(items = inbox)))
+        if (savedChat != s.chat) writeAtomic(File(dir, "chat.json"), json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ChatMsg.serializer()), s.chat))
+        val prevInfo = savedGrid?.blocks.orEmpty().associateBy { it.key }
+        val grid = NewsGrid(
+            lastCollect = s.lastCollect, report = s.report, history = s.history, business = s.business,
+            historyKeepDays = s.historyKeepDays, inbox = inbox.size,
+            blocks = blocks.sortedWith(compareByDescending<NewsBlock> { it.day }.thenByDescending { it.threads }).map { b ->
+                val info = BlockInfo(b.key, "blocks/" + fileOf(b.key), b.status, b.threads, b.read)
+                val prev = prevInfo[b.key]
+                info.copy(updatedAt = if (prev != null && prev.copy(updatedAt = 0) == info && savedBlocks[b.key] == b) prev.updatedAt else now)
+            },
+        )
+        if (savedGrid != grid) writeAtomic(File(dir, "grid.json"), json.encodeToString(NewsGrid.serializer(), grid))
+        savedBlocks = byKey
+        savedInbox = inbox
+        savedChat = s.chat
+        savedGrid = grid
+    }
+
+    private suspend fun save(s: NewsStore) = withContext(Dispatchers.IO) {
+        writeFiles(s)
         cache = s
         _flow.value = s
+        _grid.value = progressOf(s)
     }
 
     suspend fun update(f: (NewsStore) -> NewsStore) = lock.withLock { save(f(loadUnlocked())) }
@@ -193,11 +366,14 @@ class NewsDataset(context: Context) {
     suspend fun clear() {
         lock.withLock {
             withContext(Dispatchers.IO) {
-                java.nio.file.Files.deleteIfExists(File(file.parentFile, file.name + ".tmp").toPath())
-                java.nio.file.Files.deleteIfExists(file.toPath())
+                dir.deleteRecursively()
+                java.nio.file.Files.deleteIfExists(File(legacy.parentFile, legacy.name + ".tmp").toPath())
+                java.nio.file.Files.deleteIfExists(legacy.toPath())
             }
+            savedBlocks = emptyMap(); savedInbox = null; savedChat = null; savedGrid = null
             cache = NewsStore()
             _flow.value = cache
+            _grid.value = GridProgress(0, 0, 0)
         }
     }
 
@@ -289,7 +465,7 @@ class NewsDataset(context: Context) {
      * 請 AI 標註還沒標過的新聞。每批送出後核對回覆：沒有回覆到的項目
      * 會留在待標註清單，下一批優先重送；報告完整性檢查會阻止未完成的資料被當成完整結果。回傳標註則數。
      */
-    suspend fun tag(onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
+    suspend fun tag(stop: () -> Boolean = { false }, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
         var done = 0
         // 依模型把每批限制在可完整送出的字符數；未回覆的新聞維持待辦，稍後重試。
         val big = GroqAi.bigContext(GroqAi.AiTask.NEWS_TAG)
@@ -298,6 +474,8 @@ class NewsDataset(context: Context) {
         val pendingCount = load().items.count { !it.tagged }
         val total = pendingCount.coerceAtMost(maxBatches)
         for (i in 0 until maxBatches) {
+            // 每一批之前檢查時間預算與網路：停下時已完成的批次都已寫入，下一輪接續
+            if (stop()) return done
             val batch = takeNewsBatch(load().items.filter { !it.tagged }.sortedByDescending { it.tries }, maxChars)
             if (batch.isEmpty()) break
             onProgress(i, maxOf(total, i + 1))
@@ -340,7 +518,7 @@ class NewsDataset(context: Context) {
      * - 只有 1～2 則的小組不必叫 AI，直接把標題當重點，所以每一則都會進到重點庫。
      * - 已整理過的只在新聞增加不少時才重整；先整理則數多的。回傳整理了幾組。
      */
-    suspend fun digest(maxCalls: Int = 40, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
+    suspend fun digest(maxCalls: Int = 40, stop: () -> Boolean = { false }, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
         val st = load()
         val zone = java.time.ZoneId.of("Asia/Taipei")
         fun dayOf(n: NewsItem) = java.time.Instant.ofEpochSecond(n.epochSec).atZone(zone).toLocalDate().toString()
@@ -355,6 +533,7 @@ class NewsDataset(context: Context) {
         var calls = 0
         var done = 0
         for ((i, e) in groups.withIndex()) {
+            if (stop()) return done
             val (k, list) = e
             val sorted = list.sortedByDescending { it.importance }
             val points: List<DigestPoint> = if (list.size < 3) {

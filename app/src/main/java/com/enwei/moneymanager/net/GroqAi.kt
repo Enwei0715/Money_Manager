@@ -101,7 +101,7 @@ object GroqAi {
     /** 這項工作會先送到 Gemini（可以一次送大量資料），用來決定要送完整資料還是精簡版。 */
     fun bigContext(task: AiTask): Boolean {
         val now = System.currentTimeMillis()
-        return routes(task, Int.MAX_VALUE).firstOrNull { (cooldownUntil[it.model] ?: 0) <= now }?.provider == Provider.GEMINI
+        return routes(task, Int.MAX_VALUE).firstOrNull { com.enwei.moneymanager.work.AiHealth.cooldownUntil(it.model) <= now }?.provider == Provider.GEMINI
     }
 
     private suspend fun chatJson(
@@ -119,9 +119,12 @@ object GroqAi {
         if (all.isEmpty()) return@withContext null
         val now = System.currentTimeMillis()
         // 剛被限流或沒回應的模型先跳過；全部都在暫停就照原順序再試
-        val ready = all.filter { (cooldownUntil[it.model] ?: 0) <= now }.ifEmpty { all }
+        val ready = all.filter { com.enwei.moneymanager.work.AiHealth.cooldownUntil(it.model) <= now }.ifEmpty { all }
         for (r in ready) {
             lastError = null
+            retryAfterMs = null
+            // 同一家服務的呼叫之間留間隔（對話除外，送出就立刻問）
+            if (task != AiTask.CHAT) com.enwei.moneymanager.work.AiHealth.pace(r.provider.name, if (r.provider == Provider.GEMINI) 4_000 else 1_500)
             val out = when (r.provider) {
                 Provider.GEMINI -> callGemini(s.geminiKey.trim(), r.model, system, user,
                     // Gemini 的思考也算在輸出長度裡：大模型多留空間
@@ -132,14 +135,33 @@ object GroqAi {
             if (out != null) return@withContext out
             // 額度用完或沒回應：這個模型先暫停，之後的呼叫直接用下一個
             val err = lastError.orEmpty()
-            if ("429" in err || "額度" in err) cooldownUntil[r.model] = System.currentTimeMillis() + if (r.provider == Provider.GEMINI) 15 * 60_000L else 2 * 60_000L
-            else if ("逾時" in err || "timeout" in err.lowercase() || "503" in err || "404" in err) cooldownUntil[r.model] = System.currentTimeMillis() + 5 * 60_000L
+            // 伺服器有說多久後再試（Retry-After）就照它，否則用預設時間；再加隨機間隔，暫停時間會保存到 App 重開後
+            if ("429" in err || "額度" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
+                retryAfterMs?.coerceIn(5_000L, 3600_000L) ?: if (r.provider == Provider.GEMINI) 15 * 60_000L else 2 * 60_000L)
+            else if ("逾時" in err || "timeout" in err.lowercase() || "503" in err || "404" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
+                retryAfterMs?.coerceIn(5_000L, 3600_000L) ?: 5 * 60_000L)
         }
         null
     }
 
-    /** 模型 → 暫停到的時間（各模型的額度分開計算） */
-    private val cooldownUntil = ConcurrentHashMap<String, Long>()
+    /** 最近一次被限流時，伺服器建議等待的時間（Retry-After 標頭或 Gemini 的 retryDelay） */
+    @Volatile private var retryAfterMs: Long? = null
+
+    private fun parseRetryAfter(header: String?, body: String): Long? {
+        header?.trim()?.toDoubleOrNull()?.let { return (it * 1000).toLong() }
+        // Gemini：「"retryDelay": "31s"」；Groq 文字：「Please try again in 1m2.5s」
+        Regex("\"retryDelay\"\\s*:\\s*\"(\\d+(?:\\.\\d+)?)s\"").find(body)?.let { return (it.groupValues[1].toDouble() * 1000).toLong() }
+        Regex("try again in (?:(\\d+)m)?(\\d+(?:\\.\\d+)?)s").find(body)?.let {
+            return ((it.groupValues[1].toLongOrNull() ?: 0) * 60_000 + it.groupValues[2].toDouble() * 1000).toLong()
+        }
+        return null
+    }
+
+    /** 所有可用模型都被限流時，最早恢復的時間（狀態列顯示用）。 */
+    fun coolingUntil(): Long? {
+        val models = AiTask.entries.flatMap { t -> routes(t, 0).map { it.model } }.distinct()
+        return com.enwei.moneymanager.work.AiHealth.allCoolingUntil(models)
+    }
 
     private fun groqJson(
         s: com.enwei.moneymanager.data.AppSettings, systemIn: String, userIn: String, maxTokens: Int, hard: Boolean, cap: Int, effort: String,
@@ -206,6 +228,7 @@ object GroqAi {
             aiClient.newBuilder().callTimeout(timeoutSec, java.util.concurrent.TimeUnit.SECONDS).build().newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
+                    if (resp.code == 429 || resp.code == 503) retryAfterMs = parseRetryAfter(resp.header("Retry-After"), text)
                     lastError = when (resp.code) {
                         400 -> if (text.contains("API_KEY") || text.contains("API key")) "Gemini 金鑰無效" else "Gemini 請求錯誤：${text.take(140)}"
                         401, 403 -> "Gemini 金鑰無效或沒有權限（${resp.code}）"
@@ -272,6 +295,7 @@ object GroqAi {
             Http.client.newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
+                    if (resp.code == 429 || resp.code == 503) retryAfterMs = parseRetryAfter(resp.header("Retry-After"), text)
                     lastError = when (resp.code) {
                         401 -> "API 金鑰無效（401）"
                         429 -> "超過 Groq 的使用額度（429），稍後會自動恢復"
