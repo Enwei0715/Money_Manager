@@ -1592,3 +1592,326 @@ AI 分析	AI analysis
 ，建議賣	, suggest selling 
 ：多賺	: extra 
 股；續漲停利價會跟著上移	 shares; the take-profit rises as the price climbs
+不同意	Decline
+你可以隨時在系統的無障礙設定關閉這項服務。	You can turn this service off anytime in system accessibility settings.
+你可以隨時在系統設定關閉這項權限。	You can turn this permission off anytime in system settings.
+允許讀取通知	Allow reading notifications
+允許讀取錢包 App 畫面（無障礙服務）	Allow reading wallet app screens (accessibility service)
+其他 App 的通知不會被讀取或保存。	Notifications from other apps are never read or stored.
+同意並前往設定	Agree and open settings
+帳理會使用 Android 無障礙服務，在你打開「錢包畫面讀取」中勾選的錢包 App（例如交易紀錄頁）時，讀取畫面上的文字並整理成交易紀錄。	Ledgerly uses the Android accessibility service to read on-screen text when you open a wallet app selected in "Wallet reader" (e.g. its transaction history) and turns it into transactions.
+帳理會讀取你在「通知記帳」中勾選的銀行、信用卡與支付 App 的通知內容（金額、商家、時間），自動建立交易紀錄。	Ledgerly reads notifications (amount, merchant, time) from the bank, card and payment apps you select in "Notification booking" to create transactions automatically.
+系統只會把你勾選的 App 的畫面交給帳理；其他 App 一律不讀取。帳理不會操作畫面、點擊或輸入任何內容。	The system only shares screens of the apps you selected; other apps are never read. Ledgerly never taps, types or controls the screen.
+讀到的內容保存在這支手機上；只有你啟用 AI 功能時，規則看不懂的畫面文字會傳給你設定的 AI 服務（Groq 或 Gemini）整理。	What is read stays on this phone; only when AI is enabled, text the rules can't parse is sent to your AI service (Groq or Gemini).
+通知內容保存在這支手機上；只有你啟用 AI 功能時，規則看不懂的通知文字會傳給你設定的 AI 服務（Groq 或 Gemini）判讀，不會傳給其他人。	Notification content stays on this phone; only when AI is enabled, text the rules can't parse is sent to your AI service (Groq or Gemini), and to no one else.
+群組對應固定的帳戶類型，只能改名與排序。	Groups map to fixed account types; you can only rename and reorder them.
+借入 · 我欠對方	Borrowed · I owe them
+借出 · 對方欠我	Lent · they owe me
+借貸方向與對象	Direction and counterparty
+利率與期限	Rate and term
+每月到期會建立待確認的轉帳，確認後才會入帳。	Each month a pending transfer is created and only posted after you confirm it.
+每月收付款	Monthly payment
+卡片數	Cards
+AI 正在整理你的投資問題…	AI is working on your question…
+AI 額度暫停到	AI quota paused until
+· 重點整理	· digested
+⚠ 可動用現金低於預留金額	⚠ Available cash is below the reserve by
+下單前檢查	Pre-trade checklist
+下次背景更新：	Next background update:
+依你設定的參數計算，預設關閉	Based on your settings; off by default
+依你設定的門檻提示停損／停利	Stop-loss / take-profit hints from your thresholds
+保本金額（空白為自動）	Principal to protect (blank = auto)
+個區塊（日期×題材），完整	blocks (date × theme), complete
+個題材	themes
+個，依則數排序）	, by count)
+刪除中…	Deleting…
+刪除新聞資料庫？	Delete the news database?
+刪除資料庫	Delete database
+則提到 ·	mentions ·
+則，已整理進重點	items, digested
+只看前 15 個題材	Show top 15 themes
+可投入	Available
+問今天該買什麼、持股怎麼處理、資金怎麼分配，或點下方的常見問題。	Ask what to buy today, what to do with holdings or how to allocate cash, or tap a common question below.
+報告 ·	Report ·
+天內	days
+將永久刪除所有新聞、重點摘要、每日與歷史報告、AI 對話及公司說明快取。持股、帳務與 AI 設定不會變更；若新聞自動更新仍啟用，之後會重新蒐集資料。	This permanently deletes all news, digests, daily and past reports, AI chats and cached company notes. Holdings, records and AI settings are kept; if auto update is on, news will be collected again.
+尚未設定投資原則。	No investment principles yet.
+恢復背景更新	Resume background updates
+我的投資原則（	My principles (
+手動停利價	Manual take-profit price
+持股紀律建議	Holding discipline hints
+持股紀律與 AI 建議	Holding discipline & AI
+新聞依據：資料集近 3 天沒有提到這檔	News basis: not mentioned in the last 3 days
+新聞依據：近 3 天	News basis: last 3 days
+新聞自動更新與每日報告	News auto-update & daily report
+昨天 ·	Yesterday ·
+最近連續失敗	Recent consecutive failures
+條）	)
+比成本少	Below cost by
+永久刪除	Delete permanently
+沒有可用的 AI 金鑰，背景不會更新	No AI key; background updates are off
+減碼價（跌破賣一半）	Reduce price (sell half below it)
+產業題材（長條＝新聞則數，顏色＝多空）	Industry themes (bar = news count, color = sentiment)
+目前無法執行：	Can't run now:
+看 K 線	View chart
+看全部重點新聞 ›	All key news ›
+看這個題材的	View this theme's
+移除	Remove
+等待系統排程	Waiting for the system scheduler
+等條件符合就執行	Runs when conditions are met
+紀律：	Rule:
+約每 3 小時蒐集新聞，每日報告完成後通知。	Collects news about every 3 hours and notifies when the daily report is ready.
+網路連線	network
+股 · 停利價	shares · take-profit
+背景排程尚未建立（重開 App 會建立）	Background schedule not created yet (reopen the app)
+背景更新執行中	Background update running
+背景自動更新已關閉（上方開關）	Background auto-update is off (switch above)
+設定 AI 金鑰後即可產生報告。	Set an AI key to generate reports.
+詳情	Details
+讀了	Read
+資金與持股建議	Cash & holding advice
+資金追逐的題材	Themes money is chasing
+資金配置	Allocation
+這個題材的重點還在整理中。	Key points for this theme are still being digested.
+還沒有新聞。按上方「立即更新」開始蒐集	No news yet. Tap "Update now" above to start
+還沒有足夠的產業題材新聞	Not enough industry news yet
+重點	Highlights
+長按訊息可複製或刪除	Long-press a message to copy or delete
+電量不低	battery not low
+需先啟用 AI 並設定金鑰：前往 AI 設定 ›	Enable AI and add a key first: AI settings ›
+預留	Reserve
+預留金額	Reserve
+點題材看 AI 整理的重點	Tap a theme for AI key points
+（需要	(needs
+（需要先設定 AI 金鑰）	(set an AI key first)
+；待讀	; unread
+；資料集完整	; dataset complete
+AI 工作失敗	AI task failed
+AI 已停用或尚未設定可用金鑰。	AI is off or no usable key is set.
+AI 沒有回應。	AI did not respond.
+已判斷	Checked
+已新增	Added
+收支檢討已完成	Review complete
+整理不明交易…	Sorting unknown transactions…
+整理收支資料…	Preparing data…
+檢討期間已變更，請重新產生。	The period changed; please regenerate.
+沒有待判斷的重複交易	No possible duplicates to check
+沒有需要整理的未分類交易	No uncategorized transactions to sort
+筆 AI 分類建議	AI category suggestions
+等待網路或背景排程…	Waiting for network or background scheduler…
+組可能重複交易	possible duplicate groups
+背景工作失敗，請重試。	Background task failed; please retry.
+自動整理完成	Auto-tidy complete
+自動整理新進交易…	Tidying new transactions…
+沒有網路連線	No network connection
+背景 AI 連續失敗	Background AI failed in a row
+設定為只用 Wi-Fi，目前是行動網路	Set to Wi-Fi only; currently on mobile data
+這一輪的時間用完，稍後接續	Time budget used up; will continue later
+AI 尚未設定完成	AI not set up yet
+AI 已啟用	AI enabled
+以選定期間的交易資料產生檢討與分析。	Generates a review and analysis from the selected period.
+查看持倉分析、新聞資料集、每日報告與股票對話。	Holdings analysis, news dataset, daily report and stock chat.
+股票、新聞與資金分析	Stocks, news and cash analysis
+主要模型（報告、檢討、對話）	Main model (reports, reviews, chat)
+模型自動分工	Automatic model routing
+速度快，適合頻繁的小工作	Fast; good for frequent small tasks
+適合讀取較大量的資料；金鑰到 aistudio.google.com 申請	Good for large inputs; get a key at aistudio.google.com
+金鑰只存在這支手機、不放進備份。Gemini 免費方案可能會用送出的內容改進模型。	Keys stay on this phone and are not backed up. Gemini's free tier may use submitted content to improve models.
+AI 額度用完，	AI quota used up,
+· 區塊	· blocks
+、待讀	, unread
+恢復	Resume
+收支檢討中…	Reviewing…
+知道了	Got it
+股票助理回覆中…	Assistant is replying…
+前面還有 AI 工作；完成後會自動接續。	Another AI task is ahead; this will continue after it.
+等待其他 AI 工作完成…	Waiting for other AI tasks…
+等待網路或背景排程。	Waiting for network or background scheduler.
+；離開畫面或 App 後仍會繼續。	; keeps running if you leave.
+AI 執行失敗：	AI failed:
+AI 語氣	AI tone
+圖表勾選	Chart picker
+圖表勾選（收入／支出圓環、勾選分類與帳戶）	Chart picker (income/expense donuts, tick categories and accounts)
+安全	Security
+搜尋的篩選方式	Search filter style
+收支檢討、投資報告與股票助理的口吻；下次產生的內容開始套用。	Tone for reviews, reports and the stock assistant; applies to the next result.
+放在日曆日期與金額之間；點日期可以看完整名稱。	Shown between the date and amounts; tap a date for full names.
+文字	Text
+文字（休、結、繳、扣）	Text (Off, Stmt, Due, Debit)
+日曆標示	Calendar markers
+欄位篩選	Field filters
+欄位篩選（期間、帳戶、分類、金額）	Field filters (period, account, category, amount)
+每月目標與預算，留空代表不設定。進度顯示在「交易 → 檢討」；AI 檢討建議的目標按「採用」也會寫到這裡。	Monthly goals and budgets; leave blank for none. Progress shows in Transactions → Review; AI goals you adopt are saved here too.
+特大（120%）	Extra large (120%)
+背景 AI 只用 Wi-Fi	Background AI on Wi-Fi only
+較小（85%）	Smaller (85%)
+開啟後，新聞標註、重點整理與每日報告只在 Wi-Fi 等不計量網路時於背景執行；手動按「立即更新」與對話不受影響。	When on, background news tagging, digests and daily reports run only on unmetered networks; manual updates and chat are not affected.
+顏色小點	Color dots
+勾選要篩選的項目	Tick items to filter
+展開	Expand
+收合	Collapse
+在個股頁按☆加入	Tap ☆ on a stock page to add
+按右上角＋新增，或在「通知記帳」啟用券商 App 自動記錄成交	Tap ＋ at top right, or enable your broker app in Notification booking to record fills
+下次收付	Next payment
+你尚欠	You still owe
+借出給	Lent to
+向其借入	Borrowed from
+對方尚欠你	They still owe you
+待償還	To repay
+待收回	To collect
+本金進度	Principal progress
+每月利息估算	Est. monthly interest
+設定對象、本金與還款方式，開始追蹤借貸進度。	Set counterparty, principal and repayment to start tracking.
+逾期	Overdue
+預估期數	Est. installments
+上次 App 意外關閉	The app closed unexpectedly last time
+以下是錯誤紀錄，按「複製」後貼給開發者可以幫助修正。	Here is the error log; tap Copy and send it to the developer.
+· 最高第	· peak on day
+上期	Previous
+個交易日	trading days
+個交易日，%）	trading days, %)
+本期	This period
+走勢比較（近	Price comparison (last
+AI 待命中	AI ready
+上次備份	Last backup
+下一筆	Next
+個 App	apps
+個錢包 App	wallet apps
+刷卡通知	Card notification
+匯出交易明細	Export transactions
+匯出全部交易（CSV，可用 Excel 開啟）	Export all transactions (CSV, opens in Excel)
+另一端也有通知時會自動合併成一筆轉帳	Merged into one transfer when the other side also notifies
+只顯示已選的 App	Selected apps only
+可加入的工具	Tools you can add
+在 Google Play 查看	View on Google Play
+報告	Report
+寬	Wide
+尚未設定 AI 金鑰	No AI key set
+尚未設定自動備份	Auto backup not set
+已匯出	Exported
+已匯出完整備份	Full backup exported
+打開錢包 App 的交易紀錄頁就會自動匯入，重複的會合併。	Open a wallet app's history page to import automatically; duplicates are merged.
+打開錢包的交易紀錄頁後回來查看	Open the wallet's history page, then come back
+支付	Payment
+有網路時：規則或 AI 判讀後直接記帳並通知；AI 沒把握或找不到帳戶時放「待確認」。\n	Online: recorded directly after rules or AI read it, with a notification; goes to Pending if AI is unsure or no account matches.\n
+本月已用	Used this month
+本機通知辨識偏好（點擊刪除）	Local notification rules (tap to delete)
+每次直接記成轉帳，不等另一端的通知	Always record as a transfer without waiting for the other side
+沒有週期交易	No recurring transactions
+沒網路時：全部放「待確認」；規則看不懂的通知會先排隊，恢復網路後自動用 AI 判讀。	Offline: everything goes to Pending; notifications the rules can't read are queued and read by AI when back online.
+淨資產	Net worth
+測試通知辨識	Test notification parsing
+監聽	Watching
+目前	Current
+窄	Narrow
+筆、可合併	, mergeable
+自動檢查：	Auto check:
+請先新增「電子支付」帳戶（例如街口、悠遊付），匯入的交易才有地方記。	Add an e-wallet account first (e.g. JKOPay, EasyWallet) so imports have somewhere to go.
+讀取	Read
+這個版本從 Google Play 安裝，新版會由 Google Play 自動更新。	This version is from Google Play and is updated by Google Play.
+選雲端硬碟或手機裡的檔案，定期自動覆寫完整備份。	Pick a file on Drive or the phone to overwrite with a full backup regularly.
+還沒有工具，按右上「編輯」從下方清單加入。	No tools yet; tap Edit at top right to add from the list below.
+顯示更多紀錄	Show more
+＋ 新增要監聽的 App	＋ Add an app to watch
+＋ 新增要讀取的錢包 App	＋ Add a wallet app to read
+則待讀、	unread,
+準備蒐集新聞…	Preparing to collect news…
+網路或資料儲存錯誤	Network or storage error
+還有	Still
+，將稍後重試。	, will retry later.
+開始日期在過去時，會補上到今天的交易	If the start date is in the past, transactions up to today are added
+則待整理重點；	to digest;
+則待標註、	to tag,
+新聞整理沒有進展	News processing made no progress
+新聞資料集更新失敗	News dataset update failed
+暫不產生報告。	Report postponed.
+暫停：	Paused:
+更新新聞中	Updating news
+會自動繼續，完成後產生報告。	Will continue automatically and generate the report when done.
+沒有網路連線，無法更新	No network; can't update
+沒有網路連線，連上網路後再按一次。	No network; tap again once connected.
+背景工作已停止	Background task stopped
+背景工作已停止。	Background task stopped.
+資料整理中：還有	Organizing data:
+；已完成的部分已保存，稍後自動接續	; finished parts are saved and will continue later
+● AI 建議留意	● AI flagged
+上限	Cap
+下午 14–17	Afternoon 14–17
+下期目標（AI 建議）	Next period goals (AI)
+中午 11–14	Noon 11–14
+依據：	Basis:
+修改	Edit
+其餘	Other
+可以調整的地方	What to adjust
+已採用，每月在檢討頁看進度	Adopted; track progress on the review page
+常去的商家	Frequent merchants
+平日	Weekday
+平日／週末（每天平均）	Weekday / weekend (per day)
+建議可省（每月）	Possible savings (monthly)
+按「產生」寫出這期的檢討與下期目標	Tap Generate for this period's review and next goals
+採用	Adopt
+採用後會寫進每月預算與目標	Adopting saves them as monthly budgets and goals
+早上 5–11	Morning 5–11
+時段	Time of day
+晚上 17–22	Evening 17–22
+消費習慣	Spending habits
+深夜 22–5	Late night 22–5
+約省	Save about
+總支出上限	Total spending cap
+舊版文字分析（按「重新產生」改成圖表版）	Old text analysis (regenerate for the chart version)
+設定 AI 金鑰後即可產生檢討。	Set an AI key to generate reviews.
+這個月的目標	This month's goals
+週末	Weekend
+；點「每日」可看明細	; see Daily for details
+只有標題	Title only
+收起明細	Hide details
+歷年現金股利（元／股）	Cash dividends by year (per share)
+漲跌比較（%）	Change comparison (%)
+相關新聞（	Related news (
+買進後最高	High since buy
+除權息明細（	Dividend details (
+拖動方框移動位置，拖右下角的圓點改大小，點一下可以挑大小，✕ 移除。	Drag a tile to move it, drag the corner dot to resize, tap to pick a size, ✕ to remove.
+AI 中心	AI hub
+工具首頁與順序	Tools home & order
+未顯示的工具	Hidden tools
+設定與通知記帳設定固定從工具頁右上角進入，不會重複列在工具清單。	Settings and notification booking are opened from the top right of Tools and are not listed again.
+資產走勢	Net worth trend
+隱藏	Hide
+顯示	Show
+首頁顯示與排序	Home tiles & order
+信用卡日程	Card schedule
+全年收入	Yearly income
+全選	Select all
+取消選取	Cancel selection
+已選	Selected
+支出最多：	Highest spending:
+改成哪個分類？	Change to which category?
+改成哪個帳戶？	Change to which account?
+選取的交易要都是支出或都是收入（轉帳沒有分類）。	Selected transactions must all be expenses or all income (transfers have no category).
+長按日期記一筆	Long-press a date to add
+建議：	Suggestion:
+猜你是	Maybe
+筆不明或未分類的收支	unknown or uncategorized transactions
+已是最新版本	Already up to date
+（已略過）	(skipped)
+AI 判讀完成	AI reading done
+AI 沒有辨識出交易紀錄。	AI found no transactions.
+AI 錢包判讀失敗：	AI wallet reading failed:
+匯入辨識出的交易…	Importing recognized transactions…
+暫存畫面資料已不存在，請重新開啟錢包交易紀錄。	The saved screen data is gone; reopen the wallet history.
+讀取錢包交易文字…	Reading wallet text…
+錢包 AI 工作資料無效。	Wallet AI task data is invalid.
+AI 判讀未完成：	AI reading incomplete:
+AI 背景判讀中…	AI reading in background…
+沒有讀到錢包畫面文字；請確認目前在交易紀錄頁	No wallet text read; make sure you're on the history page
+無法排入 AI 背景判讀：	Couldn't queue AI reading:
+處理錢包紀錄失敗：	Processing wallet records failed:
+讀取錢包畫面失敗：	Reading wallet screen failed:
+休	Off
+班	Work
+結	Stmt
+繳	Due
+扣	Debit
+資金紀律	Plan
+直接記帳並通知	Recorded and notified
+有網路時：	Online:

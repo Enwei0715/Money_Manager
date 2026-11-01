@@ -108,8 +108,8 @@ fun AdvisorContent(nav: NavController) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
         TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
-            listOf("今日", "問 AI", "新聞", "資金與紀律").forEachIndexed { i, t ->
-                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 13.sp, group = fitGroup1) },
+            listOf("今日", "問 AI", "新聞", "資金紀律").forEachIndexed { i, t ->
+                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp, group = fitGroup1) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
