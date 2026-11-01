@@ -177,6 +177,9 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val accounts by repo.accounts.collectAsStateWithLifecycle(emptyList())
     var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, 2)) }
+    LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.txnsTab) {
+        com.enwei.moneymanager.ui.TabRequest.txnsTab?.let { tab = it; com.enwei.moneymanager.ui.TabRequest.txnsTab = null }
+    }
     var month by rememberSaveable { mutableStateOf(Periods.monthOf(LocalDate.now(), repo.settings.value.monthStartDay)) }
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())

@@ -336,6 +336,8 @@ data class AppSettings(
     val aiTone: Int = 0,
     /** 背景 AI 工作（新聞標註、整理、報告）只在 Wi-Fi 等不計量網路執行 */
     val aiWifiOnly: Boolean = false,
+    /** 背景蒐集新聞、整理題材的間隔（小時） */
+    val newsIntervalHours: Int = 3,
     /** 搜尋的篩選方式：0 圖表勾選頁（收入／支出圓環＋分類、帳戶勾選），1 欄位篩選（期間、帳戶、分類、金額） */
     val filterStyle: Int = 0,
     /** 舊版現金面額設定，保留備份相容。 */
@@ -516,6 +518,7 @@ class SettingsStore(context: Context) {
         calendarDots = prefs.getBoolean("calendarDots", false),
         aiTone = prefs.getInt("aiTone", 0),
         aiWifiOnly = prefs.getBoolean("aiWifiOnly", false),
+        newsIntervalHours = prefs.getInt("newsIntervalHours", 3),
         filterStyle = prefs.getInt("filterStyle", 0),
         lastPicks = runCatching { json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), prefs.getString("lastPicks", "{}")!!) }.getOrDefault(emptyMap()),
         cashByDenom = prefs.getBoolean("cashByDenom", true),
@@ -688,6 +691,7 @@ class SettingsStore(context: Context) {
             .putBoolean("calendarDots", s.calendarDots)
             .putInt("aiTone", s.aiTone)
             .putBoolean("aiWifiOnly", s.aiWifiOnly)
+            .putInt("newsIntervalHours", s.newsIntervalHours)
             .putInt("filterStyle", s.filterStyle)
             .putString("lastPicks", json.encodeToString(MapSerializer(String.serializer(), String.serializer()), s.lastPicks))
             .putBoolean("cashByDenom", s.cashByDenom)

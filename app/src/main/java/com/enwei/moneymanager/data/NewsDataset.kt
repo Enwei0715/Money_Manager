@@ -646,10 +646,11 @@ class NewsDataset(context: Context) {
         val st = load()
         val since = recentSince(7)
         val counts = st.items.filter { it.tagged && it.epochSec >= since && it.theme.isNotBlank() }.groupingBy { it.theme }.eachCount()
-        if (counts.size <= 40 || stop()) return 0
+        if (stop()) return 0
         val canonical = st.themeCanon
         val todo = counts.entries.filter { it.key !in canonical }.sortedByDescending { it.value }.map { it.key to it.value }
-        if (todo.isEmpty()) return 0
+        // 還沒有標準題材時：題材超過 20 個才合併；之後每次有新的題材名稱都對應到標準題材
+        if (todo.isEmpty() || canonical.isEmpty() && counts.size <= 20) return 0
         val map = GroqAi.mergeThemes(todo, canonical) ?: return 0
         val changed = map.filter { (k, v) -> k != v }
         update { s ->

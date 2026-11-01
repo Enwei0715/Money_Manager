@@ -99,6 +99,9 @@ fun AdvisorScreen(nav: NavController) {
 @Composable
 fun AdvisorContent(nav: NavController) {
     var tab by rememberSaveable { mutableStateOf(0) }
+    LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.advisorSub) {
+        com.enwei.moneymanager.ui.TabRequest.advisorSub?.let { tab = it; com.enwei.moneymanager.ui.TabRequest.advisorSub = null }
+    }
     // 直接訂閱資料集：背景蒐集、標註、產生報告時畫面即時更新
     val live by MoneyApp.news.flow.collectAsStateWithLifecycle()
     // 讀檔失敗不會讓畫面閃退：資料集改用空的並顯示提示
@@ -859,11 +862,23 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("新聞自動更新與每日報告", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        Text("約每 3 小時蒐集新聞，每日報告完成後通知。", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("依設定的頻率蒐集新聞並整理題材，每日報告完成後通知。", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = settings.advisorDaily, onCheckedChange = { enabled -> repo.settings.update { it.copy(advisorDaily = enabled) } }, enabled = aiReady)
                 }
                 if (!aiReady) TextButton(onClick = { infoOpen = false; nav.navigate("ai") }) { Text("需先啟用 AI 並設定金鑰：前往 AI 設定 ›", fontSize = 12.sp) }
+                // 背景蒐集新聞與整理題材的頻率
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("自動更新頻率", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    listOf(1, 3, 6).forEach { h ->
+                        FilterChip(settings.newsIntervalHours == h, {
+                            repo.settings.update { it.copy(newsIntervalHours = h) }
+                            com.enwei.moneymanager.work.NewsWorker.schedule(ctx, replace = true)
+                        }, label = { Text("每 $h 小時", fontSize = 12.sp) })
+                    }
+                }
+                Text("每次會：蒐集新聞 → AI 標註 → 合併題材 → 整理重點；早上 7 點後資料完整時產生當日報告。", fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Text("共 ${store.items.size} 則（近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天），已標註 ${stats.tagged} 則", fontSize = 14.sp)
                 stats.coverage?.let { c ->
@@ -1393,7 +1408,19 @@ private fun NewsScheduleInfo() {
         GroqAi.coolingUntil()?.takeIf { it > now }?.let { add("AI 額度暫停到 ${hm.format(java.util.Date(it))}") }
         if (health.failures > 0 && !health.paused(now)) add("最近連續失敗 ${health.failures} 次：${health.pauseReason ?: "沒有回應"}")
     }
+    val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // 目前的排程程序（執行中時顯示步驟與進度；結束後顯示上一輪的結果）
+        job?.let { j ->
+            if (j.running) {
+                Text("目前程序", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                PipelineSteps(j.step, refreshOnly = j.refreshOnly)
+                Text(j.step + (if (j.done != null && j.total != null) "（${j.done}/${j.total}）" else "") +
+                    (j.etaAt?.takeIf { it > now }?.let { " · 約剩 ${com.enwei.moneymanager.work.ReportJob.formatDuration(it - now)}" } ?: ""),
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+            } else Text("上一輪（${hm.format(java.util.Date(j.startedAt))} 開始）：${j.error ?: j.step}", fontSize = 12.sp,
+                color = if (j.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         lines.forEach { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (health.paused(now)) TextButton(onClick = { com.enwei.moneymanager.work.AiHealth.resume() }) { Text("恢復背景更新") }
     }

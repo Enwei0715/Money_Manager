@@ -123,6 +123,10 @@ private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {
 @Composable
 fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int = 0) {
     var section by rememberSaveable { mutableStateOf(initialTab) }
+    // 狀態列、通知要求切到某個區塊
+    androidx.compose.runtime.LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.accountsSection) {
+        com.enwei.moneymanager.ui.TabRequest.accountsSection?.let { section = it; com.enwei.moneymanager.ui.TabRequest.accountsSection = null }
+    }
     var refreshTick by remember { mutableStateOf(0) }
     val snack = remember { androidx.compose.material3.SnackbarHostState() }
     val scope = rememberCoroutineScope()

@@ -56,7 +56,7 @@ private fun hhmm(ms: Long) = DateTimeFormatter.ofPattern("HH:mm").format(Instant
  * 新聞資料集的區塊完成度，以及限流或連續失敗暫停的原因。沒有事情時不佔空間。
  */
 @Composable
-fun AiStatusBar(nav: NavController) {
+fun AiStatusBar(nav: NavController, onOpen: (String) -> Unit = { nav.navigate(it) }) {
     val report by ReportJob.state.collectAsStateWithLifecycle()
     val chat by ChatJob.state.collectAsStateWithLifecycle()
     val review by AiBackgroundWork.reviewProgress.collectAsStateWithLifecycle()
@@ -75,13 +75,21 @@ fun AiStatusBar(nav: NavController) {
                 val count = if (r.done != null && r.total != null) " ${r.done}/${r.total}" else ""
                 val eta = r.etaAt?.takeIf { it > now }?.let { " · 約剩 ${ReportJob.formatDuration(it - now)}" }.orEmpty()
                 val blocks = if (grid.blocks > 0) " · 區塊 ${grid.complete}/${grid.blocks}" + (if (grid.unread > 0) "、待讀 ${grid.unread}" else "") else ""
-                add(AiLine(r.step.removeSuffix("…").substringBefore(" ${r.done}/") + count + eta + blocks, "advisor", true,
+                // 目前在排程的第幾步：蒐集 → 標註 → 合併題材 → 整理重點 → 產生報告
+                val stepNo = when {
+                    r.step.contains("標註") -> 2; r.step.contains("合併題材") -> 3; r.step.contains("重點") -> 4
+                    r.step.contains("分析資料集") || r.step.contains("營收") || r.step.contains("大盤") || r.step.contains("代號") -> 5
+                    else -> 1
+                }
+                val stepTotal = if (r.refreshOnly) 4 else 5
+                add(AiLine("步驟 ${stepNo.coerceAtMost(stepTotal)}/$stepTotal · " + r.step.removeSuffix("…").substringBefore(" ${r.done}/") + count + eta + blocks,
+                    if (r.refreshOnly) "advisor:2" else "advisor:0", true,
                     progress = if (r.done != null && r.total != null && r.total > 0) r.done.toFloat() / r.total else null))
             } else if (r.error != null && now - r.startedAt < 6 * 3600_000L) {
-                add(AiLine(r.error, "advisor", false, warn = true, action = "知道了" to { ReportJob.state.value = null }))
+                add(AiLine(r.error, if (r.refreshOnly) "advisor:2" else "advisor:0", false, warn = true, action = "知道了" to { ReportJob.state.value = null }))
             }
         }
-        chat?.takeIf { it.running }?.let { add(AiLine("股票助理回覆中…", "advisor", true)) }
+        chat?.takeIf { it.running }?.let { add(AiLine("股票助理回覆中…", "advisor:1", true)) }
         if (review.running) add(AiLine(review.step.ifBlank { "收支檢討中…" }, "review", true, progress(review.done, review.total)))
         listOf(unknown, dups, tidy).filter { it.running }.forEach { add(AiLine(it.step.ifBlank { "AI 整理中…" }, "ai-hub", true, progress(it.done, it.total))) }
         if (health.paused(now)) {
@@ -95,16 +103,16 @@ fun AiStatusBar(nav: NavController) {
     }
     if (lines.isEmpty()) return
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
-        lines.forEach { l -> Line(l, nav) }
+        lines.forEach { l -> Line(l, onOpen) }
     }
 }
 
 private fun progress(done: Int?, total: Int?) = if (done != null && total != null && total > 0) done.toFloat() / total else null
 
 @Composable
-private fun Line(l: AiLine, nav: NavController) {
+private fun Line(l: AiLine, onOpen: (String) -> Unit) {
     val warn = MaterialTheme.colorScheme.error
-    Column(Modifier.fillMaxWidth().clickable(enabled = l.route != null) { l.route?.let { nav.navigate(it) { launchSingleTop = true } } }) {
+    Column(Modifier.fillMaxWidth().clickable(enabled = l.route != null) { l.route?.let { onOpen(it) } }) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
             if (l.running) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
             else Text("!", color = if (l.warn) warn else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)

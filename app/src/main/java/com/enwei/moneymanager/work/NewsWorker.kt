@@ -111,7 +111,8 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
         /** [replace] 為設定改變（例如只用 Wi-Fi）時更新排程條件。 */
         fun schedule(context: Context, replace: Boolean = false) {
-            val req = PeriodicWorkRequestBuilder<NewsWorker>(3, TimeUnit.HOURS)
+            val hours = MoneyApp.repo.settings.value.newsIntervalHours.coerceIn(1, 12).toLong()
+            val req = PeriodicWorkRequestBuilder<NewsWorker>(hours, TimeUnit.HOURS)
                 .setConstraints(constraints(context))
                 .build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(

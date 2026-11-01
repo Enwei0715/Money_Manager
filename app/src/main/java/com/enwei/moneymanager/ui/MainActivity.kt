@@ -132,7 +132,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     val route by pendingRoute
                     LaunchedEffect(route) {
                         // 小工具、通知開啟的分頁要「切換分頁」，不是疊在目前畫面上，否則底部分頁列會失靈
-                        route?.takeIf { it != "home" }?.let { r -> if (tabs.any { it.route == r }) nav.openTab(r) else nav.navigate(r) }
+                        route?.takeIf { it != "home" }?.let { r -> nav.openRoute(r) }
                         pendingRoute.value = null
                     }
                     AppScaffold(nav)
@@ -179,6 +179,27 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     }
 }
 
+/** 從狀態列、通知打開某個分頁裡的子頁時，先記下要切到哪一頁，再切換底部分頁（不另外疊一層畫面）。 */
+object TabRequest {
+    var accountsSection by androidx.compose.runtime.mutableStateOf<Int?>(null)
+    var advisorSub by androidx.compose.runtime.mutableStateOf<Int?>(null)
+    var txnsTab by androidx.compose.runtime.mutableStateOf<Int?>(null)
+}
+
+/** 打開路由：「advisor」「advisor:子頁」切到帳戶→助理，「review」切到交易→檢討，其他分頁用切換、其餘畫面照常開啟。 */
+fun NavHostController.openRoute(r: String) {
+    when {
+        r == "advisor" || r.startsWith("advisor:") -> {
+            TabRequest.accountsSection = 2
+            TabRequest.advisorSub = r.substringAfter(':', "").toIntOrNull()
+            openTab("accounts")
+        }
+        r == "review" -> { TabRequest.txnsTab = 2; openTab("txns") }
+        tabs.any { it.route == r } -> openTab(r)
+        else -> navigate(r)
+    }
+}
+
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
 private val tabs = listOf(
@@ -215,7 +236,7 @@ private fun BottomTabs(current: String?, onSelect: (String) -> Unit) {
  * 切換底部分頁。「交易」是起始頁：直接退回起始頁，不能用 restoreState——
  * 其他分頁的狀態是存在起始頁底下的，還原會把剛離開的分頁（例如統計）又帶回來，看起來就像按了沒反應。
  */
-private fun NavHostController.openTab(route: String) {
+internal fun NavHostController.openTab(route: String) {
     val start = graph.findStartDestination()
     if (route == start.route) {
         if (!popBackStack(start.id, inclusive = false)) navigate(route) { launchSingleTop = true }
@@ -246,7 +267,7 @@ private fun AppScaffold(nav: NavHostController) {
         bottomBar = {
             if (showBar) Column {
                 // AI 狀態列：正在進行的 AI 工作、進度與暫停原因（沒有事情時不佔空間）
-                com.enwei.moneymanager.ui.components.AiStatusBar(nav)
+                com.enwei.moneymanager.ui.components.AiStatusBar(nav) { r -> nav.openRoute(r) }
                 BottomTabs(current) { route -> nav.openTab(route) }
             }
         },
