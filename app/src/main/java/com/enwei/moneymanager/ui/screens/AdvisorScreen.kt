@@ -98,13 +98,22 @@ fun AdvisorContent(nav: NavController) {
     var tab by rememberSaveable { mutableStateOf(0) }
     // 直接訂閱資料集：背景蒐集、標註、產生報告時畫面即時更新
     val live by MoneyApp.news.flow.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { MoneyApp.news.load() }
+    // 讀檔失敗不會讓畫面閃退：資料集改用空的並顯示提示
+    LaunchedEffect(Unit) { runCatching { MoneyApp.news.load() } }
+    val loadError by MoneyApp.news.loadError.collectAsStateWithLifecycle()
     val store = live ?: NewsStore()
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
             listOf("今日", "問 AI", "新聞", "資金與紀律").forEachIndexed { i, t ->
                 Tab(tab == i, { tab = i }, text = { Text(t, fontSize = 12.sp, maxLines = 1, softWrap = false) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        loadError?.let { e ->
+            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(e, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { MoneyApp.news.loadError.value = null }) { Text("知道了", fontSize = 12.sp) }
             }
         }
         when (tab) {
@@ -699,18 +708,21 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // 沒有可用的 AI 金鑰時不能更新（按鈕變灰，下方說明到哪裡設定）
                         OutlinedButton(
-                            enabled = job?.running != true && reportWork?.running != true,
+                            enabled = GroqAi.enabled && job?.running != true && reportWork?.running != true,
                             onClick = { com.enwei.moneymanager.work.ReportJob.start(ctx, refreshOnly = true) },
                             modifier = Modifier.weight(1f),
                         ) { Text("立即更新") }
                         OutlinedButton(
-                            enabled = store != NewsStore() && job?.running != true && reportWork?.running != true &&
+                            // 只看有沒有資料；整份上萬則的資料集互相比對會讓畫面卡頓
+                            enabled = (store.items.isNotEmpty() || store.report != null || store.chat.isNotEmpty()) && job?.running != true && reportWork?.running != true &&
                                 newsWork?.running != true && chatWork?.running != true,
                             onClick = { clearDatabaseError = null; confirmClearDatabase = true },
                             modifier = Modifier.weight(1f),
                         ) { Text("刪除資料庫") }
                     }
+                    if (!GroqAi.enabled) TextButton(onClick = { nav.navigate("ai") }) { Text("需要 AI 金鑰才能更新新聞：前往 AI 設定 ›", fontSize = 12.sp) }
                     JobProgress(job, reportWork)
                     com.enwei.moneymanager.ui.components.AiWorkProgress(newsWork, Modifier.fillMaxWidth())
                 }

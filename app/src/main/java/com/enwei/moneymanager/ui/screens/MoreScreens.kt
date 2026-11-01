@@ -536,7 +536,7 @@ fun FxScreen(nav: NavController) {
     val lk = rememberLookups()
     var status by remember { mutableStateOf<String?>(null) }
     var amount by remember { mutableStateOf("100") }
-    var from by remember { mutableStateOf("USD") }
+    var from by remember { mutableStateOf(repo.settings.value.lastPicks["fx.from"] ?: "USD") }
 
     fun refresh() = scope.launch {
         status = "更新中…"
@@ -567,7 +567,7 @@ fun FxScreen(nav: NavController) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         NumberField(amount, { amount = it }, "金額", Modifier.weight(1f))
                         Spacer(Modifier.width(8.dp))
-                        DropdownField("幣別", FxService.common, from, { it }, { from = it }, Modifier.width(120.dp))
+                        DropdownField("幣別", FxService.common, from, { it }, { from = it }, Modifier.width(120.dp), memoryKey = "fx.from")
                     }
                     Money.parseMinor(amount)?.let {
                         Text("= ${Money.format(lk.fx.convert(it, from), settings.baseCurrency)} ${settings.baseCurrency}", style = MaterialTheme.typography.titleLarge)

@@ -1,24 +1,17 @@
 package com.enwei.moneymanager.work
 
 import android.content.Context
-import android.content.Intent
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingWorkPolicy
-import androidx.work.ForegroundInfo
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import androidx.work.workDataOf
 import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.data.askAdvisor
 import com.enwei.moneymanager.net.GroqAi
 import com.enwei.moneymanager.ui.tr
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 /**
- * 股票助理對話在背景執行：離開畫面或 App 也會繼續，回覆存進對話紀錄；
+ * 股票助理對話：送出後立刻在 App 的 coroutine 執行（離開對話畫面也會繼續），回覆存進對話紀錄；
  * 不在對話畫面時回覆完成會通知。
  */
 object ChatJob {
@@ -34,22 +27,21 @@ object ChatJob {
     var scrollOffset = 0
     var seenLast = -1L
 
+    /** 進行中的回覆（App 的 coroutine，不經過 WorkManager 排程，送出就立刻開始） */
+    @Volatile private var current: kotlinx.coroutines.Job? = null
+
     fun ask(context: Context, question: String) {
         if (state.value?.running == true || question.isBlank()) return
-        val requestedAt = System.currentTimeMillis()
-        state.value = State(question, requestedAt)
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            "advisor-chat", ExistingWorkPolicy.KEEP,
-            OneTimeWorkRequestBuilder<ChatWorker>()
-                .setInputData(workDataOf("q" to question, "requestedAt" to requestedAt))
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .build(),
-        )
+        val app = context.applicationContext
+        state.value = State(question, System.currentTimeMillis())
+        // 直接執行：沒有共用鎖，背景新聞分析在跑也不會讓對話排隊
+        current = MoneyApp.instance.appScope.launch { run(app, question) }
     }
 
-    /** 停止目前的回覆：取消背景工作，回覆就算之後回來也不會加進對話。 */
+    /** 停止目前的回覆：取消執行中的工作，回覆就算之後回來也不會加進對話。 */
     fun stop(context: Context, question: String? = null) {
-        WorkManager.getInstance(context).cancelUniqueWork("advisor-chat")
+        current?.cancel()
+        current = null
         val cur = state.value
         state.value = cur?.copy(running = false, error = "已停止這次回覆")
             ?: question?.let { State(it, System.currentTimeMillis(), running = false, error = "已停止這次回覆") }
@@ -68,8 +60,8 @@ object ChatJob {
         }
         if (r == null) {
             val error = state.value?.error ?: "AI 沒有回應：${GroqAi.lastError ?: "沒有回覆"}"
+            // 失敗只在對話頁顯示（附「重試」），不另外發通知
             state.value = State(question, start, running = false, error = error)
-            if (!visible) notifyFailure(context, error)
             return
         }
         state.value = State(question, start, running = false)
@@ -98,53 +90,9 @@ object ChatJob {
         )
     }
 
-    private fun notifyFailure(context: Context, text: String) {
-        val nm = context.getSystemService(android.app.NotificationManager::class.java)
-        if (!nm.areNotificationsEnabled()) return
-        nm.notify(
-            9341,
-            androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
-                .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                .setContentTitle(tr("股票助理未能完成回覆"))
-                .setContentText(text)
-                .setAutoCancel(true)
-                .build(),
-        )
-    }
 }
 
+/** 舊版排進 WorkManager 的對話工作：保留類別讓系統能結束它，不再做事（對話已改為直接執行）。 */
 class ChatWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    override suspend fun doWork(): Result {
-        val question = inputData.getString("q").orEmpty()
-        setProgress(AiBackgroundWork.progress("等待其他 AI 工作完成…", 0))
-        return AiBackgroundWork.withAiExecution {
-            val startedAt = System.currentTimeMillis()
-            setProgress(AiBackgroundWork.progress("AI 正在整理你的投資問題…", startedAt))
-            setForeground(
-                ForegroundInfo(
-                    9342,
-                    androidx.core.app.NotificationCompat.Builder(applicationContext, MoneyApp.CHANNEL_RECORDS)
-                        .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                        .setContentTitle(tr("股票助理正在回覆"))
-                        .setContentText(question.take(80))
-                        .setProgress(0, 0, true)
-                        .setOngoing(true)
-                        .setOnlyAlertOnce(true)
-                        .setContentIntent(
-                            android.app.PendingIntent.getActivity(
-                                applicationContext,
-                                9342,
-                                Intent(applicationContext, com.enwei.moneymanager.ui.MainActivity::class.java)
-                                    .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "advisor"),
-                                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-                            ),
-                        )
-                        .build(),
-                ),
-            )
-            ChatJob.run(applicationContext, question)
-            val error = ChatJob.state.value?.error
-            if (error == null) Result.success() else Result.failure(androidx.work.workDataOf("error" to error))
-        }
-    }
+    override suspend fun doWork(): Result = Result.success()
 }

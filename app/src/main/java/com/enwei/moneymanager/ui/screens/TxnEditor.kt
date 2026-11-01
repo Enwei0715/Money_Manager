@@ -135,8 +135,13 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     var feeExpr by rememberSaveable { mutableStateOf("") }
     var showFee by rememberSaveable { mutableStateOf(false) }
     var currency by rememberSaveable { mutableStateOf(settings.baseCurrency) }
-    var accountId by rememberSaveable { mutableStateOf(initialAccountId ?: settings.defaultAccountId) }
-    var toAccountId by rememberSaveable { mutableStateOf(initialToAccountId) }
+    // 新增時帶入上次用的帳戶（轉帳也記住轉入帳戶），沒有才用預設帳戶
+    var accountId by rememberSaveable {
+        mutableStateOf(initialAccountId ?: settings.lastPicks["txn.account"]?.toLongOrNull()?.takeIf { lk.accounts.isEmpty() || lk.account(it)?.archived == false } ?: settings.defaultAccountId)
+    }
+    var toAccountId by rememberSaveable {
+        mutableStateOf(initialToAccountId ?: settings.lastPicks["txn.to"]?.toLongOrNull()?.takeIf { (lk.accounts.isEmpty() || lk.account(it)?.archived == false) && it != accountId })
+    }
     var toExpr by rememberSaveable { mutableStateOf("") }
     var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var merchant by rememberSaveable { mutableStateOf("") }
@@ -201,6 +206,12 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
 
     fun save(again: Boolean) {
         val t = build() ?: return
+        if (original == null) repo.settings.update { st ->
+            st.copy(lastPicks = st.lastPicks + listOfNotNull(
+                t.accountId?.let { "txn.account" to it.toString() },
+                t.toAccountId?.takeIf { t.type == TxnType.TRANSFER }?.let { "txn.to" to it.toString() },
+            ))
+        }
         scope.launch {
             repo.saveTxn(t)
             // 轉帳手續費另記一筆支出

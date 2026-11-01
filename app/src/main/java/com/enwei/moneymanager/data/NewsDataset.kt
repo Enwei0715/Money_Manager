@@ -154,12 +154,20 @@ class NewsDataset(context: Context) {
     /** 資料集的最新內容：背景蒐集、標註、產生報告時畫面會即時更新 */
     val flow: kotlinx.coroutines.flow.StateFlow<NewsStore?> = _flow
 
-    suspend fun load(): NewsStore = lock.withLock { loadUnlocked() }
+    // 已經讀進記憶體時直接回傳，不必等正在寫檔的背景工作（對話、畫面不會被新聞分析卡住）
+    suspend fun load(): NewsStore = cache ?: lock.withLock { loadUnlocked() }
+
+    /** 上次讀檔失敗的原因（畫面顯示提示用；讀檔失敗不再丟出例外，避免畫面閃退） */
+    val loadError = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
     private suspend fun loadUnlocked(): NewsStore = cache ?: withContext(Dispatchers.IO) {
         val store = if (file.exists()) {
-            runCatching { json.decodeFromString(NewsStore.serializer(), file.readText()) }
-                .getOrElse { throw IllegalStateException("新聞資料集讀取失敗，原始檔案已保留", it) }
+            runCatching { json.decodeFromString(NewsStore.serializer(), file.readText()) }.getOrElse { e ->
+                // 檔案壞掉或太大讀不進來：另存一份壞檔，改用空的資料集，下次背景更新會重新蒐集
+                runCatching { file.renameTo(File(file.parentFile, file.name + ".bad-" + System.currentTimeMillis())) }
+                loadError.value = "新聞資料集讀取失敗，已重新建立（${e.javaClass.simpleName}）"
+                NewsStore()
+            }
         } else NewsStore()
         store.also { cache = it; _flow.value = it }
     }

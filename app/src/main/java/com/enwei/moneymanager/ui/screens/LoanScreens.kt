@@ -157,7 +157,11 @@ private fun LoanMoveDialog(acc: AccountEntity, l: Repository.LoanStatus, repay: 
     val scope = rememberCoroutineScope()
     val info = l.info
     val accounts = lk.accounts.filter { !it.archived && it.type != AccountType.LOAN && it.type != AccountType.BROKERAGE }
-    var other by remember { mutableStateOf(info.payAccountId?.let { lk.account(it) } ?: accounts.firstOrNull()) }
+    // 先用借貸設定的帳戶，其次是上次在這裡選的帳戶
+    var other by remember {
+        mutableStateOf(info.payAccountId?.let { lk.account(it) }
+            ?: repo.settings.value.lastPicks["loan.account"]?.let { n -> accounts.firstOrNull { it.name == n } } ?: accounts.firstOrNull())
+    }
     val suggested = if (repay) minOf(info.installment ?: l.outstanding, l.outstanding) else 0L
     var amount by remember { mutableStateOf(if (suggested > 0) Money.fromMinor(suggested).stripTrailingZeros().toPlainString() else "") }
     var interest by remember { mutableStateOf(if (repay && l.monthlyInterest > 0) Money.fromMinor(l.monthlyInterest).stripTrailingZeros().toPlainString() else "") }
@@ -171,7 +175,7 @@ private fun LoanMoveDialog(acc: AccountEntity, l: Repository.LoanStatus, repay: 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumberField(amount, { amount = it }, "金額")
                 if (repay && info.annualRate > 0) NumberField(interest, { interest = it }, "其中利息（另記為利息${if (info.lent) "收入" else "支出"}）")
-                DropdownField(if (info.lent == repay) "收到哪個帳戶" else "從哪個帳戶付", accounts, other, { it.name }, { other = it })
+                DropdownField(if (info.lent == repay) "收到哪個帳戶" else "從哪個帳戶付", accounts, other, { it.name }, { other = it }, memoryKey = "loan.account")
                 DateField(date, { date = it })
                 if (repay && amt > l.outstanding) Text("超過尚欠金額 ${Money.withSymbol(l.outstanding, acc.currency)}", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             }

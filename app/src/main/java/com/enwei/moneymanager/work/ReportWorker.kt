@@ -29,6 +29,8 @@ object ReportJob {
         val refreshOnly: Boolean = false,
         val done: Int? = null,
         val total: Int? = null,
+        /** 預估完成時間（毫秒）；依這一階段每批實際花的時間推算，算不出來時為 null */
+        val etaAt: Long? = null,
     )
 
     val state = MutableStateFlow<State?>(null)
@@ -60,9 +62,16 @@ object ReportJob {
         val repo = MoneyApp.repo
         val ds = MoneyApp.news
         val start = System.currentTimeMillis()
+        // 同一階段（例如「AI 標註新聞」）的開始時間，用來推算剩餘時間
+        var phase = ""
+        var phaseStart = start
         fun update(step: String, done: Int? = null, total: Int? = null) {
             val now = System.currentTimeMillis()
-            val next = State(step, start, refreshOnly = refreshOnly, done = done, total = total)
+            val key = step.substringBefore(' ')
+            if (key != phase) { phase = key; phaseStart = now }
+            val eta = if (done != null && total != null && done > 1 && total > done)
+                now + (now - phaseStart) / (done - 1) * (total - done + 1) else null
+            val next = State(step, start, refreshOnly = refreshOnly, done = done, total = total, etaAt = eta)
             state.value = next
             onProgress(next)
             if (notifyProgress) progressNotice(context, next, now - start)
@@ -107,6 +116,7 @@ object ReportJob {
             }
             r
         } catch (e: CancellationException) {
+            if (notifyProgress) cancelProgress(context)
             throw e
         } catch (e: Exception) {
             val msg = "${if (refreshOnly) "更新失敗" else "產生失敗"}：${e.message ?: e.javaClass.simpleName}"
@@ -119,11 +129,14 @@ object ReportJob {
     private const val NOTICE_ID = 9321
     private const val COMPLETION_NOTICE_ID = 9323
 
-    private fun progressNotice(context: Context, state: State, elapsed: Long) {
+    fun progressNotice(context: Context, state: State, elapsed: Long) {
         val nm = context.getSystemService(android.app.NotificationManager::class.java)
         if (!nm.areNotificationsEnabled()) return
         nm.notify(NOTICE_ID, progressNotification(context, state, elapsed))
     }
+
+    /** 收起進度通知。 */
+    fun cancelProgress(context: Context) = context.getSystemService(android.app.NotificationManager::class.java).cancel(NOTICE_ID)
 
     fun foregroundInfo(context: Context, state: State) =
         ForegroundInfo(NOTICE_ID, progressNotification(context, state, elapsed = 0))
@@ -139,7 +152,8 @@ object ReportJob {
             .setContentText(
                 tr(state.step) +
                     (state.done?.let { done -> state.total?.let { total -> " · $done / $total" } ?: "" } ?: "") +
-                    (if (elapsed > 0) " · 已執行 ${formatDuration(elapsed)}" else ""),
+                    (state.etaAt?.let { " · 約剩 ${formatDuration(it - System.currentTimeMillis())}" }
+                        ?: if (elapsed > 0) " · 已執行 ${formatDuration(elapsed)}" else ""),
             )
             .setProgress(state.total ?: 0, state.done ?: 0, state.total == null || state.total <= 0)
             .setOngoing(true)
@@ -148,6 +162,8 @@ object ReportJob {
             .build()
 
     private fun doneNotice(context: Context, title: String, text: String) {
+        // 先收起進行中的進度通知（不是前景服務時它不會自動消失）
+        cancelProgress(context)
         val nm = context.getSystemService(android.app.NotificationManager::class.java)
         if (!nm.areNotificationsEnabled()) return
         nm.notify(
@@ -188,14 +204,16 @@ class ReportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 val running = queued.copy(step = "準備中…")
                 ReportJob.state.value = running
                 setProgress(ReportJob.workProgress(running))
-                if (userInitiated) setForeground(ReportJob.foregroundInfo(applicationContext, running))
+                // 前景服務只在 App 顯示在畫面上時啟動：Android 12 以上從背景啟動會被系統拒絕（之前閃退的原因之一）；
+                // 不是前景服務時仍會顯示一般的進度通知
+                if (userInitiated && appVisible()) runCatching { setForeground(ReportJob.foregroundInfo(applicationContext, running)) }
                 ReportJob.execute(
                     applicationContext,
                     notifyProgress = true,
                     refreshOnly = refreshOnly,
                     onProgress = { state ->
+                        // 進度通知用同一個編號更新（前景服務的通知也會一起更新），不必每次重新設定前景服務
                         setProgressAsync(ReportJob.workProgress(state))
-                        if (userInitiated) setForegroundAsync(ReportJob.foregroundInfo(applicationContext, state))
                     },
                 )
             }
@@ -208,4 +226,11 @@ class ReportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val error = ReportJob.state.value?.error
         return if (error == null) Result.success() else Result.failure(androidx.work.workDataOf("error" to error))
     }
+}
+
+/** App 目前是否顯示在畫面上（可以啟動前景服務的狀態）。 */
+internal fun appVisible(): Boolean {
+    val info = android.app.ActivityManager.RunningAppProcessInfo()
+    android.app.ActivityManager.getMyMemoryState(info)
+    return info.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
 }

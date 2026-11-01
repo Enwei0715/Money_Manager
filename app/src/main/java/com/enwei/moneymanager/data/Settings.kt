@@ -322,6 +322,8 @@ data class AppSettings(
     val priceAlerts: Map<String, PriceAlert> = emptyMap(),
     /** 觀察清單（台股代號），股票頁顯示報價，新聞與 AI 分析也會一起看 */
     val watchlist: List<String> = emptyList(),
+    /** 各個選單上次選的項目（key 為選單名稱，例如 "txn.account"），下次自動帶入 */
+    val lastPicks: Map<String, String> = emptyMap(),
     /** 舊版現金面額設定，保留備份相容。 */
     val cashByDenom: Boolean = true,
     /** 盤中依紀律（動態停損、分批停利）自動通知 */
@@ -494,6 +496,7 @@ class SettingsStore(context: Context) {
         reportAiMs = prefs.getLong("reportAiMs", 50_000),
         priceAlerts = runCatching { json.decodeFromString(MapSerializer(String.serializer(), PriceAlert.serializer()), prefs.getString("priceAlerts", "{}")!!) }.getOrDefault(emptyMap()),
         watchlist = runCatching { json.decodeFromString(ListSerializer(String.serializer()), prefs.getString("watchlist", "[]")!!) }.getOrDefault(emptyList()),
+        lastPicks = runCatching { json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), prefs.getString("lastPicks", "{}")!!) }.getOrDefault(emptyMap()),
         cashByDenom = prefs.getBoolean("cashByDenom", true),
         stockAlertsOn = prefs.getBoolean("stockAlertsOn", true),
         alertsFired = runCatching { json.decodeFromString(MapSerializer(String.serializer(), Long.serializer()), prefs.getString("alertsFired", "{}")!!) }.getOrDefault(emptyMap()),
@@ -658,6 +661,7 @@ class SettingsStore(context: Context) {
             .putLong("reportAiMs", s.reportAiMs)
             .putString("priceAlerts", json.encodeToString(MapSerializer(String.serializer(), PriceAlert.serializer()), s.priceAlerts))
             .putString("watchlist", json.encodeToString(ListSerializer(String.serializer()), s.watchlist))
+            .putString("lastPicks", json.encodeToString(MapSerializer(String.serializer(), String.serializer()), s.lastPicks))
             .putBoolean("cashByDenom", s.cashByDenom)
             .putBoolean("stockAlertsOn", s.stockAlertsOn)
             .putString("alertsFired", json.encodeToString(MapSerializer(String.serializer(), Long.serializer()), s.alertsFired))

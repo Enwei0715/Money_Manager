@@ -96,8 +96,20 @@ fun <T> DropdownField(
     modifier: Modifier = Modifier,
     noneLabel: String? = null,
     onNone: (() -> Unit)? = null,
+    /** 有給名稱時記住這個選單上次選的項目；還沒選時自動帶入 */
+    memoryKey: String? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    if (memoryKey != null) androidx.compose.runtime.LaunchedEffect(memoryKey, options.size) {
+        if (selected == null) {
+            val last = com.enwei.moneymanager.MoneyApp.repo.settings.value.lastPicks[memoryKey]
+            options.firstOrNull { display(it) == last }?.let(onSelect)
+        }
+    }
+    fun pick(o: T) {
+        if (memoryKey != null) com.enwei.moneymanager.MoneyApp.repo.settings.update { it.copy(lastPicks = it.lastPicks + (memoryKey to display(o))) }
+        onSelect(o)
+    }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
         OutlinedTextField(
             value = selected?.let(display) ?: (noneLabel ?: ""),
@@ -112,7 +124,7 @@ fun <T> DropdownField(
                 DropdownMenuItem(text = { Text(noneLabel) }, onClick = { onNone(); expanded = false })
             }
             options.forEach { o ->
-                DropdownMenuItem(text = { Text(display(o)) }, onClick = { onSelect(o); expanded = false })
+                DropdownMenuItem(text = { Text(display(o)) }, onClick = { pick(o); expanded = false })
             }
         }
     }

@@ -29,10 +29,18 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val ds = MoneyApp.news
         var startedAt = 0L
         var currentStep = "準備蒐集新聞…"
+        var phase = ""
+        var phaseStart = 0L
         fun update(step: String, done: Int? = null, total: Int? = null) {
             currentStep = step
             val progress = AiBackgroundWork.progress(step, startedAt, done, total)
             setProgressAsync(progress)
+            // 通知列顯示進度與預估剩餘時間（一般通知，不啟動前景服務，不會因背景限制而閃退）
+            val now = System.currentTimeMillis()
+            val key = step.substringBefore(' ')
+            if (key != phase) { phase = key; phaseStart = now }
+            val eta = if (done != null && total != null && done > 1 && total > done) now + (now - phaseStart) / (done - 1) * (total - done + 1) else null
+            ReportJob.progressNotice(applicationContext, ReportJob.State(step, startedAt, refreshOnly = true, done = done, total = total, etaAt = eta), now - startedAt)
         }
         try {
             startedAt = System.currentTimeMillis()
@@ -44,13 +52,16 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 onDigest = { i, n -> update("整理新聞重點 ${i + 1}/$n…", i + 1, n) },
             )
         } catch (e: CancellationException) {
+            ReportJob.cancelProgress(applicationContext)
             throw e
         } catch (e: Exception) {
             android.util.Log.w("NewsWorker", "News refresh failed (${e.javaClass.simpleName}); retrying")
             val msg = "新聞資料集更新失敗：${com.enwei.moneymanager.net.InvestData.lastHeadlineError ?: "網路或資料儲存錯誤"}，將稍後重試。"
-            update(msg)
+            setProgressAsync(AiBackgroundWork.progress(msg, startedAt))
+            ReportJob.cancelProgress(applicationContext)
             return Result.retry()
         }
+        ReportJob.cancelProgress(applicationContext)
         val st = ds.load()
         val today = LocalDate.now().toEpochDay()
         if (LocalTime.now().hour >= 7 && st.report?.day != today && ds.recent(st, 3).size >= 100) {

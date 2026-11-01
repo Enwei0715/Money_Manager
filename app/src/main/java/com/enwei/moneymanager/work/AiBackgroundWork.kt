@@ -17,8 +17,6 @@ import com.enwei.moneymanager.data.spendingReview
 import com.enwei.moneymanager.net.GroqAi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.TimeUnit
 
 data class AiWorkStatus(
@@ -42,12 +40,6 @@ data class AiTaskProgress(
 )
 
 object AiBackgroundWork {
-    /**
-     * API Request 層級的 Mutex，僅在向 Groq / AI 供應商發送 HTTP 請求時短暫使用，
-     * 避免在整個 Worker 的生命週期中鎖定，解決協程死鎖（Deadlock）問題。
-     */
-    private val apiMutex = Mutex()
-
     private const val PROGRESS_STEP = "step"
     private const val PROGRESS_STARTED = "started"
     private const val PROGRESS_DONE = "done"
@@ -59,17 +51,7 @@ object AiBackgroundWork {
     val duplicatesProgress = MutableStateFlow(AiTaskProgress())
     val autoTidyProgress = MutableStateFlow(AiTaskProgress())
 
-    /**
-     * API Request 層級的鎖，保護 AI API 請求不超過並發限制。
-     */
-    suspend fun <T> withApiLock(block: suspend () -> T): T {
-        return apiMutex.withLock { block() }
-    }
-
-    /**
-     * 相容現有 Worker 呼叫，直接執行 block，不再全域持鎖，
-     * 避免系統中斷 Worker 時無法釋放 Lock 而卡死 APP。
-     */
+    /** 相容舊呼叫：直接執行（不再使用任何全域鎖）。 */
     suspend fun <T> withAiExecution(block: suspend () -> T): T = block()
 
     // ---------------- 輕量任務 suspend 函數 ----------------
@@ -92,9 +74,8 @@ object AiBackgroundWork {
                 GroqAi.bigContext(GroqAi.AiTask.REVIEW),
             )
             flow.value = AiTaskProgress(running = true, step = "AI 分析 ${transactions.size} 筆交易…")
-            val review = withApiLock {
-                GroqAi.review(text, settings.baseCurrency, transactions.map { it.id })
-            } ?: throw IllegalStateException(GroqAi.lastError ?: "AI 沒有回應。")
+            val review = GroqAi.review(text, settings.baseCurrency, transactions.map { it.id })
+                ?: throw IllegalStateException(GroqAi.lastError ?: "AI 沒有回應。")
             repo.settings.update {
                 it.copy(reviews = (it.reviews + (periodKey to review)).entries.toList().takeLast(40).associate { e -> e.key to e.value })
             }
