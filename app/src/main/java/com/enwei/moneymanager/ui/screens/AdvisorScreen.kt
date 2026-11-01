@@ -220,8 +220,12 @@ private fun reportText(r: DailyReport): String = buildString {
 private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>, nav: NavController) {
     Section("大盤") {
         StageChip(r.stage.ifBlank { "趨勢" }, com.enwei.moneymanager.data.stripCites(r.trend))
-        // 加權指數近 60 個交易日 K 線
-        com.enwei.moneymanager.ui.components.MiniKLine("^TWII", days = 60)
+        // 加權指數 K 線：月線、季線，加上 AI 標出的支撐／壓力
+        if (r.outlook.isNotBlank()) Text("短期展望：${r.outlook}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+            color = when { r.outlook.contains("多") -> StockUp; r.outlook.contains("空") -> StockDown; else -> MaterialTheme.colorScheme.onSurfaceVariant })
+        com.enwei.moneymanager.ui.components.AnnotatedKLine("^TWII", r.levels.map { l ->
+            Triple("AI ${l.label}", l.price, if (l.label.contains("壓")) Color(0xFFAB47BC) else Color(0xFF26A69A))
+        })
         if (r.summary.isNotBlank()) CitedText(r.summary, r.cites, newsById)
     }
     // 題材熱度：資料集裡報告提到的題材（則數與平均多空）
@@ -231,6 +235,10 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         // 推薦個股走勢比較（前 5 檔）
         Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
             Box(Modifier.padding(12.dp)) { com.enwei.moneymanager.ui.components.CompareChart(r.picks.take(5).map { it.symbol }) }
+        }
+        // 推薦個股的月營收年增率比較
+        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+            Box(Modifier.padding(12.dp)) { com.enwei.moneymanager.ui.components.RevenueCompare(r.picks.map { it.symbol }) }
         }
         // 長線、短線分開列
         r.picks.groupBy { it.style.ifBlank { "其他" } }.toSortedMap(compareBy { listOf("短線", "長線").indexOf(it).let { i -> if (i < 0) 9 else i } }).forEach { (style, list) ->
@@ -367,6 +375,7 @@ fun PickCard(
                 ?: Text("代號未確認，請自行查證", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
             // 近期 K 線：一眼看出走勢，不必點進去
             com.enwei.moneymanager.ui.components.MiniKLine(p.symbol)
+            com.enwei.moneymanager.ui.components.RevenueLine(p.symbol)
             // 新聞依據：資料集近 3 天有幾則新聞提到這檔、平均多空
             val store by MoneyApp.news.flow.collectAsStateWithLifecycle()
             val ev = remember(System.identityHashCode(store), p.symbol) {
@@ -1022,7 +1031,11 @@ private fun PlanTab(nav: NavController) {
         if (s == null) LinearProgressIndicator(Modifier.fillMaxWidth())
         // ① 大盤：加權指數 K 線＋階段
         if (s != null) Section("大盤") {
-            com.enwei.moneymanager.ui.components.MiniKLine("^TWII", days = 60)
+            val idx = s.index
+            com.enwei.moneymanager.ui.components.AnnotatedKLine("^TWII", if (idx != null && idx.close.size >= 20) listOf(
+                Triple("壓力（60 日高）", idx.high.takeLast(60).max(), Color(0xFFAB47BC)),
+                Triple("支撐（60 日低）", idx.low.takeLast(60).min(), Color(0xFF26A69A)),
+            ) else emptyList())
             StageChip(s.indexStage.label, s.indexStage.hint)
             if (s.sox != null) Text("費城半導體：${s.soxStage.label}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -1392,6 +1405,7 @@ private fun NewsScheduleInfo() {
 private fun ChatChartView(ch: com.enwei.moneymanager.data.ChatChart, nav: NavController) {
     when (ch.kind) {
         "compare" -> com.enwei.moneymanager.ui.components.CompareChart(ch.items)
+        "revenue" -> com.enwei.moneymanager.ui.components.RevenueCompare(ch.items)
         "themes" -> {
             val store by MoneyApp.news.flow.collectAsStateWithLifecycle()
             val st = store ?: return

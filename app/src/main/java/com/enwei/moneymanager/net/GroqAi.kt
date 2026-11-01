@@ -797,11 +797,12 @@ object GroqAi {
         if (!enabled) return null
         val system = advisorRole() + "請產生今天的投資報告，條理分明、容易閱讀：先用一句話說明今天的市場氣氛，再寫大盤趨勢與階段、目前市場資金追逐的題材（依資料集熱度與多空）、整體看法；" +
             "今天可以考慮的 6～10 檔股票：只能從資料集「被提到最多的個股」與新聞重點裡挑（每檔近 3 天至少被 2 則新聞提到），優先偏多且有具體產業題材的，分散在不同題材，長線與短線都要有；" +
-            "理由要引用新聞編號 [n] 或資料裡的數字" +
+            "理由要引用新聞編號 [n] 或資料裡的數字；有提供月營收年增率時一併參考（營收衰退的要說明理由）" +
             "（標明長線或短線、這家公司在做什麼、目前強勢／中性／弱勢、理由、進場條件、停損條件、依資金計畫建議投入金額）；文字精簡，理由 30 字內；" +
             "逐檔持股動作（只能是「續抱」「長抱」「分批停利 1/3」「減碼 1/3」「停損出場」「觀察」，參考提供的規則停損價）；" +
             "挑 3～6 則使用者一定要看的重點新聞（用新聞編號）並說明為什麼重要；資金分配建議；交易前檢查清單；依他過去錯誤的提醒。" +
-            "只回 JSON：{\"trend\": 一句話, \"stage\": 階段, \"themes\": [資金追逐的產業題材 2～5 項（要有相關個股，不可以是大盤漲跌或總經事件）], \"summary\": 100 字內, " +
+            "大盤部分依提供的加權指數均線與高低點，標出 2～4 個關鍵點位（支撐、壓力），並給短期展望。" +
+            "只回 JSON：{\"trend\": 一句話, \"stage\": 階段, \"outlook\": \"偏多\"或\"盤整\"或\"偏空\", \"levels\": [{\"k\": \"支撐\"或\"壓力\", \"p\": 指數點位}], \"themes\": [資金追逐的產業題材 2～5 項（要有相關個股，不可以是大盤漲跌或總經事件）], \"summary\": 100 字內, " +
             "\"picks\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\", \"business\": 公司做什麼 30 字內, \"strength\": \"強勢\"或\"中性\"或\"弱勢\", " +
             "\"reason\": 30 字內, \"entry\": 進場條件, \"stop\": 停損條件, \"amount\": 建議投入元}]（6～10 檔）, " +
             "\"holdings\": [{\"symbol\": 代號, \"action\": 動作, \"stop\": 數字或 null, \"reason\": 30 字內}], " +
@@ -825,6 +826,12 @@ object GroqAi {
             },
             // 新聞編號先放在 id，呼叫端換成真正的新聞 id
             keyNews = objs("news").mapNotNull { o -> o.str("n")?.toDoubleOrNull()?.toInt()?.let { com.enwei.moneymanager.data.KeyNews(it.toString(), o.str("why")?.take(60).orEmpty()) } },
+            outlook = r.str("outlook")?.take(4).orEmpty(),
+            levels = objs("levels").mapNotNull { o ->
+                val k = o.str("k")?.take(6) ?: return@mapNotNull null
+                val p = o.str("p")?.replace(",", "")?.toDoubleOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
+                com.enwei.moneymanager.data.KeyLevel(k, p)
+            }.take(4),
             allocation = r.str("allocation")?.take(200).orEmpty(), checklist = list("checklist"), warnings = list("warnings"),
         )
     }
@@ -840,7 +847,7 @@ object GroqAi {
         val system = advisorRole() + "以下是資料與使用者狀況，請回答他的問題。字要少、多用圖表：結論 reply 40 字內，重點 points 最多 3 點、每點 30 字內；" +
             tone().chat + "提到具體股票時放進 cards（App 會在卡片上畫近期 K 線，文字不必描述走勢）；" +
             "需要比較或呈現時加 charts（App 用實際資料畫）：{\"kind\": \"compare\", \"items\": [2～5 個代號]} 比較走勢、" +
-            "{\"kind\": \"themes\", \"items\": [題材名稱]} 題材熱度與多空、{\"kind\": \"holdings\", \"items\": []} 使用者持股損益；" +
+            "{\"kind\": \"themes\", \"items\": [題材名稱]} 題材熱度與多空、{\"kind\": \"revenue\", \"items\": [2～6 個代號]} 月營收年增率比較、{\"kind\": \"holdings\", \"items\": []} 使用者持股損益；" +
             "引用新聞時在句子後面用 [編號] 標出，並把編號放進 news。" +
             "只回 JSON：{\"reply\": 結論, \"points\": [重點], \"charts\": [圖表], \"cards\": [{\"symbol\": 代號, \"name\": 名稱, \"style\": \"長線\"或\"短線\"或空, \"business\": 公司做什麼, \"strength\": 強勢/中性/弱勢, \"reason\": 40 字內}], \"news\": [編號]}\n\n" +
             context
@@ -850,9 +857,9 @@ object GroqAi {
         val cards = (r["cards"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonObject)?.let { o -> parsePick(o, sym) } }.orEmpty().distinctBy { it.symbol }.take(8)
         val charts = (r["charts"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
-            val kind = o.str("kind")?.takeIf { it in setOf("compare", "themes", "holdings") } ?: return@mapNotNull null
+            val kind = o.str("kind")?.takeIf { it in setOf("compare", "themes", "holdings", "revenue") } ?: return@mapNotNull null
             val items = (o["items"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.take(40) }.orEmpty()
-            com.enwei.moneymanager.data.ChatChart(kind, if (kind == "compare") items.mapNotNull { sym.find(it)?.value }.distinct().take(5) else items.take(10))
+            com.enwei.moneymanager.data.ChatChart(kind, if (kind == "compare" || kind == "revenue") items.mapNotNull { sym.find(it)?.value }.distinct().take(5) else items.take(10))
         }.orEmpty().take(3)
         val news = (r["news"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt()?.toString() }.orEmpty()
         val points = (r["points"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.take(120)?.takeIf { s -> s.isNotEmpty() } }.orEmpty().take(5)

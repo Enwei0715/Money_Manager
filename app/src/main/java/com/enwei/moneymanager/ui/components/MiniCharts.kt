@@ -30,6 +30,8 @@ import com.enwei.moneymanager.net.InvestData
 import com.enwei.moneymanager.ui.StockDown
 import com.enwei.moneymanager.ui.StockUp
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /** 小 K 線的資料快取（這次開 App 期間），同一檔不重複下載。 */
 private object MiniBarsCache {
@@ -257,4 +259,123 @@ fun LabeledBars(title: String, rows: List<Triple<String, Long, String>>, color: 
             }
         }
     }
+}
+
+/**
+ * 有標示的 K 線（大盤用）：近 [days] 日 K 棒、月線（橘）與季線（紫）、關鍵點位虛線（[levels]：名稱、價位、顏色），
+ * 下方圖例列出各點位與目前距離。
+ */
+@Composable
+fun AnnotatedKLine(symbol: String, levels: List<Triple<String, Double, Color>>, days: Int = 120, modifier: Modifier = Modifier) {
+    val bars by produceState<DailyBars?>(null, symbol) {
+        value = runCatching { InvestData.bars(symbol, range = "1y") }.getOrNull()?.takeIf { it.close.isNotEmpty() } ?: cachedBars(symbol)
+    }
+    val b = bars ?: return
+    val n = minOf(days, b.close.size)
+    if (n < 10) return
+    val from = b.close.size - n
+    val ma = { len: Int -> (from until b.close.size).map { i -> if (i + 1 >= len) b.close.subList(i + 1 - len, i + 1).average() else null } }
+    val ma20 = ma(20); val ma60 = ma(60)
+    val last = b.close.last()
+    val grid = MaterialTheme.colorScheme.outlineVariant
+    val dash = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("近 $n 個交易日", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Box(Modifier.width(10.dp).height(2.dp).background(Color(0xFFFFA000)))
+            Text(" 月線  ", fontSize = 11.sp)
+            Box(Modifier.width(10.dp).height(2.dp).background(Color(0xFF7E57C2)))
+            Text(" 季線", fontSize = 11.sp)
+        }
+        Canvas(Modifier.fillMaxWidth().height(160.dp)) {
+            val inView = levels.map { it.second }.filter { v -> v > 0 }
+            val hi = maxOf((from until b.close.size).maxOf { b.high.getOrElse(it) { b.close[it] } }, inView.maxOrNull() ?: 0.0)
+            val lo = minOf((from until b.close.size).minOf { b.low.getOrElse(it) { b.close[it] } }, inView.minOrNull() ?: Double.MAX_VALUE)
+            val span = (hi - lo).takeIf { it > 0 } ?: 1.0
+            fun y(v: Double) = ((hi - v) / span * size.height).toFloat()
+            val w = size.width / n
+            for (k in 0..3) drawLine(grid, Offset(0f, size.height * k / 3), Offset(size.width, size.height * k / 3), 1f)
+            for (k in 0 until n) {
+                val i = from + k
+                val o = b.open.getOrElse(i) { b.close[i] }; val c = b.close[i]
+                val col = if (c >= o) StockUp else StockDown
+                val x = w * k + w / 2
+                drawLine(col, Offset(x, y(b.high.getOrElse(i) { maxOf(o, c) })), Offset(x, y(b.low.getOrElse(i) { minOf(o, c) })), 1.2f)
+                val top = y(maxOf(o, c))
+                drawRect(col, Offset(x - w * 0.35f, top), Size(w * 0.7f, (y(minOf(o, c)) - top).coerceAtLeast(1.2f)))
+            }
+            fun line(v: List<Double?>, col: Color) {
+                var prev: Offset? = null
+                v.forEachIndexed { k, d -> if (d == null) { prev = null; return@forEachIndexed }
+                    val p = Offset(w * k + w / 2, y(d)); prev?.let { drawLine(col, it, p, 2f) }; prev = p }
+            }
+            line(ma20, Color(0xFFFFA000)); line(ma60, Color(0xFF7E57C2))
+            levels.forEach { (_, v, col) -> if (v in lo..hi) drawLine(col, Offset(0f, y(v)), Offset(size.width, y(v)), 2f, pathEffect = dash) }
+        }
+        if (levels.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            levels.sortedByDescending { it.second }.forEach { (label, v, col) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.width(12.dp).height(2.dp).background(col))
+                    Text(" $label ${"%,.0f".format(v)}", fontSize = 11.sp, modifier = Modifier.weight(1f))
+                    Text("距現價 ${"%+.1f".format((v / last - 1) * 100)}%", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/** 多檔個股的月營收年增率比較（最新一個月與近三個月平均）。 */
+@Composable
+fun RevenueCompare(symbols: List<String>, modifier: Modifier = Modifier) {
+    val data by produceState<List<Triple<String, Double, String>>?>(null, symbols) {
+        value = coroutineScope {
+            symbols.distinct().take(8).map { s ->
+                async {
+                    val l = runCatching { com.enwei.moneymanager.net.TwData.monthRevenue(s, 15) }.getOrDefault(emptyList())
+                    val last = l.lastOrNull() ?: return@async null
+                    val yoy = last.yoy ?: return@async null
+                    val avg3 = l.takeLast(3).mapNotNull { it.yoy }.average()
+                    Triple("$s ${com.enwei.moneymanager.net.TwData.nameOf(s).orEmpty()}".trim(), yoy, "%+.1f%%（${last.month}月）· 三月均 %+.1f%%".format(yoy, avg3))
+                }
+            }.mapNotNull { it.await() }
+        }
+    }
+    val rows = data ?: return
+    if (rows.isEmpty()) return
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("月營收年增率比較", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        val max = rows.maxOf { kotlin.math.abs(it.second) }.takeIf { it > 0 } ?: 1.0
+        rows.sortedByDescending { it.second }.forEach { (name, v, label) ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row {
+                    Text(name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(label, fontSize = 11.sp, color = if (v >= 0) StockUp else StockDown)
+                }
+                Row(Modifier.fillMaxWidth().height(8.dp)) {
+                    // 左半邊放衰退、右半邊放成長
+                    Box(Modifier.weight(1f).height(8.dp)) {
+                        if (v < 0) Box(Modifier.align(Alignment.CenterEnd).fillMaxWidth((kotlin.math.abs(v) / max).toFloat().coerceIn(0.02f, 1f)).height(8.dp)
+                            .background(StockDown, RoundedCornerShape(3.dp)))
+                    }
+                    Box(Modifier.weight(1f).height(8.dp)) {
+                        if (v >= 0) Box(Modifier.fillMaxWidth((v / max).toFloat().coerceIn(0.02f, 1f)).height(8.dp).background(StockUp, RoundedCornerShape(3.dp)))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 一檔的最新月營收年增率（卡片上的一行）；讀不到時不顯示。 */
+@Composable
+fun RevenueLine(symbol: String) {
+    val last by produceState<com.enwei.moneymanager.net.TwData.MonthRevenue?>(null, symbol) {
+        value = runCatching { com.enwei.moneymanager.net.TwData.monthRevenue(symbol, 15).lastOrNull() }.getOrNull()
+    }
+    val m = last ?: return
+    val yoy = m.yoy ?: return
+    Text(
+        "營收：${m.year}/${m.month} ${"%,.1f".format(m.revenue / 1e8)} 億 · 年增 ${"%+.1f".format(yoy)}%" + (if (yoy < 0) "（營收衰退，留意理由）" else ""),
+        fontSize = 11.sp, color = if (yoy >= 0) StockUp else StockDown,
+    )
 }

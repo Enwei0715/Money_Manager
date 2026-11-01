@@ -408,8 +408,19 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
     val big = com.enwei.moneymanager.net.GroqAi.bigContext(com.enwei.moneymanager.net.GroqAi.AiTask.REPORT)
     val (digest, imp) = if (big) datasetDigest(ds, st, themes = 30, symbols = 60, important = 60, full = true)
     else datasetDigest(ds, st, themes = 10, symbols = 18, important = 15)
+    onStep("讀取熱門個股的月營收…")
+    val revText = runCatching {
+        val syms = ds.symbols(st).take(if (big) 20 else 10).map { it.key }
+        kotlinx.coroutines.coroutineScope {
+            syms.map { sym -> async { sym to com.enwei.moneymanager.net.TwData.monthRevenue(sym, 15) } }.map { it.await() }
+        }.filter { it.second.isNotEmpty() }.joinToString("\n", prefix = "熱門個股月營收（代號｜最新月份｜年增率｜近三月平均年增）：\n") { (sym, l) ->
+            val last = l.last()
+            val avg3 = l.takeLast(3).mapNotNull { it.yoy }.takeIf { it.isNotEmpty() }?.average()
+            "- $sym｜${last.year}/${last.month}｜${last.yoy?.let { "%+.1f%%".format(it) } ?: "?"}｜${avg3?.let { "%+.1f%%".format(it) } ?: "?"}"
+        }
+    }.getOrDefault("")
     onStep("AI 分析資料集（${ds.recent(st, 3).size} 則新聞）…")
-    val r = com.enwei.moneymanager.net.GroqAi.dailyReport(situation(snap) + "\n" + digest) ?: return null
+    val r = com.enwei.moneymanager.net.GroqAi.dailyReport(situation(snap) + "\n" + digest + "\n" + revText) ?: return null
     onStep("確認推薦的代號與價格…")
     val quotes = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(r.picks.map { Market.TW to it.symbol }) }
         .getOrDefault(emptyList()).associateBy { it.key }

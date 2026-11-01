@@ -106,7 +106,14 @@ data class DailyReport(
     val cites: List<String> = emptyList(),
     /** 資金分配比例（畫成比例條） */
     val alloc: List<AllocSlice> = emptyList(),
+    /** AI 標出的大盤關鍵點位（支撐、壓力…，加權指數點數） */
+    val levels: List<KeyLevel> = emptyList(),
+    /** 大盤短期展望：偏多／盤整／偏空 */
+    val outlook: String = "",
 )
+
+@Serializable
+data class KeyLevel(val label: String, val price: Double)
 
 /** 資金分配的一塊：名稱與百分比。 */
 @Serializable
