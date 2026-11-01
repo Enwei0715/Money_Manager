@@ -57,6 +57,7 @@ import com.enwei.moneymanager.data.spendingReview
 import com.enwei.moneymanager.data.habits
 import com.enwei.moneymanager.data.lateNight
 import com.enwei.moneymanager.data.merchants
+import com.enwei.moneymanager.data.sane
 import androidx.compose.foundation.clickable
 import com.enwei.moneymanager.net.GroqAi
 import com.enwei.moneymanager.ui.ExpenseColor
@@ -223,7 +224,8 @@ fun ReviewContent(
                     AiWorkProgress(reviewProgress, Modifier.fillMaxWidth())
                     val r = settings.reviews[d.key]
                     when {
-                        r != null -> AiReviewBody(r, ::m, d, lk, settings.txnNecessity, nav)
+                        // 下期目標依實際的前幾期支出校正（舊的檢討也一樣）
+                        r != null -> AiReviewBody(r.sane(d), ::m, d, lk, settings.txnNecessity, nav)
                         !GroqAi.enabled -> Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("設定 AI 金鑰後即可產生檢討。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                             TextButton(onClick = { nav.navigate("ai") }) { Text("設定 AI") }

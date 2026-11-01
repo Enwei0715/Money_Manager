@@ -292,3 +292,25 @@ fun ReviewData.aiInput(base: String, necessity: Map<Long, String>, full: Boolean
     }
     return text to list
 }
+
+
+/**
+ * 讓 AI 建議的下期目標合乎實際：以前幾期的實際支出為基準（這期還沒過完時不拿目前的金額當基準），
+ * 總上限介於基準的 85%～100%，各分類上限介於該分類基準的 80%～100%，儲蓄率不超過 60%。
+ */
+fun AiReview.sane(d: ReviewData): AiReview {
+    val total = (java.time.temporal.ChronoUnit.DAYS.between(d.start, d.end) + 1).toInt().coerceAtLeast(1)
+    val elapsed = d.days.coerceIn(1, total)
+    fun proj(v: Long) = if (elapsed < total) v * total / elapsed else v
+    // 這期過了至少一週才把推估納入參考
+    val useProj = elapsed >= minOf(7, total)
+    val refTotal = maxOf(d.avgExpense, d.prevExpense, if (useProj) proj(d.expense) else 0L).takeIf { it > 0 }
+    val cap = refTotal?.let { ref -> (expenseCap ?: (ref * 95 / 100)).coerceIn(ref * 85 / 100, ref) } ?: expenseCap
+    val cats = caps.mapNotNull { c ->
+        val rc = d.categories.firstOrNull { it.name == c.category || it.name.contains(c.category) || c.category.contains(it.name) }
+            ?: return@mapNotNull null
+        val ref = maxOf(rc.prev, if (useProj) proj(rc.amount) else 0L).takeIf { it > 0 } ?: return@mapNotNull null
+        c.copy(cap = c.cap.coerceIn(ref * 80 / 100, ref))
+    }
+    return copy(expenseCap = cap, caps = cats, savingsTarget = savingsTarget?.coerceIn(0.0, 60.0))
+}

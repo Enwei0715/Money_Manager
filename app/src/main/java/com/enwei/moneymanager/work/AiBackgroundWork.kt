@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.enwei.moneymanager.MoneyApp
+import com.enwei.moneymanager.data.sane
 import com.enwei.moneymanager.data.ReviewSpan
 import com.enwei.moneymanager.data.aiInput
 import com.enwei.moneymanager.data.spendingReview
@@ -74,7 +75,7 @@ object AiBackgroundWork {
                 GroqAi.bigContext(GroqAi.AiTask.REVIEW),
             )
             flow.value = AiTaskProgress(running = true, step = "AI 分析 ${transactions.size} 筆交易…")
-            val review = GroqAi.review(text, settings.baseCurrency, transactions.map { it.id })
+            val review = GroqAi.review(text, settings.baseCurrency, transactions.map { it.id })?.sane(data)
                 ?: throw IllegalStateException(GroqAi.lastError ?: "AI 沒有回應。")
             repo.settings.update {
                 it.copy(reviews = (it.reviews + (periodKey to review)).entries.toList().takeLast(40).associate { e -> e.key to e.value })
