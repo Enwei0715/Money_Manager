@@ -407,8 +407,8 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
     val big = com.enwei.moneymanager.net.GroqAi.bigContext(com.enwei.moneymanager.net.GroqAi.AiTask.CHAT)
     val today = st.report?.let { r -> "今日報告：${r.trend}；推薦 " + r.picks.joinToString("、") { "${it.symbol}${it.name}（${it.style}）" } } ?: ""
     // 資料太多時自動精簡（題材、個股、重點新聞的數量逐步減少）直到放得下，不讓使用者自己刪字
-    val fixed = situation(snap).length + today.length + 2
-    val (digest, imp) = fitDigest(ds, st, com.enwei.moneymanager.net.GroqAi.chatContextLimit() - fixed, big)
+    val reserved = situation(snap).length + today.length + 2
+    val (digest, imp) = fitDigest(ds, st, com.enwei.moneymanager.net.GroqAi.chatContextLimit() - reserved, big)
     val history = st.chat.takeLast(6).map { it.fromUser to it.text }
     val reply = com.enwei.moneymanager.net.GroqAi.advisorChat(situation(snap) + "\n" + today + "\n" + digest, history, question) ?: return null
     // 回覆裡的 [19, 35] 是資料集的新聞編號：換成 [1][2]，對應附在回覆下方的新聞
