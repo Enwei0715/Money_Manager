@@ -26,14 +26,21 @@ fun FitText(
     @Suppress("UNUSED_PARAMETER") maxLines: Int = 1,
     @Suppress("UNUSED_PARAMETER") softWrap: Boolean = false,
     minSize: TextUnit = 9.sp,
+    /** 同一排（例如一列分頁）共用的字級：只要有一個放不下，整排一起縮小，大小一致 */
+    group: androidx.compose.runtime.MutableState<TextUnit>? = null,
 ) {
-    var size by remember(text, fontSize) { mutableStateOf(fontSize) }
+    val local = remember(text, fontSize) { mutableStateOf(fontSize) }
+    val size = group ?: local
     var ready by remember(text, fontSize) { mutableStateOf(false) }
     Text(
-        text, modifier.drawWithContent { if (ready) drawContent() }, color = color, fontSize = size, fontWeight = fontWeight,
+        text, modifier.drawWithContent { if (ready) drawContent() }, color = color, fontSize = size.value, fontWeight = fontWeight,
         maxLines = 1, softWrap = false,
         onTextLayout = { r ->
-            if (r.didOverflowWidth && size.value > minSize.value) size = (size.value - 1).sp else ready = true
+            if (r.didOverflowWidth && size.value.value > minSize.value) size.value = (size.value.value - 1).sp else ready = true
         },
     )
 }
+
+/** 一排標籤共用的字級狀態。 */
+@Composable
+fun rememberFitGroup(size: TextUnit = 14.sp) = remember { mutableStateOf(size) }

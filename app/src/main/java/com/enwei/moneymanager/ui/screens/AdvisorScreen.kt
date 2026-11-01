@@ -106,9 +106,10 @@ fun AdvisorContent(nav: NavController) {
     val loadError by MoneyApp.news.loadError.collectAsStateWithLifecycle()
     val store = live ?: NewsStore()
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
         TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
             listOf("今日", "問 AI", "新聞", "資金與紀律").forEachIndexed { i, t ->
-                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 13.sp) },
+                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 13.sp, group = fitGroup1) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -1010,74 +1011,50 @@ private fun PlanTab(nav: NavController) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         val s = snap
         if (s == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+        // ① 大盤：加權指數 K 線＋階段
         if (s != null) Section("大盤") {
-            s.index?.let { b ->
-                val c = b.close
-                Text("加權指數 ${"%,.0f".format(c.last())}" + (Technicals.change(c, 5)?.let { "　5 日 ${"%+.1f".format(it)}%" } ?: ""), fontSize = 14.sp)
-            }
+            com.enwei.moneymanager.ui.components.MiniKLine("^TWII", days = 60)
             StageChip(s.indexStage.label, s.indexStage.hint)
-            if (s.sox != null) Text("費城半導體：${s.soxStage.label}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (s.sox != null) Text("費城半導體：${s.soxStage.label}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (s != null) Section("資金控管", action = "調整" to { editPlan = true }) {
+        // ② 資金配置：比例條（長線、短線、可投入、預留）＋與目標比較
+        if (s != null) Section("資金配置", action = "調整" to { editPlan = true }) {
             val a = s.alloc
-            Text("可動用現金 ${m(a.cash)}（已扣信用卡欠款）· 預留金額 ${m(a.reserve)}", fontSize = 13.sp)
-            Text("可投資 ${m(a.investable)}：長線 ${"%.0f".format(settings.investPlan.longRatio * 100)}% / 短線 ${"%.0f".format(100 - settings.investPlan.longRatio * 100)}%", fontSize = 13.sp)
-            Bucket("長線", a.longValue, a.longTarget, a.longRoom, ::m)
-            Bucket("短線", a.shortValue, a.shortTarget, a.shortRoom, ::m)
-            if (a.reserveShort > 0) Text("⚠ 可動用現金低於預留金額 ${m(a.reserveShort)}", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-            if (a.shortOver > 0) Text("⚠ 短線超出計畫 ${m(a.shortOver)}，新的短線單先暫停", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("持股紀律建議")
-                    Text("依你設定的門檻顯示停損／停利提示", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(settings.investPlan.disciplineOn, { on ->
-                    repo.settings.update { it.copy(investPlan = it.investPlan.copy(disciplineOn = on)) }
-                })
+            val spare = (a.cash - a.reserve).coerceAtLeast(0)
+            val parts = listOf(
+                Triple("長線", a.longValue, StockUp), Triple("短線", a.shortValue, Color(0xFFFFA000)),
+                Triple("可投入", spare, Color(0xFF3C82E6)), Triple("預留", minOf(a.reserve, a.cash).coerceAtLeast(0), MaterialTheme.colorScheme.onSurfaceVariant),
+            ).filter { it.second > 0 }
+            val total = parts.sumOf { it.second }.coerceAtLeast(1)
+            Row(Modifier.fillMaxWidth().height(16.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))) {
+                parts.forEach { (_, v, c) -> Box(Modifier.weight((v.toFloat() / total).coerceAtLeast(0.01f)).height(16.dp).background(c)) }
             }
-        }
-        if (settings.investPlan.disciplineOn && s != null && s.holdings.isNotEmpty() && settings.investPlan.guardOn) Section("保本＋移動停利") {
-            s.holdings.forEach { h -> GuardRow(h, nav) { editGuard = h } }
-        }
-        if (settings.investPlan.disciplineOn && s != null && s.holdings.isNotEmpty() && !settings.investPlan.guardOn) Section("持股紀律") {
-            s.holdings.forEach { h ->
-                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "${h.symbol} ${h.name.orEmpty()}",
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        modifier = Modifier.fillMaxWidth().clickable { nav.navigate("stock/${h.symbol}") },
-                    )
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TradeStyle.entries.forEach { st ->
-                            FilterChip(h.style == st, {
-                                repo.settings.update { it.copy(stockStyle = it.stockStyle + (h.symbol to st.name)) }
-                            }, label = { Text(st.label, fontSize = 12.sp) })
-                        }
-                    }
-                    val g = h.gainPct
-                    Text(
-                        "均價 ${"%.2f".format(h.avgCost)} → 現價 ${h.price?.let { "%.2f".format(it) } ?: "?"}" +
-                            (g?.let { "（${"%+.1f".format(it)}%）" } ?: "") + (h.peak?.let { " · 買進後最高 ${"%.2f".format(it)}" } ?: ""),
-                        fontSize = 13.sp, color = if ((g ?: 0.0) >= 0) StockUp else StockDown,
-                    )
-                    h.advice?.let { ad ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                color = if (ad.triggered) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
-                                shape = RoundedCornerShape(4.dp),
-                            ) { Text(ad.action, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
-                            Text(
-                                "  " + listOfNotNull(
-                                    ad.stop.takeIf { it > 0 }?.let { "停損 ${"%.2f".format(it)}" },
-                                    ad.nextTakeProfit?.let { "停利 ${"%.2f".format(it)}" },
-                                ).joinToString(" · "),
-                                fontSize = 13.sp,
-                            )
-                        }
-                        Text(ad.note, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                parts.forEach { (n, v, c) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).background(c, RoundedCornerShape(4.dp)))
+                        Text(" $n ${m(v)}", fontSize = 12.sp)
                     }
                 }
+            }
+            Bucket("長線（目標 ${"%.0f".format(settings.investPlan.longRatio * 100)}%）", a.longValue, a.longTarget, a.longRoom, ::m)
+            Bucket("短線（目標 ${"%.0f".format(100 - settings.investPlan.longRatio * 100)}%）", a.shortValue, a.shortTarget, a.shortRoom, ::m)
+            if (a.reserveShort > 0) Text("⚠ 可動用現金低於預留金額 ${m(a.reserveShort)}", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            if (a.shortOver > 0) Text("⚠ 短線超出計畫 ${m(a.shortOver)}，新的短線單先暫停", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+        }
+        // ③ 持股紀律＋AI：每檔一張小卡（價位圖、紀律動作、今日報告的 AI 動作）
+        if (s != null && s.holdings.isNotEmpty()) Section("持股紀律與 AI 建議") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("依你設定的門檻提示停損／停利", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Switch(settings.investPlan.disciplineOn, { on -> repo.settings.update { it.copy(investPlan = it.investPlan.copy(disciplineOn = on)) } })
+            }
+            val store by MoneyApp.news.flow.collectAsStateWithLifecycle()
+            val ai = store?.report?.holdings.orEmpty().associateBy { it.symbol }
+            s.holdings.forEach { h ->
+                if (settings.investPlan.disciplineOn && settings.investPlan.guardOn) {
+                    GuardRow(h, nav) { editGuard = h }
+                    ai[h.symbol]?.let { AiHoldLine(it) }
+                } else HoldingCard(h, ai[h.symbol], settings.investPlan.disciplineOn, nav)
             }
         }
         Section("我的投資原則（${settings.investPlan.rules.size} 條）", action = "編輯" to { editRules = true }, collapsible = true, initiallyOpen = false) {
@@ -1456,4 +1433,56 @@ private fun ThemeBars(rows: List<Pair<com.enwei.moneymanager.data.TopicStat, Lis
             }
         }
     }
+}
+
+
+/** 今日報告裡 AI 對這檔的動作。 */
+@Composable
+private fun AiHoldLine(a: com.enwei.moneymanager.data.AdvisorHolding) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
+        Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
+            Text("AI：${a.action}", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+        }
+        Text("  " + com.enwei.moneymanager.data.stripCites(a.reason), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+    }
+}
+
+/** 一檔持股：名稱、長短線、損益、價位圖、紀律動作與 AI 動作。 */
+@Composable
+private fun HoldingCard(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwei.moneymanager.data.AdvisorHolding?, discipline: Boolean, nav: NavController) {
+    val g = h.price?.let { (it / h.avgCost - 1) * 100 }
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${h.symbol} ${h.name.orEmpty()}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                modifier = Modifier.weight(1f).clickable { nav.navigate("stock/${h.symbol}") })
+            g?.let { Text("%+.1f%%".format(it), fontSize = 13.sp, color = if (it >= 0) StockUp else StockDown) }
+            // 長線／短線：點一下切換
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(4.dp),
+                modifier = Modifier.padding(start = 8.dp).clickable {
+                    val next = TradeStyle.entries[(h.style.ordinal + 1) % TradeStyle.entries.size]
+                    repo.settings.update { it.copy(stockStyle = it.stockStyle + (h.symbol to next.name)) }
+                },
+            ) { Text(h.style.label, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+        }
+        val ad = h.advice
+        PriceLadder(buildList {
+            add(Triple("均價", h.avgCost, Color(0xFF607D8B)))
+            h.price?.let { add(Triple("現價", it, if (it >= h.avgCost) StockUp else StockDown)) }
+            h.peak?.let { add(Triple("最高", it, Color(0xFFFFA000))) }
+            if (discipline && ad != null) {
+                ad.stop.takeIf { it > 0 }?.let { add(Triple("停損", it, StockDown)) }
+                ad.nextTakeProfit?.let { add(Triple("停利", it, Color(0xFFE53935))) }
+            }
+        })
+        if (discipline && ad != null) Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                color = if (ad.triggered) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(4.dp),
+            ) { Text("紀律：${ad.action}", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+            Text("  ${ad.note}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+        ai?.let { AiHoldLine(it) }
+    }
+    androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }

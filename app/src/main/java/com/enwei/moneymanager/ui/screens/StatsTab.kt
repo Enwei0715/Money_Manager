@@ -174,12 +174,13 @@ fun StatsTab(nav: NavController) {
         Column(Modifier.padding(pad).fillMaxSize()) {
             val tabs = listOf(TxnType.INCOME to totals.income, TxnType.EXPENSE to totals.expense)
             val idx = tabs.indexOfFirst { it.first == kind }
+            val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
             TabRow(
                 selectedTabIndex = idx, containerColor = MaterialTheme.colorScheme.surface,
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[idx]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
             ) {
                 tabs.forEach { (t, v) ->
-                    Tab(selected = kind == t, onClick = { kind = t }, text = { com.enwei.moneymanager.ui.components.FitText("${t.label}  ${Money.withSymbol(v, lk.base)}", fontSize = 14.sp) },
+                    Tab(selected = kind == t, onClick = { kind = t }, text = { com.enwei.moneymanager.ui.components.FitText("${t.label}  ${Money.withSymbol(v, lk.base)}", fontSize = 14.sp, group = fitGroup1) },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

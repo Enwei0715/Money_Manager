@@ -251,6 +251,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
             ) { _, d -> dragX += d }
         } else Modifier
         Column(Modifier.padding(pad).fillMaxSize().then(swipeModifier)) {
+            val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
             TabRow(
                 selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface,
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
@@ -260,7 +261,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         selected = tab == i, onClick = { tab = i },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ) {
-                        com.enwei.moneymanager.ui.components.FitText(t, fontSize = if (com.enwei.moneymanager.ui.I18n.english) 13.sp else 14.sp,
+                        com.enwei.moneymanager.ui.components.FitText(t, fontSize = if (com.enwei.moneymanager.ui.I18n.english) 13.sp else 14.sp, group = fitGroup1,
                             modifier = Modifier.padding(vertical = 10.dp))
                     }
                 }

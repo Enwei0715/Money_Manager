@@ -164,9 +164,10 @@ fun ChartFilterPage(
                 )
             }
         }
+        val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
         TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
             listOf("收入" to incomeSel, "支出" to expenseSel, "帳戶" to accSel).forEachIndexed { i, (t, sel) ->
-                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(if (sel.isEmpty()) t else "$t •", fontSize = 14.sp) },
+                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(if (sel.isEmpty()) t else "$t •", fontSize = 14.sp, group = fitGroup1) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = gray)
             }
         }

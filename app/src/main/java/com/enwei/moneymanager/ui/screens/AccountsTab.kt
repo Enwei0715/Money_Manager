@@ -179,12 +179,13 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
         snackbarHost = { androidx.compose.material3.SnackbarHost(snack) },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
+        val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
         TabRow(
             selectedTabIndex = section, containerColor = MaterialTheme.colorScheme.surface,
             indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[section]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
         ) {
             listOf("帳戶", "股票", "助理").forEachIndexed { i, t ->
-                Tab(section == i, { section = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp) },
+                Tab(section == i, { section = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp, group = fitGroup1) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -449,12 +450,13 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize()) {
             item {
+                val fitGroup2 = com.enwei.moneymanager.ui.components.rememberFitGroup()
                 TabRow(
                     selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface,
                     indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
                 ) {
                     detailTabs.forEachIndexed { i, t ->
-                        Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp) },
+                        Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp, group = fitGroup2) },
                             selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }

@@ -672,7 +672,7 @@ private fun RelativeChart(stock: List<Double>, index: List<Double>?, days: Int =
 /** 價位圖：把幾個價位畫在同一條軸上，看出現價離均價、高點、停利／停損多遠。 */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun PriceLadder(points: List<Triple<String, Double, Color>>) {
+internal fun PriceLadder(points: List<Triple<String, Double, Color>>) {
     val pts = points.filter { it.second > 0 }
     if (pts.size < 2) return
     val lo = pts.minOf { it.second } * 0.97
