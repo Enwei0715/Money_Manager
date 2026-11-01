@@ -64,7 +64,7 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(if (info.lent) "借出給" else "向其借入", fontSize = 13.sp, color = gray)
-                    Text(info.counterparty.ifBlank { acc.name }, fontSize = 15.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(info.counterparty.ifBlank { acc.name }, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
                 Surface(
                     color = if (l.outstanding == 0L) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,

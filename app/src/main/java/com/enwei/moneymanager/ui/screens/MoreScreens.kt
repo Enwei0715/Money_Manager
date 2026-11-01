@@ -145,31 +145,17 @@ fun MoreScreen(nav: NavController) {
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (shown.isEmpty()) Text("還沒有工具，按右上「編輯」從下方清單加入。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(14.dp))
-            // 三欄格狀：小格佔一欄，寬格佔兩欄並顯示摘要；一列放不下就換下一列
-            val rows = ArrayList<MutableList<ToolItem>>()
-            var used = 3
-            shown.forEach { t ->
-                val span = if (t.id in settings.wideTools) 2 else 1
-                if (used + span > 3) { rows += mutableListOf<ToolItem>(); used = 0 }
-                rows.last() += t; used += span
-            }
-            rows.forEach { row ->
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { t ->
-                        val wide = t.id in settings.wideTools
-                        ToolTile(
-                            t, wide, summary[t.id], editing, Modifier.weight(if (wide) 2f else 1f).fillMaxHeight(),
-                            onOpen = { if (editing) Unit else nav.navigate(t.route) },
-                            onLongPress = { editing = true },
-                            onLeft = { move(t.id, -1) }, onRight = { move(t.id, 1) },
-                            onToggleWide = { repo.settings.update { st -> st.copy(wideTools = if (wide) st.wideTools - t.id else st.wideTools + t.id) } },
-                            onHide = { setOrder(shown.map { it.id } - t.id) },
-                        )
-                    }
-                    val left = 3 - row.fold(0) { acc, t -> acc + if (t.id in settings.wideTools) 2 else 1 }
-                    if (left > 0) Spacer(Modifier.weight(left.toFloat()))
-                }
-            }
+            // 三欄網格：每格可以是 1×1、2×1、3×1、1×2、2×2；編輯時拖動移動、拖角落改大小
+            ToolGrid(
+                shown,
+                shown.associate { t -> t.id to (parseSize(settings.toolSizes[t.id]) ?: if (t.id in settings.wideTools) 2 to 1 else 1 to 1) },
+                summary, editing,
+                onOpen = { t -> nav.navigate(t.route) },
+                onLongPress = { editing = true },
+                onReorder = { ids -> setOrder(ids) },
+                onResize = { id, w, h -> repo.settings.update { st -> st.copy(toolSizes = st.toolSizes + (id to "${w}x$h")) } },
+                onRemove = { id -> setOrder(shown.map { it.id } - id) },
+            )
             // 可加入的工具：編輯時才顯示
             if (editing && available.isNotEmpty()) {
                 Text("可加入的工具", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 12.dp))
@@ -185,8 +171,6 @@ fun MoreScreen(nav: NavController) {
                     }
                 }
             }
-            if (editing) Text("長按任一格也可以進入編輯；寬格會顯示摘要。", fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(4.dp))
         }
     }
 }

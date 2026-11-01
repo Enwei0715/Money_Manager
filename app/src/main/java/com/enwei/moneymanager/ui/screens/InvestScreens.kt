@@ -161,7 +161,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
         }
         if (open.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("尚無持股", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
+                Text("尚無持股", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
                 Text("按右上角＋新增，或在「通知記帳」啟用券商 App 自動記錄成交",
                     color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, textAlign = TextAlign.Center)
@@ -295,7 +295,7 @@ private fun HoldingRow(h: HoldingView, onClick: () -> Unit) {
     Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("${h.symbol}  ${h.name.orEmpty()}", fontSize = 15.sp, maxLines = 1)
+                Text("${h.symbol}  ${h.name.orEmpty()}", fontSize = 14.sp, maxLines = 1)
                 Text(
                     if (h.shares > 0.0001) "${formatShares(h.shares)} · 均價 ${formatNum(h.avgCost)}" else "已實現 ${formatNum(h.realizedTotal, 0)}",
                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -713,7 +713,7 @@ fun <T> DropdownLine(label: String, value: String, options: List<Pair<T, String>
     var open by remember { mutableStateOf(false) }
     FormLine(label, onClick = { open = true }) {
         Box {
-            Text(value, fontSize = 15.sp)
+            Text(value, fontSize = 14.sp)
             androidx.compose.material3.DropdownMenu(open, { open = false }) {
                 options.forEach { (v, l) -> androidx.compose.material3.DropdownMenuItem(text = { Text(l) }, onClick = { onPick(v); open = false }) }
             }

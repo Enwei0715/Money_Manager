@@ -87,6 +87,29 @@ const val BASE_UI_SCALE = 0.88f
 fun MoneyTheme(dark: Boolean = isSystemInDarkTheme(), uiScale: Float = 1f, content: @Composable () -> Unit) {
     val base = LocalDensity.current
     CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale * BASE_UI_SCALE, base.fontScale)) {
-        MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
+        MaterialTheme(colorScheme = if (dark) Dark else Light, typography = AppTypography, content = content)
     }
+}
+
+
+/**
+ * 全 App 統一的字級：沒有指定大小的文字（預設 bodyLarge 16sp、標題 22sp）也和其他畫面一致。
+ * 層級：大標 18、標題 15、內文 14、次要 13、說明 12、標籤 11。
+ */
+private val AppTypography = androidx.compose.material3.Typography().let { t ->
+    fun androidx.compose.ui.text.TextStyle.sized(size: Int, line: Int) =
+        copy(fontSize = androidx.compose.ui.unit.TextUnit(size.toFloat(), androidx.compose.ui.unit.TextUnitType.Sp),
+            lineHeight = androidx.compose.ui.unit.TextUnit(line.toFloat(), androidx.compose.ui.unit.TextUnitType.Sp))
+    t.copy(
+        headlineSmall = t.headlineSmall.sized(20, 26),
+        titleLarge = t.titleLarge.sized(18, 24),
+        titleMedium = t.titleMedium.sized(15, 21),
+        titleSmall = t.titleSmall.sized(14, 20),
+        bodyLarge = t.bodyLarge.sized(14, 20),
+        bodyMedium = t.bodyMedium.sized(13, 18),
+        bodySmall = t.bodySmall.sized(12, 16),
+        labelLarge = t.labelLarge.sized(13, 18),
+        labelMedium = t.labelMedium.sized(12, 16),
+        labelSmall = t.labelSmall.sized(11, 14),
+    )
 }

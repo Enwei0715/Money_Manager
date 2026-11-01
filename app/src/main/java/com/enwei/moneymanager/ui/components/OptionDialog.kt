@@ -38,7 +38,7 @@ fun <T> OptionDialog(
         Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
             Column {
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, Modifier.weight(1f), fontSize = 17.sp)
+                    Text(title, Modifier.weight(1f), fontSize = 16.sp)
                     IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "關閉") }
                 }
                 if (description != null) Text(

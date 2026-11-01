@@ -68,7 +68,7 @@ private fun uiScaleLabel(v: Float) = when {
 @Composable
 private fun SectionHeader(title: String) {
     Text(
-        title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp,
+        title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp,
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, top = 14.dp, bottom = 6.dp),
     )
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -80,8 +80,8 @@ private fun ConfigRow(title: String, value: String? = null, onClick: () -> Unit)
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, Modifier.weight(1f), fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (value != null) Text(value, color = MaterialTheme.colorScheme.primary, fontSize = 15.sp)
+        Text(title, Modifier.weight(1f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (value != null) Text(value, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
     }
 }
 
@@ -256,7 +256,7 @@ private fun PinPad(title: String, entered: Int, error: Boolean, onDigit: (Char) 
         Spacer(Modifier.height(80.dp))
         Icon(androidx.compose.ui.res.painterResource(com.enwei.moneymanager.R.drawable.ic_stat_ledger), null, tint = Color.White, modifier = Modifier.size(72.dp))
         Spacer(Modifier.height(40.dp))
-        Text(if (error) "密碼錯誤，請再試一次" else title, color = Color.White, fontSize = 19.sp)
+        Text(if (error) "密碼錯誤，請再試一次" else title, color = Color.White, fontSize = 18.sp)
         Spacer(Modifier.height(36.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             repeat(4) { i ->
@@ -407,7 +407,7 @@ fun PasscodeScreen(nav: NavController) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("生物辨識（指紋／臉部）", fontSize = 15.sp)
+                        Text("生物辨識（指紋／臉部）", fontSize = 14.sp)
                         if (!bioOk) Text("此裝置尚未設定生物辨識", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     androidx.compose.material3.Switch(s.biometric && bioOk, { v -> repo.settings.update { it.copy(biometric = v) } }, enabled = bioOk)

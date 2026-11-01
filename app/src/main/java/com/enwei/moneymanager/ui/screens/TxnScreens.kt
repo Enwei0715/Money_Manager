@@ -118,7 +118,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
             Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                 androidx.compose.foundation.text.BasicTextField(
                     q, { q = it }, singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     decorationBox = { inner ->
@@ -295,7 +295,7 @@ private fun AiSuggestionSection(lk: Lookups) {
     if (!aiOn && open.isEmpty()) return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("AI 建議分類" + if (open.isNotEmpty()) "（${open.size}）" else "", fontSize = 15.sp, modifier = Modifier.weight(1f))
+            Text("AI 建議分類" + if (open.isNotEmpty()) "（${open.size}）" else "", fontSize = 14.sp, modifier = Modifier.weight(1f))
             if (open.size > 1) TextButton(onClick = { scope.launch { open.forEach { repo.acceptAiSuggestion(it) } } }) { Text("全部接受") }
         }
         if (aiOn && unknown > 0) {
@@ -369,7 +369,7 @@ private fun DuplicateSection(lk: Lookups) {
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("可能重複的交易（${pairs.size}）", fontSize = 15.sp, modifier = Modifier.weight(1f))
+            Text("可能重複的交易（${pairs.size}）", fontSize = 14.sp, modifier = Modifier.weight(1f))
             val sure = pairs.filter { verdicts[it.key]?.same == true }
             if (sure.size > 1) TextButton(onClick = {
                 scope.launch { sure.forEach { p -> verdicts[p.key].let { v -> repo.mergeDuplicate(p, v?.name, v?.categoryId) } } }

@@ -119,7 +119,7 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(b.name, fontSize = 15.sp)
+                    Text(b.name, fontSize = 14.sp)
                     Text(
                         "交割帳戶：${lk.account(b.linkedAccountId)?.name ?: "未設定"} · 台股買賣 ${mine.size} 筆",
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,

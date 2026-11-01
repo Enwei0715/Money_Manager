@@ -535,7 +535,7 @@ private fun BottomPanel(
                 when (panel) {
                     Panel.AMOUNT -> "金額"; Panel.FEE -> "手續費"; Panel.CATEGORY -> "分類"; Panel.TO_ACCOUNT -> "轉入帳戶"; else -> "帳戶"
                 },
-                color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f),
+                color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f),
             )
             when (panel) {
                 Panel.AMOUNT, Panel.FEE -> Box {
@@ -706,7 +706,7 @@ private fun Keypad(expr: String, calcMode: Boolean, onExpr: (String) -> Unit, on
         Row(Modifier.fillMaxWidth()) {
             Digit(Modifier.weight(1f), "00"); Digit(Modifier.weight(1f), "0"); Digit(Modifier.weight(1f), ".")
             Key(Modifier.weight(1f), MaterialTheme.colorScheme.primary, onClick = onDone) {
-                Text(if (Calculator.hasOperator(expr)) "=" else "完成", color = Color.White, fontSize = 20.sp)
+                Text(if (Calculator.hasOperator(expr)) "=" else "完成", color = Color.White, fontSize = 18.sp)
             }
         }
     }

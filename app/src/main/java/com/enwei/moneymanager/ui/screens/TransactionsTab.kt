@@ -260,7 +260,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         selected = tab == i, onClick = { tab = i },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ) {
-                        Text(t, fontSize = if (com.enwei.moneymanager.ui.I18n.english) 13.sp else 14.sp, maxLines = 1, softWrap = false,
+                        com.enwei.moneymanager.ui.components.FitText(t, fontSize = if (com.enwei.moneymanager.ui.I18n.english) 13.sp else 14.sp,
                             modifier = Modifier.padding(vertical = 10.dp))
                     }
                 }
@@ -386,7 +386,7 @@ fun NoData(text: String = "沒有資料") {
     Column(Modifier.fillMaxWidth().padding(top = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         // 自己的空白圖示（不沿用舊 App 的貓咪對話框）
         Icon(com.enwei.moneymanager.ui.components.LineIcons.Inbox, null, tint = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.size(64.dp))
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 15.sp, modifier = Modifier.padding(top = 12.dp))
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
     }
 }
 

@@ -184,7 +184,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
             indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[section]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
         ) {
             listOf("帳戶", "股票", "助理").forEachIndexed { i, t ->
-                Tab(section == i, { section = i }, text = { Text(t, fontSize = 14.sp) },
+                Tab(section == i, { section = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -454,7 +454,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                     indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
                 ) {
                     detailTabs.forEachIndexed { i, t ->
-                        Tab(tab == i, { tab = i }, text = { Text(t, fontSize = 14.sp) },
+                        Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp) },
                             selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -490,7 +490,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("持股市值 ${Money.withSymbol(value)}", fontSize = 15.sp)
+                            Text("持股市值 ${Money.withSymbol(value)}", fontSize = 14.sp)
                             Text("原幣成本 ${Money.full(cost)} · 預估損益 ${Money.full(pnl)}", fontSize = 13.sp,
                                 color = if (pnl >= 0) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown)
                             Text("交割帳戶：${lk.account(acc.linkedAccountId)?.name ?: "未設定（按右上編輯）"}", fontSize = 13.sp,
@@ -676,7 +676,7 @@ private fun PeriodRow(title: String, sub: String, deposit: Long, withdrawal: Lon
     Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(horizontalAlignment = Alignment.End) {

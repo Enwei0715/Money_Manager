@@ -128,7 +128,7 @@ fun ChartFilterPage(
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).height(52.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(enabled = month != null, onClick = { month = month?.minusMonths(1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
             Text(
-                month?.let { "${it.year}年${it.monthValue}月" } ?: "全部期間", fontSize = 15.sp,
+                month?.let { "${it.year}年${it.monthValue}月" } ?: "全部期間", fontSize = 14.sp,
                 modifier = Modifier.clickable { month = if (month == null) Periods.monthOf(LocalDate.now(), startDay) else null },
             )
             IconButton(enabled = month != null, onClick = { month = month?.plusMonths(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
@@ -166,7 +166,7 @@ fun ChartFilterPage(
         }
         TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
             listOf("收入" to incomeSel, "支出" to expenseSel, "帳戶" to accSel).forEachIndexed { i, (t, sel) ->
-                Tab(tab == i, { tab = i }, text = { Text(if (sel.isEmpty()) t else "$t •", fontSize = 14.sp) },
+                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(if (sel.isEmpty()) t else "$t •", fontSize = 14.sp) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = gray)
             }
         }

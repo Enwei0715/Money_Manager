@@ -108,7 +108,7 @@ fun AdvisorContent(nav: NavController) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
             listOf("今日", "問 AI", "新聞", "資金與紀律").forEachIndexed { i, t ->
-                Tab(tab == i, { tab = i }, text = { Text(t, fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 13.sp) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -351,7 +351,7 @@ fun PickCard(
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${p.symbol} ${p.name}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text("${p.symbol} ${p.name}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 if (p.style.isNotBlank()) Tag(p.style, MaterialTheme.colorScheme.secondaryContainer)
                 if (p.strength.isNotBlank()) Tag(
                     p.strength,
@@ -884,7 +884,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             var themeQuery by remember { mutableStateOf("") }
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("篩選新聞" + (if (filteredOrNull != null) "（符合 ${filtered.size} 則）" else ""), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text("篩選新聞" + (if (filteredOrNull != null) "（符合 ${filtered.size} 則）" else ""), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     TextButton(onClick = { days = 0; sent = 0; onlyImportant = false; onlyMine = false; sort = 0; theme = null; symbol = null; source = null; shown = 100 }) { Text("全部清除") }
                     TextButton(onClick = { filtersOpen = false }) { Text("完成") }
                 }

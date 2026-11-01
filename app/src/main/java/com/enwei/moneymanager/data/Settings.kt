@@ -267,6 +267,8 @@ data class AppSettings(
     val hiddenTools: Set<String> = emptySet(),
     /** 工具頁用寬格（兩格寬、顯示摘要）的工具 */
     val wideTools: Set<String> = setOf("pending", "ai-hub"),
+    /** 工具格的大小（id → "寬x高"，以格數計；沒有時依 wideTools 為 2x1 或 1x1） */
+    val toolSizes: Map<String, String> = emptyMap(),
     /** 帳戶群組順序（AccountType 名稱） */
     val accountGroupOrder: List<String> = emptyList(),
     /** 帳戶群組自訂名稱 */
@@ -480,6 +482,7 @@ class SettingsStore(context: Context) {
             else AppSettings().toolOrder,
         hiddenTools = prefs.getStringSet("hiddenTools", emptySet())!!.toSet(),
         wideTools = prefs.getStringSet("wideTools", null)?.toSet() ?: AppSettings().wideTools,
+        toolSizes = prefs.getStringSet("toolSizes", emptySet()).orEmpty().mapNotNull { e -> e.split('=').takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap(),
         accountGroupOrder = prefs.getString("accountGroupOrder", "")!!.split(',').filter { it.isNotBlank() },
         seedCleaned = prefs.getBoolean("seedCleaned", false),
         language = prefs.getInt("language", 1),
@@ -645,6 +648,7 @@ class SettingsStore(context: Context) {
             .putString("toolOrder", s.toolOrder.joinToString(","))
             .putStringSet("hiddenTools", s.hiddenTools)
             .putStringSet("wideTools", s.wideTools)
+            .putStringSet("toolSizes", s.toolSizes.map { "${it.key}=${it.value}" }.toSet())
             .putString("accountGroupOrder", s.accountGroupOrder.joinToString(","))
             .putString("accountGroupNames", json.encodeToString(strMapSerializer, s.accountGroupNames))
             .putString("learnedSources", json.encodeToString(learnedSerializer, s.learnedSources))

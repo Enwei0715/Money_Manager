@@ -179,7 +179,7 @@ fun StatsTab(nav: NavController) {
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[idx]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
             ) {
                 tabs.forEach { (t, v) ->
-                    Tab(selected = kind == t, onClick = { kind = t }, text = { Text("${t.label}  ${Money.withSymbol(v, lk.base)}", fontSize = 14.sp, maxLines = 1) },
+                    Tab(selected = kind == t, onClick = { kind = t }, text = { com.enwei.moneymanager.ui.components.FitText("${t.label}  ${Money.withSymbol(v, lk.base)}", fontSize = 14.sp) },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -210,8 +210,8 @@ fun StatsTab(nav: NavController) {
                                     modifier = Modifier.padding(vertical = 5.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                             }
                             Spacer(Modifier.width(14.dp))
-                            Text(cat?.name ?: "未分類", Modifier.weight(1f), fontSize = 15.sp)
-                            Text(Money.withSymbol(v, lk.base), fontSize = 15.sp)
+                            Text(cat?.name ?: "未分類", Modifier.weight(1f), fontSize = 14.sp)
+                            Text(Money.withSymbol(v, lk.base), fontSize = 14.sp)
                         }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
