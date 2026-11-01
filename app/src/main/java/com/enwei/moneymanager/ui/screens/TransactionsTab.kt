@@ -298,6 +298,28 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 }
             }
             if (tab < 2) SummaryBar(totals, lk.base)
+            // 每日：這個月的總預算進度（有設定總預算、看的是這個月時）
+            val budget = settings.budgets[0L]
+            if (tab == 0 && budget != null && month == Periods.monthOf(LocalDate.now(), startDay)) {
+                val used = totals.expense
+                val pct = used.toFloat() / budget.coerceAtLeast(1)
+                val daysLeft = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), range.second).coerceAtLeast(0) + 1
+                val col = when { pct >= 1f -> MaterialTheme.colorScheme.error; pct >= 0.8f -> Color(0xFFFFA000); else -> MaterialTheme.colorScheme.primary }
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("budget") }
+                    .padding(horizontal = 14.dp, vertical = 6.dp)) {
+                    Row {
+                        Text("預算 ${Money.full(used)} / ${Money.full(budget)}", fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        Text(
+                            if (used <= budget) "剩 ${Money.full(budget - used)} · 每天約 ${Money.full((budget - used) / daysLeft)}（$daysLeft 天）"
+                            else "超出 ${Money.full(used - budget)}",
+                            fontSize = 12.sp, color = col,
+                        )
+                    }
+                    Box(Modifier.fillMaxWidth().padding(top = 3.dp).height(5.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
+                        Box(Modifier.fillMaxWidth(pct.coerceIn(0f, 1f)).height(5.dp).background(col, RoundedCornerShape(3.dp)))
+                    }
+                }
+            }
             when (tab) {
                 0 -> DailyView(inPeriod, lk, nav, range, carry, recurring, trades.filter { inRange(LocalDate.ofEpochDay(it.date), range) },
                     memos = settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }

@@ -480,7 +480,17 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
         val q = quotes[quoteKey(Market.TW, p.symbol)]
         p.copy(price = q?.price, name = p.name.ifBlank { q?.name.orEmpty() })
     }
-    val fixed = reply.copy(text = text, points = points, newsIds = ids, cards = cards)
+    // 問到營收或走勢比較時，自動附上圖表（AI 沒有附的話）：對象是卡片上的個股、問題裡的代號或持股
+    val mentioned = (Regex("[0-9]{4,6}[A-Z]?").findAll(question).map { it.value }.toList() +
+        com.enwei.moneymanager.net.TwData.cached().filter { it.name.length >= 2 && question.contains(it.name) }.map { it.code } +
+        (if (listOf("持股", "我的股票", "庫存").any { question.contains(it) }) snap.holdings.map { it.symbol } else emptyList())).distinct()
+    val targets = (cards.map { it.symbol } + mentioned).distinct().take(6)
+    val charts = reply.charts.toMutableList()
+    if (question.contains("營收") && charts.none { it.kind == "revenue" } && targets.isNotEmpty())
+        charts += com.enwei.moneymanager.data.ChatChart("revenue", targets)
+    if (listOf("走勢", "比較", "強弱").any { question.contains(it) } && charts.none { it.kind == "compare" } && targets.size >= 2)
+        charts += com.enwei.moneymanager.data.ChatChart("compare", targets.take(5))
+    val fixed = reply.copy(text = text, points = points, newsIds = ids, cards = cards, charts = charts.take(3))
     // 使用者按了停止：不把回覆加進對話
     kotlinx.coroutines.yield()
     ds.update { it.copy(chat = (it.chat + fixed).takeLast(40), business = it.business + fixed.cards.filter { c -> c.business.isNotBlank() }.associate { c -> c.symbol to c.business }) }

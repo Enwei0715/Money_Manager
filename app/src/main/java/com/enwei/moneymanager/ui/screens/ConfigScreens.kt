@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,6 +49,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.core.Money
+import com.enwei.moneymanager.data.spendingReview
 import com.enwei.moneymanager.data.TxnType
 import com.enwei.moneymanager.data.hashPasscode
 import com.enwei.moneymanager.net.FxService
@@ -334,6 +337,24 @@ fun BudgetScreen(nav: NavController) {
         val minor = Money.parseMinor(text)
         repo.settings.update { st -> st.copy(budgets = if (minor == null || minor <= 0) st.budgets - id else st.budgets + (id to minor)) }
     }
+    // 這個月的實際支出（顯示每項預算的使用進度）
+    val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
+    var month by remember { mutableStateOf<com.enwei.moneymanager.data.ReviewData?>(null) }
+    LaunchedEffect(all) { month = runCatching { repo.spendingReview(com.enwei.moneymanager.data.ReviewSpan.MONTH, 0) }.getOrNull() }
+    @Composable
+    fun usage(id: Long) {
+        val cap = s.budgets[id] ?: return
+        val d = month ?: return
+        val used = if (id == 0L) d.expense else d.categories.find { it.id == id }?.amount ?: 0L
+        val pct = used.toFloat() / cap.coerceAtLeast(1)
+        val col = when { pct >= 1f -> MaterialTheme.colorScheme.error; pct >= 0.8f -> Color(0xFFFFA000); else -> MaterialTheme.colorScheme.primary }
+        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp)) {
+            Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
+                Box(Modifier.fillMaxWidth(pct.coerceIn(0f, 1f)).height(6.dp).background(col, RoundedCornerShape(3.dp)))
+            }
+            Text("這個月已用 ${Money.withSymbol(used, lk.base)} / ${Money.withSymbol(cap, lk.base)}（${(pct * 100).toInt()}%）", fontSize = 11.sp, color = col)
+        }
+    }
     Scaffold(containerColor = MaterialTheme.colorScheme.surface, topBar = { BackTopBar("預算設定", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad)) {
             item {
@@ -344,9 +365,11 @@ fun BudgetScreen(nav: NavController) {
                     FormInput(goal, { v -> goal = v; repo.settings.update { it.copy(savingsGoal = v.toDoubleOrNull()?.takeIf { g -> g > 0 }) } }, "", number = true)
                 }
                 FormLine("總預算") { FormInput(fields.value[0L].orEmpty(), { set(0L, it) }, "0", number = true) }
+                usage(0L)
             }
             items(lk.categories.filter { it.kind == TxnType.EXPENSE && !it.archived && it.parentId == null }, key = { it.id }) { c ->
                 FormLine(c.name) { FormInput(fields.value[c.id].orEmpty(), { set(c.id, it) }, "", number = true) }
+                usage(c.id)
             }
             item { Spacer(Modifier.height(32.dp)) }
         }

@@ -96,7 +96,11 @@ object TwData {
                 Triple(y, m, r)
             }.orEmpty()
         }.getOrDefault(emptyList()).distinctBy { it.first * 100 + it.second }.sortedBy { it.first * 100 + it.second }
-        if (raw.isEmpty()) return revenueCache[code]?.second.orEmpty()
+        if (raw.isEmpty()) {
+            // 備援：證交所／櫃買中心公開的「每月營業收入彙總表」（只有最新一個月，含年增、月增）
+            latestFromExchange(code)?.let { m -> revenueCache[code] = System.currentTimeMillis() to listOf(m); return listOf(m) }
+            return revenueCache[code]?.second.orEmpty()
+        }
         val byKey = raw.associate { (it.first * 100 + it.second) to it.third }
         val out = raw.mapIndexed { i, (y, m, r) ->
             val ly = byKey[(y - 1) * 100 + m]
@@ -105,5 +109,33 @@ object TwData {
         }.takeLast(months)
         revenueCache[code] = System.currentTimeMillis() to out
         return out
+    }
+
+    /** 上市、上櫃公司最新一個月營收（證交所、櫃買中心開放資料），整份表快取 12 小時。 */
+    @Volatile private var exchangeTable: Pair<Long, Map<String, MonthRevenue>>? = null
+
+    private suspend fun latestFromExchange(code: String): MonthRevenue? {
+        val cached = exchangeTable?.takeIf { System.currentTimeMillis() - it.first < 12 * 3600_000L }?.second
+        val table = cached ?: run {
+            val map = HashMap<String, MonthRevenue>()
+            for (url in listOf("https://openapi.twse.com.tw/v1/opendata/t187ap05_L", "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O")) {
+                runCatching {
+                    (Http.getJson(url) as? JsonArray)?.forEach { e ->
+                        val c = e.str("公司代號")?.trim() ?: return@forEach
+                        val ym = e.str("資料年月")?.trim().orEmpty()
+                        // 資料年月是民國年＋月，例如 11410
+                        val y = ym.dropLast(2).toIntOrNull()?.plus(1911) ?: return@forEach
+                        val m = ym.takeLast(2).toIntOrNull() ?: return@forEach
+                        val rev = e.str("營業收入-當月營收")?.replace(",", "")?.toDoubleOrNull()?.takeIf { it > 0 } ?: return@forEach
+                        map[c] = MonthRevenue(y, m, rev * 1000, // 單位為千元
+                            e.str("營業收入-去年同月增減(%)")?.replace(",", "")?.toDoubleOrNull(),
+                            e.str("營業收入-上月比較增減(%)")?.replace(",", "")?.toDoubleOrNull())
+                    }
+                }
+            }
+            if (map.isNotEmpty()) exchangeTable = System.currentTimeMillis() to map
+            map
+        }
+        return table[code]
     }
 }

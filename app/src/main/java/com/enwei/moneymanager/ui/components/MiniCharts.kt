@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -287,10 +288,11 @@ fun AnnotatedKLine(symbol: String, levels: List<Triple<String, Double, Color>>, 
             Box(Modifier.width(10.dp).height(2.dp).background(Color(0xFF7E57C2)))
             Text(" 季線", fontSize = 11.sp)
         }
-        Canvas(Modifier.fillMaxWidth().height(160.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(160.dp).clipToBounds()) {
             val inView = levels.map { it.second }.filter { v -> v > 0 }
-            val hi = maxOf((from until b.close.size).maxOf { b.high.getOrElse(it) { b.close[it] } }, inView.maxOrNull() ?: 0.0)
-            val lo = minOf((from until b.close.size).minOf { b.low.getOrElse(it) { b.close[it] } }, inView.minOrNull() ?: Double.MAX_VALUE)
+            val maVals = (ma20 + ma60).filterNotNull()
+            val hi = maxOf((from until b.close.size).maxOf { b.high.getOrElse(it) { b.close[it] } }, inView.maxOrNull() ?: 0.0, maVals.maxOrNull() ?: 0.0)
+            val lo = minOf((from until b.close.size).minOf { b.low.getOrElse(it) { b.close[it] } }, inView.minOrNull() ?: Double.MAX_VALUE, maVals.minOrNull() ?: Double.MAX_VALUE)
             val span = (hi - lo).takeIf { it > 0 } ?: 1.0
             fun y(v: Double) = ((hi - v) / span * size.height).toFloat()
             val w = size.width / n
@@ -340,10 +342,11 @@ fun RevenueCompare(symbols: List<String>, modifier: Modifier = Modifier) {
             }.mapNotNull { it.await() }
         }
     }
-    val rows = data ?: return
-    if (rows.isEmpty()) return
+    val rows = data
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("月營收年增率比較", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        if (rows == null) { Text("讀取營收中…", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
+        if (rows.isEmpty()) { Text("讀不到這幾檔的營收資料（需要網路，或資料來源暫時無法連線）", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
         val max = rows.maxOf { kotlin.math.abs(it.second) }.takeIf { it > 0 } ?: 1.0
         rows.sortedByDescending { it.second }.forEach { (name, v, label) ->
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
