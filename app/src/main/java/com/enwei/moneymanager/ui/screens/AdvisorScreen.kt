@@ -224,7 +224,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         if (r.summary.isNotBlank()) CitedText(r.summary, r.cites, newsById)
     }
     // 題材熱度：資料集裡報告提到的題材（則數與平均多空）
-    Section("資金追逐的題材") { ChatChartView(com.enwei.moneymanager.data.ChatChart("themes", r.themes)) }
+    Section("資金追逐的題材") { ChatChartView(com.enwei.moneymanager.data.ChatChart("themes", r.themes), nav) }
     if (r.picks.isNotEmpty()) {
         Text("今天可以考慮（${r.picks.size} 檔）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         // 推薦個股走勢比較（前 5 檔）
@@ -246,7 +246,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         }
     }
     if (r.holdings.isNotEmpty()) Section("持股動作（${r.holdings.size}）", collapsible = true) {
-        ChatChartView(com.enwei.moneymanager.data.ChatChart("holdings"))
+        ChatChartView(com.enwei.moneymanager.data.ChatChart("holdings"), nav)
         r.holdings.forEach { h ->
             Row(Modifier.fillMaxWidth().clickable { nav.navigate("stock/${h.symbol}") }.padding(vertical = 2.dp)) {
                 Text(h.symbol, fontSize = 14.sp, modifier = Modifier.widthIn(min = 56.dp))
@@ -520,7 +520,7 @@ private fun Bubble(m: ChatMsg, newsById: Map<String, com.enwei.moneymanager.data
         // 回覆附的圖表：用實際資料畫（走勢比較、題材熱度、持股損益）
         m.charts.forEach { ch ->
             Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.padding(top = 6.dp).fillMaxWidth()) {
-                Box(Modifier.padding(10.dp)) { ChatChartView(ch) }
+                Box(Modifier.padding(10.dp)) { ChatChartView(ch, nav) }
             }
         }
         m.cards.forEach { c -> Box(Modifier.padding(top = 6.dp)) { PickCard(c, m.newsIds, newsById) { nav.navigate("stock/${c.symbol}") } } }
@@ -1372,19 +1372,17 @@ private fun NewsScheduleInfo() {
 
 /** 對話回覆裡的一張圖表。 */
 @Composable
-private fun ChatChartView(ch: com.enwei.moneymanager.data.ChatChart) {
+private fun ChatChartView(ch: com.enwei.moneymanager.data.ChatChart, nav: NavController) {
     when (ch.kind) {
         "compare" -> com.enwei.moneymanager.ui.components.CompareChart(ch.items)
         "themes" -> {
             val store by MoneyApp.news.flow.collectAsStateWithLifecycle()
             val st = store ?: return
-            val all = remember(System.identityHashCode(st)) { MoneyApp.news.themes(st) }
-            val picked = if (ch.items.isEmpty()) all.take(8)
-            else all.filter { t -> ch.items.any { it.contains(t.key) || t.key.contains(it) } }.take(10).ifEmpty { all.take(8) }
-            com.enwei.moneymanager.ui.components.SignedBars(
-                "題材熱度（長條＝平均多空，右側為則數）",
-                picked.map { Triple(it.key, it.avgSentiment, "${it.count} 則") },
-            )
+            // 只列產業題材（排除大盤漲跌、總經），每個題材附相關個股
+            val all = remember(System.identityHashCode(st)) { MoneyApp.news.investableThemes(st) }
+            val picked = (if (ch.items.isEmpty()) all.take(8)
+            else all.filter { (t, _) -> ch.items.any { it.contains(t.key) || t.key.contains(it) } }.ifEmpty { all.take(8) }).take(8)
+            ThemeBars(picked, nav)
         }
         "holdings" -> {
             val holdings by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
@@ -1394,6 +1392,37 @@ private fun ChatChartView(ch: com.enwei.moneymanager.data.ChatChart) {
                 Triple("${h.symbol} ${h.name.orEmpty()}".trim(), if (cost > 0) pnl / cost * 100 else 0.0, "%+.1f%%".format(if (cost > 0) pnl / cost * 100 else 0.0))
             }.sortedByDescending { it.second }
             com.enwei.moneymanager.ui.components.SignedBars("持股損益（%）", rows)
+        }
+    }
+}
+
+
+/** 產業題材熱度：則數長條＋多空顏色＋相關個股（點個股看 K 線）。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ThemeBars(rows: List<Pair<com.enwei.moneymanager.data.TopicStat, List<String>>>, nav: NavController) {
+    if (rows.isEmpty()) { Text("還沒有足夠的產業題材新聞", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return }
+    val max = rows.maxOf { it.first.count }.coerceAtLeast(1)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("產業題材（長條＝新聞則數，顏色＝多空）", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        rows.forEach { (t, syms) ->
+            val c = when { t.avgSentiment > 0.2 -> StockUp; t.avgSentiment < -0.2 -> StockDown; else -> MaterialTheme.colorScheme.onSurfaceVariant }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(t.key, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
+                    Text("${t.count} 則 · " + (if (t.avgSentiment > 0.2) "偏多" else if (t.avgSentiment < -0.2) "偏空" else "中性"), fontSize = 11.sp, color = c)
+                }
+                Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
+                    Box(Modifier.fillMaxWidth(t.count.toFloat() / max).height(6.dp).background(c, RoundedCornerShape(3.dp)))
+                }
+                if (syms.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    syms.forEach { sym ->
+                        Text(sym, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(4.dp))
+                                .clickable { nav.navigate("stock/$sym") }.padding(horizontal = 6.dp, vertical = 1.dp))
+                    }
+                }
+            }
         }
     }
 }

@@ -236,3 +236,23 @@ fun SignedBars(title: String, rows: List<Triple<String, Double, String>>, pos: C
         }
     }
 }
+
+/** 橫條清單：每列名稱、長條、右側文字（金額、次數等），最大值為滿格。 */
+@Composable
+fun LabeledBars(title: String, rows: List<Triple<String, Long, String>>, color: Color = MaterialTheme.colorScheme.primary, modifier: Modifier = Modifier) {
+    if (rows.isEmpty() || rows.all { it.second <= 0 }) return
+    val max = rows.maxOf { it.second }.coerceAtLeast(1)
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        rows.forEach { (name, v, label) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(76.dp))
+                Box(Modifier.weight(1f).height(10.dp).background(track, RoundedCornerShape(3.dp))) {
+                    if (v > 0) Box(Modifier.fillMaxWidth((v.toFloat() / max).coerceIn(0.02f, 1f)).height(10.dp).background(color, RoundedCornerShape(3.dp)))
+                }
+                Text(" $label", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.width(96.dp))
+            }
+        }
+    }
+}

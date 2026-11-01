@@ -182,21 +182,11 @@ fun ReviewContent(
             }
 
             // ③ 重點觀察（規則）
-            // 總覽已有儲蓄率、支出變化，這裡只放消費習慣（商家、小額累積、深夜、去年同期、你標的可省）
-            val obs = buildList {
-                d.merchants().take(3).takeIf { it.isNotEmpty() }?.let { ms -> add("花最多的商家：" + ms.joinToString("、") { "${it.name.take(10)} ${it.count} 次 ${m(it.total)}" }) }
-                d.habits().take(3).forEach { add("${it.name.take(10)} 這期 ${it.count} 次、共 ${m(it.total)}，小額但累積起來不少") }
-                d.lateNight().takeIf { it.size >= 3 }?.let { add("深夜（22 點後）消費 ${it.size} 筆、共 ${m(it.sumOf { t -> t.amount })}") }
-                d.lastYearExpense?.let { ly -> add("去年同期支出 ${m(ly)}，今年 ${if (d.expense >= ly) "多" else "少"} ${m(kotlin.math.abs(d.expense - ly))}") }
-                val saved = d.expenses.filter { com.enwei.moneymanager.data.necessityOf(settings.txnNecessity[it.id])?.first == com.enwei.moneymanager.data.Necessity.SAVE }
-                if (saved.isNotEmpty()) add("你標為「可省」的 ${saved.size} 筆共 ${m(saved.sumOf { it.amount })}")
-            }
-            if (obs.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    var allObs by rememberSaveable { mutableStateOf(false) }
-                    Text("消費習慣（依交易紀錄）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    obs.take(if (allObs) obs.size else 3).forEach { Text("• $it", fontSize = 14.sp) }
-                    if (obs.size > 3) TextButton(onClick = { allObs = !allObs }) { Text(if (allObs) "收起" else "還有 ${obs.size - 3} 項") }
+            // ③ 消費習慣：全部用圖表（每日支出、時段、平日／週末、常去的商家）
+            if (d.expenses.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("消費習慣", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    HabitCharts(d, ::m, lk)
                 }
             }
 
@@ -266,20 +256,9 @@ private fun AiReviewBody(
         Spacer(Modifier.width(12.dp))
         Text(r.headline, fontSize = 14.sp, modifier = Modifier.weight(1f))
     }
-    // 圖表（用實際記帳資料畫；AI 只決定要標示哪幾個分類）
-    val daily = remember(d) {
-        val last = minOf(d.end, java.time.LocalDate.now())
-        val n = (java.time.temporal.ChronoUnit.DAYS.between(d.start, last) + 1).toInt().coerceAtLeast(1)
-        val byDay = LongArray(n)
-        d.expenses.forEach { t ->
-            val i = java.time.temporal.ChronoUnit.DAYS.between(d.start, java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()).toInt()
-            if (i in 0 until n) byDay[i] += lk.fx.convert(t.amount, t.currency)
-        }
-        // 季、年太多天：改成每週加總
-        if (n > 62) byDay.toList().chunked(7).map { it.sum() } else byDay.toList()
-    }
-    com.enwei.moneymanager.ui.components.DailyBarsChart(daily, m, ExpenseColor, Modifier.padding(top = 8.dp),
-        weekly = java.time.temporal.ChronoUnit.DAYS.between(d.start, minOf(d.end, java.time.LocalDate.now())) + 1 > 62)
+    // 可省金額：每個建議約可省多少（圖表取代文字）
+    val savings = r.findings.filter { (it.saving ?: 0) > 0 }.map { Triple(it.text, it.saving!!, "約 ${m(it.saving)}／月") }
+    com.enwei.moneymanager.ui.components.LabeledBars("建議可省（每月）", savings, IncomeColor, Modifier.padding(top = 8.dp))
     // 每一段像資料夾：點標題展開／收起（預設展開「想跟你確認的幾筆」與「行動建議」，其他收起）
     @Composable
     fun fold(title: String, count: Int, initiallyOpen: Boolean, body: @Composable () -> Unit) {
@@ -310,6 +289,9 @@ private fun AiReviewBody(
             }
         }
     }
+    // 舊版的文字分析（重新產生後會改成上面的精簡格式）
+    val oldCount = r.analysis.size + r.good.size + r.improve.size + r.actions.size
+    if (r.findings.isEmpty() && oldCount > 0) fold("舊版文字分析（按「重新產生」改成圖表版）", oldCount, false) {
     fold("多角度分析", r.analysis.size, false) {
         r.analysis.forEach { a ->
             Column {
@@ -319,18 +301,19 @@ private fun AiReviewBody(
         }
     }
     section("做得好", r.good, "✓")
-    fold("想跟你確認的幾筆", r.questions.size, true) {
-        val byId = d.expenses.associateBy { it.id }
-        r.questions.forEach { q -> QuestionCard(q, q.txnIds.mapNotNull { byId[it] }, lk, necessity, m, nav) }
-    }
     section("可以調整的地方", r.improve, "•")
-    fold("行動建議", r.actions.size, true) {
+    fold("行動建議", r.actions.size, false) {
         r.actions.forEachIndexed { i, a ->
             Row {
                 Text("${i + 1}. ${a.action}", fontSize = 14.sp, modifier = Modifier.weight(1f))
                 a.saving?.let { Text("每月省 ${m(it)}", fontSize = 13.sp, color = IncomeColor) }
             }
         }
+    }
+    }
+    fold("想跟你確認的幾筆", r.questions.size, true) {
+        val byId = d.expenses.associateBy { it.id }
+        r.questions.forEach { q -> QuestionCard(q, q.txnIds.mapNotNull { byId[it] }, lk, necessity, m, nav) }
     }
     if (r.expenseCap != null || r.savingsTarget != null || r.goals.isNotEmpty()) {
         Text("下期目標", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -430,4 +413,52 @@ private fun StructureCard(d: ReviewData, m: (Long) -> String, focus: List<String
         }
     }
     Text("合計 ${m(total)}；點「每日」可看明細", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+
+/** 消費習慣圖表：每日（或每週）支出、時段分布、平日／週末、常去的商家（金額與次數）。 */
+@Composable
+private fun HabitCharts(d: ReviewData, m: (Long) -> String, lk: Lookups) {
+    val zone = java.time.ZoneId.systemDefault()
+    val last = minOf(d.end, java.time.LocalDate.now())
+    val n = (java.time.temporal.ChronoUnit.DAYS.between(d.start, last) + 1).toInt().coerceAtLeast(1)
+    val stats = remember(d) {
+        val byDay = LongArray(n)
+        val slots = LongArray(5)
+        var weekday = 0L; var weekend = 0L
+        d.expenses.forEach { t ->
+            val dt = java.time.Instant.ofEpochMilli(t.date).atZone(zone)
+            val v = lk.fx.convert(t.amount, t.currency)
+            val i = java.time.temporal.ChronoUnit.DAYS.between(d.start, dt.toLocalDate()).toInt()
+            if (i in 0 until n) byDay[i] += v
+            val h = dt.hour
+            slots[when { h in 5..10 -> 0; h in 11..13 -> 1; h in 14..16 -> 2; h in 17..21 -> 3; else -> 4 }] += v
+            if (dt.dayOfWeek == java.time.DayOfWeek.SATURDAY || dt.dayOfWeek == java.time.DayOfWeek.SUNDAY) weekend += v else weekday += v
+        }
+        Triple(byDay.toList(), slots.toList(), weekday to weekend)
+    }
+    val weekly = n > 62
+    com.enwei.moneymanager.ui.components.DailyBarsChart(
+        if (weekly) stats.first.chunked(7).map { it.sum() } else stats.first, m, ExpenseColor, weekly = weekly,
+    )
+    val slotNames = listOf("早上 5–11", "中午 11–14", "下午 14–17", "晚上 17–22", "深夜 22–5")
+    val total = stats.second.sum().coerceAtLeast(1)
+    com.enwei.moneymanager.ui.components.LabeledBars(
+        "時段", slotNames.indices.map { i -> Triple(slotNames[i], stats.second[i], "${stats.second[i] * 100 / total}%　${m(stats.second[i])}") }, ExpenseColor,
+    )
+    val (wd, we) = stats.third
+    com.enwei.moneymanager.ui.components.LabeledBars(
+        "平日／週末（每天平均）",
+        listOf(Triple("平日", wd / 5, m(wd / 5) + "／天"), Triple("週末", we / 2, m(we / 2) + "／天")).let { rows ->
+            // 換算成每週的「每天平均」：平日 5 天、週末 2 天，再除以期間的週數
+            val weeks = (n / 7.0).coerceAtLeast(1.0)
+            rows.map { (k, v, _) -> val per = (v / weeks).toLong(); Triple(k, per, m(per) + "／天") }
+        },
+        MaterialTheme.colorScheme.tertiary,
+    )
+    com.enwei.moneymanager.ui.components.LabeledBars(
+        "常去的商家",
+        d.merchants().sortedByDescending { it.total }.take(6).map { Triple(it.name.take(12), it.total, "${it.count} 次　${m(it.total)}") },
+        MaterialTheme.colorScheme.primary,
+    )
 }

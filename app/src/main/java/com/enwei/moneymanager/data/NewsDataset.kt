@@ -387,6 +387,9 @@ class NewsDataset(context: Context) {
     }
 
     companion object {
+        /** 市場、總經類（不是產業題材）的名稱 */
+        val MACRO = Regex("大盤|台股|股市|美股|陸股|港股|日股|指數|加權|經濟|總經|景氣|通膨|利率|升息|降息|央行|聯準會|匯率|新台幣|關稅|政策|選舉|外資|法人|重挫|大漲|大跌|收盤|盤勢|盤後|行情|市場")
+
         /**
          * 「近 [days] 天」的起點：台北時間今天往前 days-1 天的 0 點。用整天計算，
          * 同一天同一題材的區塊一定完整落在範圍內，不會隨時間經過被切掉一半而一直顯示「未整理完」。
@@ -659,6 +662,18 @@ class NewsDataset(context: Context) {
     fun themes(st: NewsStore, days: Int = 3): List<TopicStat> = recent(st, days).filter { it.theme.isNotBlank() }
         .groupBy { it.theme }.map { (k, l) -> TopicStat(k, l.size, l.map { it.sentiment }.average(), l.count { it.importance >= 4 }) }
         .sortedByDescending { it.count }
+
+    /**
+     * 可投資的題材（產業／概念股）：排除大盤漲跌、總經、政策這類市場新聞，且多數新聞要有對應的個股。
+     * 回傳題材統計與最常一起出現的個股代號。
+     */
+    fun investableThemes(st: NewsStore, days: Int = 3): List<Pair<TopicStat, List<String>>> =
+        recent(st, days).filter { it.theme.isNotBlank() && !MACRO.containsMatchIn(it.theme) }.groupBy { it.theme }
+            .filter { (_, l) -> l.count { it.symbols.isNotEmpty() } * 10 >= l.size * 4 }
+            .map { (k, l) ->
+                TopicStat(k, l.size, l.map { it.sentiment }.average(), l.count { it.importance >= 4 }) to
+                    l.flatMap { it.symbols }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(4).map { it.key }
+            }.sortedByDescending { it.first.count }
 
     /** 近 [days] 天被提到的台股代號統計。 */
     fun symbols(st: NewsStore, days: Int = 3): List<TopicStat> = recent(st, days).flatMap { n -> n.symbols.map { it to n } }
