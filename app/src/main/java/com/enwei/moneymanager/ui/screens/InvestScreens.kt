@@ -146,7 +146,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                     "今日" to (Money.full(dayChange) to pnlColor(dayChange.toDouble())),
                 ),
             )
-            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 20.dp, vertical = 8.dp)) {
+            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(
                     if (totalCost > 0) "報酬率 ${formatPct(Money.toDouble(unreal) / Money.toDouble(totalCost) * 100)}" else "",
                     color = pnlColor(unreal.toDouble()), fontSize = 13.sp, modifier = Modifier.weight(1f),
@@ -160,7 +160,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
         }
         if (open.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("尚無持股", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 17.sp)
+                Text("尚無持股", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
                 Spacer(Modifier.height(8.dp))
                 Text("按右上角＋新增，或在「通知記帳」啟用券商 App 自動記錄成交",
                     color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, textAlign = TextAlign.Center)
@@ -176,7 +176,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
         item {
             Row(
                 Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
-                    .padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
+                    .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = { brokersExpanded = !brokersExpanded }, modifier = Modifier.weight(1f)) {
@@ -194,11 +194,11 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
             val cashV = lk.fx.convert(b.balance, b.account.currency)
             Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                 Row(
-                    Modifier.fillMaxWidth().clickable { nav.navigate("acct/${b.account.id}") }.padding(horizontal = 20.dp, vertical = 12.dp),
+                    Modifier.fillMaxWidth().clickable { nav.navigate("acct/${b.account.id}") }.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(b.account.name, fontSize = 16.sp)
+                        Text(b.account.name, fontSize = 14.sp)
                         Text(
                             "持股 ${hs.size} 檔 ${Money.withSymbol(stock, lk.base)} · 現金 ${Money.withSymbol(cashV, lk.base)}",
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -208,7 +208,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                             fontSize = 12.sp, color = pnlColor(pnl.toDouble()),
                         )
                     }
-                    Text(Money.withSymbol(stock + cashV, lk.base), fontSize = 16.sp)
+                    Text(Money.withSymbol(stock + cashV, lk.base), fontSize = 14.sp)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
@@ -216,24 +216,24 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
         // 觀察清單：還沒買、想留意的股票（AI 推薦卡片或個股頁的☆加入）
         item {
             Row(
-                Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 2.dp),
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("觀察清單（${settings.watchlist.size}）", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
+                Text("觀察清單（${settings.watchlist.size}）", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                 TextButton(onClick = { addWatch = true }) { Text("＋ 加入") }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             if (settings.watchlist.isEmpty()) Text("在個股頁按☆加入",
-                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
         }
         items(settings.watchlist, key = { "w$it" }) { sym ->
             val q = quotes.find { it.key == com.enwei.moneymanager.data.quoteKey(com.enwei.moneymanager.core.Market.TW, sym) }
             val pct = q?.previousClose?.takeIf { it > 0 }?.let { (q.price - it) / it * 100 }
             Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("stock/$sym") }) {
-                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 4.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("$sym  ${q?.name.orEmpty()}", fontSize = 16.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("$sym  ${q?.name.orEmpty()}", fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(q?.let { formatNum(it.price) } ?: "—", fontSize = 16.sp)
+                        Text(q?.let { formatNum(it.price) } ?: "—", fontSize = 14.sp)
                         if (pct != null) Text((if (pct >= 0) "▲" else "▼") + formatPct(pct), fontSize = 13.sp, color = pnlColor(pct))
                     }
                     IconButton(onClick = { repo.settings.update { it.copy(watchlist = it.watchlist - sym) } }) {
@@ -274,10 +274,10 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
 @Composable
 private fun StockHeader(title: String, right: String, color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 22.dp, bottom = 10.dp),
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
-        Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
+        Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         Text(right, color = color)
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -287,16 +287,16 @@ private fun StockHeader(title: String, right: String, color: androidx.compose.ui
 private fun HoldingRow(h: HoldingView, onClick: () -> Unit) {
     val dayPct = if (h.price != null && h.previousClose != null && h.previousClose > 0) (h.price - h.previousClose) / h.previousClose * 100 else null
     Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("${h.symbol}  ${h.name.orEmpty()}", fontSize = 17.sp, maxLines = 1)
+                Text("${h.symbol}  ${h.name.orEmpty()}", fontSize = 15.sp, maxLines = 1)
                 Text(
                     if (h.shares > 0.0001) "${formatShares(h.shares)} · 均價 ${formatNum(h.avgCost)}" else "已實現 ${formatNum(h.realizedTotal, 0)}",
                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(Money.withSymbol(Money.toMinor(h.marketValue), h.currency), fontSize = 16.sp)
+                Text(Money.withSymbol(Money.toMinor(h.marketValue), h.currency), fontSize = 14.sp)
                 if (h.price != null) Text(
                     "${formatNum(h.price)} " + (dayPct?.let { (if (it >= 0) "▲" else "▼") + formatPct(it) } ?: ""),
                     fontSize = 13.sp, color = pnlColor(dayPct ?: 0.0),
@@ -627,7 +627,7 @@ fun TradeEditScreen(
                     Text(
                         "成交金額 ${formatNum(amount)}　${if (side == StockSide.BUY) "應付" else "應收"} ${formatNum(settle)}\n" +
                             "手續費依 ${feeSettings.discount} 折估算，請以券商帳單為準",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
             }
@@ -707,7 +707,7 @@ fun <T> DropdownLine(label: String, value: String, options: List<Pair<T, String>
     var open by remember { mutableStateOf(false) }
     FormLine(label, onClick = { open = true }) {
         Box {
-            Text(value, fontSize = 17.sp)
+            Text(value, fontSize = 15.sp)
             androidx.compose.material3.DropdownMenu(open, { open = false }) {
                 options.forEach { (v, l) -> androidx.compose.material3.DropdownMenuItem(text = { Text(l) }, onClick = { onPick(v); open = false }) }
             }

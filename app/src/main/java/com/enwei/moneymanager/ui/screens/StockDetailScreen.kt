@@ -144,7 +144,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         Row {
                             Text("%.2f".format(last), fontSize = 28.sp, color = color, fontWeight = FontWeight.SemiBold)
                             Text("  ${if (chg >= 0) "▲" else "▼"} ${"%.2f".format(kotlin.math.abs(chg))}（${"%+.2f".format(chg / prev * 100)}%）",
-                                fontSize = 15.sp, color = color, modifier = Modifier.padding(top = 10.dp))
+                                fontSize = 14.sp, color = color, modifier = Modifier.padding(top = 10.dp))
                         }
                         val n = b.close.size - 1
                         val yearHigh = b.high.takeLast(250).max()
@@ -224,7 +224,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 // 強弱與階段
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("強弱", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text("強弱", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         val stage = Technicals.stage(c)
                         Text("走勢：${stage.label}（${stage.hint}）", fontSize = 14.sp)
                         val idx = index?.close
@@ -246,7 +246,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         val peak = first?.let { b.peakSince(it) } ?: last
                         val style = settings.styleOf(symbol)
                         val ad = Discipline.advise(style, avg, last, peak, settings.investPlan.rule())
-                        Text("我的持股（${style.label}）", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text("我的持股（${style.label}）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         Text("${"%.0f".format(shares)} 股 · 均價 ${"%.2f".format(avg)} · 損益 ${"%+.1f".format((last / avg - 1) * 100)}% · 買進後最高 ${"%.2f".format(peak)}", fontSize = 14.sp)
                         if (!settings.investPlan.guardOn) Text("${ad.action}：${ad.note}", fontSize = 14.sp, color = if (ad.triggered) MaterialTheme.colorScheme.error else Color.Unspecified)
                         if (settings.investPlan.guardOn) {
@@ -270,7 +270,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             // 除權息
             if (divs.isNotEmpty() && b != null) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("除權息", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("除權息", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     val today = java.time.LocalDate.now().toEpochDay()
                     val yearCash = divs.filter { it.exEpochDay in (today - 365)..today }.sumOf { it.perShare }
                     val last = b.close.last()
@@ -303,7 +303,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             // 公司業務
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("這家公司做什麼", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("這家公司做什麼", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     business?.let { Text(it, fontSize = 14.sp) }
                         ?: if (GroqAi.enabled) OutlinedButton(onClick = {
                             scope.launch {
@@ -320,7 +320,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             if (news.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     var allNews by remember { mutableStateOf(false) }
-                    Text("相關新聞（${news.size}）", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("相關新聞（${news.size}）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     news.take(if (allNews) news.size else 3).forEach { NewsLine(it) }
                     if (news.size > 3) TextButton(onClick = { allNews = !allNews }) { Text(if (allNews) "收起" else "顯示全部 ${news.size} 則") }
                 }
@@ -487,7 +487,7 @@ private fun PriceAlertCard(symbol: String, price: Double, held: Boolean) {
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("價格提醒", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text("價格提醒", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.enwei.moneymanager.ui.components.NumberField(target, { target = it; save() }, "目標價（漲到通知）", Modifier.weight(1f))
                 com.enwei.moneymanager.ui.components.NumberField(stop, { stop = it; save() }, "停損價（跌到通知）", Modifier.weight(1f))

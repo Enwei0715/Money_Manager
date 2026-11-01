@@ -75,7 +75,7 @@ fun StockFeeScreen(nav: NavController) {
             Modifier.padding(pad).imePadding().fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("預設（沒有個別設定的證券帳戶使用）", fontSize = 16.sp)
+            Text("預設（沒有個別設定的證券帳戶使用）", fontSize = 14.sp)
             NumberField(discount, { discount = it; saveFees() }, "台股手續費折數（1 = 不打折，2.8 折填 0.28）")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumberField(minFee, { minFee = it; saveFees() }, "整股最低手續費", Modifier.weight(1f), suffix = "元")
@@ -84,7 +84,7 @@ fun StockFeeScreen(nav: NavController) {
             NumberField(usFee, { usFee = it; saveFees() }, "美股每筆手續費", suffix = "USD")
 
             HorizontalDivider()
-            Text("各證券帳戶", fontSize = 16.sp)
+            Text("各證券帳戶", fontSize = 14.sp)
             if (brokers.isEmpty()) Text(
                 "還沒有證券帳戶。",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -119,7 +119,7 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(b.name, fontSize = 17.sp)
+                    Text(b.name, fontSize = 15.sp)
                     Text(
                         "交割帳戶：${lk.account(b.linkedAccountId)?.name ?: "未設定"} · 台股買賣 ${mine.size} 筆",
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -191,7 +191,7 @@ private fun FeeCalculator(brokers: List<AccountEntity>, rebates: Map<Long, Rebat
     var shares by remember { mutableStateOf("1000") }
     var price by remember { mutableStateOf("") }
     var etf by remember { mutableStateOf(false) }
-    Text("手續費試算", fontSize = 16.sp)
+    Text("手續費試算", fontSize = 14.sp)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         NumberField(shares, { shares = it }, "股數", Modifier.weight(1f), decimal = false)
         NumberField(price, { price = it }, "成交價", Modifier.weight(1f))

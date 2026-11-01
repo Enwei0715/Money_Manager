@@ -101,7 +101,7 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
                 myRules.forEach { r ->
                     Row(
                         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-                            .clickable { scope.launch { repo.deleteRule(r.keyword) } }.padding(horizontal = 20.dp, vertical = 12.dp),
+                            .clickable { scope.launch { repo.deleteRule(r.keyword) } }.padding(horizontal = 16.dp, vertical = 12.dp),
                     ) {
                         Text(r.keyword, Modifier.weight(1f))
                         Text(lk.catLabel(r.categoryId) ?: "?", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -204,7 +204,7 @@ private fun CategoryEditDialog(c: CategoryEntity, roots: List<CategoryEntity>, o
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(if (c.parentId == null) "→ 移為子分類" else "移至其他大分類", fontSize = 16.sp)
+                            Text(if (c.parentId == null) "→ 移為子分類" else "移至其他大分類", fontSize = 14.sp)
                             Text(
                                 parentId?.let { p -> "所屬：${roots.find { it.id == p }?.name ?: "?"}" } ?: "目前為大分類",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

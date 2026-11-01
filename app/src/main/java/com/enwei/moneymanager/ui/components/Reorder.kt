@@ -126,7 +126,7 @@ fun ManageRow(
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    title, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    title, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = if (dimmed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                 )
                 if (!subtitle.isNullOrBlank()) Text(

@@ -208,7 +208,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                                 tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> "${month.year}年"
                                 else -> "${month.year}年${month.monthValue}月"
                             },
-                            fontSize = 18.sp, modifier = Modifier.clickable { month = Periods.monthOf(LocalDate.now(), startDay) },
+                            fontSize = 16.sp, modifier = Modifier.clickable { month = Periods.monthOf(LocalDate.now(), startDay) },
                         )
                         IconButton(onClick = { step(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                     }
@@ -252,7 +252,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ) {
                         Text(t, fontSize = if (com.enwei.moneymanager.ui.I18n.english) 13.sp else 14.sp, maxLines = 1, softWrap = false,
-                            modifier = Modifier.padding(vertical = 14.dp))
+                            modifier = Modifier.padding(vertical = 10.dp))
                     }
                 }
             }
@@ -272,7 +272,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
 @Composable
 fun SummaryBar(t: Totals, base: String) {
     Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
             if (maxWidth < 360.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth()) {
@@ -296,8 +296,8 @@ fun SummaryBar(t: Totals, base: String) {
 @Composable
 private fun SummaryCell(label: String, value: String, color: Color, modifier: Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Text(value, color = color, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, fontSize = 12.sp)
+        Text(value, color = color, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -326,7 +326,7 @@ private fun DailyView(
         if (upcoming.isNotEmpty()) item {
             Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("recurring") }) {
                 upcoming.forEach { (r, d, signed) ->
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
                         Text("週期", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(max = 72.dp))
                         Text("${d.monthValue}/${d.dayOfMonth}  ${r.name}", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                         Text(Money.withSymbol(signed, r.currency), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -339,7 +339,7 @@ private fun DailyView(
         allDays.forEach { day -> item(key = "d$day") { DayBlock(day, days[day].orEmpty(), lk, nav, trades = tradeDays[day].orEmpty(), memos = memoDays[day].orEmpty(), onMemo = onMemo) } }
         if (carry != 0L) item {
             Column(Modifier.padding(top = 8.dp).background(MaterialTheme.colorScheme.surface)) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
                     Text("${range.first.monthValue}/${range.first.dayOfMonth}", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(max = 72.dp))
                     Text("上期結轉", Modifier.weight(1f))
                     Text(Money.withSymbol(carry, lk.base), color = if (carry >= 0) IncomeColor else ExpenseColor,
@@ -356,7 +356,7 @@ fun NoData(text: String = "沒有資料") {
     Column(Modifier.fillMaxWidth().padding(top = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         // 自己的空白圖示（不沿用舊 App 的貓咪對話框）
         Icon(com.enwei.moneymanager.ui.components.LineIcons.Inbox, null, tint = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.size(64.dp))
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 17.sp, modifier = Modifier.padding(top = 12.dp))
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 15.sp, modifier = Modifier.padding(top = 12.dp))
     }
 }
 
@@ -373,21 +373,21 @@ fun DayBlock(
     onMemo: (Memo) -> Unit = {},
 ) {
     val t = if (ledger != null) Totals(ledger.sumOf { maxOf(0, it.delta) }, -ledger.sumOf { minOf(0, it.delta) }) else totalsOf(txns, lk.fx)
-    Column(Modifier.padding(top = 10.dp).background(MaterialTheme.colorScheme.surface)) {
+    Column(Modifier.padding(top = 8.dp).background(MaterialTheme.colorScheme.surface)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 5.dp, bottom = 5.dp)) {
             val compact = maxWidth < 400.dp
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("${day.dayOfMonth}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("${day.dayOfMonth}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(6.dp))
                 val chip = when (day.dayOfWeek) { DayOfWeek.SUNDAY -> SundayColor; DayOfWeek.SATURDAY -> SaturdayColor; else -> Color(0xFF8C8C8C) }
                 Surface(color = chip, shape = RoundedCornerShape(3.dp)) {
                     Text("週${Recurrence.weekdayName(day.dayOfWeek)}", color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
                 }
                 Spacer(Modifier.weight(1f))
-                Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = if (compact) 12.sp else 14.sp,
+                Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = if (compact) 11.sp else 13.sp,
                     modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = if (compact) 12.sp else 14.sp,
+                Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = if (compact) 11.sp else 13.sp,
                     modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -426,25 +426,25 @@ fun TradeRow(tr: com.enwei.moneymanager.data.StockTradeEntity, lk: Lookups, acco
             if (tr.side != com.enwei.moneymanager.core.StockSide.STOCK_DIVIDEND) " @ ${com.enwei.moneymanager.ui.components.formatNum(tr.price)}" else ""
     }
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.width(96.dp)) {
-            Text("股票", color = gray, fontSize = 14.sp)
-            Text(side, color = gray, fontSize = 12.sp)
+        Column(Modifier.width(80.dp)) {
+            Text("股票", color = gray, fontSize = 11.sp)
+            Text(side, color = gray, fontSize = 11.sp)
         }
         Column(Modifier.weight(1f)) {
-            Text("${tr.symbol} ${tr.name.orEmpty()}".trim(), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(listOfNotNull(detail, cashAcc?.name ?: "未指定交割帳戶").joinToString(" · "), color = gray, fontSize = 14.sp, maxLines = 1,
+            Text("${tr.symbol} ${tr.name.orEmpty()}".trim(), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(listOfNotNull(detail, cashAcc?.name ?: "未指定交割帳戶").joinToString(" · "), color = gray, fontSize = 12.sp, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
             val affects = accountId == null || tr.cashAccountId == accountId
             // 和其他列一致：金額不帶正負號，流入用收入色、流出用支出色
-            Text(Money.withSymbol(kotlin.math.abs(flow), tr.currency), fontSize = 16.sp,
+            Text(Money.withSymbol(kotlin.math.abs(flow), tr.currency), fontSize = 14.sp,
                 color = if (!affects || flow == 0L) gray else if (flow > 0) IncomeColor else ExpenseColor)
-            if (balanceAfter != null && affects) Text("(${Money.full(balanceAfter)})", fontSize = 12.sp, color = gray)
+            if (balanceAfter != null && affects) Text("(${Money.full(balanceAfter)})", fontSize = 11.sp, color = gray)
         }
     }
 }
@@ -460,30 +460,30 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
     val title = t.merchant?.takeIf { it.isNotBlank() }
     val accountText = if (t.type == TxnType.TRANSFER) "${acc?.name ?: "?"} → ${lk.account(t.toAccountId)?.name ?: "?"}" else acc?.name.orEmpty()
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.width(96.dp)) {
+        Column(Modifier.width(80.dp)) {
             val parent = cat?.parentId?.let { lk.category(it) }
-            Text(if (t.type == TxnType.TRANSFER) "轉帳" else (parent ?: cat)?.name ?: "未分類", color = gray, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (t.type == TxnType.TRANSFER) "轉帳" else (parent ?: cat)?.name ?: "未分類", color = gray, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (parent != null && t.type != TxnType.TRANSFER) Text(cat!!.name, color = gray, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val sub = when {
                 t.status == TxnStatus.PENDING -> "待確認"
                 t.source != TxnSource.MANUAL && t.source != TxnSource.IMPORT -> t.source.label
                 else -> null
             }
-            if (sub != null) Text(sub, color = if (t.status == TxnStatus.PENDING) MaterialTheme.colorScheme.primary else gray, fontSize = 12.sp)
+            if (sub != null) Text(sub, color = if (t.status == TxnStatus.PENDING) MaterialTheme.colorScheme.primary else gray, fontSize = 11.sp)
         }
         Column(Modifier.weight(1f)) {
-            if (title != null) Text(title, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (title != null) Text(title, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(accountText, color = gray, fontSize = if (title != null) 14.sp else 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
-            Text(Money.withSymbol(t.amount, t.currency), color = color, fontSize = 16.sp)
-            if (balanceAfter != null) Text("(${Money.full(balanceAfter)})", fontSize = 12.sp, color = gray)
-            else if (t.currency != lk.base && lk.fx.hasRate(t.currency)) Text("≈" + Money.full(lk.fx.convert(t.amount, t.currency)), fontSize = 12.sp, color = gray)
+            Text(Money.withSymbol(t.amount, t.currency), color = color, fontSize = 14.sp)
+            if (balanceAfter != null) Text("(${Money.full(balanceAfter)})", fontSize = 11.sp, color = gray)
+            else if (t.currency != lk.base && lk.fx.hasRate(t.currency)) Text("≈" + Money.full(lk.fx.convert(t.amount, t.currency)), fontSize = 11.sp, color = gray)
         }
     }
 }
@@ -637,9 +637,9 @@ private fun CalendarView(
     }
     sheetDay?.let { day ->
         ModalBottomSheet(onDismissRequest = { sheetDay = null }, containerColor = MaterialTheme.colorScheme.surface) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("${day.year}/${day.monthValue}/${day.dayOfMonth}（${Recurrence.weekdayName(day.dayOfWeek)}）", fontSize = 18.sp)
+                    Text("${day.year}/${day.monthValue}/${day.dayOfMonth}（${Recurrence.weekdayName(day.dayOfWeek)}）", fontSize = 16.sp)
                     com.enwei.moneymanager.core.TaiwanHolidays.label(day)?.let { Text(it, fontSize = 13.sp, color = SundayColor) }
                 }
                 TextButton(onClick = { sheetDay = null; nav.navigate("txn/0?date=${day.toEpochDay()}") }) { Text("＋ 記一筆") }
@@ -647,7 +647,7 @@ private fun CalendarView(
             val dayCardEvents = cardEvents[day].orEmpty()
             if (dayCardEvents.isNotEmpty()) {
                 Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text("信用卡日程", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -760,12 +760,12 @@ private fun MemoDot(color: Int, modifier: Modifier = Modifier) {
 @Composable
 private fun MemoLine(m: Memo, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MemoDot(m.color, Modifier.size(12.dp))
         Spacer(Modifier.width(14.dp))
-        Text(m.title.ifBlank { m.text.lineSequence().firstOrNull().orEmpty() }, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Text(m.title.ifBlank { m.text.lineSequence().firstOrNull().orEmpty() }, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f))
         if (m.pinned) Icon(Icons.Filled.PushPin, "置頂", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
     }

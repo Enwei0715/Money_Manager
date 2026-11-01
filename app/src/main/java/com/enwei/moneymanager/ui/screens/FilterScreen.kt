@@ -128,7 +128,7 @@ fun ChartFilterPage(
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).height(52.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(enabled = month != null, onClick = { month = month?.minusMonths(1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
             Text(
-                month?.let { "${it.year}年${it.monthValue}月" } ?: "全部期間", fontSize = 17.sp,
+                month?.let { "${it.year}年${it.monthValue}月" } ?: "全部期間", fontSize = 15.sp,
                 modifier = Modifier.clickable { month = if (month == null) Periods.monthOf(LocalDate.now(), startDay) else null },
             )
             IconButton(enabled = month != null, onClick = { month = month?.plusMonths(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
@@ -160,7 +160,7 @@ fun ChartFilterPage(
                 Text("合計", fontSize = 13.sp)
                 Text(
                     Money.withSymbol(if (draft.active) selIncome - selExpense else totalIncome - totalExpense, lk.base),
-                    fontSize = 15.sp, maxLines = 1,
+                    fontSize = 14.sp, maxLines = 1,
                 )
             }
         }
@@ -243,7 +243,7 @@ private fun FilterHeader(allOn: Boolean, onAll: (Boolean) -> Unit, right: @Compo
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(allOn, onAll, colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary))
-        Text("全部", fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Text("全部", fontSize = 14.sp, modifier = Modifier.weight(1f))
         right()
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -257,7 +257,7 @@ private fun FilterRow(name: String, checked: Boolean, onCheck: (Boolean) -> Unit
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(checked, onCheck, colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary))
-        Text(name, fontSize = 15.sp, maxLines = 1, modifier = Modifier.weight(1f))
+        Text(name, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
         right()
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))

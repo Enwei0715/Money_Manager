@@ -102,7 +102,7 @@ fun ToolSettingsScreen(nav: NavController) {
             }
 
             if (hidden.isNotEmpty()) {
-                Text("未顯示的工具", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp))
+                Text("未顯示的工具", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp))
                 hidden.forEach { item ->
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),

@@ -146,7 +146,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
             Spacer(Modifier.height(12.dp))
             FormLine("群組", onClick = { typeMenu = true }) {
                 Box {
-                    Text(type.label, fontSize = 17.sp)
+                    Text(type.label, fontSize = 15.sp)
                     DropdownMenu(typeMenu, { typeMenu = false }) {
                         AccountType.entries.forEach { t -> DropdownMenuItem(text = { Text(t.label) }, onClick = { type = t; typeMenu = false }) }
                     }
@@ -156,12 +156,12 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
             if (type == AccountType.LOAN) {
                 Text(
                     "借貸方向與對象",
-                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     androidx.compose.material3.FilterChip(
@@ -193,7 +193,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 }
             }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${Money.symbolOf(currency).trim()} ", fontSize = 17.sp)
+                    Text("${Money.symbolOf(currency).trim()} ", fontSize = 15.sp)
                     FormInput(initial, { s -> initial = s.filter { it.isDigit() || it == '.' || it == '-' } }, "0.00", number = true)
                 }
             }
@@ -213,7 +213,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                         }
                     }, "銀行代碼或名稱")
                 }
-                if (bank != null) Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp)) {
+                if (bank != null) Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
                     Text(
                         "${bank.code} ${bank.name}：繳款截止日＝結帳日＋${bank.dueOffsetDays} 天" +
                             (bank.note?.let { "\n$it" } ?: "") + if (!bank.verified) "\n（此銀行資料不足，先用常見值，請對照帳單）" else "",
@@ -232,12 +232,12 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 if (dueOffset != null) FormLine("繳款日", trailing = {
                     androidx.compose.material3.TextButton(onClick = { dueOffset = null }) { Text("改用固定日") }
                 }) {
-                    Text("結帳日＋$dueOffset 天" + (sDay?.let { s0 -> CardCycle(s0, 1, shift, dueOffset).let { c -> "（本期 ${c.nextDueDate(LocalDate.now().minusDays(1))}）" } } ?: ""), fontSize = 17.sp)
+                    Text("結帳日＋$dueOffset 天" + (sDay?.let { s0 -> CardCycle(s0, 1, shift, dueOffset).let { c -> "（本期 ${c.nextDueDate(LocalDate.now().minusDays(1))}）" } } ?: ""), fontSize = 15.sp)
                 } else FormLine("繳款日") { FormInput(dueDay, { dueDay = it.filter(Char::isDigit).take(2) }, "", number = true) }
                 FormLine("扣繳日") { FormInput(autopayDay, { autopayDay = it.filter(Char::isDigit).take(2) }, "銀行實際扣款日，空白＝繳款日", number = true) }
                 FormLine("扣繳帳戶", onClick = { autopayMenu = true }) {
                     Box {
-                        Text(lk.account(autopayFrom)?.name ?: "不自動扣繳", fontSize = 17.sp)
+                        Text(lk.account(autopayFrom)?.name ?: "不自動扣繳", fontSize = 15.sp)
                         DropdownMenu(autopayMenu, { autopayMenu = false }) {
                             DropdownMenuItem(text = { Text("不自動扣繳") }, onClick = { autopayFrom = null; autopayMenu = false })
                             lk.accounts.filter { it.type != AccountType.CREDIT_CARD && !it.archived }.forEach { a ->
@@ -255,7 +255,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                         "本期：結帳日 ${cycle.statementDateFor(due)} → 繳款日 $due（遇假日順延）" +
                             if (autopayFrom != null) "\n${cycle.autopayDateFor(due, apDay)} 從「${lk.account(autopayFrom)?.name}」自動扣繳" else "",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
             } else if (type == AccountType.BROKERAGE) {
@@ -271,7 +271,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                             disc != null -> "${disc} 折 ›"
                             else -> "使用預設 ›"
                         },
-                        fontSize = 17.sp,
+                        fontSize = 15.sp,
                     )
                 }
             } else if (type == AccountType.EWALLET || type == AccountType.TRANSIT_CARD) {
@@ -280,12 +280,12 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 Text(
                     "自動儲值的扣款帳戶；該帳戶的儲值扣款通知會記成轉帳到這個錢包。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             } else if (type == AccountType.LOAN) {
                 Text(
                     "借貸對象與金額",
-                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelLarge,
                 )
@@ -293,7 +293,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 FormLine("本金") { FormInput(principal, { principal = it }, "借出／借入的總額", number = true) }
                 Text(
                     "利率與期限",
-                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelLarge,
                 )
@@ -305,7 +305,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 }
                 Text(
                     "每月收付款",
-                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelLarge,
                 )
@@ -318,7 +318,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                     Text(
                         "每月到期會建立待確認的轉帳，確認後才會入帳。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                     )
                 }
             } else if (type == AccountType.BANK) {
@@ -326,12 +326,12 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
             }
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(thickness = 10.dp, color = MaterialTheme.colorScheme.background)
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("計入總額", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 Switch(includeNet, { includeNet = it }, colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary, checkedThumbColor = Color.White))
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(Modifier.fillMaxWidth().clickable { archived = !archived }.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().clickable { archived = !archived }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("顯示／隱藏", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 Icon(if (archived) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, if (archived) "已隱藏" else "顯示中",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -384,11 +384,11 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).height(52.dp),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-            ) { Text("儲存", fontSize = 17.sp) }
+            ) { Text("儲存", fontSize = 15.sp) }
             if (original != null && name.isNotBlank()) Text(
                 "修改「目前餘額」會自動調整期初餘額，不會新增或改動任何交易。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp).background(MaterialTheme.colorScheme.surface),
+                modifier = Modifier.padding(horizontal = 16.dp).background(MaterialTheme.colorScheme.surface),
             )
         }
     }

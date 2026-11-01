@@ -48,7 +48,7 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
     var dialog by remember { mutableStateOf(0) }
     val gray = MaterialTheme.colorScheme.onSurfaceVariant
     Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 16.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 11.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (info == null) {
@@ -64,7 +64,7 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(if (info.lent) "借出給" else "向其借入", fontSize = 13.sp, color = gray)
-                    Text(info.counterparty.ifBlank { acc.name }, fontSize = 17.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(info.counterparty.ifBlank { acc.name }, fontSize = 15.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
                 Surface(
                     color = if (l.outstanding == 0L) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,

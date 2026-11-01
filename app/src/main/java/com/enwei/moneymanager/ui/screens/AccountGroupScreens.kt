@@ -48,8 +48,8 @@ import com.enwei.moneymanager.ui.components.Symbols
 @Composable
 private fun GroupHeader(title: String) {
     Text(
-        title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp,
-        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 20.dp, top = 22.dp, bottom = 8.dp),
+        title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp,
+        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, top = 14.dp, bottom = 8.dp),
     )
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
@@ -73,11 +73,11 @@ fun AccountSettingsScreen(nav: NavController) {
                 list.forEach { a ->
                     Row(
                         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("account/${a.id}") }
-                            .padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 14.dp),
+                            .padding(start = 16.dp, end = 12.dp, top = 14.dp, bottom = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            a.name + if (a.archived) "（隱藏）" else "", Modifier.weight(1f), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            a.name + if (a.archived) "（隱藏）" else "", Modifier.weight(1f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             color = if (a.archived) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                         )
                         Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)

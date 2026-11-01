@@ -187,12 +187,12 @@ private val tabs = listOf(
 private fun BottomTabs(current: String?, onSelect: (String) -> Unit) {
     Column(Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Row(Modifier.fillMaxWidth().navigationBarsPadding().height(60.dp)) {
+        Row(Modifier.fillMaxWidth().navigationBarsPadding().height(56.dp)) {
             tabs.forEach { t ->
                 val sel = current == t.route
                 val color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 Column(
-                    Modifier.weight(1f).height(60.dp).clickable(
+                    Modifier.weight(1f).height(56.dp).clickable(
                         interactionSource = remember { MutableInteractionSource() }, indication = null,
                     ) { onSelect(t.route) },
                     horizontalAlignment = Alignment.CenterHorizontally,

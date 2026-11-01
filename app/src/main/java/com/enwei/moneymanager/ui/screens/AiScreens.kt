@@ -80,7 +80,7 @@ fun AiSettingsScreen(nav: NavController) {
 
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("模型自動分工", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("模型自動分工", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Text(
                         "App 會依工作類型與資料量選擇 Groq 或 Gemini，並在額度不足或模型無回應時改用其他可用模型。",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -100,7 +100,7 @@ fun AiSettingsScreen(nav: NavController) {
 private fun SwitchRow(title: String, desc: String, on: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 16.sp)
+            Text(title, fontSize = 14.sp)
             Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(on, onChange, enabled = enabled)
@@ -117,7 +117,7 @@ private fun ProviderCard(
     var testing by remember { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(p.label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(p.label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(
                 k, { k = it; onKey(it) }, label = { Text("${p.label} API 金鑰") }, singleLine = true,

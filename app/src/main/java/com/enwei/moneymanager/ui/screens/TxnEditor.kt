@@ -294,7 +294,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     Column {
                         Text(
                             (if (currency != lk.base) Money.symbolOf(currency) else "") + expr,
-                            fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface,
                         )
                         if (Calculator.hasOperator(expr)) Calculator.evaluate(expr)?.let {
                             Text("= ${Calculator.format(it)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -307,7 +307,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 }
                 if (type == TxnType.TRANSFER && showFee) {
                     FormRow("手續費", color, panel == Panel.FEE, onClick = { focusManager.clearFocus(); panel = Panel.FEE }) {
-                        Text(feeExpr, fontSize = 16.sp)
+                        Text(feeExpr, fontSize = 14.sp)
                     }
                 }
                 if (type == TxnType.TRANSFER) {
@@ -477,7 +477,7 @@ private fun FormRow(
     trailing: (@Composable () -> Unit)? = null, content: @Composable () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 20.dp, end = 16.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 16.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // 英文標籤（Category、Account）較長，欄寬加大並保持一行
@@ -506,7 +506,7 @@ private fun PlaceholderText(value: String?, placeholder: String) {
 private fun UnderlineField(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier, singleLine: Boolean = true) {
     BasicTextField(
         value = value, onValueChange = onChange, singleLine = singleLine,
-        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp),
+        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         modifier = modifier.fillMaxWidth(),
         decorationBox = { inner ->
@@ -530,12 +530,12 @@ private fun BottomPanel(
 ) {
     var currencyMenu by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).navigationBarsPadding()) {
-        Row(Modifier.fillMaxWidth().background(PanelHeader).height(52.dp).padding(start = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().background(PanelHeader).height(46.dp).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 when (panel) {
                     Panel.AMOUNT -> "金額"; Panel.FEE -> "手續費"; Panel.CATEGORY -> "分類"; Panel.TO_ACCOUNT -> "轉入帳戶"; else -> "帳戶"
                 },
-                color = Color.White, fontSize = 17.sp, modifier = Modifier.weight(1f),
+                color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f),
             )
             when (panel) {
                 Panel.AMOUNT, Panel.FEE -> Box {
@@ -569,7 +569,7 @@ private fun BottomPanel(
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     BasicTextField(
                         query, { query = it }, singleLine = true,
-                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp),
+                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         modifier = Modifier.weight(1f),
                         decorationBox = { inner ->
@@ -580,7 +580,7 @@ private fun BottomPanel(
                             ) {
                                 Icon(Icons.Outlined.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Box { if (query.isEmpty()) Text("搜尋分類", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp); inner() }
+                                Box { if (query.isEmpty()) Text("搜尋分類", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp); inner() }
                             }
                         },
                     )
@@ -599,7 +599,7 @@ private fun BottomPanel(
                     LazyColumn(Modifier.fillMaxWidth().height(280.dp)) {
                         if (hits.isEmpty()) item { Text("找不到「$q」", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp)) }
                         items(hits, key = { "q${it.id}" }) { c ->
-                            Row(Modifier.fillMaxWidth().height(50.dp).clickable { onCategory(c.id) }.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.fillMaxWidth().height(44.dp).clickable { onCategory(c.id) }.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text(lk.catLabel(c.id) ?: c.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     color = if (c.id == selectedCategory) MaterialTheme.colorScheme.primary else Color.Unspecified)
                             }
@@ -615,7 +615,7 @@ private fun BottomPanel(
                                 val hasSub = lk.children(c.id).isNotEmpty()
                                 val sel = c.id == openParent || (c.id == selectedCategory)
                                 Row(
-                                    Modifier.fillMaxWidth().height(50.dp)
+                                    Modifier.fillMaxWidth().height(44.dp)
                                         .background(if (sel) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
                                         .clickable { if (hasSub) openParent = c.id else onCategory(c.id) }
                                         .padding(horizontal = 16.dp),
@@ -632,7 +632,7 @@ private fun BottomPanel(
                         LazyColumn(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceVariant)) {
                             items(subs, key = { it.id }) { c ->
                                 Row(
-                                    Modifier.fillMaxWidth().height(50.dp).clickable { onCategory(c.id) }.padding(horizontal = 16.dp),
+                                    Modifier.fillMaxWidth().height(44.dp).clickable { onCategory(c.id) }.padding(horizontal = 16.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(c.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -650,7 +650,7 @@ private fun BottomPanel(
                     items(accs, key = { it.id }) { a ->
                         val sel = a.id == selectedAccount
                         Box(
-                            Modifier.height(56.dp).background(if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+                            Modifier.height(50.dp).background(if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
                                 .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant).clickable { onAccount(a) }.padding(4.dp),
                             contentAlignment = Alignment.Center,
                         ) { Text(a.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }

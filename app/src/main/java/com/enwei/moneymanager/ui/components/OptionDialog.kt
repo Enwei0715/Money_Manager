@@ -37,23 +37,23 @@ fun <T> OptionDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
             Column {
-                Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, Modifier.weight(1f), fontSize = 19.sp)
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, Modifier.weight(1f), fontSize = 17.sp)
                     IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "關閉") }
                 }
                 if (description != null) Text(
-                    description, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 16.dp),
+                    description, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
                 ) else androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 LazyColumn(Modifier.heightIn(max = 420.dp)) {
                     itemsIndexed(options) { i, (v, label) ->
                         val sel = v == selected
                         Row(
-                            Modifier.fillMaxWidth().clickable { onPick(v); onDismiss() }.padding(horizontal = 24.dp, vertical = 15.dp),
+                            Modifier.fillMaxWidth().clickable { onPick(v); onDismiss() }.padding(horizontal = 16.dp, vertical = 11.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(label, Modifier.weight(1f), fontSize = 16.sp,
+                            Text(label, Modifier.weight(1f), fontSize = 14.sp,
                                 color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                             if (sel) Icon(Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.primary)
                         }

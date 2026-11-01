@@ -158,7 +158,7 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                         val today = java.time.Instant.ofEpochMilli(it.createdAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate() == java.time.LocalDate.now()
                         (if (old) "歷史報告 · " else if (today) "今日報告 · " else "報告 · ") + fmt.format(java.util.Date(it.createdAt))
                     } ?: "還沒有報告",
-                    fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
                 )
                 if (GroqAi.enabled && !old) OutlinedButton(enabled = job?.running != true && reportWork?.running != true, onClick = {
                     com.enwei.moneymanager.work.ReportJob.start(ctx)
@@ -220,7 +220,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         if (r.summary.isNotBlank()) CitedText(r.summary, r.cites, newsById)
     }
     if (r.picks.isNotEmpty()) {
-        Text("今天可以考慮", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text("今天可以考慮", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         r.picks.forEach { PickCard(it, r.cites, newsById) { nav.navigate("stock/${it.symbol}") } }
     }
     if (r.keyNews.isNotEmpty()) Section("一定要看的新聞（${r.keyNews.size}）", collapsible = true) {
@@ -318,7 +318,7 @@ fun PickCard(
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${p.symbol} ${p.name}", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text("${p.symbol} ${p.name}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 if (p.style.isNotBlank()) Tag(p.style, MaterialTheme.colorScheme.secondaryContainer)
                 if (p.strength.isNotBlank()) Tag(
                     p.strength,
@@ -756,7 +756,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             if (stats.important.isNotEmpty() && !anyFilter) item {
                 Section("重點新聞（${stats.important.size}）", collapsible = true, initiallyOpen = false) { stats.important.forEach { NewsLine(it) } }
             }
-            if (!anyFilter) item { Text("全部新聞", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+            if (!anyFilter) item { Text("全部新聞", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
             if (filteredOrNull == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             else if (filtered.isEmpty()) item { Text("沒有符合條件的新聞", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(filtered.take(shown), key = { "n" + it.id }) { n ->
@@ -862,7 +862,7 @@ private fun PlanTab(nav: NavController) {
         if (s != null) Section("大盤") {
             s.index?.let { b ->
                 val c = b.close
-                Text("加權指數 ${"%,.0f".format(c.last())}" + (Technicals.change(c, 5)?.let { "　5 日 ${"%+.1f".format(it)}%" } ?: ""), fontSize = 16.sp)
+                Text("加權指數 ${"%,.0f".format(c.last())}" + (Technicals.change(c, 5)?.let { "　5 日 ${"%+.1f".format(it)}%" } ?: ""), fontSize = 14.sp)
             }
             StageChip(s.indexStage.label, s.indexStage.hint)
             if (s.sox != null) Text("費城半導體：${s.soxStage.label}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -893,7 +893,7 @@ private fun PlanTab(nav: NavController) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         "${h.symbol} ${h.name.orEmpty()}",
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         maxLines = 1,
                         modifier = Modifier.fillMaxWidth().clickable { nav.navigate("stock/${h.symbol}") },
                     )
@@ -950,7 +950,7 @@ private fun GuardRow(h: com.enwei.moneymanager.data.HoldingPlan, nav: NavControl
     var open by rememberSaveable(h.symbol) { mutableStateOf(g?.triggered == true) }
     Column(Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${h.symbol} ${h.name.orEmpty()}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("${h.symbol} ${h.name.orEmpty()}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             if (g != null) Surface(
                 color = if (g.triggered) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
                 shape = RoundedCornerShape(4.dp),
@@ -1051,7 +1051,7 @@ private fun Section(
                 (if (collapsible) Modifier.clickable { open = !open } else Modifier).fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 action?.let { (l, f) -> TextButton(onClick = f) { Text(l) } }
                 if (collapsible) Icon(
                     if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,

@@ -122,7 +122,7 @@ fun ReviewContent(
             }
             val d = data ?: return@Column
             // 交易頁上方已顯示期間，避免重複顯示年月或季度。
-            if (period == null) Text(d.title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            if (period == null) Text(d.title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
 
             // ① 總覽
             Card(Modifier.fillMaxWidth()) {
@@ -161,7 +161,7 @@ fun ReviewContent(
             if (span == ReviewSpan.MONTH && settings.budgets.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("預算", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text("預算", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         TextButton(onClick = { nav.navigate("budget") }) { Text("設定") }
                     }
                     settings.budgets.entries.sortedBy { it.key }.forEach { (cid, budget) ->
@@ -174,7 +174,7 @@ fun ReviewContent(
             // ② 支出結構
             if (d.categories.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("支出結構", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("支出結構", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     val maxV = d.categories.maxOf { it.amount }.coerceAtLeast(1)
                     d.categories.take(8).forEach { c ->
                         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -210,7 +210,7 @@ fun ReviewContent(
             if (obs.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     var allObs by rememberSaveable { mutableStateOf(false) }
-                    Text("重點觀察", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("重點觀察", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     obs.take(if (allObs) obs.size else 3).forEach { Text("• $it", fontSize = 14.sp) }
                     if (obs.size > 3) TextButton(onClick = { allObs = !allObs }) { Text(if (allObs) "收起" else "還有 ${obs.size - 3} 項") }
                 }
@@ -220,7 +220,7 @@ fun ReviewContent(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("AI 檢討與建議", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text("AI 檢討與建議", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         val cached = settings.reviews[d.key]
                         if (GroqAi.enabled) OutlinedButton(
                             enabled = !reviewProgress.running && d.txnCount > 0,
@@ -247,7 +247,7 @@ fun ReviewContent(
             // ⑤ 最大幾筆
             if (d.top.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 12.dp)) {
-                    Text("最大幾筆支出", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp))
+                    Text("最大幾筆支出", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp))
                     d.top.take(5).forEach { t -> MmTxnRow(t, lk) { nav.navigate("txn/${t.id}") } }
                 }
             }
@@ -260,7 +260,7 @@ fun ReviewContent(
 private fun Stat(label: String, value: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
     Column(modifier) {
         Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontSize = 16.sp, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, fontSize = 14.sp, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -277,10 +277,10 @@ private fun AiReviewBody(
             else -> ExpenseColor
         }
         Box(Modifier.size(52.dp).background(c.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
-            Text("${r.score}", fontSize = 20.sp, color = c, fontWeight = FontWeight.Bold)
+            Text("${r.score}", fontSize = 18.sp, color = c, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(12.dp))
-        Text(r.headline, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Text(r.headline, fontSize = 14.sp, modifier = Modifier.weight(1f))
     }
     // 每一段像資料夾：點標題展開／收起（預設展開「想跟你確認的幾筆」與「行動建議」，其他收起）
     @Composable

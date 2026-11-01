@@ -110,7 +110,7 @@ fun balanceBefore(
 @Composable
 private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {}) {
     Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 20.dp, end = 16.dp, top = 24.dp, bottom = 10.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
         Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
@@ -184,7 +184,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
             indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[section]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
         ) {
             listOf("帳戶", "股票", "助理").forEachIndexed { i, t ->
-                Tab(section == i, { section = i }, text = { Text(t, fontSize = 16.sp) },
+                Tab(section == i, { section = i }, text = { Text(t, fontSize = 14.sp) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -236,7 +236,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                         val outst = list.sumOf { cards[it.account.id]?.outstanding ?: 0 }
                         Column(
                             Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
-                                .padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
+                                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 10.dp),
                         ) {
                             Text(st.groupLabel(type), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                             Column(Modifier.padding(top = 8.dp)) {
@@ -257,7 +257,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                         Column(
                             Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
                                 .clickable { nav.navigate("acct/${b.account.id}") }
-                                .padding(horizontal = 20.dp, vertical = 12.dp),
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -330,7 +330,7 @@ private fun AccountLine(
     right: @Composable RowScope.() -> Unit,
 ) {
     Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = if (sub != null || note != null) 12.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = if (sub != null || note != null) 12.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(name, style = MaterialTheme.typography.bodyLarge)
                 if (!sub.isNullOrEmpty()) Text(sub, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -454,16 +454,16 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                     indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
                 ) {
                     detailTabs.forEachIndexed { i, t ->
-                        Tab(tab == i, { tab = i }, text = { Text(t, fontSize = 16.sp) },
+                        Tab(tab == i, { tab = i }, text = { Text(t, fontSize = 14.sp) },
                             selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("結算期間", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(if (tab == 2) "全部" else "${start.monthValue}.${start.dayOfMonth}.${start.year % 100} ~ ${end.monthValue}.${end.dayOfMonth}.${end.year % 100}",
-                            fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                            fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     }
                     IconButton(onClick = { reconcileOpen = true }) { Icon(Icons.Outlined.FactCheck, "對帳") }
                     IconButton(onClick = { chart = !chart }) {
@@ -487,10 +487,10 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 val open = list.filter { it.shares > 0 }
                 val cost = open.sumOf { Money.toMinor(it.netCost) }
                 val pnl = open.sumOf { Money.toMinor(it.unrealized) }
-                Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(horizontal = 20.dp, vertical = 12.dp)) {
+                Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("持股市值 ${Money.withSymbol(value)}", fontSize = 17.sp)
+                            Text("持股市值 ${Money.withSymbol(value)}", fontSize = 15.sp)
                             Text("原幣成本 ${Money.full(cost)} · 預估損益 ${Money.full(pnl)}", fontSize = 13.sp,
                                 color = if (pnl >= 0) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown)
                             Text("交割帳戶：${lk.account(acc.linkedAccountId)?.name ?: "未設定（按右上編輯）"}", fontSize = 13.sp,
@@ -509,10 +509,10 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
             }
             if (acc?.type == AccountType.CREDIT_CARD) item {
                 val st = cardInfo[acc.id]
-                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 20.dp, vertical = 12.dp),
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("應繳 ${Money.withSymbol(st?.payable ?: 0, acc.currency)}" + (st?.dueDate?.let { "　繳款日 ${it.monthValue}/${it.dayOfMonth}" } ?: ""), fontSize = 16.sp)
+                        Text("應繳 ${Money.withSymbol(st?.payable ?: 0, acc.currency)}" + (st?.dueDate?.let { "　繳款日 ${it.monthValue}/${it.dayOfMonth}" } ?: ""), fontSize = 14.sp)
                         Text("未出帳 ${Money.withSymbol(st?.outstanding ?: 0, acc.currency)}" + if (acc.creditLimit > 0) "　可用額度 ${Money.full(acc.creditLimit + current)}" else "",
                             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
@@ -578,7 +578,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         if (isBroker) Text(
                             "折線：現金＋持股市值　長條：存入／提出",
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     }
                 }
@@ -674,9 +674,9 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
 @Composable
 private fun PeriodRow(title: String, sub: String, deposit: Long, withdrawal: Long, balance: Long, onClick: () -> Unit) {
     Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -761,7 +761,7 @@ fun AccountOrderScreen(nav: NavController) {
                     }) { account, handle ->
                         Column {
                             Row(
-                                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 20.dp),
+                                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(Modifier.weight(1f).padding(vertical = 10.dp)) {

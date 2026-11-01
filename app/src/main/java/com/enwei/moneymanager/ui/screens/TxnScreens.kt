@@ -108,7 +108,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
             Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                 androidx.compose.foundation.text.BasicTextField(
                     q, { q = it }, singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp),
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     decorationBox = { inner ->
@@ -126,11 +126,11 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 if (showFilter) {
                     FormLine("期間", onClick = { pickRange = true }) {
-                        Text(if (from == null) "" else "$from ~ ${to ?: from}", fontSize = 16.sp)
+                        Text(if (from == null) "" else "$from ~ ${to ?: from}", fontSize = 14.sp)
                     }
                     FormLine("帳戶", onClick = { accMenu = true }) {
                         Box {
-                            Text(lk.account(accountId)?.name.orEmpty(), fontSize = 16.sp)
+                            Text(lk.account(accountId)?.name.orEmpty(), fontSize = 14.sp)
                             DropdownMenu(accMenu, { accMenu = false }) {
                                 DropdownMenuItem(text = { Text("全部") }, onClick = { accountId = null; accMenu = false })
                                 lk.accounts.forEach { a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { accountId = a.id; accMenu = false }) }
@@ -139,7 +139,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
                     }
                     FormLine("分類", onClick = { catMenu = true }) {
                         Box {
-                            Text(lk.category(categoryId)?.name.orEmpty(), fontSize = 16.sp)
+                            Text(lk.category(categoryId)?.name.orEmpty(), fontSize = 14.sp)
                             DropdownMenu(catMenu, { catMenu = false }) {
                                 DropdownMenuItem(text = { Text("全部") }, onClick = { categoryId = null; catMenu = false })
                                 lk.categories.forEach { c -> DropdownMenuItem(text = { Text("${c.kind.label}・${c.name}") }, onClick = { categoryId = c.id; catMenu = false }) }
@@ -260,7 +260,7 @@ private fun AiSuggestionSection(lk: Lookups) {
     if (!aiOn && open.isEmpty()) return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("AI 建議分類" + if (open.isNotEmpty()) "（${open.size}）" else "", fontSize = 17.sp, modifier = Modifier.weight(1f))
+            Text("AI 建議分類" + if (open.isNotEmpty()) "（${open.size}）" else "", fontSize = 15.sp, modifier = Modifier.weight(1f))
             if (open.size > 1) TextButton(onClick = { scope.launch { open.forEach { repo.acceptAiSuggestion(it) } } }) { Text("全部接受") }
         }
         if (aiOn && unknown > 0) {
@@ -316,7 +316,7 @@ private fun DuplicateSection(lk: Lookups) {
     }
     if (settings.aiTidyLog.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Text(
-            "AI 自動整理（${settings.aiTidyLog.size}）" + if (showLog) " ▴" else " ▾", fontSize = 15.sp,
+            "AI 自動整理（${settings.aiTidyLog.size}）" + if (showLog) " ▴" else " ▾", fontSize = 14.sp,
             color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.clickable { showLog = !showLog },
         )
         if (showLog) settings.aiTidyLog.take(10).forEach { Text("• $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -333,7 +333,7 @@ private fun DuplicateSection(lk: Lookups) {
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("可能重複的交易（${pairs.size}）", fontSize = 17.sp, modifier = Modifier.weight(1f))
+            Text("可能重複的交易（${pairs.size}）", fontSize = 15.sp, modifier = Modifier.weight(1f))
             val sure = pairs.filter { verdicts[it.key]?.same == true }
             if (sure.size > 1) TextButton(onClick = {
                 scope.launch { sure.forEach { p -> verdicts[p.key].let { v -> repo.mergeDuplicate(p, v?.name, v?.categoryId) } } }
@@ -348,7 +348,7 @@ private fun DuplicateSection(lk: Lookups) {
     pairs.forEach { p ->
         val v = verdicts[p.key]
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-            Text(com.enwei.moneymanager.core.Money.withSymbol(p.keep.amount, p.keep.currency) + " · ${p.keep.type.label}", fontSize = 15.sp)
+            Text(com.enwei.moneymanager.core.Money.withSymbol(p.keep.amount, p.keep.currency) + " · ${p.keep.type.label}", fontSize = 14.sp)
             Text("保留：${line(p.keep)}", fontSize = 13.sp)
             Text("刪除：${line(p.drop)}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (v != null) Text(

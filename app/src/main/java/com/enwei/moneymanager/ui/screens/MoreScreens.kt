@@ -180,7 +180,7 @@ fun MoreScreen(nav: NavController) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(t.icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                        Text(t.label, fontSize = 15.sp, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                        Text(t.label, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(start = 12.dp))
                         Text("＋ 加入", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -207,7 +207,7 @@ private fun ToolTile(
             if (wide) Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(t.icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(30.dp))
                 Column(Modifier.padding(start = 10.dp)) {
-                    Text(t.label, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
+                    Text(t.label, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
                     Text(summary ?: "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                 }
             } else Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -461,7 +461,7 @@ fun NotificationSettingsScreen(nav: NavController) {
             item {
                 Row(Modifier.fillMaxWidth().clickable { showTests = !showTests }, verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { SectionTitle("測試通知辨識") }
-                    Text(if (showTests) "▴" else "▾", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 20.dp))
+                    Text(if (showTests) "▴" else "▾", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 16.dp))
                 }
             }
             if (showTests) {
