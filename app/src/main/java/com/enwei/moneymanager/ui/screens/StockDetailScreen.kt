@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -73,17 +76,19 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     var index by remember { mutableStateOf<DailyBars?>(null) }
     var loading by remember { mutableStateOf(true) }
     // K 線：日 K／60 分 K，可雙指縮放（看的 K 棒數）與左右拖曳（往回看）
-    var hourly by remember { mutableStateOf(false) }
+    // K 線的設定（日／60 分、看幾根、均線、布林、副圖）會記住，換一檔股票或下次打開都一樣
+    var hourly by remember { mutableStateOf(KlinePrefs.hourly) }
     var hourBars by remember { mutableStateOf<DailyBars?>(null) }
-    var count by remember { mutableStateOf(120f) }
+    var count by remember { mutableStateOf(KlinePrefs.count(hourly)) }
     var back by remember { mutableStateOf(0f) }
-    var mas by remember { mutableStateOf(setOf(5, 20, 72)) }
+    var mas by remember { mutableStateOf(KlinePrefs.mas(hourly)) }
     var picked by remember(hourly) { mutableStateOf<Int?>(null) }
     var business by remember { mutableStateOf<String?>(null) }
     var news by remember { mutableStateOf<List<NewsItem>>(emptyList()) }
     var divs by remember { mutableStateOf<List<com.enwei.moneymanager.core.DividendEvent>>(emptyList()) }
-    var indicator by remember { mutableStateOf(0) }
-    var showBB by remember { mutableStateOf(false) }
+    var indicator by remember { mutableStateOf(KlinePrefs.indicator) }
+    var showBB by remember { mutableStateOf(KlinePrefs.bb) }
+    LaunchedEffect(hourly, count, mas, indicator, showBB) { KlinePrefs.save(hourly, count, mas, indicator, showBB) }
     val trades by repo.trades.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     LaunchedEffect(symbol) {
@@ -171,8 +176,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            FilterChip(!hourly, { hourly = false; count = 120f; back = 0f; mas = setOf(5, 20, 72) }, label = { Text("日 K") })
-                            FilterChip(hourly, { hourly = true; count = 50f; back = 0f; mas = setOf(20, 50) }, label = { Text("60 分 K") })
+                            FilterChip(!hourly, { hourly = false; count = KlinePrefs.count(false); back = 0f; mas = KlinePrefs.mas(false) }, label = { Text("日 K") })
+                            FilterChip(hourly, { hourly = true; count = KlinePrefs.count(true); back = 0f; mas = KlinePrefs.mas(true) }, label = { Text("60 分 K") })
                             (if (hourly) listOf(25 to "5 天", 50 to "10 天", 100 to "1 個月") else listOf(60 to "3 個月", 120 to "6 個月", 250 to "1 年"))
                                 .forEach { (n, l) -> FilterChip(count.toInt() == n && back < 1f, { count = n.toFloat(); back = 0f }, label = { Text(l) }) }
                         }
@@ -226,16 +231,20 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("強弱", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         val stage = Technicals.stage(c)
-                        Text("走勢：${stage.label}（${stage.hint}）", fontSize = 14.sp)
+                        Text("${stage.label}　${stage.hint}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         val idx = index?.close
-                        listOf(20, 60).forEach { d ->
-                            val s = Technicals.change(c, d)
-                            val i = idx?.let { Technicals.change(it, d) }
-                            if (s != null) Text(
-                                "$d 日漲跌 ${"%+.1f".format(s)}%" + (i?.let { "，大盤 ${"%+.1f".format(it)}% → " + if (s - it >= 3) "強於大盤" else if (s - it <= -3) "弱於大盤" else "與大盤相當" } ?: ""),
-                                fontSize = 14.sp, color = if (i != null && s - i >= 3) StockUp else if (i != null && s - i <= -3) StockDown else Color.Unspecified,
-                            )
-                        }
+                        // 個股與大盤近 60 日走勢（以 60 日前為 0%）
+                        RelativeChart(c, idx)
+                        // 20 日、60 日漲跌：個股與大盤並排
+                        com.enwei.moneymanager.ui.components.SignedBars(
+                            "漲跌比較（%）",
+                            listOf(20, 60).flatMap { d ->
+                                listOfNotNull(
+                                    Technicals.change(c, d)?.let { Triple("$d 日 個股", it, "%+.1f%%".format(it)) },
+                                    idx?.let { Technicals.change(it, d) }?.let { Triple("$d 日 大盤", it, "%+.1f%%".format(it)) },
+                                )
+                            },
+                        )
                     }
                 }
                 if (held.isNotEmpty() && settings.investPlan.disciplineOn) Card(Modifier.fillMaxWidth()) {
@@ -247,7 +256,15 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         val style = settings.styleOf(symbol)
                         val ad = Discipline.advise(style, avg, last, peak, settings.investPlan.rule())
                         Text("我的持股（${style.label}）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        Text("${"%.0f".format(shares)} 股 · 均價 ${"%.2f".format(avg)} · 損益 ${"%+.1f".format((last / avg - 1) * 100)}% · 買進後最高 ${"%.2f".format(peak)}", fontSize = 14.sp)
+                        Text("${"%.0f".format(shares)} 股 · 損益 ${"%+.1f".format((last / avg - 1) * 100)}%", fontSize = 14.sp,
+                            color = if (last >= avg) StockUp else StockDown)
+                        // 價位圖：均價、現價、買進後最高與停利／減碼／提醒價的相對位置
+                        PriceLadder(buildList {
+                            add(Triple("均價", avg, Color(0xFF607D8B)))
+                            add(Triple("現價", last, if (last >= avg) StockUp else StockDown))
+                            add(Triple("買進後最高", peak, Color(0xFFFFA000)))
+                            levels.filter { it.third != "均價" }.forEach { add(Triple(it.third, it.first, it.second)) }
+                        })
                         if (!settings.investPlan.guardOn) Text("${ad.action}：${ad.note}", fontSize = 14.sp, color = if (ad.triggered) MaterialTheme.colorScheme.error else Color.Unspecified)
                         if (settings.investPlan.guardOn) {
                             // 保本＋移動停利（60 分 K 均線在「資金與紀律」頁一起看）
@@ -281,10 +298,19 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     divs.filter { it.exEpochDay > today }.forEach { e ->
                         Text("即將除權息：${java.time.LocalDate.ofEpochDay(e.exEpochDay)}（${e.exEpochDay - today} 天後）", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                     }
-                    // 歷年除權息：先看最近 3 次，點開看更多
+                    // 歷年現金股利長條圖（舊到新）
+                    com.enwei.moneymanager.ui.components.LabeledBars(
+                        "歷年現金股利（元／股）",
+                        divs.filter { it.perShare > 0 }.sortedByDescending { it.exEpochDay }.take(8).reversed().map { e ->
+                            val dt = java.time.LocalDate.ofEpochDay(e.exEpochDay)
+                            Triple("${dt.year}/${dt.monthValue}", (e.perShare * 10_000).toLong(), "%.2f".format(e.perShare))
+                        },
+                        MaterialTheme.colorScheme.primary,
+                    )
+                    // 明細：點開才看
                     var allDivs by remember { mutableStateOf(false) }
                     val divList = divs.sortedByDescending { it.exEpochDay }
-                    divList.take(if (allDivs) 20 else 3).forEach { e ->
+                    divList.take(if (allDivs) 20 else 0).forEach { e ->
                         Row {
                             Text(java.time.LocalDate.ofEpochDay(e.exEpochDay).toString(), fontSize = 13.sp, modifier = Modifier.weight(1f))
                             Text(listOfNotNull(
@@ -293,7 +319,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             ).joinToString("、"), fontSize = 13.sp)
                         }
                     }
-                    if (divList.size > 3) TextButton(onClick = { allDivs = !allDivs }) { Text(if (allDivs) "收起" else "歷年除權息（${minOf(divList.size, 20)} 次）") }
+                    if (divList.isNotEmpty()) TextButton(onClick = { allDivs = !allDivs }) { Text(if (allDivs) "收起明細" else "除權息明細（${minOf(divList.size, 20)} 次）") }
                     val mine = trades.filter { it.market == Market.TW && it.symbol.equals(symbol, true) && it.side == com.enwei.moneymanager.core.StockSide.CASH_DIVIDEND }
                     if (mine.isNotEmpty()) Text("我已領現金股利 ${"%,.0f".format(mine.sumOf { it.cashAmount })} 元（${mine.map { it.date }.distinct().size} 次）", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                 }
@@ -584,6 +610,90 @@ private fun indicatorText(b: DailyBars, kind: Int): String {
                 k.last() <= 20 -> "（低檔）"
                 else -> ""
             } + if (k.size >= 2 && k[k.size - 2] < d[d.size - 2] && k.last() >= d.last()) "，K 向上穿越 D" else ""
+        }
+    }
+}
+
+
+/** K 線設定的記憶（存在 App 的偏好設定）。 */
+private object KlinePrefs {
+    private val p by lazy { MoneyApp.instance.getSharedPreferences("kline", android.content.Context.MODE_PRIVATE) }
+    val hourly get() = p.getBoolean("hourly", false)
+    val indicator get() = p.getInt("indicator", 0)
+    val bb get() = p.getBoolean("bb", false)
+    fun count(hourly: Boolean) = p.getFloat(if (hourly) "countH" else "countD", if (hourly) 50f else 120f)
+    fun mas(hourly: Boolean): Set<Int> = p.getString(if (hourly) "masH" else "masD", null)?.split(',')?.mapNotNull { it.toIntOrNull() }?.toSet()
+        ?: if (hourly) setOf(20, 50) else setOf(5, 20, 72)
+    fun save(hourly: Boolean, count: Float, mas: Set<Int>, indicator: Int, bb: Boolean) {
+        p.edit().putBoolean("hourly", hourly).putFloat(if (hourly) "countH" else "countD", count)
+            .putString(if (hourly) "masH" else "masD", mas.joinToString(",")).putInt("indicator", indicator).putBoolean("bb", bb).apply()
+    }
+}
+
+/** 個股與大盤近 [days] 日走勢比較（以第一天為 0%）。 */
+@Composable
+private fun RelativeChart(stock: List<Double>, index: List<Double>?, days: Int = 60) {
+    val s = stock.takeLast(days)
+    if (s.size < 2 || s.first() <= 0) return
+    val sp = s.map { (it / s.first() - 1) * 100 }
+    val ip = index?.takeLast(days)?.takeIf { it.size >= 2 && it.first() > 0 }?.let { l -> l.map { (it / l.first() - 1) * 100 } }
+    val grid = MaterialTheme.colorScheme.outlineVariant
+    val idxColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val sc = if (sp.last() >= 0) StockUp else StockDown
+    Column {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(110.dp).padding(vertical = 4.dp)) {
+            val all = sp + ip.orEmpty()
+            val hi = maxOf(all.max(), 0.0); val lo = minOf(all.min(), 0.0)
+            val span = (hi - lo).takeIf { it > 0 } ?: 1.0
+            fun y(v: Double) = ((hi - v) / span * size.height).toFloat()
+            drawLine(grid, androidx.compose.ui.geometry.Offset(0f, y(0.0)), androidx.compose.ui.geometry.Offset(size.width, y(0.0)), 1f,
+                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
+            fun line(v: List<Double>, color: Color, w: Float) {
+                val step = size.width / (v.size - 1)
+                for (i in 1 until v.size) drawLine(color, androidx.compose.ui.geometry.Offset(step * (i - 1), y(v[i - 1])), androidx.compose.ui.geometry.Offset(step * i, y(v[i])), w)
+            }
+            ip?.let { line(it, idxColor, 2f) }
+            line(sp, sc, 3.5f)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(12.dp).height(3.dp).background(sc))
+            Text(" 個股 ${"%+.1f".format(sp.last())}%　", fontSize = 11.sp)
+            if (ip != null) {
+                Box(Modifier.width(12.dp).height(3.dp).background(idxColor))
+                Text(" 大盤 ${"%+.1f".format(ip.last())}%", fontSize = 11.sp)
+            }
+            Spacer(Modifier.weight(1f))
+            Text("近 ${s.size} 個交易日", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** 價位圖：把幾個價位畫在同一條軸上，看出現價離均價、高點、停利／停損多遠。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun PriceLadder(points: List<Triple<String, Double, Color>>) {
+    val pts = points.filter { it.second > 0 }
+    if (pts.size < 2) return
+    val lo = pts.minOf { it.second } * 0.97
+    val hi = pts.maxOf { it.second } * 1.03
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(22.dp)) {
+            val cy = size.height / 2
+            drawLine(track, androidx.compose.ui.geometry.Offset(0f, cy), androidx.compose.ui.geometry.Offset(size.width, cy), 6f)
+            pts.forEach { (_, v, col) ->
+                val x = ((v - lo) / (hi - lo) * size.width).toFloat()
+                drawCircle(col, 7f, androidx.compose.ui.geometry.Offset(x, cy))
+                drawLine(col, androidx.compose.ui.geometry.Offset(x, cy - 10f), androidx.compose.ui.geometry.Offset(x, cy + 10f), 2f)
+            }
+        }
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            pts.sortedBy { it.second }.forEach { (label, v, col) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).background(col, androidx.compose.foundation.shape.CircleShape))
+                    Text(" $label ${"%.2f".format(v)}", fontSize = 11.sp)
+                }
+            }
         }
     }
 }
