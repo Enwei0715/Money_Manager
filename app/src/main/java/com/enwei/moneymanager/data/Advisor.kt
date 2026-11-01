@@ -83,8 +83,14 @@ object BarCache {
     suspend fun get(symbol: String, range: String, interval: String = "1d"): DailyBars? {
         val key = "$symbol:$range:$interval"
         val ttl = if (interval == "1d") 30 * 60_000 else 10 * 60_000
-        map[key]?.takeIf { System.currentTimeMillis() - it.first < ttl }?.let { return it.second }
-        val b = runCatching { InvestData.bars(symbol, range, interval = interval) }.getOrNull()
+        map[key]?.takeIf { System.currentTimeMillis() - it.first < ttl && it.second != null }?.let { return it.second }
+        val first = runCatching { InvestData.bars(symbol, range, interval = interval) }.getOrNull()
+        // 讀不到或天數太少（判斷大盤階段至少要 65 天）：換更長的期間再試一次
+        val longer = if (interval == "1d" && (first == null || first.close.size < 65) && range != "2y")
+            runCatching { InvestData.bars(symbol, "2y", interval = interval) }.getOrNull() else null
+        val b = if (longer != null && longer.close.size > (first?.close?.size ?: 0)) longer else first
+        // 失敗時不把空結果存起來（之前會讓「資料不足」持續 30 分鐘），沿用上一次讀到的資料
+        if (b == null) return map[key]?.second
         map[key] = System.currentTimeMillis() to b
         return b
     }

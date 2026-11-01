@@ -998,6 +998,7 @@ private fun ChipRow(label: String, content: @Composable () -> Unit) {
 }
 
 /** 資金與紀律：大盤階段、資金分配、持股動態停損與交易紀律。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun PlanTab(nav: NavController) {
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
@@ -1029,7 +1030,7 @@ private fun PlanTab(nav: NavController) {
             Row(Modifier.fillMaxWidth().height(16.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))) {
                 parts.forEach { (_, v, c) -> Box(Modifier.weight((v.toFloat() / total).coerceAtLeast(0.01f)).height(16.dp).background(c)) }
             }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 parts.forEach { (n, v, c) ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(8.dp).background(c, RoundedCornerShape(4.dp)))
@@ -1439,11 +1440,12 @@ private fun ThemeBars(rows: List<Pair<com.enwei.moneymanager.data.TopicStat, Lis
 /** 今日報告裡 AI 對這檔的動作。 */
 @Composable
 private fun AiHoldLine(a: com.enwei.moneymanager.data.AdvisorHolding) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
+    Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(bottom = 4.dp)) {
         Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
-            Text("AI：${a.action}", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+            Text("AI：${a.action}", fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
         }
-        Text("  " + com.enwei.moneymanager.data.stripCites(a.reason), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+        Text(com.enwei.moneymanager.data.stripCites(a.reason), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp, top = 2.dp))
     }
 }
 
@@ -1479,8 +1481,9 @@ private fun HoldingCard(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwe
             Surface(
                 color = if (ad.triggered) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
                 shape = RoundedCornerShape(4.dp),
-            ) { Text("紀律：${ad.action}", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
-            Text("  ${ad.note}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            ) { Text("紀律：${ad.action}", fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+            Text(ad.note, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp))
         }
         ai?.let { AiHoldLine(it) }
     }
