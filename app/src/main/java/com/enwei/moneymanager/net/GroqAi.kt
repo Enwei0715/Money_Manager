@@ -619,13 +619,13 @@ object GroqAi {
         val system = tone().review + "請逐筆讀使用者的交易，" +
             "從多個角度整理（消費習慣與頻率、時段（深夜／週末）、分類趨勢與上期／去年比較、固定支出），所有結論都要引用資料裡的數字或交易，不可編造。" +
             "每個建議都要具體可執行，並寫出大約能省多少，讓使用者自己決定。" +
-            "挑 3～5 筆（或一組）想跟使用者確認用途的交易，用交易編號；使用者已標記過的交易要尊重他的回答，不要再問同一筆。金額單位為 $base 元。" +
-            "App 會用圖表呈現分類比較與每日支出，文字只寫結論，不要重複列出圖表上的數字，每段都要短。" +
-            "只回 JSON：{\"score\": 0～100 整數, \"headline\": 20 字內總評, " +
-            "\"analysis\": [{\"title\": 角度名稱, \"text\": 35 字內分析}]（3～4 項）, \"good\": [1～2 點，各 20 字內], \"improve\": [1～2 點，各 25 字內], " +
+            "挑 2～3 筆（或一組）金額較大、用途不明的交易想跟使用者確認用途，用交易編號；使用者已標記過的交易要尊重他的回答，不要再問同一筆。金額單位為 $base 元。" +
+            "App 會用圖表呈現分類結構與每日支出。每個發現都必須有依據：basis 直接引用資料裡的數字、分類或交易（例如「訂閱 6,896，上月 1,818」），" +
+            "沒有資料支持的推測不要寫；不要寫空泛的口號（例如「平衡現金流」），建議要具體到分類、商家或金額。" +
+            "只回 JSON：{\"score\": 0～100 整數, \"headline\": 20 字內總評（含一個關鍵數字）, " +
+            "\"findings\": [{\"text\": 20 字內發現, \"basis\": 30 字內依據（資料裡的數字）, \"action\": 25 字內具體建議, \"saving\": 每月約可省金額整數或 null}]（2～4 點，依影響大小排序）, " +
             "\"questions\": [{\"t\": [交易編號], \"q\": 想確認的事（30 字內）, \"why\": 確認後能幫上什麼（25 字內）}], " +
-            "\"actions\": [{\"action\": 25 字內具體行動, \"saving\": 每月可省金額整數或 null}]（3 點）, " +
-            "\"expense_cap\": 下期支出上限整數, \"savings_target\": 下期儲蓄率數字, \"goals\": [1～3 項], " +
+            "\"expense_cap\": 下期支出上限整數（依前三期平均與這期結構推算）, \"savings_target\": 下期儲蓄率數字, " +
             "\"focus\": [圖表要標示、最值得注意的 1～3 個分類名稱，用資料裡的分類名]}"
         val r = chatJson(system, input, 1500, hard = true, cap = 4000, effort = "low", task = AiTask.REVIEW) ?: return null
         fun list(k: String) = (r[k] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.take(100) }.orEmpty()
@@ -649,6 +649,13 @@ object GroqAi {
             analysis = objs("analysis").mapNotNull { o -> o.str("title")?.let { t -> com.enwei.moneymanager.data.ReviewAngle(t.take(12), o.str("text")?.take(120).orEmpty()) } },
             questions = questions,
             focus = list("focus").take(3),
+            findings = objs("findings").mapNotNull { o ->
+                val t = o.str("text") ?: return@mapNotNull null
+                com.enwei.moneymanager.data.ReviewFinding(
+                    t.take(40), o.str("basis")?.take(60).orEmpty(), o.str("action")?.take(50).orEmpty(),
+                    o.str("saving")?.toDoubleOrNull()?.toLong()?.takeIf { it > 0 }?.times(100),
+                )
+            }.take(4),
         )
     }
 

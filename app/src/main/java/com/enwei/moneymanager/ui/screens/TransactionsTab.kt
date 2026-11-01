@@ -181,7 +181,6 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     fun step(n: Long) {
         month = when {
             yearly -> month.plusYears(n)
-            tab == 1 && calSpan == 1 -> month.plusMonths(3 * n)
             tab == 1 && calSpan == 2 -> month.plusYears(n)
             tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.QUARTER -> month.plusMonths(3 * n)
             tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> month.plusYears(n)
@@ -190,10 +189,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     }
     val startDay = settings.monthStartDay
 
-    val quarterStart = YearMonth.of(month.year, (month.monthValue - 1) / 3 * 3 + 1)
     val range = when {
         yearly || (tab == 1 && calSpan == 2) -> Periods.month(YearMonth.of(month.year, 1), startDay).first to Periods.month(YearMonth.of(month.year, 12), startDay).second
-        tab == 1 && calSpan == 1 -> Periods.month(quarterStart, startDay).first to Periods.month(quarterStart.plusMonths(2), startDay).second
         else -> Periods.month(month, startDay)
     }
     val inPeriod = remember(all, range) { all.filter { inRange(it.date.toLocalDate(), range) } }
@@ -214,7 +211,6 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         Text(
                             when {
                                 yearly -> "${month.year}"
-                                tab == 1 && calSpan == 1 -> "${month.year}年Q${(month.monthValue - 1) / 3 + 1}"
                                 tab == 1 && calSpan == 2 -> "${month.year}年"
                                 tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.QUARTER -> "${month.year}年Q${(month.monthValue - 1) / 3 + 1}"
                                 tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> "${month.year}年"
@@ -278,7 +274,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.weight(1f).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(2.dp)) {
-                        listOf("月", "季", "年").forEachIndexed { i, l ->
+                        // 季的檢視已移除：只留月與年
+                        listOf(0 to "月", 2 to "年").forEach { (i, l) ->
                             val sel = calSpan == i
                             Box(
                                 Modifier.weight(1f).background(if (sel) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(6.dp))
@@ -290,8 +287,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     Text("長按日期記一筆", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp))
                     }
                     when (calSpan) {
-                        0 -> CalendarView(range, all, accounts, settings, lk, nav, DayOfWeek.of(settings.weekStartDay), carry, settings.memos) { memoEditing = it }
-                        1 -> QuarterCalendar(quarterStart, all, lk, startDay, DayOfWeek.of(settings.weekStartDay)) { ym -> month = ym; calSpan = 0 }
+                        0, 1 -> CalendarView(range, all, accounts, settings, lk, nav, DayOfWeek.of(settings.weekStartDay), carry, settings.memos) { memoEditing = it }
                         else -> YearCalendar(month.year, all, lk, startDay) { ym -> month = ym; calSpan = 0 }
                     }
                 }
@@ -902,65 +898,6 @@ private fun dailyExpense(all: List<TxnEntity>, lk: Lookups, from: LocalDate, to:
 @Composable
 private fun heatColor(v: Long, max: Long): Color =
     if (v <= 0) Color.Transparent else ExpenseColor.copy(alpha = (0.12f + 0.6f * (v.toFloat() / max.coerceAtLeast(1))).coerceAtMost(0.72f))
-
-/**
- * 季日曆：三個月的小日曆上下排，每天的底色表示當天支出多寡，格子裡有日期與支出金額；
- * 每個月標題附收入、支出、合計，點月份或日期回到那個月的月曆。
- */
-@Composable
-private fun QuarterCalendar(start: YearMonth, all: List<TxnEntity>, lk: Lookups, startDay: Int, weekStart: DayOfWeek, onMonth: (YearMonth) -> Unit) {
-    val months = (0L..2L).map { start.plusMonths(it) }
-    val first = Periods.month(months.first(), startDay).first
-    val last = Periods.month(months.last(), startDay).second
-    val daily = remember(all, first, last) { dailyExpense(all, lk, first, last) }
-    val max = daily.values.maxOrNull() ?: 1L
-    val today = LocalDate.now()
-    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-        months.forEach { ym ->
-            val r = Periods.month(ym, startDay)
-            item(key = "q$ym") {
-                val t = totalsOf(all.filter { inRange(it.date.toLocalDate(), r) }, lk.fx)
-                Column(Modifier.fillMaxWidth().clickable { onMonth(ym) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${ym.monthValue}月", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        Text(Money.full(t.income), fontSize = 12.sp, color = IncomeColor)
-                        Text("  " + Money.full(t.expense), fontSize = 12.sp, color = ExpenseColor)
-                        Text("  " + Money.full(t.total), fontSize = 12.sp)
-                    }
-                    Row(Modifier.padding(top = 4.dp)) {
-                        (0 until 7).map { weekStart.plus(it.toLong()) }.forEach { d ->
-                            Text("週${Recurrence.weekdayName(d)}", Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 10.sp,
-                                color = weekdayColor(d, MaterialTheme.colorScheme.onSurfaceVariant))
-                        }
-                    }
-                    val gStart = r.first.with(TemporalAdjusters.previousOrSame(weekStart))
-                    val gEnd = r.second.with(TemporalAdjusters.nextOrSame(weekStart.minus(1)))
-                    val weeks = ((ChronoUnit.DAYS.between(gStart, gEnd) + 1) / 7).toInt()
-                    for (w in 0 until weeks) Row(Modifier.fillMaxWidth().height(40.dp)) {
-                        for (k in 0 until 7) {
-                            val d = gStart.plusDays((w * 7 + k).toLong())
-                            val inM = inRange(d, r)
-                            val v = if (inM) daily[d] ?: 0L else 0L
-                            Column(
-                                Modifier.weight(1f).fillMaxHeight().padding(1.dp)
-                                    .background(if (inM) heatColor(v, max) else Color.Transparent, RoundedCornerShape(4.dp))
-                                    .then(if (d == today) Modifier.border(1.dp, MaterialTheme.colorScheme.onSurface, RoundedCornerShape(4.dp)) else Modifier),
-                                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
-                            ) {
-                                if (inM) {
-                                    Text("${d.dayOfMonth}", fontSize = 11.sp, color = weekdayColor(d.dayOfWeek, MaterialTheme.colorScheme.onSurface))
-                                    if (v > 0) FitAmount(Money.full(v), MaterialTheme.colorScheme.onSurface)
-                                }
-                            }
-                        }
-                    }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-        }
-        item { Spacer(Modifier.height(88.dp)) }
-    }
-}
 
 /**
  * 年曆：12 個月的格子，每格有收入、支出、合計與每天支出的小熱度圖，點了進入該月月曆。

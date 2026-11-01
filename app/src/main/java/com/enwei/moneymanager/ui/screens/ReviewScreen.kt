@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -171,35 +173,17 @@ fun ReviewContent(
                 }
             }
 
-            // ② 支出結構
+            // ② 支出結構：一條比例條＋兩欄圖例（AI 建議留意的分類以 ● 標出）
             if (d.categories.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("支出結構", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    val maxV = d.categories.maxOf { it.amount }.coerceAtLeast(1)
-                    d.categories.take(8).forEach { c ->
-                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(c.name, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
-                                Text(m(c.amount), fontSize = 14.sp, maxLines = 1, softWrap = false)
-                                Text(
-                                    if (c.prev == 0L) "新" else "${if (c.change >= 0) "▲" else "▼"}${"%.0f".format(kotlin.math.abs(c.change) * 100.0 / c.prev)}%",
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    color = if (c.change > 0) ExpenseColor else IncomeColor,
-                                    modifier = Modifier.width(56.dp),
-                                )
-                            }
-                            Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
-                                Box(Modifier.fillMaxWidth(c.amount.toFloat() / maxV).height(6.dp).background(ExpenseColor.copy(alpha = 0.75f), RoundedCornerShape(3.dp)))
-                            }
-                        }
-                    }
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val focus = settings.reviews[d.key]?.focus.orEmpty()
+                    StructureCard(d, ::m, focus)
                 }
             }
 
             // ③ 重點觀察（規則）
-            val obs = d.observations(base) + buildList {
+            // 總覽已有儲蓄率、支出變化，這裡只放消費習慣（商家、小額累積、深夜、去年同期、你標的可省）
+            val obs = buildList {
                 d.merchants().take(3).takeIf { it.isNotEmpty() }?.let { ms -> add("花最多的商家：" + ms.joinToString("、") { "${it.name.take(10)} ${it.count} 次 ${m(it.total)}" }) }
                 d.habits().take(3).forEach { add("${it.name.take(10)} 這期 ${it.count} 次、共 ${m(it.total)}，小額但累積起來不少") }
                 d.lateNight().takeIf { it.size >= 3 }?.let { add("深夜（22 點後）消費 ${it.size} 筆、共 ${m(it.sumOf { t -> t.amount })}") }
@@ -210,7 +194,7 @@ fun ReviewContent(
             if (obs.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     var allObs by rememberSaveable { mutableStateOf(false) }
-                    Text("重點觀察", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("消費習慣（依交易紀錄）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     obs.take(if (allObs) obs.size else 3).forEach { Text("• $it", fontSize = 14.sp) }
                     if (obs.size > 3) TextButton(onClick = { allObs = !allObs }) { Text(if (allObs) "收起" else "還有 ${obs.size - 3} 項") }
                 }
@@ -283,14 +267,6 @@ private fun AiReviewBody(
         Text(r.headline, fontSize = 14.sp, modifier = Modifier.weight(1f))
     }
     // 圖表（用實際記帳資料畫；AI 只決定要標示哪幾個分類）
-    val focus = r.focus.filter { it.isNotBlank() }
-    val rows = d.categories.sortedByDescending { it.amount }.take(6).map { Triple(it.name, it.amount, it.prev) }
-    val hot = rows.map { it.first }.filter { n -> focus.any { f -> n.contains(f) || f.contains(n) } }.toSet()
-    if (rows.isNotEmpty()) {
-        Text("分類支出（本期 vs 上期）" + (if (hot.isNotEmpty()) "　● 為 AI 建議留意" else ""), fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 8.dp))
-        com.enwei.moneymanager.ui.components.CompareBars(rows, hot, m, ExpenseColor)
-    }
     val daily = remember(d) {
         val last = minOf(d.end, java.time.LocalDate.now())
         val n = (java.time.temporal.ChronoUnit.DAYS.between(d.start, last) + 1).toInt().coerceAtLeast(1)
@@ -319,6 +295,21 @@ private fun AiReviewBody(
     @Composable
     fun section(title: String, items: List<String>, mark: String) =
         fold(title, items.size, false) { items.forEach { Text("$mark $it", fontSize = 14.sp) } }
+    // 新版：每個發現都附依據與建議
+    if (r.findings.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+        r.findings.forEach { f ->
+            androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp)) {
+                Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(f.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    if (f.basis.isNotBlank()) Text("依據：${f.basis}", fontSize = 12.sp, color = gray)
+                    if (f.action.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("→ ${f.action}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                        f.saving?.let { Text("約省 ${m(it)}／月", fontSize = 12.sp, color = IncomeColor) }
+                    }
+                }
+            }
+        }
+    }
     fold("多角度分析", r.analysis.size, false) {
         r.analysis.forEach { a ->
             Column {
@@ -393,4 +384,50 @@ private fun QuestionCard(
             )
         }
     }
+}
+
+
+private val StructurePalette = listOf(
+    androidx.compose.ui.graphics.Color(0xFFF0605A), androidx.compose.ui.graphics.Color(0xFFFFA000), androidx.compose.ui.graphics.Color(0xFF3C82E6),
+    androidx.compose.ui.graphics.Color(0xFF2E9E57), androidx.compose.ui.graphics.Color(0xFF7E57C2), androidx.compose.ui.graphics.Color(0xFF26A69A),
+    androidx.compose.ui.graphics.Color(0xFF9E9E9E),
+)
+
+/** 支出結構：一條 100% 比例條，下方兩欄圖例（分類、金額、比上期）。前 6 大分類，其餘併成「其他」。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun StructureCard(d: ReviewData, m: (Long) -> String, focus: List<String>) {
+    val sorted = d.categories.sortedByDescending { it.amount }.filter { it.amount > 0 }
+    val top = sorted.take(6)
+    val rest = sorted.drop(6)
+    val rows = top.map { Triple(it.name, it.amount, it.prev) } +
+        (if (rest.isNotEmpty()) listOf(Triple("其餘 ${rest.size} 類", rest.sumOf { it.amount }, rest.sumOf { it.prev })) else emptyList())
+    val total = rows.sumOf { it.second }.coerceAtLeast(1)
+    val hot = rows.map { it.first }.filter { n -> focus.any { f -> f.isNotBlank() && (n.contains(f) || f.contains(n)) } }.toSet()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("支出結構", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        if (hot.isNotEmpty()) Text("● AI 建議留意", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+    }
+    Row(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp))) {
+        rows.forEachIndexed { i, r ->
+            Box(Modifier.weight((r.second.toFloat() / total).coerceAtLeast(0.005f)).fillMaxHeight().background(StructurePalette[i % StructurePalette.size]))
+        }
+    }
+    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), maxItemsInEachRow = 2) {
+        rows.forEachIndexed { i, (name, v, prev) ->
+            Row(Modifier.weight(1f).padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).background(StructurePalette[i % StructurePalette.size], CircleShape))
+                Text(
+                    " " + (if (name in hot) "● " else "") + name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = if (name in hot) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f),
+                )
+                Text("${v * 100 / total}% ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (prev == 0L) "新" else "${if (v >= prev) "▲" else "▼"}${kotlin.math.abs(v - prev) * 100 / prev}%",
+                    fontSize = 11.sp, color = if (v > prev) ExpenseColor else IncomeColor, modifier = Modifier.padding(end = 6.dp),
+                )
+            }
+        }
+    }
+    Text("合計 ${m(total)}；點「每日」可看明細", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

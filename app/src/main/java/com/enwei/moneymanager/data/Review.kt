@@ -153,7 +153,13 @@ data class AiReview(
     val questions: List<ReviewQuestion> = emptyList(),
     /** 圖表要標示的分類（AI 認為最值得注意的 1～3 個分類名稱） */
     val focus: List<String> = emptyList(),
+    /** 發現：每點都附依據（資料裡的數字或交易）與建議 */
+    val findings: List<ReviewFinding> = emptyList(),
 )
+
+/** AI 的一個發現：[text] 結論、[basis] 依據（引用資料的數字）、[action] 建議、[saving] 每月約可省（最小單位）。 */
+@Serializable
+data class ReviewFinding(val text: String, val basis: String = "", val action: String = "", val saving: Long? = null)
 
 @Serializable
 data class ReviewAngle(val title: String, val text: String)
