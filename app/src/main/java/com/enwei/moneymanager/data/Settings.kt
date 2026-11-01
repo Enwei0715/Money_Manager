@@ -326,6 +326,8 @@ data class AppSettings(
     val lastPicks: Map<String, String> = emptyMap(),
     /** 日曆的休、結、繳、扣標示：false 用文字，true 用顏色小點 */
     val calendarDots: Boolean = false,
+    /** AI 語氣：0 溫和教練、1 理性顧問、2 簡潔直接（收支檢討、投資報告、股票助理共用） */
+    val aiTone: Int = 0,
     /** 搜尋的篩選方式：0 圖表勾選頁（收入／支出圓環＋分類、帳戶勾選），1 欄位篩選（期間、帳戶、分類、金額） */
     val filterStyle: Int = 0,
     /** 舊版現金面額設定，保留備份相容。 */
@@ -501,6 +503,7 @@ class SettingsStore(context: Context) {
         priceAlerts = runCatching { json.decodeFromString(MapSerializer(String.serializer(), PriceAlert.serializer()), prefs.getString("priceAlerts", "{}")!!) }.getOrDefault(emptyMap()),
         watchlist = runCatching { json.decodeFromString(ListSerializer(String.serializer()), prefs.getString("watchlist", "[]")!!) }.getOrDefault(emptyList()),
         calendarDots = prefs.getBoolean("calendarDots", false),
+        aiTone = prefs.getInt("aiTone", 0),
         filterStyle = prefs.getInt("filterStyle", 0),
         lastPicks = runCatching { json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), prefs.getString("lastPicks", "{}")!!) }.getOrDefault(emptyMap()),
         cashByDenom = prefs.getBoolean("cashByDenom", true),
@@ -668,6 +671,7 @@ class SettingsStore(context: Context) {
             .putString("priceAlerts", json.encodeToString(MapSerializer(String.serializer(), PriceAlert.serializer()), s.priceAlerts))
             .putString("watchlist", json.encodeToString(ListSerializer(String.serializer()), s.watchlist))
             .putBoolean("calendarDots", s.calendarDots)
+            .putInt("aiTone", s.aiTone)
             .putInt("filterStyle", s.filterStyle)
             .putString("lastPicks", json.encodeToString(MapSerializer(String.serializer(), String.serializer()), s.lastPicks))
             .putBoolean("cashByDenom", s.cashByDenom)

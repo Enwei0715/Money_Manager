@@ -200,6 +200,13 @@ fun ConfigScreen(nav: NavController) {
 
                 SectionHeader("AI")
                 ConfigRow("AI 模型設定", onOff(s.aiEnabled && (s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()))) { nav.navigate("ai") }
+                // AI 說話的口吻：收支檢討、投資報告、股票助理都會照這個語氣
+                ConfigRow("AI 語氣", com.enwei.moneymanager.net.GroqAi.AiTone.entries.getOrElse(s.aiTone) { com.enwei.moneymanager.net.GroqAi.AiTone.GENTLE }.label) {
+                    ask(
+                        "AI 語氣", com.enwei.moneymanager.net.GroqAi.AiTone.entries.mapIndexed { i, t -> i to "${t.label}：${t.desc}" }, s.aiTone,
+                        "收支檢討、投資報告與股票助理的口吻；下次產生的內容開始套用。",
+                    ) { v -> repo.settings.update { it.copy(aiTone = v) } }
+                }
 
                 SectionHeader("股票")
                 ConfigRow("手續費與月退") { nav.navigate("stockfees") }
