@@ -286,10 +286,11 @@ private fun AiReviewBody(
     @Composable
     fun fold(title: String, count: Int, initiallyOpen: Boolean, body: @Composable () -> Unit) {
         if (count == 0) return
-        var open by rememberSaveable(title, r.createdAt) { mutableStateOf(initiallyOpen) }
-        Row(Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        val fold = com.enwei.moneymanager.ui.components.rememberFold("review." + title, initiallyOpen)
+        val open = fold.open
+        Row(Modifier.fillMaxWidth().clickable { fold.toggle() }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Text(if (open) "▴" else "▾ $count", fontSize = 12.sp, color = gray)
+            com.enwei.moneymanager.ui.components.FoldToggle(open, count)
         }
         if (open) body()
     }

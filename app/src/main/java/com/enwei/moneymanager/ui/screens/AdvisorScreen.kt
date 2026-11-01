@@ -161,7 +161,7 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                     fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
                 )
                 if (GroqAi.enabled && !old) OutlinedButton(enabled = job?.running != true && reportWork?.running != true, onClick = {
-                    com.enwei.moneymanager.work.ReportJob.start(ctx)
+                    com.enwei.moneymanager.work.ReportJob.startNow(ctx)
                 }) { Text(if (job?.running == true) "產生中…" else if (r == null) "產生報告" else "重新產生") }
             }
             Text(
@@ -719,7 +719,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                         // 沒有可用的 AI 金鑰時不能更新（按鈕變灰，下方說明到哪裡設定）
                         OutlinedButton(
                             enabled = GroqAi.enabled && job?.running != true && reportWork?.running != true,
-                            onClick = { com.enwei.moneymanager.work.ReportJob.start(ctx, refreshOnly = true) },
+                            onClick = { com.enwei.moneymanager.work.ReportJob.startNow(ctx, refreshOnly = true) },
                             modifier = Modifier.weight(1f),
                         ) { Text("立即更新") }
                         OutlinedButton(
@@ -733,6 +733,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                     if (!GroqAi.enabled) TextButton(onClick = { nav.navigate("ai") }) { Text("需要 AI 金鑰才能更新新聞：前往 AI 設定 ›", fontSize = 12.sp) }
                     JobProgress(job, reportWork)
                     com.enwei.moneymanager.ui.components.AiWorkProgress(newsWork, Modifier.fillMaxWidth())
+                    NewsScheduleInfo()
                 }
             }
             if (themes.isNotEmpty() && !anyFilter) item {
@@ -827,11 +828,12 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
 /** 一個題材的新聞重點：標題列點一下展開／收起。 */
 @Composable
 private fun DigestFolder(d: com.enwei.moneymanager.data.ThemeDigest) {
-    var open by rememberSaveable(d.theme) { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    val fold = com.enwei.moneymanager.ui.components.rememberFold("digest." + d.theme, false)
+    val open = fold.open
+    Column(Modifier.fillMaxWidth().clickable { fold.toggle() }.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${d.theme}　${d.day.substring(5)} · ${d.count} 則", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Text(if (open) "▴" else "▾ ${d.points.size} 點", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            com.enwei.moneymanager.ui.components.FoldToggle(open, d.points.size)
         }
         (if (open) d.points else d.points.take(1)).forEach { p ->
             Text(
@@ -968,7 +970,7 @@ private fun GuardRow(h: com.enwei.moneymanager.data.HoldingPlan, nav: NavControl
                     fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }
-            Icon(if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            com.enwei.moneymanager.ui.components.FoldToggle(open, modifier = Modifier.padding(start = 6.dp))
         }
         if (gi == null || g == null) { Text("讀不到現價", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
         Text(
@@ -1052,19 +1054,17 @@ private fun Section(
     collapsible: Boolean = false, initiallyOpen: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    var open by rememberSaveable(title.substringBefore('（')) { mutableStateOf(initiallyOpen) }
+    val fold = com.enwei.moneymanager.ui.components.rememberFold("advisor." + title.substringBefore('（'), initiallyOpen)
+    val open = fold.open
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
-                (if (collapsible) Modifier.clickable { open = !open } else Modifier).fillMaxWidth(),
+                (if (collapsible) Modifier.clickable { fold.toggle() } else Modifier).fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 action?.let { (l, f) -> TextButton(onClick = f) { Text(l) } }
-                if (collapsible) Icon(
-                    if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                    if (open) "收合" else "展開", tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (collapsible) com.enwei.moneymanager.ui.components.FoldToggle(open)
             }
             if (!collapsible || open) content()
         }
@@ -1218,4 +1218,43 @@ private fun RulesDialog(rules: List<String>, onDismiss: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
+}
+
+/** 背景新聞排程的具體狀態：下次執行時間、等待的條件、暫停或限流的原因。 */
+@Composable
+private fun NewsScheduleInfo() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    val health by com.enwei.moneymanager.work.AiHealth.state.collectAsStateWithLifecycle()
+    var info by remember { mutableStateOf<androidx.work.WorkInfo?>(null) }
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val live = androidx.work.WorkManager.getInstance(ctx).getWorkInfosForUniqueWorkLiveData("news")
+        val obs = androidx.lifecycle.Observer<List<androidx.work.WorkInfo>> { info = it.firstOrNull { w -> !w.state.isFinished } ?: it.lastOrNull() }
+        live.observe(owner, obs)
+        onDispose { live.removeObserver(obs) }
+    }
+    val hm = java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN)
+    val now = System.currentTimeMillis()
+    val lines = buildList {
+        val need = listOf(if (settings.aiWifiOnly) "Wi-Fi" else "網路連線", "電量不低").joinToString("、")
+        when {
+            !settings.advisorDaily -> add("背景自動更新已關閉（上方開關）")
+            !GroqAi.enabled -> add("沒有可用的 AI 金鑰，背景不會更新")
+            health.paused(now) -> add("${health.pauseReason ?: "背景 AI 已暫停"}；${hm.format(java.util.Date(health.pausedUntil))} 恢復")
+            info == null -> add("背景排程尚未建立（重開 App 會建立）")
+            info!!.state == androidx.work.WorkInfo.State.RUNNING -> add("背景更新執行中")
+            else -> {
+                val next = info!!.nextScheduleTimeMillis.takeIf { it in 1 until Long.MAX_VALUE }
+                add("下次背景更新：" + (next?.let { if (it <= now) "等條件符合就執行" else "約 ${hm.format(java.util.Date(it))}" } ?: "等待系統排程") + "（需要 $need）")
+                com.enwei.moneymanager.work.AiHealth.networkProblem(ctx)?.let { add("目前無法執行：$it") }
+            }
+        }
+        GroqAi.coolingUntil()?.takeIf { it > now }?.let { add("AI 額度暫停到 ${hm.format(java.util.Date(it))}") }
+        if (health.failures > 0 && !health.paused(now)) add("最近連續失敗 ${health.failures} 次：${health.pauseReason ?: "沒有回應"}")
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        lines.forEach { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (health.paused(now)) TextButton(onClick = { com.enwei.moneymanager.work.AiHealth.resume() }) { Text("恢復背景更新") }
+    }
 }

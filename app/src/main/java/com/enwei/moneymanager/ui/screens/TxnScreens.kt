@@ -340,7 +340,8 @@ private fun DuplicateSection(lk: Lookups) {
     var pairs by remember { mutableStateOf<List<com.enwei.moneymanager.data.Repository.DupPair>>(emptyList()) }
     // AI 的判斷會記住（自動整理或按下判斷時存起來）
     val verdicts = settings.dupVerdicts
-    var showLog by remember { mutableStateOf(false) }
+    val logFold = com.enwei.moneymanager.ui.components.rememberFold("pending.tidyLog", false)
+    val showLog = logFold.open
     val aiOn = settings.aiEnabled && (settings.groqKey.isNotBlank() || settings.geminiKey.isNotBlank())
     LaunchedEffect(all, settings.dupDismissed) { pairs = repo.findDuplicates() }
     // 打開待確認頁時，順便請 AI 整理還沒判斷過的重複
@@ -350,10 +351,10 @@ private fun DuplicateSection(lk: Lookups) {
         }
     }
     if (settings.aiTidyLog.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-        Text(
-            "AI 自動整理（${settings.aiTidyLog.size}）" + if (showLog) " ▴" else " ▾", fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.clickable { showLog = !showLog },
-        )
+        Row(Modifier.fillMaxWidth().clickable { logFold.toggle() }, verticalAlignment = Alignment.CenterVertically) {
+            Text("AI 自動整理（${settings.aiTidyLog.size}）", fontSize = 14.sp, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
+            com.enwei.moneymanager.ui.components.FoldToggle(showLog)
+        }
         if (showLog) settings.aiTidyLog.take(10).forEach { Text("• $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     if (pairs.isEmpty()) {

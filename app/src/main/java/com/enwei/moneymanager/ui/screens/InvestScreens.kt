@@ -112,7 +112,8 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
     val byBroker by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
     val brokers = balances.filter { it.account.type == AccountType.BROKERAGE && !it.account.archived }
         .sortedWith(compareBy({ it.account.sortOrder }, { it.account.id }))
-    var brokersExpanded by rememberSaveable { mutableStateOf(false) }
+    val brokersFold = com.enwei.moneymanager.ui.components.rememberFold("invest.brokers", false)
+    val brokersExpanded = brokersFold.open
 
     // 畫面開著時每 30 秒更新一次報價；手動按更新時 refreshTick 會變動
     val quotes by repo.quotes.collectAsStateWithLifecycle(emptyList())
@@ -179,8 +180,13 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                     .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = { brokersExpanded = !brokersExpanded }, modifier = Modifier.weight(1f)) {
-                    Text("證券帳戶（${brokers.size}） ${if (brokersExpanded) "▴" else "▾"}")
+                Row(
+                    Modifier.weight(1f).clickable { brokersFold.toggle() }.padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("證券帳戶（${brokers.size}）", fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    Spacer(Modifier.width(8.dp))
+                    com.enwei.moneymanager.ui.components.FoldToggle(brokersExpanded)
                 }
                 TextButton(onClick = { nav.navigate("account/0?type=BROKERAGE") }) { Text("＋ 新增") }
             }

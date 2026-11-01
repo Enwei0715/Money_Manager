@@ -304,7 +304,8 @@ fun NotificationSettingsScreen(nav: NavController) {
     var filter by remember { mutableStateOf("") }
     var showAllApps by remember { mutableStateOf(false) }
     var allLog by remember { mutableStateOf(false) }
-    var showTests by remember { mutableStateOf(false) }
+    val testsFold = com.enwei.moneymanager.ui.components.rememberFold("notif.tests", false)
+    val showTests = testsFold.open
     var testText by remember { mutableStateOf("") }
     var testTitle by remember { mutableStateOf("") }
     var testPkg by remember { mutableStateOf<String?>(null) }
@@ -463,9 +464,9 @@ fun NotificationSettingsScreen(nav: NavController) {
             }
             // 測試區（讀通知列、貼上通知）預設收起，需要時再展開
             item {
-                Row(Modifier.fillMaxWidth().clickable { showTests = !showTests }, verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clickable { testsFold.toggle() }, verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { SectionTitle("測試通知辨識") }
-                    Text(if (showTests) "▴" else "▾", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 16.dp))
+                    com.enwei.moneymanager.ui.components.FoldToggle(showTests, modifier = Modifier.padding(end = 16.dp))
                 }
             }
             if (showTests) {

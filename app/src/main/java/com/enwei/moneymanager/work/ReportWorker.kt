@@ -16,6 +16,7 @@ import com.enwei.moneymanager.net.GroqAi
 import com.enwei.moneymanager.ui.tr
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * 產生每日投資報告：在背景執行（離開畫面或 App 也會繼續），
@@ -36,9 +37,31 @@ object ReportJob {
 
     val state = MutableStateFlow<State?>(null)
 
+    @Volatile private var direct: kotlinx.coroutines.Job? = null
+
+    /**
+     * 使用者按「立即更新」或「產生報告」：直接在 App 裡執行，不經過 WorkManager 排隊
+     * （排隊可能被系統延後很久，畫面只會顯示「等待網路或背景排程」）。離開畫面也會繼續；
+     * App 被系統關掉時，背景排程之後會從已保存的區塊接續。
+     */
+    fun startNow(context: Context, refreshOnly: Boolean = false) {
+        if (direct?.isActive == true || state.value?.running == true) return
+        val app = context.applicationContext
+        // 清掉之前卡在排隊中的同一件工作
+        WorkManager.getInstance(app).cancelUniqueWork("report-now")
+        if (AiHealth.networkProblem(app, background = false) != null) {
+            state.value = State("沒有網路連線，無法更新", System.currentTimeMillis(), running = false, error = "沒有網路連線，連上網路後再按一次。", refreshOnly = refreshOnly)
+            return
+        }
+        state.value = State("準備中…", System.currentTimeMillis(), refreshOnly = refreshOnly)
+        direct = MoneyApp.instance.appScope.launch {
+            execute(app, notifyProgress = true, refreshOnly = refreshOnly, budgetMs = 30 * 60_000L, userInitiated = true)
+        }
+    }
+
     /** 產生報告（[refreshOnly] 為只更新新聞資料集）。 */
     fun start(context: Context, refreshOnly: Boolean = false, userInitiated: Boolean = true) {
-        state.value = State("等待網路或背景排程…", System.currentTimeMillis(), refreshOnly = refreshOnly)
+        // 背景排程：還在排隊時不顯示「執行中」（真正開始執行時才更新狀態），畫面不會一直卡在「等待網路或背景排程」
         WorkManager.getInstance(context).enqueueUniqueWork(
             "report-now", ExistingWorkPolicy.KEEP,
             OneTimeWorkRequestBuilder<ReportWorker>()
