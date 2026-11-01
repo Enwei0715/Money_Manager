@@ -801,7 +801,7 @@ object GroqAi {
     /** 投資助理對話：依資料集與使用者狀況回答，需要時附股票卡片與新聞編號。 */
     suspend fun advisorChat(context: String, history: List<Pair<Boolean, String>>, question: String): com.enwei.moneymanager.data.ChatMsg? {
         if (!enabled) return null
-        val contextLimit = if (bigContext(AiTask.CHAT)) 80_000 else 2500
+        val contextLimit = chatContextLimit()
         if (context.length > contextLimit) {
             lastError = "AI 對話資料超過安全上下文上限（${context.length}/$contextLimit 字元），未截斷或送出；請稍後重試"
             return null
@@ -816,6 +816,9 @@ object GroqAi {
         val news = (r["news"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt()?.toString() }.orEmpty()
         return com.enwei.moneymanager.data.ChatMsg(false, r.str("reply")?.take(1200) ?: return null, cards = cards, newsIds = news)
     }
+
+    /** 對話可以帶的資料量（字元）：Gemini 可讀大量資料，Groq 每分鐘 token 有限。 */
+    fun chatContextLimit(): Int = if (bigContext(AiTask.CHAT)) 80_000 else 2500
 
     /** 一句話說明這家公司在做什麼（股票資訊頁用，結果會快取）。 */
     suspend fun describeCompany(symbol: String, name: String): String? {

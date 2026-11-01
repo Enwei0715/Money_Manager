@@ -614,45 +614,37 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
     // 第一次篩選還在背景計算時顯示「整理中」，不要誤顯示 0 則
     val filtered = filteredOrNull.orEmpty()
     val scope = rememberCoroutineScope()
-    val digestsAll = store.digests.values.groupBy { it.theme }.mapValues { (_, l) -> l.maxBy { it.day } }
-    // 沒篩選時列表前面有幾個整理區塊（「跳到新聞列表」用）
-    val overviewCount = if (anyFilter) 0 else 1 + (if (themes.isNotEmpty()) 1 else 0) + (if (digestsAll.isNotEmpty()) 1 else 0) + (if (stats.important.isNotEmpty()) 1 else 0)
     val listState = rememberLazyListState()
     var filtersOpen by remember { mutableStateOf(false) }
     val activeCount = listOf(days != 0, sent != 0, onlyImportant, onlyMine, sort != 0, theme != null, symbol != null, source != null).count { it }
+    // 兩個檢視：「重點」（重點新聞＋題材，點題材展開 AI 整理的重點）與「全部新聞」（依日期）。有篩選條件時自動切到全部新聞
+    var view by rememberSaveable { mutableStateOf(0) }
+    var infoOpen by remember { mutableStateOf(false) }
+    var expandedTheme by remember { mutableStateOf<String?>(null) }
+    var allThemes by remember { mutableStateOf(false) }
+    LaunchedEffect(anyFilter) { if (anyFilter) view = 1 }
+    val digestsByTheme = remember(store.digests) { store.digests.values.groupBy { it.theme }.mapValues { (_, l) -> l.sortedByDescending { it.day } } }
     Column(Modifier.fillMaxSize()) {
-        Card(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        // 狀態列：一行看懂資料集狀態，詳細與設定在「詳情」
+        Row(
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { infoOpen = true }.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("新聞自動更新與每日報告", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "啟用後約每 3 小時蒐集新聞，並在每日報告完成後通知。",
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = settings.advisorDaily,
-                        onCheckedChange = { enabled -> repo.settings.update { it.copy(advisorDaily = enabled) } },
-                        enabled = aiReady,
-                    )
-                }
-                if (!aiReady) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "需先啟用 AI 並設定至少一組模型金鑰。",
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = { nav.navigate("ai") }) { Text("設定 AI") }
-                    }
-                }
-            }
+            val running = job?.running == true
+            val c = stats.coverage
+            Text(
+                if (running) job?.step.orEmpty()
+                else "${store.items.size} 則" + (c?.takeIf { it.recent > 0 }?.let { " · 重點整理 ${it.digested * 100 / it.recent}%" } ?: "") +
+                    (if (store.lastCollect > 0) " · " + java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(store.lastCollect)) + " 更新" else "") +
+                    (if (!settings.advisorDaily) " · 自動更新關閉" else ""),
+                fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                color = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
+            )
+            if (!running) TextButton(enabled = GroqAi.enabled, onClick = { com.enwei.moneymanager.work.ReportJob.startNow(ctx, refreshOnly = true) }) { Text("立即更新", fontSize = 12.sp) }
+            TextButton(onClick = { infoOpen = true }) { Text("詳情", fontSize = 12.sp) }
         }
-        // 搜尋與篩選固定在最上方，不用先滑過整理好的題材與重點
+        if (job?.running == true) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+        // 搜尋與篩選固定在最上方
         Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -661,7 +653,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 FilterChip(filtersOpen || activeCount > 0, { filtersOpen = !filtersOpen },
                     label = { Text(if (activeCount > 0) "篩選 $activeCount" else "篩選") })
             }
-            // 已套用的條件：一個一個列出來，點 ✕ 就移除（不用打開篩選或滑回上方）
+            // 已套用的條件：一個一個列出來，點 ✕ 就移除
             val activeChips = buildList<Pair<String, () -> Unit>> {
                 if (days != 0) add((if (days == 1) "今天" else "$days 天內") to { days = 0 })
                 if (sent != 0) add(listOf("", "利多", "利空", "中性")[sent] to { sent = 0 })
@@ -672,131 +664,157 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 symbol?.let { add("個股：$it" to { symbol = null }) }
                 source?.let { add("來源：$it" to { source = null }) }
             }
-            if (activeChips.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (activeChips.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 activeChips.forEach { (label, remove) ->
                     InputChip(true, { remove(); shown = 100 }, label = { Text(label, fontSize = 12.sp) },
                         trailingIcon = { Icon(Icons.Filled.Close, "移除", Modifier.size(16.dp)) })
                 }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text((if (filteredOrNull == null) "整理中…" else "符合 ${filtered.size} 則") + (theme?.let { "　題材：$it" } ?: "") + (symbol?.let { "　個股：$it" } ?: "") + (source?.let { "　來源：$it" } ?: ""),
-                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                if (activeChips.isNotEmpty() || query.isNotBlank()) TextButton(onClick = {
-                    query = ""; days = 0; sent = 0; onlyImportant = false; onlyMine = false; sort = 0; theme = null; symbol = null; source = null; shown = 100
-                }) { Text("清除篩選") }
-                else TextButton(onClick = { scope.launch { listState.animateScrollToItem(overviewCount) } }) { Text("跳到新聞列表") }
-            }
-        }
-        // 換條件後清單回到最上面，直接看到結果
-        LaunchedEffect(query, days, sent, onlyImportant, onlyMine, sort, theme, symbol, source) { listState.scrollToItem(0) }
-        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!anyFilter) item {
-                Section("資料集（${store.items.size} 則）", collapsible = true, initiallyOpen = false) {
-                    Text("共 ${store.items.size} 則（近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天），已標註 ${stats.tagged} 則", fontSize = 14.sp)
-                    stats.coverage?.let { c ->
-                        val pct = if (c.recent > 0) c.digested * 100 / c.recent else 0
-                        Text(
-                            "近 3 天 ${c.recent} 則，已整理進重點庫 ${c.digested} 則（$pct%）" +
-                                (if (c.pending > 0) "；待標註 ${c.pending} 則" else ""),
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    // grid/block/thread：每個「日期|題材」區塊的新聞都讀完並整理成重點，區塊才算完整
-                    val grid by com.enwei.moneymanager.MoneyApp.news.grid.collectAsStateWithLifecycle()
-                    if (grid.blocks > 0) Text(
-                        "近 3 天 ${grid.blocks} 個區塊（日期×題材），完整 ${grid.complete} 個" +
-                            (if (grid.unread > 0) "；待讀 ${grid.unread} 則" else "") +
-                            (if (grid.done) "；資料集完整" else ""),
-                        fontSize = 12.sp, color = if (grid.done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        "上次蒐集：" + (if (store.lastCollect > 0) java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(store.lastCollect)) else "還沒有") +
-                            "，背景每 3 小時更新一次。",
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // 沒有可用的 AI 金鑰時不能更新（按鈕變灰，下方說明到哪裡設定）
-                        OutlinedButton(
-                            enabled = GroqAi.enabled && job?.running != true && reportWork?.running != true,
-                            onClick = { com.enwei.moneymanager.work.ReportJob.startNow(ctx, refreshOnly = true) },
-                            modifier = Modifier.weight(1f),
-                        ) { Text("立即更新") }
-                        OutlinedButton(
-                            // 只看有沒有資料；整份上萬則的資料集互相比對會讓畫面卡頓
-                            enabled = (store.items.isNotEmpty() || store.report != null || store.chat.isNotEmpty()) && job?.running != true && reportWork?.running != true &&
-                                newsWork?.running != true && chatWork?.running != true,
-                            onClick = { clearDatabaseError = null; confirmClearDatabase = true },
-                            modifier = Modifier.weight(1f),
-                        ) { Text("刪除資料庫") }
-                    }
-                    if (!GroqAi.enabled) TextButton(onClick = { nav.navigate("ai") }) { Text("需要 AI 金鑰才能更新新聞：前往 AI 設定 ›", fontSize = 12.sp) }
-                    JobProgress(job, reportWork)
-                    com.enwei.moneymanager.ui.components.AiWorkProgress(newsWork, Modifier.fillMaxWidth())
-                    NewsScheduleInfo()
+                TextButton(onClick = { query = ""; days = 0; sent = 0; onlyImportant = false; onlyMine = false; sort = 0; theme = null; symbol = null; source = null; shown = 100 }) {
+                    Text("全部清除", fontSize = 12.sp)
                 }
             }
-            if (themes.isNotEmpty() && !anyFilter) item {
-                Section("題材熱度（點選篩選）", collapsible = true) {
-                    val max = themes.maxOf { it.count }.coerceAtLeast(1)
-                    themes.take(12).forEach { t ->
-                        Column(Modifier.clickable { theme = if (theme == t.key) null else t.key; shown = 100 }) {
-                            Row {
-                                Text((if (theme == t.key) "● " else "") + t.key, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                                Text("${t.count} 則 · " + (if (t.avgSentiment > 0.2) "偏多" else if (t.avgSentiment < -0.2) "偏空" else "中性"), fontSize = 13.sp,
+            // 重點／全部新聞
+            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
+                listOf("重點", "全部新聞" + (if (filteredOrNull != null) "（${filtered.size}）" else "")).forEachIndexed { i, l ->
+                    val sel = view == i
+                    Box(
+                        Modifier.weight(1f).background(if (sel) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
+                            .clickable { view = i }.padding(vertical = 7.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { Text(l, fontSize = 13.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
+                }
+            }
+        }
+        // 換條件或換檢視後清單回到最上面
+        LaunchedEffect(query, days, sent, onlyImportant, onlyMine, sort, theme, symbol, source, view) { listState.scrollToItem(0) }
+        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (view == 0) {
+                if (store.items.isEmpty()) item {
+                    Text("還沒有新聞。按上方「立即更新」開始蒐集" + (if (!GroqAi.enabled) "（需要先設定 AI 金鑰）" else "") + "。",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp))
+                }
+                if (stats.important.isNotEmpty()) item {
+                    Text("重點新聞", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                }
+                items(stats.important.take(6), key = { "i" + it.id }) { n ->
+                    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) { Box(Modifier.padding(horizontal = 10.dp)) { NewsLine(n) } }
+                }
+                if (stats.important.size > 6) item {
+                    TextButton(onClick = { onlyImportant = true; view = 1 }) { Text("看全部重點新聞 ›") }
+                }
+                if (themes.isNotEmpty()) item {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                        Text("題材（近 3 天，共 ${themes.size} 個）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text("點題材看 AI 整理的重點", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                val maxCount = themes.maxOfOrNull { it.count }?.coerceAtLeast(1) ?: 1
+                items(themes.take(if (allThemes) themes.size else 15), key = { "t" + it.key }) { t ->
+                    val open = expandedTheme == t.key
+                    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) {
+                        Column(Modifier.fillMaxWidth().clickable { expandedTheme = if (open) null else t.key }.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(t.key, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                Text("${t.count} 則 · " + (if (t.avgSentiment > 0.2) "偏多" else if (t.avgSentiment < -0.2) "偏空" else "中性"), fontSize = 12.sp,
                                     color = if (t.avgSentiment > 0.2) StockUp else if (t.avgSentiment < -0.2) StockDown else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Box(Modifier.fillMaxWidth().height(5.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
-                                Box(Modifier.fillMaxWidth(t.count.toFloat() / max).height(5.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)))
+                            Box(Modifier.fillMaxWidth().height(4.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(2.dp))) {
+                                Box(Modifier.fillMaxWidth(t.count.toFloat() / maxCount).height(4.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
+                            }
+                            if (open) {
+                                val ds2 = digestsByTheme[t.key].orEmpty()
+                                if (ds2.isEmpty()) Text("這個題材的重點還在整理中。", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                ds2.take(3).forEach { d ->
+                                    Text("${d.day.substring(5)}（${d.count} 則）", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    d.points.take(5).forEach { p ->
+                                        Text("• ${p.text}" + (if (p.symbols.isNotEmpty()) "（${p.symbols.joinToString("、")}）" else ""), fontSize = 13.sp)
+                                    }
+                                }
+                                TextButton(onClick = { theme = t.key; view = 1 }) { Text("看這個題材的 ${t.count} 則新聞 ›") }
                             }
                         }
                     }
-                    // 全部題材在篩選面板裡（可搜尋）
-                    if (themes.size > 12) TextButton(onClick = { filtersOpen = true }) { Text("看全部 ${themes.size} 個題材 ›") }
                 }
-            }
-            // 新聞重點庫：每個題材最新一天整理好的重點（同一事件只列一次）
-            val digests = store.digests.values.groupBy { it.theme }.mapValues { (_, l) -> l.maxBy { it.day } }
-                .values.sortedByDescending { it.count }.filter { theme == null || it.theme == theme }
-            if (digests.isNotEmpty() && !anyFilter) item {
-                Section("新聞重點（${digests.size} 個題材）", collapsible = true) {
-                    // 每個題材像資料夾：預設只看第一個重點，點開看全部
-                    val allDigests = com.enwei.moneymanager.ui.components.rememberFold("advisor.allDigests", false)
-                    digests.take(if (allDigests.open) digests.size else 12).forEach { d -> DigestFolder(d) }
-                    if (digests.size > 12) TextButton(onClick = { allDigests.toggle() }) {
-                        Text(if (allDigests.open) "只看前 12 個" else "看全部 ${digests.size} 個題材的重點 ›")
+                if (themes.size > 15) item {
+                    TextButton(onClick = { allThemes = !allThemes }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (allThemes) "只看前 15 個題材" else "顯示全部 ${themes.size} 個題材")
                     }
                 }
-            }
-            if (stats.important.isNotEmpty() && !anyFilter) item {
-                Section("重點新聞（${stats.important.size}）", collapsible = true, initiallyOpen = false) { stats.important.forEach { NewsLine(it) } }
-            }
-            if (!anyFilter) item { Text("全部新聞", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
-            if (filteredOrNull == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            else if (filtered.isEmpty()) item { Text("沒有符合條件的新聞", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            // 依日期分組（排序為「最新」時），每天一個標題
-            val zoneTw = java.time.ZoneId.of("Asia/Taipei")
-            val todayTw = java.time.LocalDate.now(zoneTw)
-            fun dayOf(n: com.enwei.moneymanager.data.NewsItem) = java.time.Instant.ofEpochSecond(n.epochSec).atZone(zoneTw).toLocalDate()
-            val page = filtered.take(shown)
-            val dayCounts = if (sort == 0) filtered.groupingBy { dayOf(it) }.eachCount() else emptyMap()
-            page.forEachIndexed { i, n ->
-                val d = dayOf(n)
-                if (sort == 0 && (i == 0 || dayOf(page[i - 1]) != d)) item(key = "d$d") {
-                    Text(
-                        (when (d) { todayTw -> "今天 · "; todayTw.minusDays(1) -> "昨天 · "; else -> "" }) +
-                            "${d.monthValue}/${d.dayOfMonth}（${com.enwei.moneymanager.core.Recurrence.weekdayName(d.dayOfWeek)}）· ${dayCounts[d] ?: 0} 則",
-                        fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
+            } else {
+                if (filteredOrNull == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                else if (filtered.isEmpty()) item { Text("沒有符合條件的新聞", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                // 依日期分組（排序為「最新」時），每天一個標題
+                val zoneTw = java.time.ZoneId.of("Asia/Taipei")
+                val todayTw = java.time.LocalDate.now(zoneTw)
+                fun dayOf(n: com.enwei.moneymanager.data.NewsItem) = java.time.Instant.ofEpochSecond(n.epochSec).atZone(zoneTw).toLocalDate()
+                val page = filtered.take(shown)
+                val dayCounts = if (sort == 0) filtered.groupingBy { dayOf(it) }.eachCount() else emptyMap()
+                page.forEachIndexed { i, n ->
+                    val d = dayOf(n)
+                    if (sort == 0 && (i == 0 || dayOf(page[i - 1]) != d)) item(key = "d$d") {
+                        Text(
+                            (when (d) { todayTw -> "今天 · "; todayTw.minusDays(1) -> "昨天 · "; else -> "" }) +
+                                "${d.monthValue}/${d.dayOfMonth}（${com.enwei.moneymanager.core.Recurrence.weekdayName(d.dayOfWeek)}）· ${dayCounts[d] ?: 0} 則",
+                            fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+                    item(key = "n" + n.id) {
+                        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) { Box(Modifier.padding(horizontal = 10.dp)) { NewsLine(n) } }
+                    }
                 }
-                item(key = "n" + n.id) {
-                    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) { Box(Modifier.padding(horizontal = 10.dp)) { NewsLine(n) } }
+                if (filtered.size > shown) item {
+                    TextButton(onClick = { shown += 100 }, modifier = Modifier.fillMaxWidth()) { Text("顯示更多（還有 ${filtered.size - shown} 則）") }
                 }
-            }
-            if (filtered.size > shown) item {
-                TextButton(onClick = { shown += 100 }, modifier = Modifier.fillMaxWidth()) { Text("顯示更多（還有 ${filtered.size - shown} 則）") }
             }
             item { Spacer(Modifier.height(24.dp)) }
+        }
+        // 資料集詳情與設定（自動更新開關、更新、刪除、排程狀態）
+        if (infoOpen) androidx.compose.material3.ModalBottomSheet(onDismissRequest = { infoOpen = false }, containerColor = MaterialTheme.colorScheme.surface) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("新聞自動更新與每日報告", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("約每 3 小時蒐集新聞，每日報告完成後通知。", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = settings.advisorDaily, onCheckedChange = { enabled -> repo.settings.update { it.copy(advisorDaily = enabled) } }, enabled = aiReady)
+                }
+                if (!aiReady) TextButton(onClick = { infoOpen = false; nav.navigate("ai") }) { Text("需先啟用 AI 並設定金鑰：前往 AI 設定 ›", fontSize = 12.sp) }
+                androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text("共 ${store.items.size} 則（近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天），已標註 ${stats.tagged} 則", fontSize = 14.sp)
+                stats.coverage?.let { c ->
+                    val pct = if (c.recent > 0) c.digested * 100 / c.recent else 0
+                    Text("近 3 天 ${c.recent} 則，已整理進重點 ${c.digested} 則（$pct%）" + (if (c.pending > 0) "；待標註 ${c.pending} 則" else ""),
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                val grid by com.enwei.moneymanager.MoneyApp.news.grid.collectAsStateWithLifecycle()
+                if (grid.blocks > 0) Text(
+                    "近 3 天 ${grid.blocks} 個區塊（日期×題材），完整 ${grid.complete} 個" + (if (grid.unread > 0) "；待讀 ${grid.unread} 則" else "") +
+                        (if (grid.done) "；資料集完整" else ""),
+                    fontSize = 12.sp, color = if (grid.done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        enabled = GroqAi.enabled && job?.running != true && reportWork?.running != true,
+                        onClick = { com.enwei.moneymanager.work.ReportJob.startNow(ctx, refreshOnly = true) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("立即更新") }
+                    OutlinedButton(
+                        enabled = (store.items.isNotEmpty() || store.report != null || store.chat.isNotEmpty()) && job?.running != true && reportWork?.running != true &&
+                            newsWork?.running != true && chatWork?.running != true,
+                        onClick = { clearDatabaseError = null; confirmClearDatabase = true },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("刪除資料庫") }
+                }
+                JobProgress(job, reportWork)
+                com.enwei.moneymanager.ui.components.AiWorkProgress(newsWork, Modifier.fillMaxWidth())
+                NewsScheduleInfo()
+                Spacer(Modifier.height(24.dp))
+            }
         }
         if (filtersOpen) androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { filtersOpen = false }, containerColor = MaterialTheme.colorScheme.surface,

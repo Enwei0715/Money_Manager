@@ -312,6 +312,21 @@ private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: 
     return text to imp
 }
 
+/**
+ * 依可用的字數挑選資料集摘要的詳細程度：先試完整版，放不下就逐步減少題材、個股與重點新聞，
+ * 都放不下時再截短（並註明已精簡）。
+ */
+private fun fitDigest(ds: NewsDataset, st: NewsStore, room: Int, big: Boolean): Pair<String, List<NewsItem>> {
+    val levels = listOf(Triple(30, 50, 40), Triple(20, 30, 25), Triple(12, 18, 15), Triple(8, 12, 10), Triple(5, 8, 6), Triple(3, 5, 4))
+    if (big) datasetDigest(ds, st, 30, 50, 40, full = true).let { if (it.first.length <= room) return it }
+    for ((t, s, i) in levels) {
+        val r = datasetDigest(ds, st, themes = t, symbols = s, important = i)
+        if (r.first.length + 30 <= room) return ("（資料量較大，已精簡為前 $t 個題材、$s 檔個股、$i 則重點新聞）\n" + r.first) to r.second
+    }
+    val r = datasetDigest(ds, st, themes = 3, symbols = 5, important = 4)
+    return r.first.take((room - 20).coerceAtLeast(0)) to r.second
+}
+
 /** 背景蒐集與標註新聞（每天數次）；回傳新增則數。 */
 suspend fun Repository.refreshNews(
     ds: NewsDataset, onStep: (String) -> Unit = {}, onBatch: (Int, Int) -> Unit = { _, _ -> }, onDigest: (Int, Int) -> Unit = { _, _ -> },
@@ -390,9 +405,10 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
     ds.update { st -> if (st.chat.lastOrNull()?.let { it.fromUser && it.text == question } == true) st else st.copy(chat = (st.chat + ChatMsg(true, question)).takeLast(40)) }
     val snap = advisorSnapshot(fetch = true)
     val big = com.enwei.moneymanager.net.GroqAi.bigContext(com.enwei.moneymanager.net.GroqAi.AiTask.CHAT)
-    val (digest, imp) = if (big) datasetDigest(ds, st, themes = 30, symbols = 50, important = 40, full = true)
-    else datasetDigest(ds, st, themes = 8, symbols = 12, important = 10)
     val today = st.report?.let { r -> "今日報告：${r.trend}；推薦 " + r.picks.joinToString("、") { "${it.symbol}${it.name}（${it.style}）" } } ?: ""
+    // 資料太多時自動精簡（題材、個股、重點新聞的數量逐步減少）直到放得下，不讓使用者自己刪字
+    val fixed = situation(snap).length + today.length + 2
+    val (digest, imp) = fitDigest(ds, st, com.enwei.moneymanager.net.GroqAi.chatContextLimit() - fixed, big)
     val history = st.chat.takeLast(6).map { it.fromUser to it.text }
     val reply = com.enwei.moneymanager.net.GroqAi.advisorChat(situation(snap) + "\n" + today + "\n" + digest, history, question) ?: return null
     // 回覆裡的 [19, 35] 是資料集的新聞編號：換成 [1][2]，對應附在回覆下方的新聞
