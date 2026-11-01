@@ -246,12 +246,14 @@ fun LabeledBars(title: String, rows: List<Triple<String, Long, String>>, color: 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         rows.forEach { (name, v, label) ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(name, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(76.dp))
-                Box(Modifier.weight(1f).height(10.dp).background(track, RoundedCornerShape(3.dp))) {
-                    if (v > 0) Box(Modifier.fillMaxWidth((v.toFloat() / max).coerceIn(0.02f, 1f)).height(10.dp).background(color, RoundedCornerShape(3.dp)))
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
                 }
-                Text(" $label", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.width(96.dp))
+                Box(Modifier.fillMaxWidth().height(8.dp).background(track, RoundedCornerShape(3.dp))) {
+                    if (v > 0) Box(Modifier.fillMaxWidth((v.toFloat() / max).coerceIn(0.02f, 1f)).height(8.dp).background(color, RoundedCornerShape(3.dp)))
+                }
             }
         }
     }

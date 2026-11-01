@@ -366,6 +366,19 @@ fun PickCard(
                 ?: Text("代號未確認，請自行查證", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
             // 近期 K 線：一眼看出走勢，不必點進去
             com.enwei.moneymanager.ui.components.MiniKLine(p.symbol)
+            // 新聞依據：資料集近 3 天有幾則新聞提到這檔、平均多空
+            val store by MoneyApp.news.flow.collectAsStateWithLifecycle()
+            val ev = remember(System.identityHashCode(store), p.symbol) {
+                store?.let { st -> MoneyApp.news.recent(st, 3).filter { p.symbol in it.symbols } }.orEmpty()
+            }
+            if (ev.isNotEmpty()) {
+                val avg = ev.map { it.sentiment }.average()
+                Text(
+                    "新聞依據：近 3 天 ${ev.size} 則提到 · " + (if (avg > 0.2) "偏多" else if (avg < -0.2) "偏空" else "中性") +
+                        " · " + ev.groupingBy { it.theme }.eachCount().entries.sortedByDescending { it.value }.take(2).joinToString("、") { it.key },
+                    fontSize = 11.sp, color = if (avg > 0.2) StockUp else if (avg < -0.2) StockDown else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else Text("新聞依據：資料集近 3 天沒有提到這檔", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
             if (p.business.isNotBlank()) Text(p.business, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (p.reason.isNotBlank()) CitedText(p.reason, cites, newsById)
             if (p.entry.isNotBlank()) Text("進場：${p.entry}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

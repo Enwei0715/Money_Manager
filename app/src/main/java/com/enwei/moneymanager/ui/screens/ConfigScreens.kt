@@ -337,8 +337,12 @@ fun BudgetScreen(nav: NavController) {
     Scaffold(containerColor = MaterialTheme.colorScheme.surface, topBar = { BackTopBar("預算設定", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad)) {
             item {
-                Text("每月預算，留空代表不設定。進度顯示在「交易 → 總計」。", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Text("每月目標與預算，留空代表不設定。進度顯示在「交易 → 檢討」；AI 檢討建議的目標按「採用」也會寫到這裡。", color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp, modifier = Modifier.padding(20.dp))
+                var goal by remember { mutableStateOf(s.savingsGoal?.let { "%.0f".format(it) }.orEmpty()) }
+                FormLine("儲蓄率目標（%）") {
+                    FormInput(goal, { v -> goal = v; repo.settings.update { it.copy(savingsGoal = v.toDoubleOrNull()?.takeIf { g -> g > 0 }) } }, "", number = true)
+                }
                 FormLine("總預算") { FormInput(fields.value[0L].orEmpty(), { set(0L, it) }, "0", number = true) }
             }
             items(lk.categories.filter { it.kind == TxnType.EXPENSE && !it.archived && it.parentId == null }, key = { it.id }) { c ->

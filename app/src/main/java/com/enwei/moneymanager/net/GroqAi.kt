@@ -619,12 +619,12 @@ object GroqAi {
         val system = tone().review + "請逐筆讀使用者的交易，" +
             "從多個角度整理（消費習慣與頻率、時段（深夜／週末）、分類趨勢與上期／去年比較、固定支出），所有結論都要引用資料裡的數字或交易，不可編造。" +
             "每個建議都要具體可執行，並寫出大約能省多少，讓使用者自己決定。" +
-            "挑 2～3 筆（或一組）金額較大、用途不明的交易想跟使用者確認用途，用交易編號；使用者已標記過的交易要尊重他的回答，不要再問同一筆。金額單位為 $base 元。" +
+            "不要反問使用者交易的用途，直接依資料給建議；使用者已標記過必要性的交易要尊重他的標記。金額單位為 $base 元。" +
             "App 會用圖表呈現分類結構與每日支出。每個發現都必須有依據：basis 直接引用資料裡的數字、分類或交易（例如「訂閱 6,896，上月 1,818」），" +
             "沒有資料支持的推測不要寫；不要寫空泛的口號（例如「平衡現金流」），建議要具體到分類、商家或金額。" +
             "只回 JSON：{\"score\": 0～100 整數, \"headline\": 20 字內總評（含一個關鍵數字）, " +
             "\"findings\": [{\"text\": 20 字內發現, \"basis\": 30 字內依據（資料裡的數字）, \"action\": 25 字內具體建議, \"saving\": 每月約可省金額整數或 null}]（2～4 點，依影響大小排序）, " +
-            "\"questions\": [{\"t\": [交易編號], \"q\": 想確認的事（30 字內）, \"why\": 確認後能幫上什麼（25 字內）}], " +
+            "\"caps\": [{\"cat\": 大分類名稱（用資料裡的分類名）, \"cap\": 下期上限整數}]（2～4 個最需要控制的分類，上限要依前幾期實際金額合理設定）, " +
             "\"expense_cap\": 下期支出上限整數（依前三期平均與這期結構推算）, \"savings_target\": 下期儲蓄率數字, " +
             "\"focus\": [圖表要標示、最值得注意的 1～3 個分類名稱，用資料裡的分類名]}"
         val r = chatJson(system, input, 1500, hard = true, cap = 4000, effort = "low", task = AiTask.REVIEW) ?: return null
@@ -649,6 +649,11 @@ object GroqAi {
             analysis = objs("analysis").mapNotNull { o -> o.str("title")?.let { t -> com.enwei.moneymanager.data.ReviewAngle(t.take(12), o.str("text")?.take(120).orEmpty()) } },
             questions = questions,
             focus = list("focus").take(3),
+            caps = objs("caps").mapNotNull { o ->
+                val c = o.str("cat")?.take(20) ?: return@mapNotNull null
+                val v = o.str("cap")?.toDoubleOrNull()?.toLong()?.takeIf { it > 0 } ?: return@mapNotNull null
+                com.enwei.moneymanager.data.CategoryCap(c, v * 100)
+            }.take(4),
             findings = objs("findings").mapNotNull { o ->
                 val t = o.str("text") ?: return@mapNotNull null
                 com.enwei.moneymanager.data.ReviewFinding(
@@ -787,7 +792,8 @@ object GroqAi {
     suspend fun dailyReport(user: String): com.enwei.moneymanager.data.DailyReport? {
         if (!enabled) return null
         val system = advisorRole() + "請產生今天的投資報告，條理分明、容易閱讀：先用一句話說明今天的市場氣氛，再寫大盤趨勢與階段、目前市場資金追逐的題材（依資料集熱度與多空）、整體看法；" +
-            "今天可以考慮的 6～10 檔股票：從資料集裡新聞多、偏多且有具體題材的個股挑選，分散在不同題材，長線與短線都要有" +
+            "今天可以考慮的 6～10 檔股票：只能從資料集「被提到最多的個股」與新聞重點裡挑（每檔近 3 天至少被 2 則新聞提到），優先偏多且有具體產業題材的，分散在不同題材，長線與短線都要有；" +
+            "理由要引用新聞編號 [n] 或資料裡的數字" +
             "（標明長線或短線、這家公司在做什麼、目前強勢／中性／弱勢、理由、進場條件、停損條件、依資金計畫建議投入金額）；文字精簡，理由 30 字內；" +
             "逐檔持股動作（只能是「續抱」「長抱」「分批停利 1/3」「減碼 1/3」「停損出場」「觀察」，參考提供的規則停損價）；" +
             "挑 3～6 則使用者一定要看的重點新聞（用新聞編號）並說明為什麼重要；資金分配建議；交易前檢查清單；依他過去錯誤的提醒。" +

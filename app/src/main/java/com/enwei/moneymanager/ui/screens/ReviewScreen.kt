@@ -160,11 +160,26 @@ fun ReviewContent(
             }
 
             // 預算（每月）：原本在「總計」分頁，移到這裡和檢討一起看
-            if (span == ReviewSpan.MONTH && settings.budgets.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+            // 目標與預算：每月的支出上限、各分類上限與儲蓄率目標（可在「預算設定」修改，也可以採用 AI 建議）
+            if (span == ReviewSpan.MONTH && (settings.budgets.isNotEmpty() || settings.savingsGoal != null)) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("預算", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { nav.navigate("budget") }) { Text("設定") }
+                        Text("這個月的目標", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { nav.navigate("budget") }) { Text("修改") }
+                    }
+                    settings.savingsGoal?.let { g ->
+                        val rate = if (d.income > 0) d.savingsRate else 0.0
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row {
+                                Text("儲蓄率", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                Text("${"%.0f".format(rate)}%　目標 ${"%.0f".format(g)}%", fontSize = 13.sp,
+                                    color = if (rate >= g) IncomeColor else ExpenseColor)
+                            }
+                            Box(Modifier.fillMaxWidth().height(8.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))) {
+                                Box(Modifier.fillMaxWidth((rate / g).toFloat().coerceIn(0f, 1f)).height(8.dp)
+                                    .background(if (rate >= g) IncomeColor else ExpenseColor, RoundedCornerShape(4.dp)))
+                            }
+                        }
                     }
                     settings.budgets.entries.sortedBy { it.key }.forEach { (cid, budget) ->
                         val used = if (cid == 0L) d.expense else d.categories.find { it.id == cid }?.amount ?: 0L
@@ -281,10 +296,8 @@ private fun AiReviewBody(
                 Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(f.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     if (f.basis.isNotBlank()) Text("依據：${f.basis}", fontSize = 12.sp, color = gray)
-                    if (f.action.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("→ ${f.action}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                        f.saving?.let { Text("約省 ${m(it)}／月", fontSize = 12.sp, color = IncomeColor) }
-                    }
+                    if (f.action.isNotBlank()) Text("→ ${f.action}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                    f.saving?.let { Text("約省 ${m(it)}／月", fontSize = 12.sp, color = IncomeColor) }
                 }
             }
         }
@@ -311,18 +324,8 @@ private fun AiReviewBody(
         }
     }
     }
-    fold("想跟你確認的幾筆", r.questions.size, true) {
-        val byId = d.expenses.associateBy { it.id }
-        r.questions.forEach { q -> QuestionCard(q, q.txnIds.mapNotNull { byId[it] }, lk, necessity, m, nav) }
-    }
-    if (r.expenseCap != null || r.savingsTarget != null || r.goals.isNotEmpty()) {
-        Text("下期目標", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        listOfNotNull(
-            r.expenseCap?.let { "支出上限 ${m(it)}" },
-            r.savingsTarget?.let { "儲蓄率 ${"%.0f".format(it)}% 以上" },
-        ).forEach { Text("◎ $it", fontSize = 14.sp) }
-        r.goals.forEach { Text("◎ $it", fontSize = 14.sp) }
-    }
+    // 下期目標：AI 建議的支出上限、各分類上限、儲蓄率；按「採用」寫進每月預算與目標（之後在檢討頁看進度、在預算設定修改）
+    if (r.expenseCap != null || r.savingsTarget != null || r.caps.isNotEmpty()) NextGoals(r, m, lk, nav)
     Text(
         "產生於 " + java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(r.createdAt)),
         fontSize = 11.sp, color = gray,
@@ -461,4 +464,44 @@ private fun HabitCharts(d: ReviewData, m: (Long) -> String, lk: Lookups) {
         d.merchants().sortedByDescending { it.total }.take(6).map { Triple(it.name.take(12), it.total, "${it.count} 次　${m(it.total)}") },
         MaterialTheme.colorScheme.primary,
     )
+}
+
+
+/** AI 建議的下期目標，可一鍵採用為每月預算與儲蓄率目標。 */
+@Composable
+private fun NextGoals(r: AiReview, m: (Long) -> String, lk: Lookups, nav: NavController) {
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    // 分類名稱對應到大分類
+    val roots = lk.categories.filter { it.kind == com.enwei.moneymanager.data.TxnType.EXPENSE && it.parentId == null && !it.archived }
+    val capIds = r.caps.mapNotNull { c -> roots.firstOrNull { it.name == c.category } ?: roots.firstOrNull { it.name.contains(c.category) || c.category.contains(it.name) } }
+        .zip(r.caps).map { (cat, c) -> cat.id to c }
+    val adopted = (r.expenseCap == null || settings.budgets[0L] == r.expenseCap) &&
+        capIds.all { (id, c) -> settings.budgets[id] == c.cap } &&
+        (r.savingsTarget == null || settings.savingsGoal == r.savingsTarget)
+    androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("下期目標（AI 建議）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            r.expenseCap?.let { Row { Text("總支出上限", fontSize = 13.sp, modifier = Modifier.weight(1f)); Text(m(it), fontSize = 13.sp) } }
+            r.savingsTarget?.let { Row { Text("儲蓄率", fontSize = 13.sp, modifier = Modifier.weight(1f)); Text("${"%.0f".format(it)}% 以上", fontSize = 13.sp) } }
+            capIds.forEach { (id, c) ->
+                Row {
+                    Text(lk.category(id)?.name ?: c.category, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text("上限 ${m(c.cap)}", fontSize = 13.sp)
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (adopted) Text("已採用，每月在檢討頁看進度", fontSize = 12.sp, color = IncomeColor, modifier = Modifier.weight(1f))
+                else Text("採用後會寫進每月預算與目標", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                if (!adopted) TextButton(onClick = {
+                    repo.settings.update { s ->
+                        s.copy(
+                            budgets = s.budgets + listOfNotNull(r.expenseCap?.let { 0L to it }) + capIds.associate { (id, c) -> id to c.cap },
+                            savingsGoal = r.savingsTarget ?: s.savingsGoal,
+                        )
+                    }
+                }) { Text("採用") }
+                TextButton(onClick = { nav.navigate("budget") }) { Text("修改") }
+            }
+        }
+    }
 }

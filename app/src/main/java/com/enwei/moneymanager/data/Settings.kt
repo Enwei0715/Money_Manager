@@ -230,6 +230,8 @@ data class AppSettings(
     val memos: List<Memo> = emptyList(),
     /** 每月預算：key 為分類 id，0 代表總預算；值為最小單位金額 */
     val budgets: Map<Long, Long> = emptyMap(),
+    /** 儲蓄率目標（%）；null 為不設定 */
+    val savingsGoal: Double? = null,
     /** 通知來源 App → 記入的帳戶 */
     val notifAccountMap: Map<String, Long> = emptyMap(),
     /** 讀取交易紀錄畫面的錢包 App */
@@ -458,6 +460,7 @@ class SettingsStore(context: Context) {
         carryOver = prefs.getBoolean("carryOver", true),
         memos = runCatching { json.decodeFromString(memoSerializer, prefs.getString("memos", "[]")!!) }.getOrDefault(emptyList()),
         budgets = runCatching { json.decodeFromString(budgetSerializer, prefs.getString("budgets", "{}")!!) }.getOrDefault(emptyMap()),
+        savingsGoal = prefs.getFloat("savingsGoal", -1f).takeIf { it >= 0f }?.toDouble(),
         notifAccountMap = runCatching { json.decodeFromString(pkgMapSerializer, prefs.getString("notifAccountMap", "{}")!!) }.getOrDefault(emptyMap()),
         screenPackages = prefs.getStringSet("screenPackages", emptySet())!!.toSet(),
         screenReadSince = runCatching { json.decodeFromString(pkgMapSerializer, prefs.getString("screenReadSince", "{}")!!) }.getOrDefault(emptyMap()),
@@ -623,6 +626,7 @@ class SettingsStore(context: Context) {
             .putBoolean("carryOver", s.carryOver)
             .putString("memos", json.encodeToString(memoSerializer, s.memos))
             .putString("budgets", json.encodeToString(budgetSerializer, s.budgets))
+            .putFloat("savingsGoal", s.savingsGoal?.toFloat() ?: -1f)
             .putString("notifAccountMap", json.encodeToString(pkgMapSerializer, s.notifAccountMap))
             .putStringSet("screenPackages", s.screenPackages)
             .putString("screenReadSince", json.encodeToString(pkgMapSerializer, s.screenReadSince))

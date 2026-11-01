@@ -155,7 +155,12 @@ data class AiReview(
     val focus: List<String> = emptyList(),
     /** 發現：每點都附依據（資料裡的數字或交易）與建議 */
     val findings: List<ReviewFinding> = emptyList(),
+    /** 下期各分類支出上限建議（分類名稱 → 金額，最小單位） */
+    val caps: List<CategoryCap> = emptyList(),
 )
+
+@Serializable
+data class CategoryCap(val category: String, val cap: Long)
 
 /** AI 的一個發現：[text] 結論、[basis] 依據（引用資料的數字）、[action] 建議、[saving] 每月約可省（最小單位）。 */
 @Serializable

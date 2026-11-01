@@ -416,7 +416,14 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String): ChatMsg? {
     val text = renumberCites(reply.text, imp, ids)
     val points = reply.points.map { renumberCites(it, imp, ids) }
     reply.newsIds.mapNotNull { it.toIntOrNull() }.mapNotNull { imp.getOrNull(it)?.id }.forEach { if (it !in ids) ids += it }
-    val fixed = reply.copy(text = text, points = points, newsIds = ids)
+    // 卡片的代號查報價確認（查得到才算確認，並帶上現價與名稱）
+    val quotes = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(reply.cards.map { Market.TW to it.symbol }) }
+        .getOrDefault(emptyList()).associateBy { it.key }
+    val cards = reply.cards.map { p ->
+        val q = quotes[quoteKey(Market.TW, p.symbol)]
+        p.copy(price = q?.price, name = p.name.ifBlank { q?.name.orEmpty() })
+    }
+    val fixed = reply.copy(text = text, points = points, newsIds = ids, cards = cards)
     // 使用者按了停止：不把回覆加進對話
     kotlinx.coroutines.yield()
     ds.update { it.copy(chat = (it.chat + fixed).takeLast(40), business = it.business + fixed.cards.filter { c -> c.business.isNotBlank() }.associate { c -> c.symbol to c.business }) }
