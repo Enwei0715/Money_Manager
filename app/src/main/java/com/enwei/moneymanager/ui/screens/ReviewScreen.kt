@@ -282,7 +282,7 @@ private fun AiReviewBody(
         Spacer(Modifier.width(12.dp))
         Text(r.headline, fontSize = 15.sp, modifier = Modifier.weight(1f))
     }
-    // 每一段像資料夾：點標題展開／收起（預設展開「想問你的幾筆」與「行動建議」，其他收起）
+    // 每一段像資料夾：點標題展開／收起（預設展開「想跟你確認的幾筆」與「行動建議」，其他收起）
     @Composable
     fun fold(title: String, count: Int, initiallyOpen: Boolean, body: @Composable () -> Unit) {
         if (count == 0) return
@@ -305,11 +305,11 @@ private fun AiReviewBody(
         }
     }
     section("做得好", r.good, "✓")
-    fold("想問你的幾筆", r.questions.size, true) {
+    fold("想跟你確認的幾筆", r.questions.size, true) {
         val byId = d.expenses.associateBy { it.id }
         r.questions.forEach { q -> QuestionCard(q, q.txnIds.mapNotNull { byId[it] }, lk, necessity, m, nav) }
     }
-    section("需要改善", r.improve, "!")
+    section("可以調整的地方", r.improve, "•")
     fold("行動建議", r.actions.size, true) {
         r.actions.forEachIndexed { i, a ->
             Row {

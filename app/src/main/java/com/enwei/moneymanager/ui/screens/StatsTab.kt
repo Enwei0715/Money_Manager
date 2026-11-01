@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -249,6 +250,9 @@ fun PieChart(slices: List<Pair<String, Long>>) {
     val labelColor = MaterialTheme.colorScheme.onSurface
     val empty = MaterialTheme.colorScheme.surfaceVariant
     val separator = MaterialTheme.colorScheme.surface
+    // 動畫：每次資料改變都從 12 點鐘方向（0 度）順時針轉開到完整圓餅，轉完標籤再淡入
+    val prog = remember(slices) { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(slices) { prog.animateTo(1f, androidx.compose.animation.core.tween(800, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
     Canvas(Modifier.fillMaxWidth().height(320.dp).padding(vertical = 12.dp)) {
         val r = minOf(size.width * 0.27f, size.height * 0.42f)
         val c = Offset(size.width / 2, size.height / 2)
@@ -258,11 +262,15 @@ fun PieChart(slices: List<Pair<String, Long>>) {
             return@Canvas
         }
         val sweeps = slices.map { it.second.toFloat() / total * 360f }
+        val limit = 360f * prog.value
         var start = -90f
         slices.indices.forEach { i ->
-            drawArc(chartPalette[i % chartPalette.size], start, sweeps[i], true, topLeft, Size(2 * r, 2 * r))
+            val drawn = (limit - (start + 90f)).coerceIn(0f, sweeps[i])
+            if (drawn > 0f) drawArc(chartPalette[i % chartPalette.size], start, drawn, true, topLeft, Size(2 * r, 2 * r))
             start += sweeps[i]
         }
+        val labelAlpha = ((prog.value - 0.75f) / 0.25f).coerceIn(0f, 1f)
+        if (labelAlpha <= 0f) return@Canvas
         // 細分隔線
         start = -90f
         if (slices.size > 1) sweeps.forEach { sw ->
@@ -316,10 +324,10 @@ fun PieChart(slices: List<Pair<String, Long>>) {
                 moveTo(p1.x, p1.y)
                 cubicTo(out.x, out.y, anchor.x - dir * 18f, anchor.y, anchor.x, anchor.y)
             }
-            drawPath(path, l.color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+            drawPath(path, l.color, alpha = labelAlpha, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
             val w = l.layout.size.width.toFloat()
             val x = if (l.right) anchor.x + 8f else anchor.x - 8f - w
-            drawText(l.layout, topLeft = Offset(x.coerceIn(0f, size.width - w), l.y - l.layout.size.height / 2))
+            drawText(l.layout, topLeft = Offset(x.coerceIn(0f, size.width - w), l.y - l.layout.size.height / 2), alpha = labelAlpha)
         }
     }
 }

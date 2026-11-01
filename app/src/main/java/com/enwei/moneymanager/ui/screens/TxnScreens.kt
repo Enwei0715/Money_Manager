@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.enwei.moneymanager.ui.components.FormInput
 import com.enwei.moneymanager.ui.components.FormLine
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,7 +64,13 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
     val lk = rememberLookups()
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     var q by rememberSaveable { mutableStateOf("") }
-    var showFilter by rememberSaveable { mutableStateOf(startWithFilter) }
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    // 篩選方式（設定裡選）：0 圖表勾選頁、1 欄位篩選
+    val chartStyle = settings.filterStyle == 0
+    var showFilter by rememberSaveable { mutableStateOf(startWithFilter && !chartStyle) }
+    var chartOpen by remember { mutableStateOf(startWithFilter && chartStyle) }
+    var chart by remember { mutableStateOf(ChartFilter(month = com.enwei.moneymanager.core.Periods.monthOf(java.time.LocalDate.now(), repo.settings.value.monthStartDay))) }
+    var chartApplied by remember { mutableStateOf(false) }
     var from by rememberSaveable { mutableStateOf<java.time.LocalDate?>(null) }
     var to by rememberSaveable { mutableStateOf<java.time.LocalDate?>(null) }
     var accountId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -75,10 +82,12 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
     var catMenu by remember { mutableStateOf(false) }
     val minMinor = Money.parseMinor(min)
     val maxMinor = Money.parseMinor(max)
-    val active = q.isNotBlank() || from != null || accountId != null || categoryId != null || minMinor != null || maxMinor != null
-    val result = remember(q, all, lk, from, to, accountId, categoryId, minMinor, maxMinor) {
+    val chartOn = chartApplied && chart.active
+    val active = q.isNotBlank() || from != null || accountId != null || categoryId != null || minMinor != null || maxMinor != null || chartOn
+    val result = remember(q, all, lk, from, to, accountId, categoryId, minMinor, maxMinor, chart, chartOn) {
         if (!active) emptyList() else all.filter { t ->
             val d = t.date.toLocalDate()
+            (!chartOn || (chart.inPeriod(t, settings.monthStartDay) && chart.matches(t, lk))) &&
             (q.isBlank() || listOfNotNull(t.merchant, t.note, lk.category(t.categoryId)?.name, lk.account(t.accountId)?.name, lk.account(t.toAccountId)?.name)
                 .any { it.contains(q, true) } || Money.full(t.amount).replace(",", "").contains(q.replace(",", ""))) &&
                 (from == null || !d.isBefore(from)) && (to == null || !d.isAfter(to)) &&
@@ -91,7 +100,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             BackTopBar("搜尋", { nav.popBackStack() }) {
-                IconButton(onClick = { showFilter = !showFilter }) { Icon(Icons.Outlined.Tune, "篩選") }
+                IconButton(onClick = { if (chartStyle) chartOpen = true else showFilter = !showFilter }) { Icon(Icons.Outlined.Tune, "篩選") }
             }
         },
     ) { pad ->
@@ -149,12 +158,37 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false) {
                 }
             }
             if (active) SummaryBar(totalsOf(result, lk.fx), lk.base)
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 if (active && result.isEmpty()) item { NoData("找不到符合的交易") }
                 result.groupBy { it.date.toLocalDate() }.toSortedMap(Comparator.reverseOrder()).forEach { (day, txns) ->
                     item(key = "s$day") { DayBlock(day, txns, lk, nav) }
                 }
             }
+            // 圖表篩選套用中：底部顯示已選項目，可以「編輯」或清除
+            if (chartOn) Row(
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(start = 16.dp, end = 8.dp).navigationBarsPadding(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    (chart.month?.let { "${it.monthValue}月 · " } ?: "") + chart.label(lk), fontSize = 14.sp, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { chartApplied = false }) { Text("清除") }
+                TextButton(onClick = { chartOpen = true }) { Text("編輯") }
+            }
+        }
+    }
+    if (chartOpen) {
+        androidx.activity.compose.BackHandler { chartOpen = false; if (startWithFilter && !chartApplied) nav.popBackStack() }
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { chartOpen = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+        ) {
+            ChartFilterPage(
+                lk, all, settings.monthStartDay, chart,
+                onApply = { chart = it; chartApplied = true; chartOpen = false },
+                onClose = { chartOpen = false; if (startWithFilter && !chartApplied) nav.popBackStack() },
+            )
         }
     }
     if (pickRange) {
