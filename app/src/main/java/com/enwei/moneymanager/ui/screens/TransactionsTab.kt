@@ -917,15 +917,16 @@ private fun YearCalendar(year: Int, all: List<TxnEntity>, lk: Lookups, startDay:
     val year0 = totals.values.fold(0L) { a, t -> a + t.expense }
     val income0 = totals.values.fold(0L) { a, t -> a + t.income }
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        val cellH = ((maxHeight - 40.dp) / 4).coerceAtLeast(110.dp)
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 6.dp)) {
+        // 四列平分畫面高度，一年剛好放滿、不用滑；畫面太矮（每列不到 110dp）時才改成可捲動
+        val fit = (maxHeight - 28.dp) / 4 >= 110.dp
+        Column(Modifier.fillMaxSize().then(if (fit) Modifier else Modifier.verticalScroll(rememberScrollState())).padding(horizontal = 6.dp)) {
             months.chunked(3).forEach { row ->
-                Row(Modifier.fillMaxWidth().height(cellH)) {
+                Row(Modifier.fillMaxWidth().then(if (fit) Modifier.weight(1f) else Modifier.height(110.dp))) {
                     row.forEach { ym ->
                         val t = totals[ym]!!
                         val r = Periods.month(ym, startDay)
                         Column(
-                            Modifier.weight(1f).fillMaxHeight().padding(3.dp)
+                            Modifier.weight(1f).fillMaxHeight().padding(3.dp).clipToBounds()
                                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
                                 .then(if (ym == now) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
                                 .clickable { onMonth(ym) }.padding(6.dp),
@@ -957,9 +958,9 @@ private fun YearCalendar(year: Int, all: List<TxnEntity>, lk: Lookups, startDay:
             val top = totals.maxByOrNull { it.value.expense }?.takeIf { it.value.expense > 0 }
             Text(
                 "全年收入 ${Money.full(income0)}　支出 ${Money.full(year0)}" + (top?.let { "　支出最多：${it.key.monthValue}月" } ?: ""),
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp),
+                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
             )
-            Spacer(Modifier.height(80.dp))
         }
     }
 }
