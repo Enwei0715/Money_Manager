@@ -542,14 +542,10 @@ class NewsDataset(context: Context) {
                 val retried = LinkedHashMap<String, GroqAi.NewsTag>()
                 val parts = chunkNews(batch, 2_500)
                 for (part in parts) {
-                    val result = GroqAi.tagNews(part, known)
-                    if (result == null || !result.keys.containsAll(part.map { it.id })) {
-                        retried.clear()
-                        break
-                    }
-                    retried.putAll(result)
+                    // 部分成功也保留，沒標到的下一輪再標
+                    GroqAi.tagNews(part, known)?.let { retried.putAll(it) }
                 }
-                if (retried.keys.containsAll(ids)) tags = retried
+                if (retried.size > (tags?.size ?: 0)) tags = retried
             }
             val completeTags = tags
             if (completeTags == null) {
@@ -563,7 +559,8 @@ class NewsDataset(context: Context) {
                 })
             }
             done += completeTags.size
-            if (completeTags.size < batch.size) return done
+            // 這批只標到一部分也繼續下一批（沒標到的保留待辦）；一則都沒標到才停
+            if (completeTags.isEmpty()) return done
             delay(if (big) 6_000 else 15_000)
         }
         return done

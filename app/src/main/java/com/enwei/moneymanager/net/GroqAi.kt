@@ -162,8 +162,15 @@ object GroqAi {
         /** 回覆（含推理）的 token 上限；免費方案每分鐘上限約 8,000，輸入加回覆不能超過 */
         cap: Int = 6000, effort: String = "medium",
         task: AiTask = AiTask.NAMING,
+        /**
+         * 回覆的完整度（0～1）：不到 1 時換下一個模型再試同一份工作；全部都不完整時回傳最完整的那一份。
+         * 例如新聞標註要每一則都有標到、重點整理要每一則都歸到某個重點。
+         */
+        quality: ((JsonObject) -> Double)? = null,
     ): JsonObject? = withContext(Dispatchers.IO) {
         val s = MoneyApp.repo.settings.value
+        var best: JsonObject? = null
+        var bestScore = -1.0
         // 回覆語言跟隨 App 介面語言（JSON 的鍵、清單裡指定的選項值、代號與商家原名不翻）
         val system = if (com.enwei.moneymanager.ui.I18n.english && task.userText)
             system + " Write every human-readable text value in English (keep JSON keys, values chosen from given lists, stock codes and original names unchanged)."
@@ -202,12 +209,20 @@ object GroqAi {
                 // 不加全域鎖：鎖不能重複取得，外層若已持有就會永遠卡住；限流交給下面的暫停機制與各工作的批次間隔
                 Provider.GROQ -> groqJson(s, system, user, maxTokens, r.big || hard, cap, if (r.big) effort else "low", forceModel = r.model)
                 Provider.OPENROUTER -> callCompat(Provider.OPENROUTER, s.openRouterKey.trim(), r.model, system, user, maxOf(1024, maxTokens * 3).coerceAtMost(8192),
-                    timeoutSec = if (r.big) 120 else 60)
+                    timeoutSec = if (r.big) 90 else 50)
                 Provider.NVIDIA -> callCompat(Provider.NVIDIA, s.nvidiaKey.trim(), r.model.removePrefix(NV), system, user, maxOf(1024, maxTokens * 3).coerceAtMost(8192),
-                    timeoutSec = if (r.big) 150 else 75)
+                    timeoutSec = if (r.big) 90 else 50)
             }
-            ProviderLog.record(r.provider, r.model, if (out != null) null else lastError ?: "沒有回應")
-            if (out != null) return@withContext out
+            val score = if (out != null && quality != null) runCatching { quality(out) }.getOrDefault(0.0) else 1.0
+            ProviderLog.record(r.provider, r.model,
+                if (out == null) lastError ?: "沒有回應" else if (score < 1.0) "回覆不完整（${(score * 100).toInt()}%），換下一個模型" else null)
+            if (out != null && score >= 1.0) return@withContext out
+            if (out != null) {
+                // 不完整：記住目前最好的，換下一個模型（這個模型沒壞，不暫停）
+                if (score > bestScore) { best = out; bestScore = score }
+                lastError = "${r.provider.label}「${r.model.removePrefix(NV)}」回覆不完整"
+                continue
+            }
             // 額度用完或沒回應：這個模型先暫停，之後的呼叫直接用下一個
             val err = lastError.orEmpty()
             // 伺服器有說多久後再試（Retry-After）就照它，否則用預設時間；再加隨機間隔，暫停時間會保存到 App 重開後
@@ -225,7 +240,7 @@ object GroqAi {
             else if ("逾時" in err || "timeout" in err.lowercase() || "503" in err || "404" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
                 retryAfterMs?.coerceIn(5_000L, 3600_000L) ?: 5 * 60_000L)
         }
-        null
+        best
     }
 
     /** 最近一次被限流時，伺服器建議等待的時間（Retry-After 標頭或 Gemini 的 retryDelay） */
@@ -959,7 +974,12 @@ object GroqAi {
                 if (item.content.isNotBlank()) append("\n來源內容：${item.content.take(150)}")
             }
         }.joinToString("\n\n")
-        val r = chatJson(system, user, 25 * items.size + 200, task = AiTask.NEWS_TAG) ?: return null
+        val r = chatJson(system, user, 25 * items.size + 200, task = AiTask.NEWS_TAG, quality = { o ->
+            val got = (o["r"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
+                ((e as? JsonObject)?.get("i") as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt()?.takeIf { it in items.indices }
+            }?.toSet().orEmpty()
+            got.size.toDouble() / items.size
+        }) ?: return null
         val arr = r["r"] as? kotlinx.serialization.json.JsonArray ?: return null
         val code = Regex("^[0-9]{4,6}[A-Z]?$")
         return arr.mapNotNull { e ->
@@ -1199,7 +1219,13 @@ object GroqAi {
                 if (item.content.isNotBlank()) append("\n來源內容：${item.content.take(300)}")
             }
         }.joinToString("\n\n")
-        val r = chatJson(system, user, 900, task = AiTask.DIGEST) ?: return null
+        val r = chatJson(system, user, 900, task = AiTask.DIGEST, quality = { o ->
+            // 至少八成的新聞有歸到重點就接受（少數漏掉的會用標題補上）
+            val got = (o["p"] as? kotlinx.serialization.json.JsonArray)?.flatMap { e ->
+                ((e as? JsonObject)?.get("i") as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toIntOrNull() }.orEmpty()
+            }?.filter { it in items.indices }?.toSet().orEmpty()
+            (got.size.toDouble() / items.size / 0.8).coerceAtMost(1.0)
+        }) ?: return null
         val code = Regex("^[0-9]{4,6}[A-Z]?$")
         val points = (r["p"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null

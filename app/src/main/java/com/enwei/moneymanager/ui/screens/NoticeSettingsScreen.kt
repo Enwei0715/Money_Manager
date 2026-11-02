@@ -1,6 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
 import android.app.NotificationManager
+import androidx.compose.material.icons.filled.MoreVert
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.background
@@ -27,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -95,33 +97,35 @@ fun NoticeSettingsScreen(nav: NavController) {
                                 // 股價提醒：關掉時連背景檢查也停
                                 if (k == NoticeKind.STOCK) st.copy(noticeOff = off - k.name, stockAlertsOn = v) else st.copy(noticeOff = off)
                             }
-                            Column(Modifier.fillMaxWidth().clickable { toggle(!on) }.padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 4.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(k.label, fontSize = 15.sp)
-                                        Text(k.desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            // 一行：名稱（系統關閉時下方紅字）＋更多（試發、聲音與震動）＋開關
+                            var menu by remember { mutableStateOf(false) }
+                            Row(Modifier.fillMaxWidth().clickable { toggle(!on) }.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(k.label, fontSize = 15.sp)
+                                    if (blocked) Text("系統已關閉這一類", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                                }
+                                androidx.compose.foundation.layout.Box {
+                                    androidx.compose.material3.IconButton(onClick = { menu = true }) {
+                                        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.MoreVert, "更多",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    Switch(on, { toggle(it) })
+                                    androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                                        if (on && systemOn && !blocked) androidx.compose.material3.DropdownMenuItem(text = { Text("試發一則") },
+                                            onClick = { menu = false; sample(ctx, k) })
+                                        androidx.compose.material3.DropdownMenuItem(text = { Text("聲音與震動") }, onClick = {
+                                            menu = false
+                                            ctx.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                                                .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, k.channel))
+                                        })
+                                    }
                                 }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (blocked) Text("系統已關閉這一類", fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
-                                    else Spacer(Modifier.weight(1f))
-                                    if (on && systemOn && !blocked) TextButton(onClick = { sample(ctx, k) }) { Text("試發一則", fontSize = 12.sp) }
-                                    TextButton(onClick = {
-                                        ctx.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
-                                            .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, k.channel))
-                                    }) { Text("聲音與震動", fontSize = 12.sp) }
-                                }
+                                Switch(on, { toggle(it) })
                             }
                         }
                     }
                 }
             }
-            val hidden = NoticeKind.entries.filter { !it.available(s) }
-            if (hidden.isNotEmpty()) Text(
-                tr("上層功能關閉而不顯示：") + hidden.joinToString("、") { tr(it.label) },
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp),
-            )
             Spacer(Modifier.height(24.dp))
         }
     }
