@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -187,7 +188,10 @@ object TabRequest {
 }
 
 /** 打開路由：「advisor」「advisor:子頁」切到帳戶→助理，「review」切到交易→檢討，其他分頁用切換、其餘畫面照常開啟。 */
-fun NavHostController.openRoute(r: String) {
+/** 給其他檔案用：切到分頁或打開頁面。 */
+fun openRouteFrom(nav: NavController, r: String) = nav.openRoute(r)
+
+fun NavController.openRoute(r: String) {
     when {
         r == "advisor" || r.startsWith("advisor:") -> {
             TabRequest.accountsSection = 2
@@ -201,6 +205,12 @@ fun NavHostController.openRoute(r: String) {
 }
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
+
+/** 工具頁：從分頁打開時保留底部分頁列（編輯交易等會丟資料的畫面不在這裡）。 */
+private val TOOL_PAGES = setOf(
+    "pending", "recurring", "fx", "backup", "ai-hub", "budget", "totalstats", "notif", "walletreader",
+    "stockfees", "settings", "config", "stocksearch", "ai", "categories", "accountgroups", "bookmarks",
+)
 
 private val tabs = listOf(
     Tab("txns", "交易", Icons.AutoMirrored.Outlined.MenuBook),
@@ -236,7 +246,7 @@ private fun BottomTabs(current: String?, onSelect: (String) -> Unit) {
  * 切換底部分頁。「交易」是起始頁：直接退回起始頁，不能用 restoreState——
  * 其他分頁的狀態是存在起始頁底下的，還原會把剛離開的分頁（例如統計）又帶回來，看起來就像按了沒反應。
  */
-internal fun NavHostController.openTab(route: String) {
+internal fun NavController.openTab(route: String) {
     val start = graph.findStartDestination()
     if (route == start.route) {
         if (!popBackStack(start.id, inclusive = false)) navigate(route) { launchSingleTop = true }
@@ -257,8 +267,12 @@ private fun AppScaffold(nav: NavHostController) {
     // 鍵盤打開時收起底部分頁列（否則輸入框和鍵盤之間會留一大塊空白）
     @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
     val imeOpen = WindowInsets.isImeVisible
-    val showBar = !imeOpen && tabs.any { it.route == current } &&
-        nav.previousBackStackEntry?.destination?.route.let { prev -> prev == null || tabs.any { it.route == prev } }
+    // 從「工具」或分頁直接打開的工具頁（待確認、預算、備份…）也保留底部分頁列，分頁標示停在原本的分頁
+    val prevRoute = nav.previousBackStackEntry?.destination?.route
+    val isTab = tabs.any { it.route == current }
+    val toolPage = current in TOOL_PAGES && tabs.any { it.route == prevRoute }
+    val showBar = !imeOpen && (isTab || toolPage) && (prevRoute == null || tabs.any { it.route == prevRoute })
+    val tabShown = if (isTab) current else prevRoute
     val startScreen = remember { MoneyApp.repo.settings.value.startScreen }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -268,7 +282,7 @@ private fun AppScaffold(nav: NavHostController) {
             if (showBar) Column {
                 // AI 狀態列：正在進行的 AI 工作、進度與暫停原因（沒有事情時不佔空間）
                 com.enwei.moneymanager.ui.components.AiStatusBar(nav) { r -> nav.openRoute(r) }
-                BottomTabs(current) { route -> nav.openTab(route) }
+                BottomTabs(tabShown) { route -> nav.openTab(route) }
             }
         },
     ) { inner ->

@@ -33,7 +33,12 @@ object ReportJob {
         val etaAt: Long? = null,
         /** 背景排程自動執行（不是使用者按的） */
         val background: Boolean = false,
+        /** 這一輪停下來了，稍後會自動接續（狀態列保留一行並可按「繼續」） */
+        val paused: Boolean = false,
     )
+
+    /** App 裡直接執行的這一輪是否還活著（看門狗用：活著就不必接手）。 */
+    fun activeHere(): Boolean = direct?.isActive == true
 
     val state = MutableStateFlow<State?>(null)
 
@@ -55,7 +60,7 @@ object ReportJob {
         }
         state.value = State("準備中…", System.currentTimeMillis(), refreshOnly = refreshOnly)
         direct = MoneyApp.instance.appScope.launch {
-            execute(app, notifyProgress = true, refreshOnly = refreshOnly, budgetMs = 30 * 60_000L, userInitiated = true)
+            execute(app, notifyProgress = true, refreshOnly = refreshOnly, budgetMs = 30 * 60_000L, userInitiated = true, watchdog = true)
         }
     }
 
@@ -84,8 +89,31 @@ object ReportJob {
         /** 這一輪可以執行多久；用完就在批次之間停下，稍後接續 */
         budgetMs: Long = 8 * 60_000L,
         userInitiated: Boolean = true,
+        /**
+         * App 裡直接執行時：一直往後延一個「看門狗」背景工作；App 被系統關掉（這一輪跟著消失）時，
+         * 看門狗約 2 分鐘後由 WorkManager 啟動，從已保存的區塊接續，不會整個停掉。
+         */
+        watchdog: Boolean = false,
         onProgress: (State) -> Unit = {},
     ): DailyReport? {
+        var lastWatch = 0L
+        fun pushWatchdog() {
+            if (!watchdog) return
+            val now = System.currentTimeMillis()
+            if (now - lastWatch < 45_000L) return
+            lastWatch = now
+            runCatching {
+                WorkManager.getInstance(context).enqueueUniqueWork(
+                    "report-watchdog", ExistingWorkPolicy.REPLACE,
+                    OneTimeWorkRequestBuilder<ReportWorker>()
+                        .setInputData(androidx.work.workDataOf("refreshOnly" to refreshOnly, "userInitiated" to true, "watchdog" to true))
+                        .setInitialDelay(2, java.util.concurrent.TimeUnit.MINUTES)
+                        .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build(),
+                )
+            }
+        }
+        fun stopWatchdog() { if (watchdog) runCatching { WorkManager.getInstance(context).cancelUniqueWork("report-watchdog") } }
+        pushWatchdog()
         val budget = WorkBudget(budgetMs, background = !userInitiated)
         val repo = MoneyApp.repo
         val ds = MoneyApp.news
@@ -101,6 +129,7 @@ object ReportJob {
                 now + (now - phaseStart) / (done - 1) * (total - done + 1) else null
             val next = State(step, start, refreshOnly = refreshOnly, done = done, total = total, etaAt = eta, background = !userInitiated)
             state.value = next
+            pushWatchdog()
             onProgress(next)
             if (notifyProgress) progressNotice(context, next, now - start)
         }
@@ -126,12 +155,14 @@ object ReportJob {
             budget.stopReason?.let { why ->
                 // 時間用完或網路不符：已讀完的區塊都已寫入，稍後從斷點接續（不算失敗）
                 val msg = "暫停：$why；已完成的部分已保存，稍後自動接續"
-                state.value = State(msg, start, running = false, refreshOnly = refreshOnly, background = !userInitiated)
+                state.value = State(msg, start, running = false, refreshOnly = refreshOnly, background = !userInitiated, paused = true)
+                stopWatchdog()
                 if (notifyProgress) cancelProgress(context)
                 continueLater(context, refreshOnly, userInitiated)
                 return null
             }
             if (refreshOnly) {
+                stopWatchdog()
                 state.value = State("資料集已更新：共 ${st.items.size} 則", start, running = false, refreshOnly = true)
                 if (notifyProgress) context.getSystemService(android.app.NotificationManager::class.java).cancel(NOTICE_ID)
                 return null
@@ -141,6 +172,7 @@ object ReportJob {
                 reportStep = step
                 update(step)
             }
+            stopWatchdog()
             val notReady = reportStep.startsWith("近 3 天新聞")
             if (r == null && notReady) {
                 // 不是失敗：新聞還在整理，報告要等資料完整才產生。這一輪有進展就稍後自動接續，不發「失敗」通知
@@ -148,8 +180,9 @@ object ReportJob {
                 val progressed = after.digested > coverage.digested || after.pending < coverage.pending
                 val msg = "資料整理中：還有 ${after.pending} 則待標註、${after.recent - after.digested} 則待整理重點；" +
                     (if (progressed) "會自動繼續，完成後產生報告。" else "AI 這一輪沒有進展（${GroqAi.lastError ?: "可能是額度用完"}），稍後再試。")
-                state.value = State(msg, start, running = false, background = !userInitiated)
+                state.value = State(msg, start, running = false, background = !userInitiated, paused = progressed)
                 if (notifyProgress) cancelProgress(context)
+                stopWatchdog()
                 if (progressed) continueLater(context, refreshOnly, userInitiated)
                 else if (!userInitiated) AiHealth.record(false, GroqAi.lastError ?: "新聞整理沒有進展")
             } else if (r == null) {
@@ -165,8 +198,10 @@ object ReportJob {
             r
         } catch (e: CancellationException) {
             if (notifyProgress) cancelProgress(context)
+            stopWatchdog()
             throw e
         } catch (e: Exception) {
+            stopWatchdog()
             val msg = "${if (refreshOnly) "更新失敗" else "產生失敗"}：${e.message ?: e.javaClass.simpleName}"
             state.value = State(msg, start, running = false, error = msg, background = !userInitiated)
             if (!userInitiated) AiHealth.record(false, msg)
@@ -256,6 +291,8 @@ class ReportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val userInitiated = inputData.getBoolean("userInitiated", false)
         // 背景自動執行：連續失敗暫停中、或網路不符（只用 Wi-Fi）時先不跑
         if (!userInitiated && (AiHealth.backgroundPaused() || AiHealth.networkProblem() != null)) return Result.success()
+        // 看門狗：App 裡那一輪還在跑就不用接手；App 被關掉後才由這裡從斷點接續
+        if (ReportJob.activeHere() || (inputData.getBoolean("watchdog", false) && ReportJob.state.value?.running == true)) return Result.success()
         val queued = ReportJob.State("準備中…", System.currentTimeMillis(), refreshOnly = refreshOnly)
         ReportJob.state.value = queued
         setProgress(ReportJob.workProgress(queued))

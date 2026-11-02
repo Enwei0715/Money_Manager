@@ -150,7 +150,8 @@ fun MoreScreen(nav: NavController) {
                 shown,
                 shown.associate { t -> t.id to (parseSize(settings.toolSizes[t.id]) ?: if (t.id in settings.wideTools) 2 to 1 else 1 to 1) },
                 summary, editing,
-                onOpen = { t -> nav.navigate(t.route) },
+                // 股票助理、收支檢討這類其實是分頁的工具：切到那個分頁，不另外疊一層（底部分頁列不會消失）
+                onOpen = { t -> com.enwei.moneymanager.ui.openRouteFrom(nav, t.route) },
                 onLongPress = { editing = true },
                 onReorder = { ids -> setOrder(ids) },
                 onResize = { id, w, h -> repo.settings.update { st -> st.copy(toolSizes = st.toolSizes + (id to "${w}x$h")) } },

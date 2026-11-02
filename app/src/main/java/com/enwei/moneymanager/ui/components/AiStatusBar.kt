@@ -85,6 +85,10 @@ fun AiStatusBar(nav: NavController, onOpen: (String) -> Unit = { nav.navigate(it
                 add(AiLine("步驟 ${stepNo.coerceAtMost(stepTotal)}/$stepTotal · " + r.step.removeSuffix("…").substringBefore(" ${r.done}/") + count + eta + blocks,
                     if (r.refreshOnly) "advisor:2" else "advisor:0", true,
                     progress = if (r.done != null && r.total != null && r.total > 0) r.done.toFloat() / r.total else null))
+            } else if (r.paused && now - r.startedAt < 6 * 3600_000L) {
+                // 暫停中（時間用完、網路不符、等 AI 額度）：保留一行，可以按「繼續」馬上接續
+                add(AiLine(r.step, if (r.refreshOnly) "advisor:2" else "advisor:0", false,
+                    action = "繼續" to { ReportJob.startNow(MoneyApp.instance, refreshOnly = r.refreshOnly) }))
             } else if (r.error != null && now - r.startedAt < 6 * 3600_000L) {
                 add(AiLine(r.error, if (r.refreshOnly) "advisor:2" else "advisor:0", false, warn = true, action = "知道了" to { ReportJob.state.value = null }))
             }
