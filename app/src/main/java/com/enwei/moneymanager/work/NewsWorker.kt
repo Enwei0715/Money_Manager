@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.work
 
+import kotlinx.coroutines.launch
 import android.content.Context
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -62,7 +63,12 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             )
         } catch (e: CancellationException) {
             ReportJob.cancelProgress(applicationContext)
-            finish("背景工作已停止")
+            // 系統停止了背景工作（時間上限、電量、網路條件改變）：App 開著就改在 App 裡接著跑，否則標成暫停
+            finish("系統停止了背景更新；已完成的部分已保存", paused = true)
+            if (appVisible()) MoneyApp.instance.appScope.launch {
+                kotlinx.coroutines.delay(1500)
+                ReportJob.startNow(MoneyApp.instance, refreshOnly = true)
+            }
             throw e
         } catch (e: Exception) {
             android.util.Log.w("NewsWorker", "News refresh failed (${e.javaClass.simpleName}); retrying")
@@ -79,13 +85,19 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val stopped = budget.stopReason
         when {
             // 時間用完：已完成的區塊都已寫入，排一輪接續剩下的新聞
-            stopped != null -> { continueSoon(applicationContext); finish("暫停：$stopped") }
+            stopped != null -> { finish("暫停：$stopped；已完成的部分已保存", paused = true); resumeOrSchedule(applicationContext) }
             // 還沒整理完：這一輪有進展就接著跑（不算失敗）；完全沒進展才算失敗（多半是 AI 額度或回應問題）
             cov.pending > 0 || cov.digested < cov.recent -> {
                 val progressed = cov.digested > before.digested || cov.pending < before.pending
-                if (progressed) { AiHealth.record(true); continueSoon(applicationContext) }
-                else AiHealth.record(false, GroqAi.lastError ?: "新聞整理沒有進展")
-                finish(if (progressed) null else "還有 ${cov.pending} 則待讀、${cov.recent - cov.digested} 則待整理：${GroqAi.lastError ?: "稍後繼續"}")
+                if (progressed) {
+                    AiHealth.record(true)
+                    // 還沒做完：不是「已更新」，標成暫停並接續（App 開著就馬上在 App 裡接著跑）
+                    finish("這一輪完成，還有 ${cov.pending} 則待標註、${cov.recent - cov.digested} 則待整理，接續中", paused = true)
+                    resumeOrSchedule(applicationContext)
+                } else {
+                    AiHealth.record(false, GroqAi.lastError ?: "新聞整理沒有進展")
+                    finish("還有 ${cov.pending} 則待讀、${cov.recent - cov.digested} 則待整理：${GroqAi.lastError ?: "稍後繼續"}")
+                }
             }
             else -> { AiHealth.record(true); finish(null) }
         }
@@ -97,11 +109,21 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     }
 
     /** 背景更新結束：狀態列改為結束狀態（[error] 為 null 表示完成）。 */
-    private fun finish(error: String?) {
+    private fun finish(error: String?, paused: Boolean = false) {
         val cur = ReportJob.state.value ?: return
         if (cur.background) ReportJob.state.value = cur.copy(
-            step = error ?: "新聞資料集已更新", running = false, error = error, done = null, total = null, etaAt = null,
+            step = error ?: "新聞資料集已更新", running = false, error = if (paused) null else error, done = null, total = null, etaAt = null, paused = paused,
         )
+    }
+
+    /** 還沒做完：App 開在畫面上就馬上在 App 裡接著跑（不用等系統排程）；否則排背景接續。 */
+    private fun resumeOrSchedule(context: Context) {
+        if (appVisible()) {
+            MoneyApp.instance.appScope.launch {
+                kotlinx.coroutines.delay(1500)
+                ReportJob.startNow(context, refreshOnly = true)
+            }
+        } else continueSoon(context)
     }
 
     companion object {

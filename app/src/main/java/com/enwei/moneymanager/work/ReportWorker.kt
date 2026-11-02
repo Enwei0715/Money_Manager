@@ -158,7 +158,7 @@ object ReportJob {
                 state.value = State(msg, start, running = false, refreshOnly = refreshOnly, background = !userInitiated, paused = true)
                 stopWatchdog()
                 if (notifyProgress) cancelProgress(context)
-                continueLater(context, refreshOnly, userInitiated)
+                resumeOrLater(context, refreshOnly, userInitiated)
                 return null
             }
             if (refreshOnly) {
@@ -183,7 +183,7 @@ object ReportJob {
                 state.value = State(msg, start, running = false, background = !userInitiated, paused = progressed)
                 if (notifyProgress) cancelProgress(context)
                 stopWatchdog()
-                if (progressed) continueLater(context, refreshOnly, userInitiated)
+                if (progressed) resumeOrLater(context, refreshOnly, userInitiated)
                 else if (!userInitiated) AiHealth.record(false, GroqAi.lastError ?: "新聞整理沒有進展")
             } else if (r == null) {
                 val msg = if (reportStep.endsWith("暫不產生報告。")) reportStep else "產生失敗：${GroqAi.lastError ?: "沒有回應"}"
@@ -208,6 +208,16 @@ object ReportJob {
             doneNotice(context, tr(if (refreshOnly) "新聞資料集更新失敗" else "投資報告產生失敗"), msg)
             null
         }
+    }
+
+    /** 還沒做完：App 開在畫面上就馬上在 App 裡接著跑；否則排背景接續。 */
+    fun resumeOrLater(context: Context, refreshOnly: Boolean, userInitiated: Boolean) {
+        if (appVisible()) MoneyApp.instance.appScope.launch {
+            // 等目前這一輪完全結束再開始下一輪
+            kotlinx.coroutines.delay(1500)
+            while (direct?.isActive == true) kotlinx.coroutines.delay(500)
+            startNow(context, refreshOnly)
+        } else continueLater(context, refreshOnly, userInitiated)
     }
 
     /** 這一輪時間用完：1 分鐘後接續（排在目前這輪之後）。 */
