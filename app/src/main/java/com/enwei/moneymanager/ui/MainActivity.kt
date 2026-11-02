@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -204,9 +205,8 @@ fun openRouteFrom(nav: NavController, r: String) = nav.openRoute(r)
 fun NavController.openRoute(r: String) {
     when {
         r == "advisor" || r.startsWith("advisor:") -> {
-            TabRequest.accountsSection = 2
             TabRequest.advisorSub = r.substringAfter(':', "").toIntOrNull()
-            openTab("accounts")
+            openTab("assistant")
         }
         r == "review" -> { TabRequest.txnsTab = 2; openTab("txns") }
         tabs.any { it.route == r } -> openTab(r)
@@ -222,7 +222,9 @@ private val EDITOR_PREFIXES = listOf("txn/", "account/", "trade/", "recurring/{"
 private val tabs = listOf(
     Tab("txns", "交易", Icons.AutoMirrored.Outlined.MenuBook),
     Tab("stats", "統計", Icons.Outlined.BarChart),
-    Tab("accounts", "帳戶", Icons.Outlined.AccountBalanceWallet),
+    Tab("accounts", "資產", Icons.Outlined.AccountBalanceWallet),
+    // 股票助理獨立成一個分頁（不再放在帳戶裡）；股票功能關閉時不顯示
+    Tab("assistant", "助理", Icons.Outlined.AutoAwesome),
     Tab("more", "工具", Icons.Filled.MoreHoriz),
 )
 
@@ -230,8 +232,9 @@ private val tabs = listOf(
 private fun BottomTabs(current: String?, onSelect: (String) -> Unit) {
     Column(Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        val stocksOn = MoneyApp.repo.settings.flow.collectAsStateWithLifecycle().value.featureStocks
         Row(Modifier.fillMaxWidth().navigationBarsPadding().height(56.dp)) {
-            tabs.forEach { t ->
+            tabs.filter { it.route != "assistant" || stocksOn }.forEach { t ->
                 val sel = current == t.route
                 val color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 Column(
@@ -428,7 +431,8 @@ private fun AppScaffold(nav: NavHostController) {
             composable("settings") { SettingsScreen(nav) }
             composable("stockfees") { StockFeeScreen(nav) }
             composable("review") { ReviewScreen(nav) }
-            composable("advisor") { AccountsTab(nav, showBack = true, initialTab = 2) }
+            composable("advisor") { com.enwei.moneymanager.ui.screens.AssistantScreen(nav, showBack = true) }
+            composable("assistant") { com.enwei.moneymanager.ui.screens.AssistantScreen(nav) }
             composable("stock/{symbol}") { e -> StockDetailScreen(nav, e.arguments?.getString("symbol").orEmpty()) }
         }
     }

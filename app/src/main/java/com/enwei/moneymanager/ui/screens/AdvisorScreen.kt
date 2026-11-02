@@ -12,6 +12,9 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -155,6 +158,41 @@ fun AdvisorContent(nav: NavController) {
             2 -> NewsTab(nav, store)
             else -> PlanTab(nav)
         }
+        }
+    }
+}
+
+/** 股票助理（底部分頁）：今日報告、問 AI、新聞、資金紀律；標題列往下捲時收起。 */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun AssistantScreen(nav: NavController, showBack: Boolean = false) {
+    val topScroll = androidx.compose.material3.TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val settings by repo.settings.flow.collectAsStateWithLifecycle()
+    androidx.compose.material3.Scaffold(
+        modifier = Modifier.nestedScroll(topScroll.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            androidx.compose.material3.TopAppBar(
+                scrollBehavior = topScroll,
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface, scrolledContainerColor = MaterialTheme.colorScheme.surface),
+                title = { Text("股票助理") },
+                navigationIcon = {
+                    if (showBack) androidx.compose.material3.IconButton(onClick = { nav.popBackStack() }) {
+                        androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
+                    }
+                },
+                actions = {
+                    androidx.compose.material3.IconButton(onClick = { nav.navigate("stocksearch") }) {
+                        androidx.compose.material3.Icon(Icons.Outlined.Search, "搜尋股票")
+                    }
+                },
+            )
+        },
+    ) { pad ->
+        Box(Modifier.padding(pad).fillMaxSize()) {
+            if (settings.featureStocks) AdvisorContent(nav)
+            else com.enwei.moneymanager.ui.components.EmptyHint("股票功能已關閉（設定 → 功能開關）")
         }
     }
 }

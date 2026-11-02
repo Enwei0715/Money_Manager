@@ -165,13 +165,12 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
             TopAppBar(
                 scrollBehavior = topScroll,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, scrolledContainerColor = MaterialTheme.colorScheme.surface),
-                title = { Text(listOf("帳戶", "股票", "股票助理")[section]) },
+                title = { Text(listOf("帳戶", "股票").getOrElse(section) { "帳戶" }) },
                 navigationIcon = {
                     if (showBack) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
                 },
                 actions = {
-                  if (section == 2) IconButton(onClick = { nav.navigate("stocksearch") }) { Icon(Icons.Outlined.Search, "搜尋股票") }
-                  else if (section == 1) {
+                  if (section == 1) {
                     IconButton(onClick = { nav.navigate("stocksearch") }) { Icon(Icons.Outlined.Search, "搜尋股票") }
                     IconButton(onClick = { refreshTick++ }) { Icon(Icons.Filled.Refresh, "更新股價") }
                     IconButton(onClick = { nav.navigate("stockfees") }) { Icon(Icons.Outlined.Settings, "手續費與月退") }
@@ -197,19 +196,20 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
         // 設定裡關掉股票功能：只剩帳戶
         val stocksOn = repo.settings.flow.collectAsStateWithLifecycle().value.featureStocks
         if (!stocksOn && section != 0) section = 0
+        // 助理已移到底部分頁：舊的記憶位置改回股票
+        if (section > 1) section = 1
         com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = {
         if (stocksOn) TabRow(
             selectedTabIndex = section, containerColor = MaterialTheme.colorScheme.surface,
             indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[section]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
         ) {
-            (if (stocksOn) listOf("帳戶", "股票", "助理") else listOf("帳戶")).forEachIndexed { i, t ->
+            (if (stocksOn) listOf("帳戶", "股票") else listOf("帳戶")).forEachIndexed { i, t ->
                 Tab(section == i, { section = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp, group = fitGroup1) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         }) {
-        if (section == 2) AdvisorContent(nav)
-        else if (section == 1) StockContent(nav, refreshTick) { msg -> scope.launch { snack.showSnackbar(com.enwei.moneymanager.ui.tr(msg)) } }
+        if (section == 1) StockContent(nav, refreshTick) { msg -> scope.launch { snack.showSnackbar(com.enwei.moneymanager.ui.tr(msg)) } }
         else LazyColumn(Modifier.fillMaxSize()) {
             item {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
