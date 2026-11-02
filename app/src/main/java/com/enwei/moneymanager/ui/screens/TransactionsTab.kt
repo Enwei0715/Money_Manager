@@ -618,12 +618,7 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
             val parent = cat?.parentId?.let { lk.category(it) }
             Text(if (t.type == TxnType.TRANSFER) "轉帳" else (parent ?: cat)?.name ?: "未分類", color = gray, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (parent != null && t.type != TxnType.TRANSFER) Text(cat!!.name, color = gray, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val sub = when {
-                t.status == TxnStatus.PENDING -> "待確認"
-                t.source != TxnSource.MANUAL && t.source != TxnSource.IMPORT -> t.source.label
-                else -> null
-            }
-            if (sub != null) Text(sub, color = if (t.status == TxnStatus.PENDING) MaterialTheme.colorScheme.primary else gray, fontSize = 11.sp)
+            // 來源（通知、錢包…）不另佔一行，打開交易可以看到；只有「待確認」標在金額下方
         }
         Column(Modifier.weight(1f)) {
             if (title != null) Text(title, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -633,6 +628,7 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(Money.withSymbol(t.amount, t.currency), color = color, fontSize = 14.sp)
+            if (t.status == TxnStatus.PENDING) Text("待確認", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)
             if (balanceAfter != null) Text("(${Money.full(balanceAfter)})", fontSize = 11.sp, color = gray)
             else if (t.currency != lk.base && lk.fx.hasRate(t.currency)) Text("≈" + Money.full(lk.fx.convert(t.amount, t.currency)), fontSize = 11.sp, color = gray)
         }
