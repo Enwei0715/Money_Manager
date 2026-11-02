@@ -50,6 +50,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -280,6 +281,9 @@ private fun AppScaffold(nav: NavHostController) {
     var lastTab by remember { mutableStateOf("txns") }
     androidx.compose.runtime.SideEffect { if (isTab && current != null && lastTab != current) lastTab = current }
     val showBar = !imeOpen && !editing
+    // 換頁時底部分頁列一定出現
+    androidx.compose.runtime.LaunchedEffect(current) { com.enwei.moneymanager.ui.components.Chrome.bottomHidden = false }
+    val barHidden = com.enwei.moneymanager.ui.components.Chrome.bottomHidden
     val tabShown = if (isTab) current else lastTab
     val startScreen = remember { MoneyApp.repo.settings.value.startScreen }
     Scaffold(
@@ -288,9 +292,19 @@ private fun AppScaffold(nav: NavHostController) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (showBar) Column {
-                // AI 狀態列：正在進行的 AI 工作、進度與暫停原因（沒有事情時不佔空間）
-                com.enwei.moneymanager.ui.components.AiStatusBar(nav) { r -> nav.openRoute(r) }
-                BottomTabs(tabShown) { route -> nav.openTab(route) }
+            androidx.compose.animation.AnimatedVisibility(
+                !barHidden,
+                enter = androidx.compose.animation.expandVertically(expandFrom = androidx.compose.ui.Alignment.Top),
+                exit = androidx.compose.animation.shrinkVertically(shrinkTowards = androidx.compose.ui.Alignment.Top),
+            ) {
+                Column {
+                    // AI 狀態列：正在進行的 AI 工作、進度與暫停原因（沒有事情時不佔空間）
+                    com.enwei.moneymanager.ui.components.AiStatusBar(nav) { r -> nav.openRoute(r) }
+                    BottomTabs(tabShown) { route -> nav.openTab(route) }
+                }
+            }
+            // 分頁列收起時仍保留手機導覽列的高度
+            if (barHidden) androidx.compose.foundation.layout.Spacer(Modifier.navigationBarsPadding())
             } else if (!imeOpen) {
                 // 其他畫面（個股、設定…）也保留 AI 狀態列，看得到報告還在跑，不會以為被關掉
                 com.enwei.moneymanager.ui.components.AiStatusBar(nav, padNav = true) { r -> nav.openRoute(r) }
@@ -304,7 +318,7 @@ private fun AppScaffold(nav: NavHostController) {
             exitTransition = { fadeOut(tween(80)) },
             popEnterTransition = { fadeIn(tween(120)) },
             popExitTransition = { fadeOut(tween(80)) },
-            modifier = Modifier.padding(bottom = inner.calculateBottomPadding())
+            modifier = Modifier.nestedScroll(com.enwei.moneymanager.ui.components.Chrome.watcher).padding(bottom = inner.calculateBottomPadding())
                 .consumeWindowInsets(if (showBar) WindowInsets.navigationBars.only(WindowInsetsSides.Bottom) else WindowInsets.navigationBars.only(WindowInsetsSides.Top))
                 // 只有狀態列時：狀態列已含導覽列高度，內容不再重複留導覽列的空白
                 .then(if (!showBar) Modifier.consumeWindowInsets(PaddingValues(bottom = inner.calculateBottomPadding())) else Modifier)) {

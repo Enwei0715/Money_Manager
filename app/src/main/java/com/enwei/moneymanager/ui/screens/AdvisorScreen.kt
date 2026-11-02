@@ -134,6 +134,7 @@ fun AdvisorContent(nav: NavController) {
     }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
+        com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = { Column {
         TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
             listOf("今日", "問 AI", "新聞", "資金紀律").forEachIndexed { i, t ->
                 Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp, group = fitGroup1) },
@@ -147,11 +148,13 @@ fun AdvisorContent(nav: NavController) {
                 TextButton(onClick = { MoneyApp.news.loadError.value = null }) { Text("知道了", fontSize = 12.sp) }
             }
         }
+        } }) {
         when (tab) {
             0 -> TodayTab(nav, store) {}
             1 -> ChatTab(nav, store) {}
             2 -> NewsTab(nav, store)
             else -> PlanTab(nav)
+        }
         }
     }
 }
@@ -984,6 +987,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
     LaunchedEffect(anyFilter) { if (anyFilter) view = 1 }
     val digestsByTheme = remember(store.digests) { store.digests.values.groupBy { it.theme }.mapValues { (_, l) -> l.sortedByDescending { it.day } } }
     Column(Modifier.fillMaxSize()) {
+        com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = { Column {
         // 狀態列：一行看懂資料集狀態，詳細與設定在「詳情」
         Row(
             Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { infoOpen = true }.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
@@ -1061,6 +1065,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 }
             }
         }
+        } }) {
         // 換條件或換檢視後清單回到最上面
         LaunchedEffect(query, days, sent, onlyImportant, onlyMine, sort, theme, symbol, source, view) { listState.scrollToItem(0) }
         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1165,6 +1170,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 }
             }
             item { Spacer(Modifier.height(24.dp)) }
+        }
         }
         // 資料集詳情與設定（自動更新開關、更新、刪除、排程狀態）
         if (infoOpen) androidx.compose.material3.ModalBottomSheet(onDismissRequest = { infoOpen = false }, containerColor = MaterialTheme.colorScheme.surface) {

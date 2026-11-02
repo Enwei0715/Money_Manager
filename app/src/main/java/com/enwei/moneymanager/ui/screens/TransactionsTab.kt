@@ -83,6 +83,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -225,7 +226,10 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     var batchCat by remember { mutableStateOf(false) }
     var batchAcc by remember { mutableStateOf(false) }
     var batchDelete by remember { mutableStateOf(false) }
+    // 往下捲時標題列、分頁列與摘要收起，往上捲立刻出現
+    val topScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(topScroll.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             if (TxnSelect.active) TopAppBar(
@@ -239,7 +243,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     TextButton(onClick = { batchDelete = true }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
                 },
             ) else TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                scrollBehavior = topScroll,
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, scrolledContainerColor = MaterialTheme.colorScheme.surface),
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(x = (-12).dp)) {
                         IconButton(onClick = { step(-1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
@@ -287,6 +292,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         } else Modifier
         Column(Modifier.padding(pad).fillMaxSize().then(swipeModifier)) {
             val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
+            com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = { Column {
             TabRow(
                 selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface,
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
@@ -312,6 +318,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         .padding(horizontal = 14.dp, vertical = 6.dp),
                     daysLeft = daysLeft, compact = true)
             }
+            } }) {
             when (tab) {
                 0 -> DailyView(inPeriod, lk, nav, range, carry, recurring, trades.filter { inRange(LocalDate.ofEpochDay(it.date), range) },
                     memos = settings.memos.filter { inRange(it.date.toLocalDate(), range) }) { memoEditing = it }
@@ -339,6 +346,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 }
                 // 收支檢討（月、季、年；AI 逐筆檢查並提問）
                 else -> ReviewContent(nav, reviewSpan to month) { reviewSpan = it }
+            }
             }
         }
     }

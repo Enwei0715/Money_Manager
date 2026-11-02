@@ -1,6 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -120,8 +121,11 @@ private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int = 0) {
+    // 往下捲時標題列與分頁列收起，內容用滿畫面；往上捲立刻出現
+    val topScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
     var section by com.enwei.moneymanager.ui.components.rememberTab("accounts.section", initialTab)
     // 從「助理」入口打開時直接到助理分頁
     remember { if (initialTab != 0) section = initialTab }
@@ -155,10 +159,12 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
     val debts = -counted.filter { it.balance < 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(topScroll.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                scrollBehavior = topScroll,
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, scrolledContainerColor = MaterialTheme.colorScheme.surface),
                 title = { Text(listOf("帳戶", "股票", "股票助理")[section]) },
                 navigationIcon = {
                     if (showBack) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
@@ -191,6 +197,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
         // 設定裡關掉股票功能：只剩帳戶
         val stocksOn = repo.settings.flow.collectAsStateWithLifecycle().value.featureStocks
         if (!stocksOn && section != 0) section = 0
+        com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = {
         if (stocksOn) TabRow(
             selectedTabIndex = section, containerColor = MaterialTheme.colorScheme.surface,
             indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[section]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
@@ -200,6 +207,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        }) {
         if (section == 2) AdvisorContent(nav)
         else if (section == 1) StockContent(nav, refreshTick) { msg -> scope.launch { snack.showSnackbar(com.enwei.moneymanager.ui.tr(msg)) } }
         else LazyColumn(Modifier.fillMaxSize()) {
@@ -329,6 +337,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
             }
             if (balances.isEmpty()) item { EmptyHint("點右上角 ⋮ → 新增帳戶") }
             item { Spacer(Modifier.height(24.dp)) }
+        }
         }
         }
     }
