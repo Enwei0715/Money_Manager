@@ -1110,7 +1110,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 }?.let { other ->
                     val from = if (isOut) account?.id else other.accountId
                     val to = if (isOut) other.accountId else account?.id
-                    return merged(other, other.copy(type = TxnType.TRANSFER, accountId = from, toAccountId = to, categoryId = null, merchant = "轉帳"),
+                    return merged(other, other.copy(type = TxnType.TRANSFER, accountId = from, toAccountId = to, categoryId = null, merchant = "轉帳", status = if (status == TxnStatus.CONFIRMED) TxnStatus.CONFIRMED else other.status),
                         "轉帳 $amountText：${lookupName(from)} → ${lookupName(to)}")
                 }
             }
@@ -1185,8 +1185,18 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 if (categoryId == null && cat != null) { categoryId = cat; aiNote += "（分類由 AI 推測）" }
             }
         }
+        // 不確定的一律放「待確認」：分類填不出來、單邊的轉入／轉出（可能是自己帳戶間的轉帳，不一定是真正的收支）、
+        // 內容像促銷但被判成交易
+        val unsure = when {
+            p.kind == ParsedKind.TRANSFER_OUT || p.kind == ParsedKind.TRANSFER_IN -> "（單邊轉帳，不確定是不是真正的收支）"
+            categoryId == null -> "（沒有分類）"
+            NotificationParser.isPromo(raw) -> "（內容像促銷）"
+            else -> null
+        }
+        val finalStatus = if (status == TxnStatus.CONFIRMED && unsure != null) TxnStatus.PENDING else status
+        if (finalStatus != status) aiNote += "$unsure，放待確認"
         return insert(
-            base.copy(type = type, merchant = merchant, rawText = if (aiParsed) "$tagged\n$AI_TAG" else tagged, categoryId = categoryId),
+            base.copy(type = type, merchant = merchant, rawText = if (aiParsed) "$tagged\n$AI_TAG" else tagged, categoryId = categoryId, status = finalStatus),
             "RECORDED", "${type.label} $amountText ${merchant.orEmpty()}$aiNote",
         )
     }
