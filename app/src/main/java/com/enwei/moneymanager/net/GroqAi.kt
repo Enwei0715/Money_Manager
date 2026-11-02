@@ -87,14 +87,18 @@ object GroqAi {
         val g120 = Route(Provider.GROQ, s.aiModelHard.trim().ifBlank { HARD_MODEL }, true)
         val lite = Route(Provider.GEMINI, s.geminiLiteModel.trim().ifBlank { "gemini-flash-lite-latest" }, false)
         val flash = Route(Provider.GEMINI, s.geminiModel.trim().ifBlank { "gemini-flash-latest" }, true)
+        // 其他 Gemini 模型各有自己的免費額度：主要模型用完時分擔
+        val lite25 = Route(Provider.GEMINI, "gemini-2.5-flash-lite", false)
+        val flash20 = Route(Provider.GEMINI, "gemini-2.0-flash", false)
+        val flash25 = Route(Provider.GEMINI, "gemini-2.5-flash", true)
         val heavy = task in HEAVY
         val fitsGroq = inputLen <= 5000
-        val order = when {
-            !heavy && fitsGroq -> listOf(g20, lite, g120)
-            !heavy -> listOf(lite, flash, g20)
-            fitsGroq -> listOf(g120, flash, lite, g20)
-            else -> listOf(flash, lite, g120)
-        }
+        val order = (when {
+            !heavy && fitsGroq -> listOf(g20, lite, g120, lite25, flash20)
+            !heavy -> listOf(lite, lite25, flash20, flash, g20)
+            fitsGroq -> listOf(g120, flash, flash25, lite, flash20, lite25, g20)
+            else -> listOf(flash, flash25, lite, flash20, lite25, g120)
+        }).distinctBy { it.model }
         return order.filter { if (it.provider == Provider.GROQ) s.groqKey.isNotBlank() else s.geminiKey.isNotBlank() }
     }
 
@@ -119,12 +123,25 @@ object GroqAi {
         if (all.isEmpty()) return@withContext null
         val now = System.currentTimeMillis()
         // 剛被限流或沒回應的模型先跳過；全部都在暫停就照原順序再試
-        val ready = all.filter { com.enwei.moneymanager.work.AiHealth.cooldownUntil(it.model) <= now }.ifEmpty { all }
-        for (r in ready) {
+        val ready0 = all.filter { com.enwei.moneymanager.work.AiHealth.cooldownUntil(it.model) <= now }.ifEmpty { all }
+        // 依每個模型自己的額度排序：還有空間的先用（照原本的優先順序），快滿的排後面，今天用完的跳過
+        val estTokens = ((system.length + user.length) * 1.1).toInt() + maxTokens
+        val quota = com.enwei.moneymanager.work.AiQuota
+        val ready = ready0.mapNotNull { r -> quota.waitMs(r.model, r.provider == Provider.GEMINI, estTokens)?.let { r to it } }
+            .sortedBy { (_, w) -> if (w <= 3_000) 0L else w }
+        if (ready.isEmpty()) lastError = "所有模型今天的免費額度都用完了：" + quota.todaySummary(all.map { it.model to (it.provider == Provider.GEMINI) }).joinToString("；")
+        for ((r, w0) in ready) {
             lastError = null
             retryAfterMs = null
-            // 同一家服務的呼叫之間留間隔（對話除外，送出就立刻問）
-            if (task != AiTask.CHAT) com.enwei.moneymanager.work.AiHealth.pace(r.provider.name, if (r.provider == Provider.GEMINI) 4_000 else 1_500)
+            lastBody = null
+            val gem = r.provider == Provider.GEMINI
+            // 這個模型的每分鐘額度快滿：等到有空間再送（對話最多等 8 秒，否則換下一個模型）
+            val w = quota.waitMs(r.model, gem, estTokens) ?: continue
+            if (w > 0) {
+                if (task == AiTask.CHAT && w > 8_000 && r != ready.last().first) continue
+                kotlinx.coroutines.delay(minOf(w, 65_000L))
+            } else if (task != AiTask.CHAT) com.enwei.moneymanager.work.AiHealth.pace(r.provider.name, if (gem) 1_000 else 800)
+            quota.record(r.model, gem, estTokens)
             val out = when (r.provider) {
                 Provider.GEMINI -> callGemini(s.geminiKey.trim(), r.model, system, user,
                     // Gemini 的思考也算在輸出長度裡：大模型多留空間
@@ -136,6 +153,8 @@ object GroqAi {
             // 額度用完或沒回應：這個模型先暫停，之後的呼叫直接用下一個
             val err = lastError.orEmpty()
             // 伺服器有說多久後再試（Retry-After）就照它，否則用預設時間；再加隨機間隔，暫停時間會保存到 App 重開後
+            if ("429" in err) lastBody?.let { quota.learnFrom429(r.model, r.provider == Provider.GEMINI, it) }
+            if ("404" in err) { com.enwei.moneymanager.work.AiHealth.cooldown(r.model, 24 * 3600_000L); continue }
             if ("429" in err || "額度" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
                 retryAfterMs?.coerceIn(5_000L, 3600_000L) ?: if (r.provider == Provider.GEMINI) 15 * 60_000L else 2 * 60_000L)
             else if ("逾時" in err || "timeout" in err.lowercase() || "503" in err || "404" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
@@ -146,6 +165,9 @@ object GroqAi {
 
     /** 最近一次被限流時，伺服器建議等待的時間（Retry-After 標頭或 Gemini 的 retryDelay） */
     @Volatile private var retryAfterMs: Long? = null
+
+    /** 最近一次 429 的原始回覆（用來學真正的上限） */
+    @Volatile private var lastBody: String? = null
 
     /**
      * 把 429 的回覆整理成看得懂的原因：哪個模型、哪一種上限（每分鐘／每日的請求數或 token 數）、多久後恢復。
@@ -247,7 +269,7 @@ object GroqAi {
             aiClient.newBuilder().callTimeout(timeoutSec, java.util.concurrent.TimeUnit.SECONDS).build().newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
-                    if (resp.code == 429 || resp.code == 503) retryAfterMs = parseRetryAfter(resp.header("Retry-After"), text)
+                    if (resp.code == 429 || resp.code == 503) { retryAfterMs = parseRetryAfter(resp.header("Retry-After"), text); lastBody = text }
                     lastError = when (resp.code) {
                         400 -> if (text.contains("API_KEY") || text.contains("API key")) "Gemini 金鑰無效" else "Gemini 請求錯誤：${text.take(140)}"
                         401, 403 -> "Gemini 金鑰無效或沒有權限（${resp.code}）"
@@ -314,7 +336,7 @@ object GroqAi {
             Http.client.newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
-                    if (resp.code == 429 || resp.code == 503) retryAfterMs = parseRetryAfter(resp.header("Retry-After"), text)
+                    if (resp.code == 429 || resp.code == 503) { retryAfterMs = parseRetryAfter(resp.header("Retry-After"), text); lastBody = text }
                     lastError = when (resp.code) {
                         401 -> "API 金鑰無效（401）"
                         429 -> describeLimit("Groq", model, text)

@@ -1507,6 +1507,9 @@ private fun NewsScheduleInfo() {
         }
         GroqAi.coolingUntil()?.takeIf { it > now }?.let { add("AI 額度暫停到 ${hm.format(java.util.Date(it))}") }
         if (health.failures > 0 && !health.paused(now)) add("最近連續失敗 ${health.failures} 次：${health.pauseReason ?: "沒有回應"}")
+        // 今天各模型用了多少（App 自己記的次數，和 Groq／Google AI Studio 後台的數字大致相同）
+        val models = GroqAi.AiTask.entries.flatMap { t -> GroqAi.routes(t, 0) + GroqAi.routes(t, Int.MAX_VALUE) }.map { it.model to (it.provider == GroqAi.Provider.GEMINI) }
+        com.enwei.moneymanager.work.AiQuota.todaySummary(models).takeIf { it.isNotEmpty() }?.let { add("今日 AI 用量：" + it.joinToString("；")) }
     }
     val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
     val chatJob by com.enwei.moneymanager.work.ChatJob.state.collectAsStateWithLifecycle()
