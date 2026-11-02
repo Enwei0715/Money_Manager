@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
@@ -272,28 +275,29 @@ fun PendingScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
     Scaffold(topBar = {
-        BackTopBar("待確認（${pending.size}）", { nav.popBackStack() }) {
-            if (pending.isNotEmpty()) IconButton(onClick = { scope.launch { repo.confirmAllPending() } }) { Icon(Icons.Filled.DoneAll, "全部確認") }
+        BackTopBar(if (pending.isEmpty()) "待確認" else "待確認（${pending.size}）", { nav.popBackStack() }) {
+            if (pending.size > 1) TextButton(onClick = { scope.launch { repo.confirmAllPending() } }) {
+                Icon(Icons.Filled.DoneAll, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("全部確認")
+            }
         }
     }) { pad ->
-        LazyColumn(Modifier.padding(pad)) {
-            // 待確認的交易放最上面，AI 整理與合併重複放在下面
-            if (pending.isEmpty()) item { EmptyHint("沒有待確認的交易") }
-            items(pending, key = { it.id }) { t ->
-                Column {
-                    MmTxnRow(t, lk) { nav.navigate("txn/${t.id}") }
-                    Text(
-                        "${t.date.toLocalDate()} · ${t.source.label}", style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 100.dp),
-                    )
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
-                        OutlinedButton(onClick = { scope.launch { repo.deleteTxn(t.id) } }) { Text("刪除") }
-                        Spacer(Modifier.width(8.dp))
-                        Button(onClick = { scope.launch { repo.saveTxn(t.copy(status = TxnStatus.CONFIRMED)) } }) { Text("確認") }
+        LazyColumn(
+            Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // 待確認的交易放最上面，AI 建議與合併重複放在下面
+            if (pending.isEmpty()) item {
+                Column(Modifier.fillMaxWidth().padding(vertical = 36.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = androidx.compose.foundation.shape.CircleShape) {
+                        Icon(Icons.Filled.DoneAll, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.padding(18.dp).size(32.dp))
                     }
-                    HorizontalDivider(Modifier.padding(top = 8.dp))
+                    Text("都確認完了", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("通知記帳沒把握的交易會放在這裡等你確認", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            items(pending, key = { it.id }) { t -> PendingCard(t, lk, nav) }
             // AI 建議分類：只在使用者接受後才修改交易
             item { AiSuggestionSection(lk) }
             // 通知、錢包畫面、手動記帳可能重複記了同一筆：AI 判斷後合併
@@ -302,6 +306,53 @@ fun PendingScreen(nav: NavController) {
     }
 }
 
+/** 一筆待確認：金額與內容為主，來源、帳戶、時間一行小字，下方三個動作。 */
+@Composable
+private fun PendingCard(t: com.enwei.moneymanager.data.TxnEntity, lk: Lookups, nav: NavController) {
+    val scope = rememberCoroutineScope()
+    val cat = lk.catLabel(t.categoryId)
+    val dt = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault())
+    androidx.compose.material3.Card(Modifier.fillMaxWidth().clickable { nav.navigate("txn/${t.id}") }) {
+        Column(Modifier.padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(t.merchant?.takeIf { it.isNotBlank() } ?: t.type.label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                com.enwei.moneymanager.ui.components.AmountText(t.amount, t.currency, t.type, Modifier.padding(end = 6.dp))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(color = if (cat == null) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(4.dp)) {
+                    Text(cat ?: "未分類", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+                Text(
+                    listOfNotNull(lk.account(t.accountId)?.name ?: "未指定帳戶", "%d/%d %02d:%02d".format(dt.monthValue, dt.dayOfMonth, dt.hour, dt.minute), t.source.label)
+                        .joinToString(" · "),
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { scope.launch { repo.deleteTxn(t.id) } }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = { nav.navigate("txn/${t.id}") }) { Text("修改") }
+                Button(onClick = { scope.launch { repo.saveTxn(t.copy(status = TxnStatus.CONFIRMED)) } }, enabled = t.accountId != null) { Text("確認") }
+            }
+        }
+    }
+}
+
+/** 待確認頁的區塊卡片：標題列（可帶右側按鈕）＋內容。 */
+@Composable
+private fun PendingSection(title: String, action: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
+    androidx.compose.material3.Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                action?.invoke()
+            }
+            content()
+        }
+    }
+}
 
 /** 待確認頁的「AI 建議分類」：AI 整理「不明」花費，逐筆接受或略過。 */
 @Composable
@@ -317,37 +368,32 @@ private fun AiSuggestionSection(lk: Lookups) {
     val byId = all.associateBy { it.id }
     val aiOn = settings.aiEnabled && (settings.groqKey.isNotBlank() || settings.geminiKey.isNotBlank())
     if (!aiOn && open.isEmpty()) return
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("AI 建議分類" + if (open.isNotEmpty()) "（${open.size}）" else "", fontSize = 14.sp, modifier = Modifier.weight(1f))
-            if (open.size > 1) TextButton(onClick = { scope.launch { open.forEach { repo.acceptAiSuggestion(it) } } }) { Text("全部接受") }
-        }
-        if (aiOn && unknown > 0) {
-            Text("有 $unknown 筆不明或未分類的收支",
-                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // 沒有建議也沒有不明花費時不顯示整塊（避免只剩一行「自動整理完成」）
+    if (open.isEmpty() && unknown == 0 && !unknownProgress.running && unknownProgress.error == null) return
+    PendingSection(
+        "AI 建議分類" + if (open.isNotEmpty()) "（${open.size}）" else "",
+        action = if (open.size > 1) ({ TextButton(onClick = { scope.launch { open.forEach { repo.acceptAiSuggestion(it) } } }) { Text("全部接受") } }) else null,
+    ) {
+        if (aiOn && unknown > 0) Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("有 $unknown 筆不明或未分類的收支", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             OutlinedButton(enabled = !unknownProgress.running, onClick = {
                 scope.launch { com.enwei.moneymanager.work.AiBackgroundWork.runUnknownSort() }
-            }) { Text(if (unknownProgress.running) "整理中…" else "用 AI 整理不明花費") }
+            }) { Text(if (unknownProgress.running) "整理中…" else "AI 整理") }
         }
-        com.enwei.moneymanager.ui.components.AiWorkProgress(unknownProgress, Modifier.fillMaxWidth())
-    }
-    open.forEach { sg ->
-        val t = byId[sg.txnId] ?: return@forEach
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-            Text(
-                "${t.date.toLocalDate()} · ${lk.account(t.accountId)?.name ?: "未指定"} · ${com.enwei.moneymanager.core.Money.withSymbol(t.amount, t.currency)}" +
-                    (t.merchant?.let { " · $it" } ?: ""),
-                fontSize = 14.sp,
-            )
-            Text(
-                "→ ${lk.catLabel(sg.categoryId) ?: "?"}" + if (sg.reason.isNotBlank()) "（${sg.reason}）" else "",
-                fontSize = 14.sp, color = MaterialTheme.colorScheme.primary,
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        if (unknownProgress.running || unknownProgress.error != null) com.enwei.moneymanager.ui.components.AiWorkProgress(unknownProgress, Modifier.fillMaxWidth())
+        open.forEachIndexed { i, sg ->
+            val t = byId[sg.txnId] ?: return@forEachIndexed
+            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text((t.merchant ?: "未命名") + "　" + com.enwei.moneymanager.core.Money.withSymbol(t.amount, t.currency), fontSize = 14.sp,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text("→ ${lk.catLabel(sg.categoryId) ?: "?"}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    if (sg.reason.isNotBlank()) Text(sg.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 TextButton(onClick = { repo.rejectAiSuggestion(sg) }) { Text("略過") }
                 Button(onClick = { scope.launch { repo.acceptAiSuggestion(sg) } }) { Text("接受") }
             }
-            HorizontalDivider()
         }
     }
 }
@@ -374,54 +420,46 @@ private fun DuplicateSection(lk: Lookups) {
             com.enwei.moneymanager.work.AiBackgroundWork.runAutoTidy()
         }
     }
-    if (settings.aiTidyLog.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-        Row(Modifier.fillMaxWidth().clickable { logFold.toggle() }, verticalAlignment = Alignment.CenterVertically) {
-            Text("AI 自動整理（${settings.aiTidyLog.size}）", fontSize = 14.sp, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
-            com.enwei.moneymanager.ui.components.FoldToggle(showLog)
-        }
+    // AI 自動整理紀錄：收合成一張小卡，點開才看
+    if (settings.aiTidyLog.isNotEmpty()) PendingSection("AI 自動整理紀錄（${settings.aiTidyLog.size}）",
+        action = { Box(Modifier.clickable { logFold.toggle() }) { com.enwei.moneymanager.ui.components.FoldToggle(showLog) } }) {
         if (showLog) settings.aiTidyLog.take(10).forEach { Text("• $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
-    if (pairs.isEmpty()) {
-        com.enwei.moneymanager.ui.components.AiWorkProgress(tidyProgress, Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-        return
-    }
+    if (tidyProgress.running || tidyProgress.error != null)
+        com.enwei.moneymanager.ui.components.AiWorkProgress(tidyProgress, Modifier.fillMaxWidth().padding(horizontal = 4.dp))
+    if (pairs.isEmpty()) return
     fun line(t: com.enwei.moneymanager.data.TxnEntity): String {
         val time = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
         val clock = if (time.toLocalTime() == java.time.LocalTime.MIDNIGHT) "" else " %02d:%02d".format(time.hour, time.minute)
         return "${t.source.label} · ${time.toLocalDate()}$clock · ${lk.account(t.accountId)?.name ?: "未指定"} · ${t.merchant ?: "未命名"}" +
             (lk.catLabel(t.categoryId)?.let { " · $it" } ?: "")
     }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("可能重複的交易（${pairs.size}）", fontSize = 14.sp, modifier = Modifier.weight(1f))
-            val sure = pairs.filter { verdicts[it.key]?.same == true }
-            if (sure.size > 1) TextButton(onClick = {
-                scope.launch { sure.forEach { p -> verdicts[p.key].let { v -> repo.mergeDuplicate(p, v?.name, v?.categoryId) } } }
-            }) { Text("合併 AI 判定的 ${sure.size} 組") }
-        }
+    val sure = pairs.filter { verdicts[it.key]?.same == true }
+    PendingSection("可能重複的交易（${pairs.size}）", action = if (sure.size > 1) ({
+        TextButton(onClick = {
+            scope.launch { sure.forEach { p -> verdicts[p.key].let { v -> repo.mergeDuplicate(p, v?.name, v?.categoryId) } } }
+        }) { Text("合併 ${sure.size} 組") }
+    }) else null) {
         if (aiOn) OutlinedButton(enabled = !dupProgress.running, onClick = {
             scope.launch { com.enwei.moneymanager.work.AiBackgroundWork.runDuplicatesCheck() }
         }) { Text(if (dupProgress.running) "判斷中…" else "請 AI 判斷並整理名稱") }
-        com.enwei.moneymanager.ui.components.AiWorkProgress(dupProgress, Modifier.fillMaxWidth())
-        com.enwei.moneymanager.ui.components.AiWorkProgress(tidyProgress, Modifier.fillMaxWidth())
-    }
-    pairs.forEach { p ->
-        val v = verdicts[p.key]
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-            Text(com.enwei.moneymanager.core.Money.withSymbol(p.keep.amount, p.keep.currency) + " · ${p.keep.type.label}", fontSize = 14.sp)
-            Text("保留：${line(p.keep)}", fontSize = 13.sp)
-            Text("刪除：${line(p.drop)}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (dupProgress.running || dupProgress.error != null) com.enwei.moneymanager.ui.components.AiWorkProgress(dupProgress, Modifier.fillMaxWidth())
+        pairs.forEach { p ->
+            val v = verdicts[p.key]
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Text(com.enwei.moneymanager.core.Money.withSymbol(p.keep.amount, p.keep.currency) + " · ${p.keep.type.label}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("保留：${line(p.keep)}", fontSize = 12.sp)
+            Text("刪除：${line(p.drop)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (v != null) Text(
                 (if (v.same) "AI：同一筆" else "AI：不是同一筆") +
                     (if (v.same) listOfNotNull(v.name, lk.catLabel(v.categoryId)).joinToString(" · ", prefix = " → ").takeIf { it != " → " }.orEmpty() else "") +
                     (if (v.reason.isNotBlank()) "（${v.reason}）" else ""),
-                fontSize = 13.sp, color = if (v.same) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                fontSize = 12.sp, color = if (v.same) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { repo.dismissDuplicate(p) }) { Text("不是重複") }
                 Button(onClick = { scope.launch { repo.mergeDuplicate(p, v?.takeIf { it.same }?.name, v?.takeIf { it.same }?.categoryId) } }) { Text("合併") }
             }
-            HorizontalDivider()
         }
     }
 }

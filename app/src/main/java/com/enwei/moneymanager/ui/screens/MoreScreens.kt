@@ -1013,41 +1013,111 @@ fun SettingsScreen(nav: NavController) {
         } else Updater.install(ctx, file)
     }
 
+    // 打開就自動檢查一次
+    LaunchedEffect(Unit) { if (release == null) check() }
+    val r = release
+    val newer = r != null && Updater.isNewer(r)
+    val checking = updateStatus == "檢查中…"
+    val tokenFold = com.enwei.moneymanager.ui.components.rememberFold("update.token", false)
     Scaffold(topBar = { BackTopBar("App 更新", { nav.popBackStack() }) }) { pad ->
         Column(
-            Modifier.padding(pad).imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
+            Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()
+                .verticalScroll(rememberScrollState()).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("App 更新", style = MaterialTheme.typography.titleMedium)
-            Text("目前版本 ${BuildConfig.VERSION_NAME}（build ${BuildConfig.VERSION_CODE}）", style = MaterialTheme.typography.bodySmall)
-            if (settings.updateCheckLog.isNotBlank()) Text("自動檢查：${settings.updateCheckLog}", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(
-                token, { v -> token = v; repo.settings.update { it.copy(githubToken = v.trim()) } }, label = { Text("GitHub Token（私人儲存庫需要）") }, singleLine = true,
-                supportingText = { Text("私人儲存庫才需要（權限 Contents: Read-only）") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row {
-                Button(onClick = { check() }) { Text("檢查更新") }
-                Spacer(Modifier.width(8.dp))
-                val r = release
-                if (r != null && Updater.isNewer(r)) Button(enabled = progress == null, onClick = {
-                    scope.launch {
-                        progress = 0f
-                        runCatching { Updater.download(ctx, r, token) { p -> progress = p } }
-                            .onSuccess { apk = it; progress = null; install(it) }
-                            .onFailure { progress = null; updateStatus = "下載失敗：${it.message}" }
+            // ① 版本卡：目前版本、狀態標籤、一個主要按鈕
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(14.dp)) {
+                            Icon(androidx.compose.material.icons.Icons.Outlined.SystemUpdate, null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(12.dp).size(28.dp))
+                        }
+                        Column(Modifier.padding(start = 14.dp).weight(1f)) {
+                            Text("目前版本", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(BuildConfig.VERSION_NAME, fontSize = 22.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                        }
+                        val (chip, chipColor) = when {
+                            checking -> "檢查中" to MaterialTheme.colorScheme.surfaceVariant
+                            newer -> "有新版" to MaterialTheme.colorScheme.primaryContainer
+                            r != null -> "已是最新" to MaterialTheme.colorScheme.secondaryContainer
+                            updateStatus != null -> "無法檢查" to MaterialTheme.colorScheme.errorContainer
+                            else -> null to MaterialTheme.colorScheme.surfaceVariant
+                        }
+                        if (chip != null) Surface(color = chipColor, shape = RoundedCornerShape(50)) {
+                            Text(chip, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                        }
                     }
-                }) { Text("下載並安裝") }
-                apk?.let { f -> Spacer(Modifier.width(8.dp)); OutlinedButton(onClick = { install(f) }) { Text("安裝") } }
+                    if (newer) Text("新版本 ${r!!.tag}", fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary)
+                    // 失敗或提示訊息（成功時狀態已在標籤裡，不重複）
+                    updateStatus?.takeIf { !checking && (r == null || it.startsWith("下載") || it.startsWith("請允許")) }?.let {
+                        Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                    }
+                    progress?.let {
+                        LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth())
+                        Text("下載中 ${(it * 100).toInt()}%", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    val f = apk
+                    when {
+                        f != null -> Button(onClick = { install(f) }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("安裝") }
+                        newer -> Button(enabled = progress == null, modifier = Modifier.fillMaxWidth().height(48.dp), onClick = {
+                            scope.launch {
+                                progress = 0f
+                                runCatching { Updater.download(ctx, r!!, token) { p -> progress = p } }
+                                    .onSuccess { apk = it; progress = null; install(it) }
+                                    .onFailure { progress = null; updateStatus = "下載失敗：${it.message}" }
+                            }
+                        }) { Text("下載並安裝") }
+                        else -> OutlinedButton(enabled = !checking, onClick = { check() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                            Text(if (checking) "檢查中…" else "重新檢查")
+                        }
+                    }
+                    if (settings.updateCheckLog.isNotBlank()) Text("上次自動檢查：${settings.updateCheckLog}", fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
-            updateStatus?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-            // 更新說明：和更新視窗一樣只列最新 3 段
-            release?.notes?.takeIf { it.isNotBlank() && Updater.isNewer(release!!) }?.let { notes ->
-                parseNotes(notes).asReversed().take(3).forEach { (title, lines) ->
-                    if (title.isNotBlank()) Text(title, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                    lines.forEach { l -> Text("• " + l.removePrefix("・").trim(), fontSize = 12.sp) }
+            // ② 更新內容：和更新視窗一樣只列最新 3 段
+            if (newer && r!!.notes.isNotBlank()) Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("更新內容", fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    parseNotes(r.notes).asReversed().take(3).forEach { (title, lines) ->
+                        if (title.isNotBlank()) Text(title, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+                        lines.forEach { l ->
+                            Row {
+                                Text("•", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 6.dp))
+                                Text(l.removePrefix("・").trim(), fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
+            // ③ 設定：自動檢查開關；GitHub Token 收在進階裡
+            Card(Modifier.fillMaxWidth()) {
+                Column {
+                    Row(Modifier.fillMaxWidth().clickable { repo.settings.update { it.copy(notifyUpdates = !it.notifyUpdates, updateSkipped = 0) } }
+                        .padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("自動檢查新版本", fontSize = 15.sp)
+                            Text("開啟 App 時有新版會跳出提示，背景也會通知", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        androidx.compose.material3.Switch(settings.notifyUpdates, { v -> repo.settings.update { it.copy(notifyUpdates = v, updateSkipped = 0) } })
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Row(Modifier.fillMaxWidth().clickable { tokenFold.toggle() }.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("GitHub Token", fontSize = 15.sp)
+                            Text(if (token.isBlank()) "未設定（公開儲存庫不需要）" else "已設定", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        com.enwei.moneymanager.ui.components.FoldToggle(tokenFold.open)
+                    }
+                    if (tokenFold.open) OutlinedTextField(
+                        token, { v -> token = v; repo.settings.update { it.copy(githubToken = v.trim()) } }, label = { Text("GitHub Token") }, singleLine = true,
+                        supportingText = { Text("私人儲存庫才需要（權限 Contents: Read-only）") },
+                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    )
                 }
             }
         }
