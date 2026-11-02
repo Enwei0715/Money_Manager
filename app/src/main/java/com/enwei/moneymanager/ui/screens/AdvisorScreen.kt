@@ -1589,7 +1589,7 @@ private fun ChatSteps(step: String) {
         step.contains("搜尋") -> 1
         else -> 0
     }
-    StepRow(listOf("持股與大盤", "搜尋新聞", "讀取全文", "AI 回答", "確認代號"), cur)
+    StepRow(listOf("即時行情", "搜尋新聞", "讀取全文", "AI 回答", "確認代號"), cur)
 }
 
 @Composable

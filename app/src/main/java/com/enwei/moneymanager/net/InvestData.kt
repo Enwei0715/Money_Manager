@@ -31,6 +31,41 @@ data class Headline(
 )
 
 object InvestData {
+    /** 對話與圖表用的指數代碼（Yahoo）→ 中文名稱 */
+    val indexNames: Map<String, String> = linkedMapOf(
+        "^TWII" to "加權指數", "^TWOII" to "櫃買指數", "^SOX" to "費城半導體", "^IXIC" to "那斯達克",
+        "^DJI" to "道瓊", "^GSPC" to "S&P 500", "^N225" to "日經", "^VIX" to "VIX 恐慌指數",
+    )
+
+    /** 問題裡提到的指數（大盤、費半、美股…）。 */
+    fun indexesIn(q: String): List<String> = buildList {
+        if (listOf("大盤", "加權", "台股", "盤勢", "股市", "指數").any { q.contains(it) }) add("^TWII")
+        if (listOf("櫃買", "上櫃", "OTC").any { q.contains(it, true) }) add("^TWOII")
+        if (listOf("費半", "費城", "SOX", "半導體").any { q.contains(it, true) }) add("^SOX")
+        if (listOf("那斯達克", "那指", "NASDAQ", "美股", "科技股").any { q.contains(it, true) }) add("^IXIC")
+        if (listOf("道瓊", "DOW").any { q.contains(it, true) }) add("^DJI")
+        if (listOf("標普", "S&P", "SP500").any { q.contains(it, true) }) add("^GSPC")
+        if (listOf("日經", "日股").any { q.contains(it) }) add("^N225")
+        if (listOf("恐慌", "VIX").any { q.contains(it, true) }) add("^VIX")
+    }
+
+    /** 即時行情一行文字：主要指數與美元匯率的最新價與漲跌（Yahoo，盤中即時、收盤後為收盤價）。 */
+    suspend fun liveMarketLine(): String = kotlinx.coroutines.coroutineScope {
+        val list = listOf("^TWII", "^TWOII", "^SOX", "^IXIC", "^GSPC", "^VIX", "TWD=X")
+        list.map { sym ->
+            async {
+                runCatching {
+                    val root = Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(sym, "UTF-8")}?range=5d&interval=1d", quick = true)
+                    val meta = (root.obj("chart").obj("result") as? JsonArray)?.firstOrNull().obj("meta")
+                    val p = meta.num("regularMarketPrice") ?: return@runCatching null
+                    val prev = meta.num("chartPreviousClose") ?: meta.num("previousClose")
+                    val name = if (sym == "TWD=X") "美元兌台幣" else indexNames[sym] ?: sym
+                    "$name ${"%,.2f".format(p)}" + (prev?.takeIf { it > 0 }?.let { " (%+.2f%%)".format((p / it - 1) * 100) } ?: "")
+                }.getOrNull()
+            }
+        }.mapNotNull { it.await() }.let { if (it.isEmpty()) "" else "即時行情（App 剛查到，可直接引用數字）：" + it.joinToString("；") }
+    }
+
     @Volatile
     var lastHeadlineError: String? = null
         private set

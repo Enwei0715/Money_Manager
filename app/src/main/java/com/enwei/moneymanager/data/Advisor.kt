@@ -474,7 +474,7 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
     val st = ds.load()
     // 重試同一個問題時不重複加進對話
     ds.update { st -> if (st.chat.lastOrNull()?.let { it.fromUser && it.text == question } == true) st else st.copy(chat = (st.chat + ChatMsg(true, question)).takeLast(40)) }
-    onStep("讀取持股與大盤…")
+    onStep("讀取持股、大盤與即時行情…")
     val snap = advisorSnapshot(fetch = true)
     val big = com.enwei.moneymanager.net.GroqAi.bigContext(com.enwei.moneymanager.net.GroqAi.AiTask.CHAT)
     val today = st.report?.let { r -> "今日報告：${r.trend}；推薦 " + r.picks.joinToString("、") { "${it.symbol}${it.name}（${it.style}）" } } ?: ""
@@ -485,7 +485,9 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
     onStep("搜尋相關新聞…")
     val related0 = relatedNews(ds, st, question, holdSyms, if (big) 20 else 5)
     // 有找到相關新聞時，資料以新聞為主：小模型把持股／大盤狀況與今日報告縮短，空間留給新聞全文
-    val sit = situation(snap).let { if (!big && related0.isNotEmpty()) it.take(700) else it }
+    // 即時行情（主要指數、費半、美元）：AI 可以直接引用最新的數字
+    val live = runCatching { com.enwei.moneymanager.net.InvestData.liveMarketLine() }.getOrDefault("")
+    val sit = live + "\n" + situation(snap).let { if (!big && related0.isNotEmpty()) it.take(700) else it }
     val today2 = if (!big && related0.isNotEmpty()) today.take(160) else today
     val reserved0 = sit.length + today2.length + 2
     // 2. 讀取最相關的前幾篇新聞全文（Groq 2 篇、Gemini 5 篇）
@@ -537,25 +539,45 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
         val q = quotes[quoteKey(Market.TW, p.symbol)]
         p.copy(price = q?.price, name = p.name.ifBlank { q?.name.orEmpty() })
     }
+    // 回覆實際提到的內容（結論、重點、問題）：卡片與圖表要跟文字對得上
+    val said = text + "\n" + points.joinToString("\n") + "\n" + question
+    fun mentionedIn(code: String, name: String?) = said.contains(code) || (name != null && name.length >= 2 && said.contains(name)) ||
+        (name != null && name.length >= 3 && said.contains(name.take(2)))
+    val indexes = com.enwei.moneymanager.net.InvestData.indexesIn(question + " " + text)
+    val marketQ = indexes.isNotEmpty() && Regex("[0-9]{4,6}[A-Z]?").find(question) == null &&
+        com.enwei.moneymanager.net.TwData.cached().none { it.name.length >= 2 && question.contains(it.name) }
+    val cardsOk = cards.filter { mentionedIn(it.symbol, it.name.ifBlank { com.enwei.moneymanager.net.TwData.nameOf(it.symbol) }) }
     // 問到營收或走勢比較時，自動附上圖表（AI 沒有附的話）：對象是卡片上的個股、問題裡的代號或持股
     val mentioned = (Regex("[0-9]{4,6}[A-Z]?").findAll(question).map { it.value }.toList() +
         com.enwei.moneymanager.net.TwData.cached().filter { it.name.length >= 2 && question.contains(it.name) }.map { it.code } +
         (if (listOf("持股", "我的股票", "庫存").any { question.contains(it) }) snap.holdings.map { it.symbol } else emptyList())).distinct()
-    val targets = (cards.map { it.symbol } + mentioned).distinct().take(6)
-    val charts = reply.charts.toMutableList()
+    val targets = (cardsOk.map { it.symbol } + mentioned).distinct().take(6)
+    // AI 附的圖表：個股要是回覆提到的，指數一律可以；剩不到該有的數量就不畫
+    val charts = reply.charts.mapNotNull { ch ->
+        when (ch.kind) {
+            "compare" -> ch.copy(items = ch.items.filter { it.startsWith("^") || mentionedIn(it, com.enwei.moneymanager.net.TwData.nameOf(it)) })
+                .takeIf { c -> c.items.size >= 2 || c.items.any { it.startsWith("^") } }
+            "revenue" -> ch.copy(items = ch.items.filter { mentionedIn(it, com.enwei.moneymanager.net.TwData.nameOf(it)) }).takeIf { it.items.isNotEmpty() }
+            else -> ch
+        }
+    }.toMutableList()
+    // 問大盤／整體市場：附上相關指數的走勢比較（加權＋費半，問美股時加那斯達克）
+    if (marketQ && charts.none { c -> c.kind == "compare" && c.items.any { it.startsWith("^") } })
+        charts.add(0, com.enwei.moneymanager.data.ChatChart("compare", (listOf("^TWII") + indexes + "^SOX").distinct().take(3)))
     if (question.contains("營收") && charts.none { it.kind == "revenue" } && targets.isNotEmpty())
         charts += com.enwei.moneymanager.data.ChatChart("revenue", targets)
     if (listOf("走勢", "比較", "強弱").any { question.contains(it) } && charts.none { it.kind == "compare" } && targets.size >= 2)
         charts += com.enwei.moneymanager.data.ChatChart("compare", targets.take(5))
-    // AI 沒有附卡片時，用相關新聞裡最常出現的個股做卡片，理由放新聞重點
-    val cards2 = if (cards.isNotEmpty() || related0.isEmpty()) cards else {
+    // AI 沒有附卡片、又不是問大盤時：用相關新聞裡、且回覆有提到的個股做卡片，理由放新聞重點
+    val cards2 = if (cardsOk.isNotEmpty() || related0.isEmpty() || marketQ) cardsOk else {
         val top = related0.take(6).flatMap { n -> n.symbols.map { it to n } }.groupBy({ it.first }, { it.second })
-            .entries.sortedByDescending { it.value.size }.take(3)
+            .entries.filter { (sym, _) -> mentionedIn(sym, com.enwei.moneymanager.net.TwData.nameOf(sym)) }
+            .sortedByDescending { it.value.size }.take(3)
         val q2 = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(top.map { Market.TW to it.key }) }.getOrDefault(emptyList()).associateBy { it.key }
         top.mapNotNull { (sym, ns) ->
             val q = q2[quoteKey(Market.TW, sym)] ?: return@mapNotNull null
             val n = ns.first()
-            StockPick(sym, name = q.name.orEmpty().ifBlank { com.enwei.moneymanager.net.TwData.nameOf(sym).orEmpty() }, price = q.price,
+            StockPick(sym, name = com.enwei.moneymanager.net.TwData.nameOf(sym) ?: q.name.orEmpty(), price = q.price,
                 strength = when { n.sentiment > 0 -> "強勢"; n.sentiment < 0 -> "弱勢"; else -> "中性" }, reason = n.note.ifBlank { n.title }.take(60))
         }
     }

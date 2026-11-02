@@ -179,7 +179,10 @@ fun CompareChart(symbols: List<String>, days: Int = 60, modifier: Modifier = Mod
             val b = cachedBars(s) ?: return@mapNotNull null
             val c = b.close.takeLast(days)
             val base = c.firstOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
-            "$s ${b.name.orEmpty()}".trim() to c.map { (it - base) / base * 100 }
+            // 名稱用中文：指數用指數名稱，個股用股票清單裡的名稱（Yahoo 的是英文全名）
+            val label = com.enwei.moneymanager.net.InvestData.indexNames[s]
+                ?: "$s ${com.enwei.moneymanager.net.TwData.nameOf(s) ?: b.name.orEmpty()}".trim()
+            label to c.map { (it - base) / base * 100 }
         }
     }
     val series = data ?: return
