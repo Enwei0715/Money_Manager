@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -677,7 +678,7 @@ private fun CandleChart(
             drawPath(p, col, style = Stroke(width = w))
         }
         // 超出價格區的部分直接不畫（不要貼著邊變成直線）
-        androidx.compose.ui.graphics.drawscope.clipRect(0f, 0f, size.width, priceH) {
+        clipRect(0f, 0f, size.width, priceH) {
             if (showBB) listOf(bb.first, bb.third).forEach { series(it, Color(0xFF90A4AE), 1.5f) }
             maSeries.forEach { (len, v) -> series(v, maColor(len), 2f) }
         }
