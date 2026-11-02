@@ -138,13 +138,9 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     var feeExpr by rememberSaveable { mutableStateOf("") }
     var showFee by rememberSaveable { mutableStateOf(false) }
     var currency by rememberSaveable { mutableStateOf(settings.baseCurrency) }
-    // 新增時帶入上次用的帳戶（轉帳也記住轉入帳戶），沒有才用預設帳戶
-    var accountId by rememberSaveable {
-        mutableStateOf(initialAccountId ?: settings.lastPicks["txn.account"]?.toLongOrNull()?.takeIf { lk.accounts.isEmpty() || lk.account(it)?.archived == false } ?: settings.defaultAccountId)
-    }
-    var toAccountId by rememberSaveable {
-        mutableStateOf(initialToAccountId ?: settings.lastPicks["txn.to"]?.toLongOrNull()?.takeIf { (lk.accounts.isEmpty() || lk.account(it)?.archived == false) && it != accountId })
-    }
+    // 新增時不預先帶帳戶（之前會一直帶上次的帳戶，容易記錯）；從帳戶頁進來時才帶那個帳戶
+    var accountId by rememberSaveable { mutableStateOf(initialAccountId) }
+    var toAccountId by rememberSaveable { mutableStateOf(initialToAccountId) }
     var toExpr by rememberSaveable { mutableStateOf("") }
     var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var merchant by rememberSaveable { mutableStateOf("") }

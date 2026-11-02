@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.PushPin as OutlinedPushPin
 import androidx.compose.material.icons.filled.Add
@@ -637,7 +638,7 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
 
 // ---------------- 日曆 ----------------
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CalendarView(
     range: Pair<LocalDate, LocalDate>, all: List<TxnEntity>, accounts: List<AccountEntity>, settings: AppSettings,
@@ -792,48 +793,38 @@ private fun CalendarView(
     }
     sheetDay?.let { day ->
         ModalBottomSheet(onDismissRequest = { sheetDay = null }, containerColor = MaterialTheme.colorScheme.surface) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("${day.year}/${day.monthValue}/${day.dayOfMonth}（${Recurrence.weekdayName(day.dayOfWeek)}）", fontSize = 16.sp)
-                    com.enwei.moneymanager.core.TaiwanHolidays.label(day)?.let { Text(it, fontSize = 13.sp, color = SundayColor) }
-                }
-                TextButton(onClick = { sheetDay = null; nav.navigate("txn/0?date=${day.toEpochDay()}") }) { Text("＋ 記一筆") }
+            // 一列標題：日期（假日名稱）＋「備註」「記一筆」；信用卡日程與颱風假放成一排小標籤，留白少
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("${day.year}/${day.monthValue}/${day.dayOfMonth}（${Recurrence.weekdayName(day.dayOfWeek)}）", fontSize = 16.sp)
+                com.enwei.moneymanager.core.TaiwanHolidays.label(day)?.let { Text("  $it", fontSize = 13.sp, color = SundayColor) }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { sheetDay = null; onMemo(Memo(0, day.toMillis(), "")) }) { Text("＋備註", fontSize = 13.sp) }
+                TextButton(onClick = { sheetDay = null; nav.navigate("txn/0?date=${day.toEpochDay()}") }) { Text("＋記一筆", fontSize = 13.sp) }
             }
             val dayCardEvents = cardEvents[day].orEmpty()
-            if (dayCardEvents.isNotEmpty()) {
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+            val weekday = day.dayOfWeek != DayOfWeek.SATURDAY && day.dayOfWeek != DayOfWeek.SUNDAY
+            val typhoon = com.enwei.moneymanager.core.TaiwanHolidays.holidayName(day) == "颱風假"
+            val canTyphoon = weekday && (typhoon || com.enwei.moneymanager.core.TaiwanHolidays.isBusinessDay(day))
+            if (dayCardEvents.isNotEmpty() || canTyphoon) {
+                androidx.compose.foundation.layout.FlowRow(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text("信用卡日程", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     dayCardEvents.forEach { event ->
-                        Text(
-                            "${event.kind.label} · ${event.accountName}",
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
+                        Text("${event.kind.label}・${event.accountName}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
                     }
+                    // 平日才需要：颱風等天然災害停止上班時，銀行也停止營業，信用卡結帳、繳款與扣繳會順延
+                    if (canTyphoon) Text(if (typhoon) "取消颱風假" else "標記颱風假", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { repo.setTyphoonDay(day, !typhoon) }.padding(horizontal = 6.dp, vertical = 2.dp))
                 }
             }
             val txns = byDay[day].orEmpty()
             val dayMemos = memoDays[day].orEmpty()
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 4.dp)) {
                 dayMemos.forEach { m -> MemoLine(m) { sheetDay = null; onMemo(m) } }
-                Row {
-                    TextButton(onClick = { sheetDay = null; onMemo(Memo(0, day.toMillis(), "")) }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                        Text("＋ 備註")
-                    }
-                    // 平日才需要：颱風等天然災害臺北市停止上班時，銀行也停止營業，信用卡結帳、繳款與扣繳會順延
-                    if (day.dayOfWeek != DayOfWeek.SATURDAY && day.dayOfWeek != DayOfWeek.SUNDAY) {
-                        val typhoon = com.enwei.moneymanager.core.TaiwanHolidays.holidayName(day) == "颱風假"
-                        val holiday = !com.enwei.moneymanager.core.TaiwanHolidays.isBusinessDay(day)
-                        if (typhoon || !holiday) TextButton(onClick = { repo.setTyphoonDay(day, !typhoon) }) {
-                            Text(if (typhoon) "取消颱風假" else "標記為颱風假（停止上班）")
-                        }
-                    }
-                }
                 if (dayMemos.isNotEmpty() || txns.isNotEmpty()) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                if (txns.isEmpty()) Text("沒有交易", color = gray, modifier = Modifier.padding(20.dp))
+                if (txns.isEmpty()) Text("沒有交易", color = gray, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
                 else txns.sortedByDescending { it.date }.forEach { t -> MmTxnRow(t, lk) { sheetDay = null; nav.navigate("txn/${t.id}") } }
             }
             Spacer(Modifier.height(24.dp))
@@ -935,6 +926,31 @@ fun MemoDialog(memo: Memo, onSaved: () -> Unit = {}, onDismiss: () -> Unit) {
     var pinned by remember(memo) { mutableStateOf(memo.pinned) }
     var date by remember(memo) { mutableStateOf(memo.date.toLocalDate()) }
     val tint = com.enwei.moneymanager.data.memoColors.getOrElse(color) { 0L }
+    // 已有的備註先以「筆記」方式閱讀，按右上角的筆才進入編輯；新增時直接編輯
+    var editing by remember(memo) { mutableStateOf(memo.id == 0L) }
+    if (!editing) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            containerColor = if (tint == 0L) MaterialTheme.colorScheme.surfaceContainerHigh
+            else androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.surfaceContainerHigh, Color(tint), 0.18f),
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(memo.title.ifBlank { "備註" }, fontSize = 20.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                        Text("${date.year}/${date.monthValue}/${date.dayOfMonth}（${Recurrence.weekdayName(date.dayOfWeek)}）" + if (memo.pinned) " · 置頂" else "",
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = { editing = true }) { Icon(Icons.Filled.Edit, "編輯") }
+                }
+            },
+            text = {
+                Text(memo.text.ifBlank { "（沒有內容）" }, fontSize = 15.sp, lineHeight = 24.sp,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 420.dp).verticalScroll(rememberScrollState()))
+            },
+            confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
+        )
+        return
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = if (tint == 0L) MaterialTheme.colorScheme.surfaceContainerHigh
