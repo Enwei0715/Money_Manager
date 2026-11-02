@@ -695,7 +695,7 @@ private fun CandleChart(
         labeledLevels.sortedByDescending { it.first }.forEach { (v, col, name) ->
             val inside = v in lo..hi
             var ly = when { v > hi -> 14f; v < lo -> priceH - 4f; else -> y(v) }
-            if (inside) drawLine(col, Offset(0f, ly), Offset(size.width, ly), 1.8f, pathEffect = dash)
+            if (inside) drawLine(col.copy(alpha = 0.45f), Offset(0f, ly), Offset(size.width, ly), 1.2f, pathEffect = dash)
             // 標籤互相錯開
             while (usedY.any { kotlin.math.abs(it - ly) < 26f }) ly += 26f
             usedY += ly
@@ -741,30 +741,32 @@ private fun CandleChart(
             if (a0 <= b0 && a1 > b1) {
                 val yy = (y(b.low[j]) + 6f).coerceAtMost(priceH - 2f)
                 drawPath(Path().apply { moveTo(cx, yy); lineTo(cx - s / 2, yy + s); lineTo(cx + s / 2, yy + s); close() }, up)
-                drawContext.canvas.nativeCanvas.drawText("金叉", cx - 18f, (yy + s + 22f).coerceAtMost(priceH), android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f; color = argb(up) })
             } else if (a0 >= b0 && a1 < b1) {
                 val yy = (y(b.high[j]) - 6f).coerceAtLeast(2f)
                 drawPath(Path().apply { moveTo(cx, yy); lineTo(cx - s / 2, yy - s); lineTo(cx + s / 2, yy - s); close() }, down)
-                drawContext.canvas.nativeCanvas.drawText("死叉", cx - 18f, (yy - s - 6f).coerceAtLeast(40f), android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f; color = argb(down) })
             }
         }
-        // 紀律買賣點：把那根 K 棒整根框起來，買點在下方、賣點在上方標出理由（例如「買·站回季線」）
-        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 26f; isFakeBoldText = true }
+        // 紀律買賣點：小圓章「買／賣」標在 K 棒下方／上方；只有最新一個與點選的那根才寫出理由，畫面不擠
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 24f; isFakeBoldText = true }
+        val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f; isFakeBoldText = true; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER }
+        val latest = signals.maxByOrNull { it.index }?.index
         signals.forEach { sg ->
             val i = sg.index - from
             if (i !in 0 until n) return@forEach
             val cx = i * cw + cw / 2
             val col = if (sg.buy) up else down
-            val half = maxOf(cw * 0.75f, 7f)
-            val top = y(b.high[sg.index]) - 5f
-            val bot = y(b.low[sg.index]) + 5f
-            drawRoundRect(col, Offset(cx - half, top), Size(half * 2, bot - top), androidx.compose.ui.geometry.CornerRadius(half, half), style = Stroke(2.5f))
-            val label = (if (sg.buy) "買" else "賣") + (sg.tag.takeIf { it.isNotBlank() }?.let { "·$it" } ?: "")
-            paint.color = android.graphics.Color.argb(255, (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt())
-            val tw = paint.measureText(label)
-            val tx = (cx - tw / 2).coerceIn(0f, size.width - tw)
-            val ty = if (sg.buy) (bot + 28f).coerceAtMost(priceH) else (top - 8f).coerceAtLeast(24f)
-            drawContext.canvas.nativeCanvas.drawText(label, tx, ty, paint)
+            val r = 11f
+            val cy = if (sg.buy) (y(b.low[sg.index]) + r + 4f).coerceAtMost(priceH - r) else (y(b.high[sg.index]) - r - 4f).coerceAtLeast(r + 28f)
+            drawCircle(col, radius = r, center = Offset(cx, cy))
+            drawContext.canvas.nativeCanvas.drawText(if (sg.buy) "買" else "賣", cx, cy + 7f, badge)
+            if (sg.index == latest || sg.index == selected) {
+                val label = sg.tag.ifBlank { if (sg.buy) "買" else "賣" }
+                paint.color = android.graphics.Color.argb(255, (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt())
+                val tw = paint.measureText(label)
+                val tx = (cx - tw / 2).coerceIn(0f, size.width - tw)
+                val ty = if (sg.buy) (cy + r + 24f).coerceAtMost(priceH) else (cy - r - 6f).coerceAtLeast(46f)
+                drawContext.canvas.nativeCanvas.drawText(label, tx, ty, paint)
+            }
         }
         // 點選的 K 棒：直線標示
         selected?.takeIf { it in from until to }?.let { j ->
