@@ -224,6 +224,8 @@ data class AppSettings(
     val defaultAccountId: Long? = null,
     val notifAutoConfirm: Boolean = false,
     val notifPackages: Set<String> = emptySet(),
+    /** 「偵測到的交易通知來源」裡按了「忽略」的 App，不再列出 */
+    val notifIgnored: Set<String> = emptySet(),
     val feeDiscount: Double = 1.0,
     val minFee: Double = 20.0,
     val usFee: Double = 0.0,
@@ -473,6 +475,7 @@ class SettingsStore(context: Context) {
         defaultAccountId = prefs.getLong("defaultAccountId", -1).takeIf { it > 0 },
         notifAutoConfirm = prefs.getBoolean("notifAutoConfirm", false),
         notifPackages = prefs.getStringSet("notifPackages", emptySet())!!.toSet(),
+        notifIgnored = prefs.getStringSet("notifIgnored", emptySet())!!.toSet(),
         feeDiscount = prefs.getFloat("feeDiscount", 1f).toDouble(),
         minFee = prefs.getFloat("minFee", 20f).toDouble(),
         usFee = prefs.getFloat("usFee", 0f).toDouble(),
@@ -645,6 +648,7 @@ class SettingsStore(context: Context) {
             .putLong("defaultAccountId", s.defaultAccountId ?: -1)
             .putBoolean("notifAutoConfirm", s.notifAutoConfirm)
             .putStringSet("notifPackages", s.notifPackages)
+            .putStringSet("notifIgnored", s.notifIgnored)
             .putFloat("feeDiscount", s.feeDiscount.toFloat())
             .putFloat("minFee", s.minFee.toFloat())
             .putFloat("usFee", s.usFee.toFloat())

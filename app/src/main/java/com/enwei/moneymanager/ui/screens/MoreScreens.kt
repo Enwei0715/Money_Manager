@@ -303,7 +303,8 @@ fun NotificationSettingsScreen(nav: NavController) {
     var pasted by remember { mutableStateOf<TxnNotificationListener.ActiveNote?>(null) }
     var pastedPreview by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     val labelOf = remember(apps) { apps.associate { it.pkg to it.label } }
-    val candidates = log.filter { it.result == "CANDIDATE" && it.packageName !in settings.notifPackages }.map { it.packageName }.distinct()
+    val candidates = log.filter { it.result == "CANDIDATE" && it.packageName !in settings.notifPackages && it.packageName !in settings.notifIgnored }
+        .map { it.packageName }.distinct()
     val testScope = rememberCoroutineScope()
     var notes by remember { mutableStateOf<List<TxnNotificationListener.ActiveNote>?>(null) }
     var previews by remember { mutableStateOf<List<Pair<Boolean, String>>>(emptyList()) }
@@ -422,9 +423,10 @@ fun NotificationSettingsScreen(nav: NavController) {
             item {
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     // 入帳方式：有網路就直接記帳（AI 判讀要有把握、找得到帳戶）；沒網路或不確定才放「待確認」
-                    Text("有網路時：規則或 AI 判讀後直接記帳並通知；AI 沒把握或找不到帳戶時放「待確認」。\n" +
-                        "沒網路時：全部放「待確認」；規則看不懂的通知會先排隊，恢復網路後自動用 AI 判讀。",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(10.dp)) {
+                        Text("・有網路：辨識後直接記帳並通知；沒把握或找不到帳戶放「待確認」\n・沒網路：全部放「待確認」，恢復網路後自動再判讀",
+                            fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(10.dp))
+                    }
                     DropdownField(
                         "無法對應卡號時記入的帳戶", lk.accounts.filter { !it.archived }, lk.account(settings.defaultAccountId),
                         { it.name }, { a -> repo.settings.update { it.copy(defaultAccountId = a.id) } },
@@ -433,13 +435,25 @@ fun NotificationSettingsScreen(nav: NavController) {
                 }
             }
             if (candidates.isNotEmpty()) {
-                item { SectionTitle("偵測到可能的交易通知來源") }
+                item { SectionTitle("可能的交易通知來源（${candidates.size}）") }
+                // 小卡：App 名稱、偵測到幾則、最近一則的內容；可「啟用」或「忽略」（忽略後不再出現）
                 items(candidates, key = { "cand$it" }) { pkg ->
-                    ListItem(
-                        headlineContent = { Text(labelOf[pkg] ?: pkg) },
-                        supportingContent = { Text(log.first { it.packageName == pkg }.let { listOfNotNull(it.title, it.text).joinToString(" ") }, maxLines = 2) },
-                        trailingContent = { TextButton(onClick = { toggle(pkg, true) }) { Text("啟用") } },
-                    )
+                    val notes = log.filter { it.packageName == pkg && it.result == "CANDIDATE" }
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp)) {
+                        Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("${labelOf[pkg] ?: pkg} · ${notes.size} 則", fontSize = 14.sp, maxLines = 1)
+                                Text(notes.first().let { listOfNotNull(it.title, it.text).joinToString(" ") }, fontSize = 12.sp, maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            TextButton(onClick = { repo.settings.update { it.copy(notifIgnored = it.notifIgnored + pkg) } }) {
+                                Text("忽略", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            androidx.compose.material3.FilledTonalButton(onClick = { toggle(pkg, true) },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) { Text("啟用", fontSize = 13.sp) }
+                        }
+                    }
                 }
             }
             item { SectionTitle("要監聽的 App（已選 ${settings.notifPackages.size}）") }
