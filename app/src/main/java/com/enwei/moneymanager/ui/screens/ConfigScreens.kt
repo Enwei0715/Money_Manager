@@ -25,6 +25,9 @@ import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -332,65 +335,128 @@ private fun PasscodeSetupDialog(onDone: (String) -> Unit, onCancel: () -> Unit) 
 fun BudgetScreen(nav: NavController) {
     val lk = rememberLookups()
     val s by repo.settings.flow.collectAsStateWithLifecycle()
-    val fields = remember { mutableStateOf(s.budgets.mapValues { Money.fromMinor(it.value).stripTrailingZeros().toPlainString() }) }
-    fun set(id: Long, text: String) {
-        fields.value = fields.value + (id to text)
-        val minor = Money.parseMinor(text)
+    fun setCap(id: Long, minor: Long?) {
         repo.settings.update { st -> st.copy(budgets = if (minor == null || minor <= 0) st.budgets - id else st.budgets + (id to minor)) }
     }
-    // 這個月的實際支出（顯示每項預算的使用進度）
+    // 這個月的實際支出（每項預算的使用進度）
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     var month by remember { mutableStateOf<com.enwei.moneymanager.data.ReviewData?>(null) }
     LaunchedEffect(all) { month = runCatching { repo.spendingReview(com.enwei.moneymanager.data.ReviewSpan.MONTH, 0) }.getOrNull() }
-    @Composable
-    fun usage(id: Long) {
-        val cap = s.budgets[id] ?: return
-        val d = month ?: return
-        val used = if (id == 0L) d.expense else d.categories.find { it.id == id }?.amount ?: 0L
-        val pct = used.toFloat() / cap.coerceAtLeast(1)
-        val col = when { pct >= 1f -> MaterialTheme.colorScheme.error; pct >= 0.8f -> Color(0xFFFFA000); else -> MaterialTheme.colorScheme.primary }
-        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp)) {
-            Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
-                Box(Modifier.fillMaxWidth(pct.coerceIn(0f, 1f)).height(6.dp).background(col, RoundedCornerShape(3.dp)))
-            }
-            Text("這個月已用 ${Money.withSymbol(used, lk.base)} / ${Money.withSymbol(cap, lk.base)}（${(pct * 100).toInt()}%）", fontSize = 11.sp, color = col)
-        }
-    }
     // 建議值：前三個月的平均月支出
     var suggest by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     LaunchedEffect(Unit) { suggest = runCatching { repo.budgetSuggestions() }.getOrDefault(emptyMap()) }
+    fun used(id: Long): Long? = month?.let { d -> if (id == 0L) d.expense else d.categories.find { it.id == id }?.amount ?: 0L }
+    var editing by remember { mutableStateOf<Pair<Long, String>?>(null) }
+    var editGoal by remember { mutableStateOf(false) }
+    val gray = MaterialTheme.colorScheme.onSurfaceVariant
+
+    // 一列：名稱＋已用／預算、進度條、剩餘與平均（和「檢討」頁的目標卡片同樣排法）；點一下修改
     @Composable
-    fun hint(id: Long) {
-        val v = suggest[id] ?: return
-        if (s.budgets.containsKey(id)) Text("前三個月平均 ${Money.withSymbol(v, lk.base)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 16.dp, bottom = 6.dp))
-        else Text("前三個月平均 ${Money.withSymbol(v, lk.base)}・點這裡帶入", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable { set(id, Money.fromMinor(v).stripTrailingZeros().toPlainString()) }.padding(start = 16.dp, bottom = 6.dp))
-    }
-    Scaffold(containerColor = MaterialTheme.colorScheme.surface, topBar = { BackTopBar("預算設定", { nav.popBackStack() }) }) { pad ->
-        LazyColumn(Modifier.padding(pad)) {
-            item {
-                Text("每月目標與預算，留空代表不設定。進度顯示在「交易 → 檢討」；AI 檢討建議的目標按「採用」也會寫到這裡。", color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp, modifier = Modifier.padding(20.dp))
-                var goal by remember { mutableStateOf(s.savingsGoal?.let { "%.0f".format(it) }.orEmpty()) }
-                FormLine("儲蓄率目標（%）") {
-                    FormInput(goal, { v -> goal = v; repo.settings.update { it.copy(savingsGoal = v.toDoubleOrNull()?.takeIf { g -> g > 0 }) } }, "", number = true)
+    fun BudgetLine(id: Long, name: String) {
+        val cap = s.budgets[id]
+        val u = used(id)
+        val avg = suggest[id]
+        Column(Modifier.fillMaxWidth().clickable { editing = id to name }.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                if (cap != null) Text("${Money.full(u ?: 0)} / ${Money.full(cap)}", fontSize = 14.sp)
+                else Text("未設定", fontSize = 13.sp, color = gray)
+            }
+            if (cap != null) {
+                val pct = (u ?: 0).toFloat() / cap.coerceAtLeast(1)
+                val col = when { pct >= 1f -> MaterialTheme.colorScheme.error; pct >= 0.8f -> Color(0xFFFFA000); else -> MaterialTheme.colorScheme.primary }
+                Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
+                    Box(Modifier.fillMaxWidth(pct.coerceIn(0f, 1f)).height(6.dp).background(col, RoundedCornerShape(3.dp)))
                 }
-                FormLine("總預算") { FormInput(fields.value[0L].orEmpty(), { set(0L, it) }, "0", number = true) }
-                usage(0L)
-                hint(0L)
-                if (suggest.isNotEmpty()) TextButton(onClick = {
-                    // 只填還沒設定的項目，已設定的不動
-                    suggest.forEach { (id, v) -> if (!s.budgets.containsKey(id) && (id == 0L || v >= 50_000)) set(id, Money.fromMinor(v).stripTrailingZeros().toPlainString()) }
-                }, modifier = Modifier.padding(start = 8.dp)) { Text("依前三個月平均，填入還沒設定的預算") }
-            }
-            items(lk.categories.filter { it.kind == TxnType.EXPENSE && !it.archived && it.parentId == null }, key = { it.id }) { c ->
-                FormLine(c.name) { FormInput(fields.value[c.id].orEmpty(), { set(c.id, it) }, "", number = true) }
-                usage(c.id)
-                hint(c.id)
-            }
-            item { Spacer(Modifier.height(32.dp)) }
+                Row {
+                    val left = cap - (u ?: 0)
+                    Text(if (left >= 0) "剩餘 ${Money.full(left)}" else "超出 ${Money.full(-left)}", fontSize = 12.sp,
+                        color = if (left >= 0) gray else MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+                    avg?.let { Text("近三月平均 ${Money.full(it)}", fontSize = 12.sp, color = gray) }
+                }
+            } else avg?.let { Text("近三月平均 ${Money.full(it)}", fontSize = 12.sp, color = gray) }
         }
+    }
+
+    val cats = lk.categories.filter { it.kind == TxnType.EXPENSE && !it.archived && it.parentId == null }
+    val setCats = cats.filter { s.budgets.containsKey(it.id) }
+    val unsetCats = cats.filter { !s.budgets.containsKey(it.id) }.sortedByDescending { suggest[it.id] ?: 0L }
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("預算設定", { nav.popBackStack() }) }) { pad ->
+        LazyColumn(Modifier.padding(pad).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item {
+                Text("點一下修改。進度也會顯示在「交易 → 檢討」；AI 檢討建議的目標按「採用」會寫到這裡。", color = gray, fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 4.dp, top = 8.dp))
+            }
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(vertical = 8.dp)) {
+                        // 儲蓄率目標
+                        Row(Modifier.fillMaxWidth().clickable { editGoal = true }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("儲蓄率目標", fontSize = 15.sp, modifier = Modifier.weight(1f))
+                            Text(s.savingsGoal?.let { "%.0f%%".format(it) } ?: "未設定", fontSize = 14.sp, color = if (s.savingsGoal == null) gray else MaterialTheme.colorScheme.onSurface)
+                        }
+                        BudgetLine(0L, "總預算")
+                    }
+                }
+            }
+            if (setCats.isNotEmpty()) item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(vertical = 8.dp)) {
+                        Text("分類預算", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                        setCats.forEach { BudgetLine(it.id, it.name) }
+                    }
+                }
+            }
+            if (unsetCats.isNotEmpty()) item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(vertical = 8.dp)) {
+                        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("還沒設定（${unsetCats.size}）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            if (suggest.isNotEmpty()) TextButton(onClick = {
+                                // 只填還沒設定、平均 500 元以上的分類
+                                unsetCats.forEach { c -> suggest[c.id]?.takeIf { it >= 50_000 }?.let { setCap(c.id, it) } }
+                                if (!s.budgets.containsKey(0L)) suggest[0L]?.let { setCap(0L, it) }
+                            }) { Text("全部帶入平均", fontSize = 13.sp) }
+                        }
+                        unsetCats.forEach { BudgetLine(it.id, it.name) }
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(24.dp)) }
+        }
+    }
+    editing?.let { (id, name) ->
+        var text by remember(id) { mutableStateOf(s.budgets[id]?.let { Money.fromMinor(it).stripTrailingZeros().toPlainString() }.orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { editing = null },
+            title = { Text("$name 預算") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(text, { text = it }, singleLine = true, label = { Text("每月金額（留空＝不設定）") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth())
+                    suggest[id]?.let { v ->
+                        TextButton(onClick = { text = Money.fromMinor(v).stripTrailingZeros().toPlainString() }) { Text("帶入近三月平均 ${Money.full(v)}") }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { setCap(id, Money.parseMinor(text)); editing = null }) { Text("儲存") } },
+            dismissButton = { TextButton(onClick = { editing = null }) { Text("取消") } },
+        )
+    }
+    if (editGoal) {
+        var text by remember { mutableStateOf(s.savingsGoal?.let { "%.0f".format(it) }.orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { editGoal = false },
+            title = { Text("儲蓄率目標") },
+            text = {
+                OutlinedTextField(text, { text = it }, singleLine = true, label = { Text("%（留空＝不設定）") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth())
+            },
+            confirmButton = { TextButton(onClick = { repo.settings.update { it.copy(savingsGoal = text.toDoubleOrNull()?.takeIf { g -> g > 0 }) }; editGoal = false }) { Text("儲存") } },
+            dismissButton = { TextButton(onClick = { editGoal = false }) { Text("取消") } },
+        )
     }
 }
 
