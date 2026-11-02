@@ -19,12 +19,16 @@ object NvidiaModels {
      * 每類工作的偏好（依序）：用關鍵字比對實際提供的模型 id，NVIDIA 改版號或下架時自動對到還在的版本。
      * 簡短判讀：快、JSON 穩定；大量資料：長上下文；推理整合：大模型。
      */
-    val FAST = listOf("llama-3.3-70b-instruct", "qwen3-next-80b-a3b-instruct", "gemma-3-27b-it", "llama-4-maverick", "llama-3.1-70b-instruct", "phi-4")
-    val LONG = listOf("qwen3-next-80b-a3b-instruct", "llama-4-maverick", "deepseek-v3", "kimi-k2", "llama-3.3-70b-instruct", "llama-3.1-405b")
-    val HEAVY = listOf("deepseek-v3", "kimi-k2", "qwen3-235b", "gpt-oss-120b", "nemotron-super-49b", "llama-3.3-70b-instruct", "llama-3.1-405b")
+    val FAST = listOf("nemotron-3.5-lightning", "llama-3.3-70b-instruct", "deepseek-v4", "qwen3-next-80b-a3b-instruct", "llama-3.1-70b-instruct", "gemma-3-27b-it", "nemotron-3.5-bolt")
+    val LONG = listOf("deepseek-v4", "qwen3-next-80b-a3b-instruct", "nemotron-3.5-lightning", "mistral-large", "llama-4-maverick", "kimi-k2", "llama-3.3-70b-instruct")
+    val HEAVY = listOf("deepseek-v4", "mistral-large", "kimi-k2", "deepseek-v3", "qwen3-235b", "gpt-oss-120b", "llama-3.1-70b-instruct", "llama-3.3-70b-instruct")
 
     /** 還沒抓到清單時用的 id（確定長期存在的） */
     private val FALLBACK = mapOf(
+        "deepseek-v4" to "deepseek-ai/deepseek-v4.1-flash",
+        "mistral-large" to "mistralai/mistral-large-4",
+        "nemotron-3.5-lightning" to "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "nemotron-3.5-bolt" to "nvidia/nemotron-3.5-bolt-e4b",
         "llama-3.3-70b-instruct" to "meta/llama-3.3-70b-instruct",
         "llama-3.1-70b-instruct" to "meta/llama-3.1-70b-instruct",
         "llama-3.1-405b" to "meta/llama-3.1-405b-instruct",
@@ -57,7 +61,7 @@ object NvidiaModels {
     /** 依工作類型挑 [n] 個（[preferred] 為使用者指定的優先模型）；排除視覺、嵌入、安全審查等非對話模型 */
     fun pick(prefs: List<String>, n: Int, preferred: String = ""): List<String> {
         val av = available().filter { id ->
-            listOf("embed", "vision", "-vl", "guard", "reward", "rerank", "parse", "retriever", "safety", "clip", "ocr", "coder").none { id.contains(it, true) }
+            listOf("embed", "vision", "-vl", "guard", "reward", "rerank", "parse", "retriever", "safety", "clip", "ocr", "coder", "flux", "image", "embedding").none { id.contains(it, true) }
         }
         val found = prefs.mapNotNull { k ->
             if (av.isEmpty()) FALLBACK[k]

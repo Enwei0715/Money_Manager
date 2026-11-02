@@ -442,7 +442,7 @@
 ・所有空白頁改成圖示＋一行字
 ・AI 新增 NVIDIA（build.nvidia.com）：不限每日次數、每分鐘約 40 次，成為背景大量工作的主力
   - 新聞標註、重點整理、每日報告這類背景工作先用 NVIDIA，Gemini 的每日額度留給對話與檢討
-  - 依工作挑模型：簡短判讀用 Llama 3.3 70B、Qwen3-Next；大量資料用 Qwen3-Next、Llama 4 Maverick；推理整合用 DeepSeek V3.1、Kimi K2、Qwen3-235B
+  - 依工作挑模型：簡短判讀用 Nemotron 3.5 Lightning、Llama 3.3 70B；大量資料與推理整合用 DeepSeek V4.1 Flash、Mistral Large 4、Kimi K2
   - 模型清單每天自動更新，下架的模型自動跳過；也可以指定優先模型
 ・Groq 加入 Qwen3-32B、Llama 4 Scout、Kimi K2，各有自己的免費額度，分擔 gpt-oss
 ・AI 設定分成「金鑰與模型／自動分工」：自動分工列出每項工作實際使用的模型順序（顏色代表平台，淡色＝暫停中）
@@ -456,3 +456,4 @@
 ・新聞重點整理不再卡住：AI 漏掉少數新聞時，用該則的摘要或標題補成重點，不必整組重來；漏掉一半以上才拆小重送
 ・AI 設定的每個平台顯示「上次成功（時間・模型）」或「上次失敗（時間・原因）」，背景工作也會記錄，看得出哪家沒在運作
 ・AI 設定每家平台新增「可用模型」：即時查詢 Groq、Gemini、NVIDIA、OpenRouter（免費）目前能用的模型與上下文長度，可搜尋，點一下設成優先模型
+・NVIDIA 模型更新：加入 DeepSeek V4.1 Flash、Mistral Large 4、Nemotron 3.5 Lightning 30B、Nemotron 3.5 Bolt、Llama 3.1 70B；圖片生成、文件解析、重排序等非對話模型自動排除
