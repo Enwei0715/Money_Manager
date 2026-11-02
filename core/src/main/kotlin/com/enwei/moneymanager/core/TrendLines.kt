@@ -173,7 +173,13 @@ object TradeSignals {
     }
 
     /** 目前狀態的依據（一條一條，true＝偏多、false＝偏空、null＝中性）與依紀律的結論。 */
-    data class Status(val checks: List<Pair<String, Boolean?>>, val verdict: String, val bias: Int)
+    data class Status(
+        val checks: List<Pair<String, Boolean?>>, val verdict: String, val bias: Int,
+        /** 同樣的依據，短標籤（畫面用小方塊顯示） */
+        val chips: List<Pair<String, Boolean?>> = emptyList(),
+        /** 要畫在 K 線上的價位：名稱 → 價格（移動停損、停損、停利） */
+        val lines: List<Pair<String, Double>> = emptyList(),
+    )
 
     fun status(high: List<Double>, close: List<Double>, p: Params, avgCost: Double?, signals: List<Signal>, dayLabel: (Int) -> String): Status? {
         val n = close.size
@@ -183,6 +189,12 @@ object TradeSignals {
         val m60 = Technicals.sma(close, 60) ?: return null
         val m20Ago = Technicals.sma(close, 20, n - 5) ?: m20
         val checks = ArrayList<Pair<String, Boolean?>>()
+        val chips = ArrayList<Pair<String, Boolean?>>()
+        val lines = ArrayList<Pair<String, Double>>()
+        chips += (if (c >= m20) "站上月線" else "跌破月線") to (c >= m20)
+        chips += (if (c >= m60) "站上季線" else "跌破季線") to (c >= m60)
+        chips += (if (m20 >= m20Ago) "月線上彎" else "月線下彎") to (m20 >= m20Ago)
+        chips += (if (m20 >= m60) "多頭排列" else "空頭排列") to (m20 >= m60)
         checks += (if (c >= m20) "收盤 ${f(c)} 站上月線（20 日線）${f(m20)}" else "收盤 ${f(c)} 跌破月線（20 日線）${f(m20)}") to (c >= m20)
         checks += (if (c >= m60) "站上季線（60 日線）${f(m60)}" else "跌破季線（60 日線）${f(m60)}") to (c >= m60)
         checks += (if (m20 >= m20Ago) "月線上彎" else "月線下彎") to (m20 >= m20Ago)
@@ -190,6 +202,8 @@ object TradeSignals {
         val peak = high.takeLast(60).max()
         val trailStop = peak * (1 - p.trailPct / 100)
         checks += "近 60 日高點 ${f(peak)}，移動停損價 ${f(trailStop)}（${if (c >= trailStop) "未跌破" else "已跌破"}）" to (c >= trailStop)
+        chips += (if (c >= trailStop) "移動停損未破" else "破移動停損") to (c >= trailStop)
+        lines += "移動停損" to trailStop
         var verdict: String
         var bias: Int
         if (avgCost != null && avgCost > 0) {
@@ -199,6 +213,9 @@ object TradeSignals {
             checks += "成本 ${f(avgCost)}，報酬 ${"%+.1f".format(gain)}%" to (gain >= 0)
             if (!p.long) checks += "停損價 ${f(stop)}（${if (c >= stop) "未跌破" else "已跌破"}）" to (c >= stop)
             checks += "停利價 ${f(tp)}（${if (c >= tp) "已達到" else "未達到"}）" to null
+            chips += "報酬 ${"%+.1f".format(gain)}%" to (gain >= 0)
+            if (!p.long) { chips += (if (c >= stop) "停損未破" else "破停損") to (c >= stop); lines += "停損" to stop }
+            lines += "停利" to tp
             when {
                 !p.long && c < stop -> { verdict = "依紀律：跌破停損價，停損出場"; bias = -1 }
                 c < trailStop && (p.long.not() || c > avgCost) -> { verdict = "依紀律：跌破移動停損價，減碼或出場"; bias = -1 }
@@ -217,6 +234,6 @@ object TradeSignals {
         signals.lastOrNull()?.takeIf { n - 1 - it.index <= 15 }?.let { sg ->
             checks += "最近紀律訊號：${dayLabel(sg.index)} ${if (sg.buy) "買" else "賣"}，${sg.reason}" to sg.buy
         }
-        return Status(checks, verdict, bias)
+        return Status(checks, verdict, bias, chips, lines)
     }
 }

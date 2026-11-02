@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -72,6 +73,7 @@ import com.enwei.moneymanager.ui.components.Text
 import kotlinx.coroutines.launch
 
 /** 股票資訊：K 線（含均線、成交量）、基本數據、相對大盤強弱、公司業務、持股紀律與相關新聞。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun StockDetailScreen(nav: NavController, symbol: String) {
     // 英文字母開頭的代號是美股（沒有月營收；大盤比較改用 S&P 500）
@@ -223,11 +225,29 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 var showSignals by remember { mutableStateOf(true) }
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
-                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            FilterChip(!hourly, { hourly = false; count = KlinePrefs.count(false); back = 0f; mas = KlinePrefs.mas(false) }, label = { Text("日 K") })
-                            FilterChip(hourly, { hourly = true; count = KlinePrefs.count(true); back = 0f; mas = KlinePrefs.mas(true) }, label = { Text("60 分 K") })
+                        // 第一列：日 K／60 分 K（分段按鈕）；第二列：顯示區間
+                        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
+                            listOf(false to "日 K", true to "60 分 K").forEach { (h, l) ->
+                                val on = hourly == h
+                                Box(
+                                    Modifier.weight(1f).background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
+                                        .clickable { if (hourly != h) { hourly = h; count = KlinePrefs.count(h); back = 0f; mas = KlinePrefs.mas(h) } }.padding(vertical = 7.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) { Text(l, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal) }
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("區間", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
                             (if (hourly) listOf(25 to "5 天", 50 to "10 天", 100 to "1 個月") else listOf(60 to "3 個月", 120 to "6 個月", 250 to "1 年"))
-                                .forEach { (n, l) -> FilterChip(count.toInt() == n && back < 1f, { count = n.toFloat(); back = 0f }, label = { Text(l) }) }
+                                .forEach { (n, l) ->
+                                    val on = count.toInt() == n && back < 1f
+                                    Text(l, fontSize = 13.sp, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                                        modifier = Modifier.clickable { count = n.toFloat(); back = 0f }.padding(horizontal = 10.dp, vertical = 4.dp))
+                                }
+                            Spacer(Modifier.weight(1f))
+                            if (back >= 1f) Text("回到最新 ›", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { back = 0f }.padding(4.dp))
                         }
                         if (kb == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 40.dp))
                         if (kb != null) {
@@ -249,57 +269,114 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             sel?.let { j -> visibleSignals.firstOrNull { it.index == j } }?.let { sg ->
                                 Text((if (sg.buy) "買點：" else "賣點：") + sg.reason, fontSize = 12.sp, color = if (sg.buy) StockUp else StockDown)
                             }
-                            CandleChart(kb, from, n, showBB, mas.sorted(), signals = visibleSignals,
+                            fun d(i: Int) = java.time.LocalDate.ofEpochDay(kb.days[i]).let { "${it.monthValue}/${it.dayOfMonth}" }
+                            val avg = held.takeIf { it.isNotEmpty() }?.let { hs -> hs.sumOf { it.avgCost * it.shares } / hs.sumOf { it.shares } }
+                            val stt = if (hourly) null else remember(System.identityHashCode(b), sigParams, avg) {
+                                com.enwei.moneymanager.core.TradeSignals.status(b.high, b.close, sigParams, avg, signals) { i ->
+                                    java.time.LocalDate.ofEpochDay(b.days[i]).let { "${it.monthValue}/${it.dayOfMonth}" }
+                                }
+                            }
+                            // 圖上的價位線：壓力、支撐、均價、提醒價，以及紀律的移動停損／停損／停利（開啟紀律買賣點時）
+                            val chartLevels = levels.map { Triple(it.first, it.second, it.third) } +
+                                (if (showSignals) stt?.lines.orEmpty().map { (nm, v) ->
+                                    Triple(v, when (nm) { "移動停損" -> Color(0xFFFF7043); "停損" -> Color(0xFF2E7D32); else -> Color(0xFFD81B60) }, nm)
+                                } else emptyList())
+                            CandleChart(kb, from, n, showBB, mas.sorted(), signals = visibleSignals, labeledLevels = chartLevels,
                                 onZoom = { z -> count = (count / z).coerceIn(10f, total.toFloat()); back = back.coerceIn(0f, (total - count).coerceAtLeast(0f)) },
                                 onPan = { bars -> back = (back + bars).coerceIn(0f, (total - count).coerceAtLeast(0f)) },
-                                levels = levels.map { it.first to it.second }, selected = sel,
+                                selected = sel,
                                 onTap = { f -> val j = from + (f * n).toInt().coerceIn(0, n - 1); picked = if (picked == j) null else j },
                             )
-                            if (levels.isNotEmpty()) Text(
-                                levels.joinToString("　") { "┄ ${it.third} ${"%.2f".format(it.first)}" }, fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            fun d(i: Int) = java.time.LocalDate.ofEpochDay(kb.days[i]).let { "${it.monthValue}/${it.dayOfMonth}" }
-                            Text("${d(from)} – ${d(from + n - 1)}", fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            // 紀律買賣點：圈出的 K 棒與理由（依「資金紀律」的參數）
+                            // 均線（只列出顯示中的，點 ✕ 移除，＋ 可加任意天數）與布林
+                            var addMa by remember { mutableStateOf(false) }
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("${d(from)}–${d(from + n - 1)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                mas.sorted().forEach { len ->
+                                    Row(
+                                        Modifier.background(maColor(len).copy(alpha = 0.12f), RoundedCornerShape(12.dp)).clickable { mas = mas - len }
+                                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Box(Modifier.size(width = 12.dp, height = 3.dp).background(maColor(len)))
+                                        Text(" ${len}${if (hourly) "" else "日"} ✕", fontSize = 12.sp, color = maColor(len))
+                                    }
+                                }
+                                Text(if (showBB) "布林 ✕" else "＋布林", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).clickable { showBB = !showBB }
+                                        .padding(horizontal = 8.dp, vertical = 3.dp))
+                                Text("＋均線", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(12.dp)).clickable { addMa = true }
+                                        .padding(horizontal = 8.dp, vertical = 3.dp))
+                            }
+                            if (addMa) {
+                                var custom by remember { mutableStateOf("") }
+                                androidx.compose.material3.AlertDialog(
+                                    onDismissRequest = { addMa = false },
+                                    title = { Text("顯示哪些均線") },
+                                    text = {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                (if (hourly) listOf(10, 20, 50, 100) else listOf(5, 10, 20, 60, 120, 240)).forEach { len ->
+                                                    FilterChip(len in mas, { mas = if (len in mas) mas - len else mas + len },
+                                                        label = { Text("$len${if (hourly) "" else " 日"}", color = maColor(len)) })
+                                                }
+                                            }
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                com.enwei.moneymanager.ui.components.NumberField(custom, { custom = it.filter { c -> c.isDigit() }.take(3) }, "自訂天數", Modifier.weight(1f))
+                                                TextButton(onClick = {
+                                                    custom.toIntOrNull()?.takeIf { it in 2..250 }?.let { mas = mas + it }
+                                                    custom = ""
+                                                }) { Text("加入") }
+                                            }
+                                            Text("最多同時顯示 5 條，太多線會看不清楚。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    },
+                                    confirmButton = { TextButton(onClick = { mas = mas.sorted().take(5).toSet(); addMa = false }) { Text("完成") } },
+                                )
+                            }
+                            // 紀律：一行結論＋小方塊依據；買賣點只列最近一個，其餘展開看
                             if (!hourly) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("紀律買賣點（${style.label}：停損 ${"%.0f".format(sigParams.stopPct)}%、移動停損 ${"%.0f".format(sigParams.trailPct)}%、停利 ${"%.0f".format(if (sigParams.long) sigParams.takeProfitPct * 2 else sigParams.takeProfitPct)}%）",
-                                        fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                                    androidx.compose.material3.Switch(showSignals, { showSignals = it }, Modifier.scale(0.8f))
+                                var allSig by remember { mutableStateOf(false) }
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                                    Text(stt?.verdict ?: "紀律買賣點", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+                                        color = when (stt?.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface })
+                                    androidx.compose.material3.Switch(showSignals, { showSignals = it }, Modifier.scale(0.75f))
                                 }
                                 if (showSignals) {
-                                    if (visibleSignals.isEmpty()) Text("這段期間沒有符合紀律的買賣點", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    visibleSignals.takeLast(6).forEach { sg ->
-                                        Text("${if (sg.buy) "● 買" else "● 賣"} ${d(sg.index)}　${sg.reason}", fontSize = 12.sp,
-                                            color = if (sg.buy) StockUp else StockDown,
-                                            modifier = Modifier.clickable { picked = sg.index })
-                                    }
-                                    // 目前狀態的依據與依紀律的結論
-                                    val avg = held.takeIf { it.isNotEmpty() }?.let { hs -> hs.sumOf { it.avgCost * it.shares } / hs.sumOf { it.shares } }
-                                    com.enwei.moneymanager.core.TradeSignals.status(b.high, b.close, sigParams, avg, signals) { d(it) }?.let { stt ->
-                                        Text(stt.verdict, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                                            color = when (stt.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface },
-                                            modifier = Modifier.padding(top = 4.dp))
-                                        stt.checks.forEach { (t, ok) ->
-                                            Text((when (ok) { true -> "✓ "; false -> "✗ "; null -> "・" }) + t, fontSize = 12.sp,
-                                                color = when (ok) { true -> StockUp; false -> StockDown; null -> MaterialTheme.colorScheme.onSurfaceVariant })
+                                    stt?.let { st ->
+                                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            st.chips.forEach { (t, ok) ->
+                                                val col = when (ok) { true -> StockUp; false -> StockDown; null -> MaterialTheme.colorScheme.onSurfaceVariant }
+                                                Text((when (ok) { true -> "✓"; false -> "✗"; null -> "" }) + t, fontSize = 11.sp, color = col,
+                                                    modifier = Modifier.background(col.copy(alpha = 0.1f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
+                                            }
                                         }
                                     }
-                                    Text("參數在「助理 → 資金紀律」調整，也可以讓 AI 依你的投資原則帶入；僅供參考。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    val shown = if (allSig) visibleSignals.reversed() else visibleSignals.takeLast(1)
+                                    shown.forEach { sg ->
+                                        Text("${if (sg.buy) "買" else "賣"} ${d(sg.index)}：${sg.reason}", fontSize = 12.sp,
+                                            color = if (sg.buy) StockUp else StockDown, maxLines = if (allSig) 2 else 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            modifier = Modifier.clickable { picked = sg.index }.padding(top = 3.dp))
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("${style.label}：停損 ${"%.0f".format(sigParams.stopPct)}%・移動停損 ${"%.0f".format(sigParams.trailPct)}%・停利 ${"%.0f".format(if (sigParams.long) sigParams.takeProfitPct * 2 else sigParams.takeProfitPct)}%",
+                                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                        if (visibleSignals.size > 1) Text(if (allSig) "收起" else "全部 ${visibleSignals.size} 個買賣點", fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { allSig = !allSig }.padding(4.dp))
+                                    }
                                 }
                             }
-                            if (back >= 1f) TextButton(onClick = { back = 0f }) { Text("回到最新") }
-                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                (if (hourly) listOf(20, 50) else listOf(5, 10, 20, 60, 72, 100, 200)).forEach { len ->
-                                    FilterChip(len in mas, { mas = if (len in mas) mas - len else mas + len },
-                                        label = { Text("${len}${if (hourly) "" else "日"}", fontSize = 12.sp, color = maColor(len)) })
+                            // 下方指標：分段按鈕
+                            Row(Modifier.fillMaxWidth().padding(top = 8.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
+                                listOf("成交量", "RSI", "MACD", "KD").forEachIndexed { i, l ->
+                                    val on = indicator == i
+                                    Box(Modifier.weight(1f).background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
+                                        .clickable { indicator = i }.padding(vertical = 5.dp), contentAlignment = Alignment.Center) {
+                                        Text(l, fontSize = 12.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                                    }
                                 }
-                                FilterChip(showBB, { showBB = !showBB }, label = { Text("布林", fontSize = 12.sp) })
-                            }
-                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOf("成交量", "RSI", "MACD", "KD").forEachIndexed { i, l -> FilterChip(indicator == i, { indicator = i }, label = { Text(l, fontSize = 12.sp) }) }
                             }
                             IndicatorChart(kb, from, n, indicator)
                             IndicatorNote(kb, indicator)
@@ -500,14 +577,15 @@ fun NewsLine(n: NewsItem, num: Int? = null) {
 
 /** 均線顏色（日 K 與 60 分 K 共用）。 */
 private fun maColor(len: Int): Color = when (len) {
-    5 -> Color(0xFFFFA000)
-    10 -> Color(0xFF42A5F5)
-    20 -> Color(0xFF7E57C2)
-    50 -> Color(0xFF26A69A)
-    60 -> Color(0xFF26A69A)
-    72 -> Color(0xFFEC407A)
-    100 -> Color(0xFF8D6E63)
-    else -> Color(0xFF546E7A)
+    5 -> Color(0xFFFF9800)     // 橘
+    10 -> Color(0xFF03A9F4)    // 天藍
+    20 -> Color(0xFF9C27B0)    // 紫（月線）
+    50 -> Color(0xFF009688)
+    60 -> Color(0xFF43A047)    // 綠（季線）
+    100 -> Color(0xFF6D4C41)
+    120 -> Color(0xFFE91E63)   // 桃紅（半年線）
+    240 -> Color(0xFF3F51B5)   // 靛藍（年線）
+    else -> listOf(Color(0xFF00BCD4), Color(0xFFCDDC39), Color(0xFF795548), Color(0xFFF44336), Color(0xFF607D8B))[len % 5]
 }
 
 /**
@@ -519,6 +597,8 @@ private fun CandleChart(
     b: DailyBars, from: Int, n: Int, showBB: Boolean, mas: List<Int>, onZoom: (Float) -> Unit, onPan: (Float) -> Unit,
     levels: List<Pair<Double, Color>> = emptyList(), selected: Int? = null, onTap: (Float) -> Unit = {},
     signals: List<com.enwei.moneymanager.core.TradeSignals.Signal> = emptyList(),
+    /** 價位線（價格、顏色、名稱）：在圖右邊標名稱與價格 */
+    labeledLevels: List<Triple<Double, Color, String>> = emptyList(),
 ) {
     val bb = remember(System.identityHashCode(b)) { Technicals.bollinger(b.close) }
     // 月線、季線（畫交叉標記用）
@@ -563,7 +643,8 @@ private fun CandleChart(
         val lo = (from until to).minOf { b.low[it] }
         val range = (hi - lo).takeIf { it > 0 } ?: 1.0
         val cw = size.width / n
-        fun y(v: Double) = ((hi - v) / range * priceH).toFloat()
+        // 上緣留 28px 給均線圖例
+        fun y(v: Double) = (28.0 + (hi - v) / range * (priceH - 28.0)).toFloat()
         for (k in 0..3) drawLine(grid, Offset(0f, priceH * k / 3), Offset(size.width, priceH * k / 3), 1f)
         val maxVol = (from until to).maxOf { b.volume.getOrNull(it) ?: 0.0 }.takeIf { it > 0 } ?: 1.0
         for (i in 0 until n) {
@@ -593,6 +674,47 @@ private fun CandleChart(
         // 均價、停利價、減碼價、提醒價：虛線（在畫面價格範圍內才畫）
         val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
         levels.forEach { (v, col) -> if (v in lo..hi) drawLine(col, Offset(0f, y(v)), Offset(size.width, y(v)), 2f, pathEffect = dash) }
+        // 有名稱的價位線：虛線＋右邊小標籤「移動停損 3851」；不在畫面範圍時貼在上緣或下緣並加箭頭
+        val tagPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f; color = android.graphics.Color.WHITE }
+        fun argb(c: Color) = android.graphics.Color.argb(255, (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
+        val usedY = ArrayList<Float>()
+        labeledLevels.sortedByDescending { it.first }.forEach { (v, col, name) ->
+            val inside = v in lo..hi
+            var ly = when { v > hi -> 14f; v < lo -> priceH - 4f; else -> y(v) }
+            if (inside) drawLine(col, Offset(0f, ly), Offset(size.width, ly), 1.8f, pathEffect = dash)
+            // 標籤互相錯開
+            while (usedY.any { kotlin.math.abs(it - ly) < 26f }) ly += 26f
+            usedY += ly
+            val label = (if (v > hi) "↑" else if (v < lo) "↓" else "") + "$name ${"%.1f".format(v).removeSuffix(".0")}"
+            val tw = tagPaint.measureText(label)
+            val bgP = android.graphics.Paint().apply { color = argb(col) }
+            val x0 = size.width - tw - 10f
+            drawContext.canvas.nativeCanvas.drawRoundRect(x0, ly - 13f, size.width, ly + 11f, 6f, 6f, bgP)
+            drawContext.canvas.nativeCanvas.drawText(label, x0 + 5f, ly + 6f, tagPaint)
+        }
+        // 最新價標籤（右邊）
+        run {
+            val lastI = to - 1
+            val col = if (b.close[lastI] >= b.open[lastI]) up else down
+            val ly = y(b.close[lastI])
+            val label = "%.2f".format(b.close[lastI])
+            val tw = tagPaint.measureText(label)
+            drawLine(col.copy(alpha = 0.6f), Offset(0f, ly), Offset(size.width, ly), 1f)
+            drawContext.canvas.nativeCanvas.drawRoundRect(0f, ly - 13f, tw + 10f, ly + 11f, 6f, 6f, android.graphics.Paint().apply { color = argb(col) })
+            drawContext.canvas.nativeCanvas.drawText(label, 5f, ly + 6f, tagPaint)
+        }
+        // 均線圖例（左上）：MA20 3805　MA60 3823…，顏色和線一樣
+        run {
+            val lp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f; isFakeBoldText = true }
+            var lx = 4f
+            maSeries.toSortedMap().forEach { (len, v) ->
+                val cur = v.getOrNull(to - 1) ?: return@forEach
+                val t = "MA$len ${"%.1f".format(cur)}"
+                lp.color = argb(maColor(len))
+                drawContext.canvas.nativeCanvas.drawText(t, lx, 20f, lp)
+                lx += lp.measureText(t) + 14f
+            }
+        }
         // 月線與季線交叉：▲ 黃金交叉（K 棒下方）、▼ 死亡交叉（K 棒上方）
         for (i in 1 until n) {
             val j = from + i
@@ -603,9 +725,11 @@ private fun CandleChart(
             if (a0 <= b0 && a1 > b1) {
                 val yy = (y(b.low[j]) + 6f).coerceAtMost(priceH - 2f)
                 drawPath(Path().apply { moveTo(cx, yy); lineTo(cx - s / 2, yy + s); lineTo(cx + s / 2, yy + s); close() }, up)
+                drawContext.canvas.nativeCanvas.drawText("金叉", cx - 18f, (yy + s + 22f).coerceAtMost(priceH), android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f; color = argb(up) })
             } else if (a0 >= b0 && a1 < b1) {
                 val yy = (y(b.high[j]) - 6f).coerceAtLeast(2f)
                 drawPath(Path().apply { moveTo(cx, yy); lineTo(cx - s / 2, yy - s); lineTo(cx + s / 2, yy - s); close() }, down)
+                drawContext.canvas.nativeCanvas.drawText("死叉", cx - 18f, (yy - s - 6f).coerceAtLeast(40f), android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f; color = argb(down) })
             }
         }
         // 紀律買賣點：把那根 K 棒整根框起來，買點在下方、賣點在上方標出理由（例如「買·站回季線」）
@@ -698,7 +822,12 @@ private fun IndicatorChart(b: DailyBars, from: Int, n: Int, kind: Int) {
                     drawRect((if (b.close[j] >= b.open[j]) up else down).copy(alpha = 0.6f), Offset(i * cw + cw * 0.15f, size.height - h), Size(cw * 0.7f, h))
                 }
             }
-            1 -> { hline(70.0, 0.0, 100.0); hline(30.0, 0.0, 100.0); line(rsi, 0.0, 100.0, c1) }
+            1 -> {
+                hline(70.0, 0.0, 100.0); hline(30.0, 0.0, 100.0); line(rsi, 0.0, 100.0, c1)
+                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f; color = android.graphics.Color.GRAY }
+                drawContext.canvas.nativeCanvas.drawText("70 過熱", 4f, size.height * 0.3f - 4f, tp)
+                drawContext.canvas.nativeCanvas.drawText("30 超賣", 4f, size.height * 0.7f + 20f, tp)
+            }
             2 -> {
                 val vals = (from until to).flatMap { listOf(macd.dif[it], macd.signal[it], macd.hist[it]) }
                 val m = vals.maxOf { kotlin.math.abs(it) }.takeIf { it > 0 } ?: 1.0
@@ -710,8 +839,19 @@ private fun IndicatorChart(b: DailyBars, from: Int, n: Int, kind: Int) {
                     drawRect((if (h >= 0) up else down).copy(alpha = 0.6f), Offset(i * cw + cw * 0.2f, minOf(y0, y1)), Size(cw * 0.6f, kotlin.math.abs(y1 - y0)))
                 }
                 line(macd.dif, -m, m, c2); line(macd.signal, -m, m, c1)
+                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f }
+                tp.color = android.graphics.Color.argb(255, 255, 160, 0); drawContext.canvas.nativeCanvas.drawText("DIF", 4f, 18f, tp)
+                tp.color = android.graphics.Color.argb(255, 126, 87, 194); drawContext.canvas.nativeCanvas.drawText("DEA", 44f, 18f, tp)
             }
-            else -> { hline(80.0, 0.0, 100.0); hline(20.0, 0.0, 100.0); line(kd.first, 0.0, 100.0, c2); line(kd.second, 0.0, 100.0, c1) }
+            else -> {
+                hline(80.0, 0.0, 100.0); hline(20.0, 0.0, 100.0); line(kd.first, 0.0, 100.0, c2); line(kd.second, 0.0, 100.0, c1)
+                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f }
+                tp.color = android.graphics.Color.argb(255, 255, 160, 0); drawContext.canvas.nativeCanvas.drawText("K", 4f, 18f, tp)
+                tp.color = android.graphics.Color.argb(255, 126, 87, 194); drawContext.canvas.nativeCanvas.drawText("D", 22f, 18f, tp)
+                tp.color = android.graphics.Color.GRAY
+                drawContext.canvas.nativeCanvas.drawText("80", size.width - 28f, size.height * 0.2f - 4f, tp)
+                drawContext.canvas.nativeCanvas.drawText("20", size.width - 28f, size.height * 0.8f + 20f, tp)
+            }
         }
     }
 }
