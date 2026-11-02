@@ -85,7 +85,7 @@ suspend fun Repository.disciplineFacts(symbol: String): String? {
     return "$symbol $name：${st.verdict}；" + st.checks.joinToString("；") { (t, ok) -> (when (ok) { true -> "✓"; false -> "✗"; null -> "" }) + t }
 }
 
-fun InvestPlanSettings.guardRule() = com.enwei.moneymanager.core.GuardRule(guardTrailPct, baseShares)
+fun InvestPlanSettings.guardRule() = com.enwei.moneymanager.core.GuardRule(guardTrailPct, baseShares, reducePct, tolerancePct)
 
 /**
  * 自動的保本金額：這一輪（上次賣光之後）所有買進的成本加手續費。
@@ -160,7 +160,7 @@ suspend fun Repository.advisorSnapshot(fetch: Boolean = true): AdvisorSnapshot =
             com.enwei.moneymanager.core.GuardInput(
                 shares, p, gs?.principal ?: autoPrincipal(allTrades.filter { it.symbol.equals(sym, true) }),
                 gs?.peak, gs?.takeProfit, gs?.reduceAt,
-                hour?.let { Technicals.sma(it, 20) }, hour?.let { Technicals.sma(it, 50) },
+                hour?.let { Technicals.sma(it, plan.hourFast) }, hour?.let { Technicals.sma(it, plan.hourSlow) },
             )
         }
         HoldingPlan(

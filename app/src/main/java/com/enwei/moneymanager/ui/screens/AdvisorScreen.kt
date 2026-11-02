@@ -1123,6 +1123,24 @@ private fun PlanTab(nav: NavController) {
                 } else HoldingCard(h, ai[h.symbol], settings.investPlan.disciplineOn, nav)
             }
         }
+        // 紀律參數：和投資原則一樣條列，點「調整」修改數字
+        Section("我的紀律參數", action = "調整" to { editPlan = true }, collapsible = true, initiallyOpen = false) {
+            val p = settings.investPlan
+            val lines = if (!p.disciplineOn) listOf("持股紀律建議目前關閉（按「調整」開啟）")
+            else if (p.guardOn) listOf(
+                "股價上漲：保本＋移動停利，從最高價回落 ${"%.1f".format(p.guardTrailPct)}% 賣出多賺的股數",
+                "想減碼：先設減碼價，跌破時賣出約 ${"%.0f".format(p.reducePct)}%",
+                "股價下跌：60 分 K ${p.hourFast}MA、${p.hourSlow}MA，跌破其中一條賣約 ${"%.0f".format(p.reducePct)}%",
+                "兩條都跌破：只留 ${p.baseShares.toLong()} 股基本股；站上兩條是買入訊號",
+                "容許稍微跌破 ${"%.1f".format(p.tolerancePct)}%，連續 ${p.confirmBars} 根才算，避免被洗出場",
+                "輔助參考：日 K ${p.dailyMas.joinToString("、")} 日均線",
+            ) else listOf(
+                "短線停損：跌破買進價 ${"%.0f".format(p.shortStopPct)}%",
+                "短線移動停損：從高點回落 ${"%.0f".format(p.shortTrailPct)}%；長線 ${"%.0f".format(p.longTrailPct)}%",
+                "分批停利：獲利 ${"%.0f".format(p.takeProfitPct)}% 先賣 1/3（長線為兩倍）",
+            )
+            lines.forEachIndexed { i, l -> Text("${i + 1}. $l", fontSize = 14.sp) }
+        }
         Section("我的投資原則（${settings.investPlan.rules.size} 條）", action = "編輯" to { editRules = true }, collapsible = true, initiallyOpen = false) {
             if (settings.investPlan.rules.isEmpty()) Text("尚未設定投資原則。", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             settings.investPlan.rules.forEachIndexed { i, r -> Text("${i + 1}. $r", fontSize = 14.sp) }
@@ -1327,6 +1345,12 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
     var guardOn by remember { mutableStateOf(p.guardOn) }
     var gTrail by remember { mutableStateOf(p.guardTrailPct.toString()) }
     var base by remember { mutableStateOf(p.baseShares.toLong().toString()) }
+    var fast by remember { mutableStateOf(p.hourFast.toString()) }
+    var slow by remember { mutableStateOf(p.hourSlow.toString()) }
+    var reduce by remember { mutableStateOf("%.0f".format(p.reducePct)) }
+    var tol by remember { mutableStateOf(p.tolerancePct.toString()) }
+    var confirm by remember { mutableStateOf(p.confirmBars.toString()) }
+    var dailyMas by remember { mutableStateOf(p.dailyMas.joinToString(", ")) }
     var aiNote by remember { mutableStateOf<String?>(null) }
     var aiBusy by remember { mutableStateOf(false) }
     val aiScope = rememberCoroutineScope()
@@ -1373,8 +1397,26 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
                         Switch(guardOn, { guardOn = it })
                     }
                     if (guardOn) {
+                        @Composable fun head(t: String) = Text(t, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+                        @Composable fun note(t: String) = Text(t, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        head("一、股價上漲：保本＋移動停利")
+                        note("集保永遠保留「市值約等於原始成本」的股數，只賣多賺的部分；不見價就賣，先設停利價並跟著往上移。")
                         NumberField(gTrail, { gTrail = it }, "移動停利：從最高價回落", suffix = "%")
-                        NumberField(base, { base = it }, "兩條 60 分 K 均線都跌破時留下的基本股", suffix = "股")
+                        NumberField(reduce, { reduce = it }, "想減碼時，跌破減碼價賣出", suffix = "%")
+                        head("二、股價下跌：60 分 K 均線")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(Modifier.weight(1f)) { NumberField(fast, { fast = it }, "快線", suffix = "MA") }
+                            Box(Modifier.weight(1f)) { NumberField(slow, { slow = it }, "慢線", suffix = "MA") }
+                        }
+                        NumberField(reduce, { reduce = it }, "跌破其中一條，賣出", suffix = "%")
+                        NumberField(base, { base = it }, "兩條都跌破，只留基本股", suffix = "股")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(Modifier.weight(1f)) { NumberField(tol, { tol = it }, "容許稍微跌破", suffix = "%") }
+                            Box(Modifier.weight(1f)) { NumberField(confirm, { confirm = it }, "連續確認", suffix = "根") }
+                        }
+                        note("股價突破兩條線是買入訊號；只是短暫稍微跌破（在容許範圍內、或沒有連續確認）不賣，避免來回震盪被洗出場。")
+                        head("輔助參考：日 K 均線")
+                        OutlinedTextField(dailyMas, { dailyMas = it }, label = { Text("天數（逗號分開）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     } else {
                         NumberField(stop, { stop = it }, "短線停損", suffix = "%")
                         NumberField(trail, { trail = it }, "短線移動停損（從高點回落）", suffix = "%")
@@ -1398,6 +1440,12 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
                             guardOn = guardOn,
                             disciplineOn = disciplineOn,
                             guardTrailPct = gTrail.toDoubleOrNull()?.coerceIn(0.5, 30.0) ?: p.guardTrailPct,
+                            hourFast = fast.toIntOrNull()?.coerceIn(2, 200) ?: p.hourFast,
+                            hourSlow = slow.toIntOrNull()?.coerceIn(2, 300) ?: p.hourSlow,
+                            reducePct = reduce.toDoubleOrNull()?.coerceIn(5.0, 100.0) ?: p.reducePct,
+                            tolerancePct = tol.toDoubleOrNull()?.coerceIn(0.0, 10.0) ?: p.tolerancePct,
+                            confirmBars = confirm.toIntOrNull()?.coerceIn(1, 10) ?: p.confirmBars,
+                            dailyMas = dailyMas.split(Regex("[,，、\\s]+")).mapNotNull { it.toIntOrNull()?.takeIf { d -> d in 2..300 } }.distinct().ifEmpty { p.dailyMas },
                             baseShares = base.toDoubleOrNull()?.coerceIn(0.0, 1_000_000.0) ?: p.baseShares,
                         ),
                     )

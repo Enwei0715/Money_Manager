@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.work
 
+import com.enwei.moneymanager.data.guardRule
 import android.content.Context
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -75,7 +76,7 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
             if (s.stockAlertsOn && s.investPlan.disciplineOn && s.investPlan.guardOn) snap.holdings.forEach { h ->
                 val gi = h.guardInput ?: return@forEach
                 val p = price[quoteKey(Market.TW, h.symbol)] ?: return@forEach
-                val g = com.enwei.moneymanager.core.ProfitGuard.advise(gi.copy(price = p), s.investPlan.let { com.enwei.moneymanager.core.GuardRule(it.guardTrailPct, it.baseShares) })
+                val g = com.enwei.moneymanager.core.ProfitGuard.advise(gi.copy(price = p), s.investPlan.guardRule())
                 peaks[h.symbol] = g.peak
                 if (g.triggered) fire(h.symbol, "guard-${g.action.name}", "${h.symbol} ${h.name.orEmpty()}：${g.action.label}", "${g.note}，建議賣 ${g.sellShares.toLong()} 股")
             }

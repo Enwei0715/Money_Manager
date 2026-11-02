@@ -80,6 +80,16 @@ data class InvestPlanSettings(
     val guardTrailPct: Double = 3.0,
     /** 60 分 K 兩條均線都跌破時留下的基本股數 */
     val baseShares: Double = 1.0,
+    /** 60 分 K 快線、慢線天數 */
+    val hourFast: Int = 20,
+    val hourSlow: Int = 50,
+    /** 跌破一條均線或跌破減碼價時賣出的比例（%） */
+    val reducePct: Double = 50.0,
+    /** 容許的跌破幅度（%）與需要連續幾根 K 棒確認 */
+    val tolerancePct: Double = 1.0,
+    val confirmBars: Int = 2,
+    /** 輔助參考的日 K 均線（天數） */
+    val dailyMas: List<Int> = listOf(5, 10, 20, 72, 100, 200),
     /** 每檔的保本金額、移動停利最高價、手動停利價與減碼價（key 為代號） */
     val guards: Map<String, GuardState> = emptyMap(),
 ) {

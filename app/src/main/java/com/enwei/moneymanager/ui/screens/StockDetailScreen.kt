@@ -265,7 +265,11 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                     fontSize = 12.sp, color = if ((chg ?: 0.0) >= 0) StockUp else StockDown, modifier = Modifier.padding(top = 6.dp),
                                 )
                             }
-                            val visibleSignals = if (hourly || !showSignals) emptyList() else signals.filter { it.index in from until from + n }
+                            // 60 分 K：依「保本＋移動停利」的快慢線規則標買賣點；日 K：依停損／移動停損／停利標
+                            val hourSignals = if (hourly && showSignals) remember(System.identityHashCode(kb), plan) {
+                                com.enwei.moneymanager.core.TradeSignals.scanGuard(kb.close, plan.hourFast, plan.hourSlow, plan.tolerancePct, plan.confirmBars, plan.reducePct)
+                            } else emptyList()
+                            val visibleSignals = if (!showSignals) emptyList() else (if (hourly) hourSignals else signals).filter { it.index in from until from + n }
                             sel?.let { j -> visibleSignals.firstOrNull { it.index == j } }?.let { sg ->
                                 Text((if (sg.buy) "買點：" else "賣點：") + sg.reason, fontSize = 12.sp, color = if (sg.buy) StockUp else StockDown)
                             }
@@ -336,10 +340,10 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                 )
                             }
                             // 紀律：一行結論＋小方塊依據；買賣點只列最近一個，其餘展開看
-                            if (!hourly) {
+                            run {
                                 var allSig by remember { mutableStateOf(false) }
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
-                                    Text(stt?.verdict ?: "紀律買賣點", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+                                    Text(stt?.verdict ?: (if (hourly) "保本＋移動停利：60 分 K ${plan.hourFast}MA／${plan.hourSlow}MA" else "紀律買賣點"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
                                         color = when (stt?.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface })
                                     androidx.compose.material3.Switch(showSignals, { showSignals = it }, Modifier.scale(0.75f))
                                 }
@@ -361,7 +365,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                             modifier = Modifier.clickable { picked = sg.index }.padding(top = 3.dp))
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("${style.label}：停損 ${"%.0f".format(sigParams.stopPct)}%・移動停損 ${"%.0f".format(sigParams.trailPct)}%・停利 ${"%.0f".format(if (sigParams.long) sigParams.takeProfitPct * 2 else sigParams.takeProfitPct)}%",
+                                        Text(if (hourly) "容許跌破 ${"%.1f".format(plan.tolerancePct)}%・連續 ${plan.confirmBars} 根確認・破一條賣 ${"%.0f".format(plan.reducePct)}%・基本股 ${plan.baseShares.toLong()} 股"
+                                            else "${style.label}：停損 ${"%.0f".format(sigParams.stopPct)}%・移動停損 ${"%.0f".format(sigParams.trailPct)}%・停利 ${"%.0f".format(if (sigParams.long) sigParams.takeProfitPct * 2 else sigParams.takeProfitPct)}%",
                                             fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                                         if (visibleSignals.size > 1) Text(if (allSig) "收起" else "全部 ${visibleSignals.size} 個買賣點", fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { allSig = !allSig }.padding(4.dp))
@@ -432,8 +437,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             val hc = hourBars?.close
                             val g = com.enwei.moneymanager.core.ProfitGuard.advise(
                                 com.enwei.moneymanager.core.GuardInput(shares, last, principal, gs?.peak, gs?.takeProfit, gs?.reduceAt,
-                                    hc?.let { Technicals.sma(it, 20) }, hc?.let { Technicals.sma(it, 50) }),
-                                com.enwei.moneymanager.core.GuardRule(settings.investPlan.guardTrailPct, settings.investPlan.baseShares),
+                                    hc?.let { Technicals.sma(it, settings.investPlan.hourFast) }, hc?.let { Technicals.sma(it, settings.investPlan.hourSlow) }),
+                                com.enwei.moneymanager.core.GuardRule(settings.investPlan.guardTrailPct, settings.investPlan.baseShares, settings.investPlan.reducePct, settings.investPlan.tolerancePct),
                             )
                             Text("保本 ${"%,.0f".format(principal)} · 市值 ${"%,.0f".format(shares * last)}" +
                                 (if (g.excessShares >= 1) " · 多賺 ${g.excessShares.toLong()} 股 · 停利價 ${"%.2f".format(g.takeProfit ?: 0.0)}" else ""), fontSize = 14.sp)
@@ -897,7 +902,7 @@ private object KlinePrefs {
     val bb get() = p.getBoolean("bb", false)
     fun count(hourly: Boolean) = p.getFloat(if (hourly) "countH" else "countD", if (hourly) 50f else 120f)
     fun mas(hourly: Boolean): Set<Int> = p.getString(if (hourly) "masH" else "masD", null)?.split(',')?.mapNotNull { it.toIntOrNull() }?.toSet()
-        ?: if (hourly) setOf(20, 50) else setOf(5, 20, 72)
+        ?: if (hourly) repo.settings.value.investPlan.let { setOf(it.hourFast, it.hourSlow) } else repo.settings.value.investPlan.dailyMas.take(5).toSet()
     fun save(hourly: Boolean, count: Float, mas: Set<Int>, indicator: Int, bb: Boolean) {
         p.edit().putBoolean("hourly", hourly).putFloat(if (hourly) "countH" else "countD", count)
             .putString(if (hourly) "masH" else "masD", mas.joinToString(",")).putInt("indicator", indicator).putBoolean("bb", bb).apply()

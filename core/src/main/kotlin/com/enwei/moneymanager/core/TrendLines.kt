@@ -172,6 +172,46 @@ object TradeSignals {
         return out
     }
 
+    /**
+     * 保本＋移動停利紀律在 60 分 K 的買賣點：
+     * - 站上快線與慢線（超過容許幅度、連續 [confirm] 根）→ 買點
+     * - 跌破其中一條（超過容許幅度、連續 [confirm] 根）→ 減碼一部分
+     * - 兩條都跌破 → 減到只剩基本股
+     */
+    fun scanGuard(close: List<Double>, fast: Int, slow: Int, tolerancePct: Double, confirm: Int, reducePct: Double): List<Signal> {
+        val n = close.size
+        if (n < slow + confirm + 2) return emptyList()
+        val mf = close.indices.map { Technicals.sma(close, fast, it + 1) }
+        val ms = close.indices.map { Technicals.sma(close, slow, it + 1) }
+        val tol = tolerancePct / 100
+        // 狀態：2 站上兩條、1 只破一條、0 兩條都破
+        fun state(i: Int): Int? {
+            val a = mf[i] ?: return null; val b = ms[i] ?: return null
+            val c = close[i]
+            val brokeA = c < a * (1 - tol); val brokeB = c < b * (1 - tol)
+            val aboveBoth = c > a * (1 + tol) && c > b * (1 + tol)
+            return when { aboveBoth -> 2; brokeA && brokeB -> 0; brokeA || brokeB -> 1; else -> -1 }   // -1：在容許範圍內，維持原狀
+        }
+        val out = ArrayList<Signal>()
+        var cur = 2
+        for (i in slow until n) {
+            val st = state(i) ?: continue
+            if (st == -1 || st == cur) continue
+            // 要連續 confirm 根都是這個狀態才算（避免假跌破／假突破）
+            val ok = (0 until confirm).all { k -> i - k >= 0 && state(i - k) == st }
+            if (!ok) continue
+            val a = mf[i]!!; val b = ms[i]!!
+            fun f(v: Double) = if (v >= 100) "%.0f".format(v) else "%.1f".format(v)
+            when (st) {
+                2 -> out += Signal(i, true, "站上 ${fast}MA ${f(a)} 與 ${slow}MA ${f(b)}（連續 $confirm 根）", "站上雙線")
+                1 -> if (cur == 2) out += Signal(i, false, "跌破 ${if (close[i] < a * (1 - tol)) "${fast}MA ${f(a)}" else "${slow}MA ${f(b)}"} 超過 ${"%.1f".format(tolerancePct)}%，減碼約 ${"%.0f".format(reducePct)}%", "減碼")
+                0 -> out += Signal(i, false, "同時跌破 ${fast}MA 與 ${slow}MA，減到只剩基本股", "留基本股")
+            }
+            cur = st
+        }
+        return out
+    }
+
     /** 目前狀態的依據（一條一條，true＝偏多、false＝偏空、null＝中性）與依紀律的結論。 */
     data class Status(
         val checks: List<Pair<String, Boolean?>>, val verdict: String, val bias: Int,

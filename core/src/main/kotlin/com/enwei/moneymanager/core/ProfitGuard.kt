@@ -16,6 +16,10 @@ data class GuardRule(
     val trailPct: Double = 3.0,
     /** 兩條 60 分 K 均線都跌破時留下的基本股數 */
     val baseShares: Double = 1.0,
+    /** 跌破一條均線、或跌破減碼價時賣出的比例（%） */
+    val reducePct: Double = 50.0,
+    /** 容許的跌破幅度（%）：只是稍微跌破、在這個範圍內不算，避免來回震盪被洗出場 */
+    val tolerancePct: Double = 1.0,
 )
 
 data class GuardInput(
@@ -70,18 +74,20 @@ object ProfitGuard {
         val auto = peak?.let { it * (1 - rule.trailPct / 100) }
         val tp = if (excess >= 1) max(auto ?: 0.0, i.manualTakeProfit ?: 0.0).takeIf { it > 0 } else null
 
-        val below = listOfNotNull(i.hourMa20, i.hourMa50).count { i.price < it }
+        // 跌破要超過容許幅度才算（短暫稍微跌破不賣）
+        fun broke(ma: Double) = i.price < ma * (1 - rule.tolerancePct / 100)
+        val below = listOfNotNull(i.hourMa20, i.hourMa50).count { broke(it) }
         val sellable = (i.shares - rule.baseShares).coerceAtLeast(0.0)
-        fun half() = floor(i.shares / 2).coerceAtMost(sellable)
+        fun half() = floor(i.shares * rule.reducePct / 100).coerceAtMost(sellable)
         fun f(v: Double) = "%.2f".format(v)
         return when {
             below >= 2 && sellable > 0 -> GuardAdvice(excess, excessValue, tp, peak, GuardAction.TO_BASE, sellable,
                 "現價 ${f(i.price)} 同時跌破 60 分 K 20MA ${f(i.hourMa20!!)}、50MA ${f(i.hourMa50!!)}，減到只剩 ${rule.baseShares.toLong()} 股")
             i.reduceAt != null && i.price < i.reduceAt && half() > 0 -> GuardAdvice(excess, excessValue, tp, peak, GuardAction.REDUCE_TRIGGER, half(),
-                "現價 ${f(i.price)} 跌破你設的減碼價 ${f(i.reduceAt)}，賣一半")
+                "現價 ${f(i.price)} 跌破你設的減碼價 ${f(i.reduceAt)}，賣出約 ${"%.0f".format(rule.reducePct)}%")
             below == 1 && half() > 0 -> {
-                val which = if (i.hourMa20 != null && i.price < i.hourMa20) "20MA ${f(i.hourMa20)}" else "50MA ${f(i.hourMa50 ?: 0.0)}"
-                GuardAdvice(excess, excessValue, tp, peak, GuardAction.REDUCE_HALF, half(), "現價 ${f(i.price)} 跌破 60 分 K $which，考慮減碼約一半")
+                val which = if (i.hourMa20 != null && broke(i.hourMa20)) "快線 ${f(i.hourMa20)}" else "慢線 ${f(i.hourMa50 ?: 0.0)}"
+                GuardAdvice(excess, excessValue, tp, peak, GuardAction.REDUCE_HALF, half(), "現價 ${f(i.price)} 跌破 60 分 K $which 超過 ${"%.1f".format(rule.tolerancePct)}%，減碼約 ${"%.0f".format(rule.reducePct)}%")
             }
             tp != null && i.price < tp -> GuardAdvice(excess, excessValue, tp, peak, GuardAction.SELL_EXCESS, excess,
                 "跌破停利價 ${f(tp)}，賣出多賺的 ${excess.toLong()} 股，留下的市值約等於成本")
