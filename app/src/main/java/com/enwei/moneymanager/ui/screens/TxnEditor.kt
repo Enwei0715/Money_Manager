@@ -393,7 +393,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         val col = when { after < 0 -> MaterialTheme.colorScheme.error; pctAfter >= 80 -> Color(0xFFFFA000); else -> MaterialTheme.colorScheme.onSurfaceVariant }
                         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 4.dp)) {
                             Text(
-                                "${u.name} 預算：本月剩 ${Money.withSymbol(u.left, lk.base)}" +
+                                (if (u.name.endsWith("預算")) u.name else "${u.name} 預算") + "：本月剩 ${Money.withSymbol(u.left, lk.base)}" +
                                     (if (add > 0) "，記這筆後" + (if (after >= 0) "剩 ${Money.withSymbol(after, lk.base)}" else "超出 ${Money.withSymbol(-after, lk.base)}") else "") +
                                     "（$pctAfter%）",
                                 fontSize = 12.sp, color = col,

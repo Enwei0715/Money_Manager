@@ -45,28 +45,40 @@ object FxService {
 }
 
 object QuoteService {
-    suspend fun fetch(items: List<Pair<Market, String>>): List<QuoteEntity> {
-        val out = mutableListOf<QuoteEntity>()
+    suspend fun fetch(items: List<Pair<Market, String>>): List<QuoteEntity> = kotlinx.coroutines.coroutineScope {
         val tw = items.filter { it.first == Market.TW }.map { it.second.uppercase() }.distinct()
         val us = items.filter { it.first == Market.US }.map { it.second.uppercase() }.distinct()
-        if (tw.isNotEmpty()) {
-            val got = runCatching { fetchTwse(tw) }.getOrDefault(emptyList())
-            out += got
-            val missing = tw - got.map { it.key.removePrefix("TW:") }.toSet()
-            missing.forEach { sym ->
-                (runCatching { fetchYahoo("$sym.TW", Market.TW, sym) }.getOrNull()
-                    ?: runCatching { fetchYahoo("$sym.TWO", Market.TW, sym) }.getOrNull())?.let(out::add)
+        // 證交所與 Yahoo 同時查（各最多約 6 秒），證交所的價格合理就用證交所，否則用 Yahoo
+        val twseJob = async { if (tw.isEmpty()) emptyList() else runCatching { fetchTwse(tw) }.getOrDefault(emptyList()) }
+        val yahooTw = tw.map { sym ->
+            sym to async {
+                runCatching { fetchYahoo("$sym.TW", Market.TW, sym) }.getOrNull()
+                    ?: runCatching { fetchYahoo("$sym.TWO", Market.TW, sym) }.getOrNull()
             }
         }
-        us.forEach { sym -> runCatching { fetchYahoo(sym, Market.US, sym) }.getOrNull()?.let(out::add) }
-        return out
+        val usJobs = us.map { sym -> async { runCatching { fetchYahoo(sym, Market.US, sym) }.getOrNull() } }
+        val twse = twseJob.await().associateBy { it.key }
+        val out = mutableListOf<QuoteEntity>()
+        for ((sym, job) in yahooTw) {
+            val raw = twse[quoteKey(Market.TW, sym)]
+            val q = raw?.takeIf { sane(it) } ?: job.await()?.takeIf { sane(it) } ?: raw ?: job.await()
+            if (q != null) out += q
+        }
+        out += usJobs.mapNotNull { it.await() }
+        out
+    }
+
+    /** 台股單日漲跌幅上限 10%：超過太多（例如抓到錯的欄位或別檔的價格）就不採用。 */
+    private fun sane(q: QuoteEntity): Boolean {
+        val prev = q.previousClose ?: return q.price > 0
+        return q.price > 0 && prev > 0 && kotlin.math.abs(q.price / prev - 1) <= 0.105
     }
 
     /** 證交所即時報價（上市 tse、上櫃 otc 同時查詢）。 */
     private suspend fun fetchTwse(symbols: List<String>): List<QuoteEntity> {
         val channels = symbols.flatMap { listOf("tse_$it.tw", "otc_$it.tw") }.joinToString("|")
         val url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${URLEncoder.encode(channels, "UTF-8")}&json=1&delay=0"
-        val root = Http.getJson(url, mapOf("Referer" to "https://mis.twse.com.tw/stock/index.jsp"))
+        val root = Http.getJson(url, mapOf("Referer" to "https://mis.twse.com.tw/stock/index.jsp"), quick = true)
         val arr = root.obj("msgArray") as? JsonArray ?: return emptyList()
         val now = System.currentTimeMillis()
         return arr.mapNotNull { e ->
@@ -136,7 +148,7 @@ object QuoteService {
     }
 
     private suspend fun fetchYahoo(yahooSymbol: String, market: Market, symbol: String): QuoteEntity? {
-        val root = Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(yahooSymbol, "UTF-8")}?range=5d&interval=1d")
+        val root = Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(yahooSymbol, "UTF-8")}?range=5d&interval=1d", quick = true)
         val result = (root.obj("chart").obj("result") as? JsonArray)?.firstOrNull() ?: return null
         val meta = result.obj("meta")
         val price = meta.num("regularMarketPrice") ?: return null

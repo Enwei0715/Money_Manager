@@ -5,6 +5,17 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class NotificationParserTest {
+    @Test fun promotionIsNotATransaction() {
+        val t = "【金門23%回饋，最後一個月】11月最後機會！在金門使用悠遊付不限金額消費，筆筆最高享23%回饋(最高可賺1,000元)最後一波，記得打開悠遊付，把回饋拿好拿滿→"
+        assertEquals(true, NotificationParser.isPromo(t))
+        assertNull(NotificationParser.parse("悠遊付", t))
+    }
+
+    @Test fun realSpendIsNotPromo() {
+        assertEquals(false, NotificationParser.isPromo("您於 2026/11/02 10:04 在全家便利商店 消費 NT$120，交易成功"))
+        assertEquals(false, NotificationParser.isPromo("國泰世華刷卡通知：卡號末四碼1234 於 11/02 刷卡消費 NT$1,000，本次消費享 1% 回饋"))
+    }
+
     @Test fun creditCardSpend() {
         val r = NotificationParser.parse("國泰世華信用卡", "您的信用卡末四碼1234於10/28 12:30在全聯福利中心消費NT$1,280，提醒您")!!
         assertEquals(ParsedType.EXPENSE, r.type)

@@ -883,6 +883,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 return@mapIndexedNotNull null
             }
             val learned = s.learnedFor(notice.pkg, notice.title, notice.text)
+            if (NotificationParser.isPromo(listOfNotNull(notice.title, notice.text).joinToString("\n"))) return@mapIndexedNotNull null
             if (learned?.parse(notice.title, notice.text) != null || NotificationParser.parse(notice.title, notice.text) != null) {
                 return@mapIndexedNotNull null
             }
@@ -925,6 +926,11 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         fun logAs(result: String, txnId: Long? = null) =
             NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = result, txnId = txnId)
 
+        // 行銷推播（「最高享 23% 回饋」「最後機會」…）不是交易：直接略過，也不交給 AI（手動測試時不略過）
+        if (!force && NotificationParser.isPromo(listOfNotNull(title, text).joinToString("\n"))) {
+            if (enabled) log.insert(logAs("PROMO"))
+            return null
+        }
         val fill = NotificationParser.parseStockFill(title, text)
         var parsed = if (fill != null) null else aiOverride ?: learned?.parse(title, text) ?: NotificationParser.parse(title, text)
         // 規則看不懂、但來自已啟用的銀行／支付 App：請 AI 判讀（結果一律放「待確認」）

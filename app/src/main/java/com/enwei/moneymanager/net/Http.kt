@@ -23,11 +23,14 @@ object Http {
 
     const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36"
 
-    suspend fun getJson(url: String, headers: Map<String, String> = emptyMap()): JsonElement = withContext(Dispatchers.IO) {
+    /** 報價用：整個請求最多 6 秒，來源卡住時很快改用備援來源。 */
+    val fast: OkHttpClient by lazy { client.newBuilder().callTimeout(6, TimeUnit.SECONDS).connectTimeout(4, TimeUnit.SECONDS).build() }
+
+    suspend fun getJson(url: String, headers: Map<String, String> = emptyMap(), quick: Boolean = false): JsonElement = withContext(Dispatchers.IO) {
         val req = Request.Builder().url(url).header("User-Agent", USER_AGENT).apply {
             headers.forEach { (k, v) -> header(k, v) }
         }.build()
-        client.newCall(req).execute().use { resp ->
+        (if (quick) fast else client).newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}: $url")
             json.parseToJsonElement(resp.body!!.string())
         }

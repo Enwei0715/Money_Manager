@@ -464,7 +464,7 @@ object GroqAi {
             }
             val system = "你是台灣記帳 App 的通知判讀器。這是一組同時收到的通知，請逐則判斷是否為已完成的金錢交易。" +
                 "利用彼此資訊辨別自己的帳戶轉帳：同金額、時間接近且一出一入時，兩則都標記為 transfer_out/transfer_in。" +
-                "登入、驗證碼、廣告、帳單提醒、未完成交易不得列入。索引必須使用原通知編號，不可漏掉能判斷的交易。只回 JSON：" +
+                "登入、驗證碼、廣告、帳單提醒、未完成交易不得列入；行銷活動推播（例如「最高享 23% 回饋」「最後機會」「記得使用 XX 消費」）不是交易，is_transaction 一律 false。索引必須使用原通知編號，不可漏掉能判斷的交易。只回 JSON：" +
                 "{\"items\":[{\"index\":number,\"is_transaction\":boolean,\"type\":\"expense\"|\"income\"|\"transfer_out\"|\"transfer_in\"," +
                 "\"amount\":number,\"currency\":\"TWD\",\"merchant\":string|null,\"datetime\":\"yyyy-MM-dd HH:mm\"|null," +
                 "\"sure\":boolean（金額、方向、商家或對象都清楚才 true，有任何猜測 false）}]}。今天是 ${now.toLocalDate()}。"

@@ -110,6 +110,23 @@ object NotificationParser {
     fun shouldIgnore(text: String): Boolean =
         ignoreKeywords.any { text.contains(it, ignoreCase = true) } || englishIgnore.any { text.contains(it, ignoreCase = true) }
 
+    // 行銷推播常見的字眼（「最高享 23% 回饋」「最後機會」「記得打開」…）
+    private val promoWords = listOf(
+        "最後機會", "最後一波", "最後一個月", "最高享", "最高可", "最高回饋", "可賺", "拿好拿滿", "拿滿", "記得打開", "記得使用", "記得領",
+        "立即領取", "立即參加", "立即登錄", "馬上領", "快來", "限量", "倒數", "活動期間", "活動時間", "登錄", "筆筆", "不限金額", "即享", "享回饋",
+        "%回饋", "％回饋", "折價券", "優惠券", "專屬優惠", "好康", "回饋活動", "新戶", "首刷", "加碼送", "抽獎", "滿額", "→", "👉", "🎁", "🔥",
+    )
+    // 真正交易通知的字眼：出現時不當成促銷
+    private val doneWords = listOf("交易成功", "已扣款", "扣款成功", "付款成功", "支付成功", "已付款", "授權", "消費通知", "刷卡通知", "末四碼", "末4碼", "卡號", "交易序號", "訂單編號", "已入帳", "入帳通知")
+
+    /** 行銷推播（促銷活動、回饋宣傳）：不是已完成的交易，不記帳也不交給 AI。 */
+    fun isPromo(text: String): Boolean {
+        val t = clean(text)
+        val hits = promoWords.count { t.contains(it, ignoreCase = true) }
+        if (doneWords.any { t.contains(it) }) return hits >= 4
+        return hits >= 2 || (t.contains("最高") && t.contains("回饋") && !t.contains("回饋入帳"))
+    }
+
     /**
      * 從其他 App 複製或推播的文字常混有外觀相同、編碼不同的字：康熙部首（⾦、⽇）、相容漢字、
      * 全形數字，以及「∶」「︰」等冒號。先換成一般字元，關鍵字與數字才比對得到。
@@ -131,7 +148,7 @@ object NotificationParser {
 
     fun parse(title: String?, text: String?, now: LocalDateTime = LocalDateTime.now()): ParsedTransaction? {
         val full = clean(listOfNotNull(title, text).joinToString(" ").replace('\n', ' '))
-        if (full.isBlank() || shouldIgnore(full)) return null
+        if (full.isBlank() || shouldIgnore(full) || isPromo(full)) return null
 
         val hasIncome = incomeKeywords.any { full.contains(it) } || englishIncome.any { full.contains(it, ignoreCase = true) }
         val hasExpense = expenseKeywords.any { full.contains(it) } || englishExpense.any { full.contains(it, ignoreCase = true) }
@@ -178,7 +195,7 @@ object NotificationParser {
         title: String?, text: String?, type: ParsedType, now: LocalDateTime = LocalDateTime.now(), kind: ParsedKind = ParsedKind.NORMAL,
     ): ParsedTransaction? {
         val full = clean(listOfNotNull(title, text).joinToString(" ").replace('\n', ' '))
-        if (full.isBlank() || shouldIgnore(full)) return null
+        if (full.isBlank() || shouldIgnore(full) || isPromo(full)) return null
         val (amount, currency) = findAmount(full) ?: return null
         if (amount <= 0) return null
         return ParsedTransaction(

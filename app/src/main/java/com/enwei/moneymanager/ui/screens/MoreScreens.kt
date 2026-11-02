@@ -533,7 +533,7 @@ fun NotificationSettingsScreen(nav: NavController) {
             item { SectionTitle("最近處理紀錄") }
             items(log.take(if (allLog) 50 else 8), key = { "log${it.id}" }) { e ->
                 val label = when (e.result) {
-                    "RECORDED" -> "已記帳"; "STOCK" -> "股票成交"; "DUPLICATE" -> "重複略過"; "MERGED" -> "合併為轉帳"; "UNPARSED" -> "無法辨識"; else -> "未啟用來源"
+                    "RECORDED" -> "已記帳"; "STOCK" -> "股票成交"; "DUPLICATE" -> "重複略過"; "MERGED" -> "合併為轉帳"; "UNPARSED" -> "無法辨識"; "PROMO" -> "促銷廣告略過"; else -> "未啟用來源"
                 }
                 ListItem(
                     overlineContent = { Text("${labelOf[e.packageName] ?: e.packageName} · ${timeFmt.format(Date(e.postedAt))} · $label") },
