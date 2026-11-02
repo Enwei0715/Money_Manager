@@ -27,3 +27,14 @@ private class SavedTab(private val key: String, private val state: MutableState<
 @Composable
 fun rememberTab(key: String, default: Int = 0): MutableState<Int> =
     remember(key) { SavedTab(key, mutableStateOf(TabMemory.get(key, default))) }
+
+private class SavedChoice<T>(private val key: String, private val options: List<T>, private val state: MutableState<T>) : MutableState<T> by state {
+    override var value: T
+        get() = state.value
+        set(v) { state.value = v; TabMemory.set(key, options.indexOf(v)) }
+}
+
+/** 記住選項（例如統計的期間、收支種類）：存選項在 [options] 裡的位置。 */
+@Composable
+fun <T> rememberChoice(key: String, options: List<T>, default: T): MutableState<T> =
+    remember(key) { SavedChoice(key, options, mutableStateOf(options.getOrNull(TabMemory.get(key, -1)) ?: default)) }

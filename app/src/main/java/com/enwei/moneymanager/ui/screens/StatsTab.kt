@@ -126,15 +126,9 @@ private fun List<TxnEntity>.inRange(r: PeriodRange) = filter { val d = it.date.t
 fun StatsTab(nav: NavController) {
     val lk = rememberLookups()
     // 期間與收支種類都記住，下次回來維持上次的檢視
-    var periodIdx by com.enwei.moneymanager.ui.components.rememberTab("stats.period", Period.MONTH.ordinal)
-    var period: Period
-        get() = Period.entries.getOrElse(periodIdx) { Period.MONTH }
-        set(v) { periodIdx = v.ordinal }
+    var period by com.enwei.moneymanager.ui.components.rememberChoice("stats.period", Period.entries, Period.MONTH)
     var anchor by rememberSaveable { mutableStateOf(LocalDate.now()) }
-    var kindIdx by com.enwei.moneymanager.ui.components.rememberTab("stats.kind", TxnType.EXPENSE.ordinal)
-    var kind: TxnType
-        get() = TxnType.entries.getOrElse(kindIdx) { TxnType.EXPENSE }
-        set(v) { kindIdx = v.ordinal }
+    var kind by com.enwei.moneymanager.ui.components.rememberChoice("stats.kind", TxnType.entries, TxnType.EXPENSE)
     var menu by remember { mutableStateOf(false) }
     var customStart by rememberSaveable { mutableStateOf(LocalDate.now().withDayOfMonth(1)) }
     var customEnd by rememberSaveable { mutableStateOf(LocalDate.now()) }
