@@ -39,7 +39,7 @@ object GroqAi {
     val enabled: Boolean
         get() = MoneyApp.repo.settings.value.let { it.aiEnabled && it.hasAiKey }
 
-    enum class Provider(val label: String) { GROQ("Groq"), GEMINI("Gemini"), NVIDIA("NVIDIA"), OPENROUTER("OpenRouter") }
+    enum class Provider(val label: String) { GROQ("Groq"), GEMINI("Gemini"), OPENROUTER("OpenRouter") }
 
     /** 每家平台最近一次成功與失敗（AI 設定頁顯示，看得出哪家沒在運作） */
     object ProviderLog {
@@ -52,15 +52,13 @@ object GroqAi {
         )
         fun record(p: Provider, model: String, error: String?) {
             val e = prefs.edit().putInt("${p.name}.calls", prefs.getInt("${p.name}.calls", 0) + 1)
-            if (error == null) e.putLong("${p.name}.okAt", System.currentTimeMillis()).putString("${p.name}.okModel", model.removePrefix(NV))
+            if (error == null) e.putLong("${p.name}.okAt", System.currentTimeMillis()).putString("${p.name}.okModel", model)
             else e.putLong("${p.name}.errAt", System.currentTimeMillis()).putString("${p.name}.err", error.take(160))
             e.apply()
             flow.value++
         }
     }
 
-    /** NVIDIA 的模型 id 和 Groq 可能相同（例如 openai/gpt-oss-120b）：加上前綴，額度與暫停才不會混在一起 */
-    const val NV = "nv:"
 
     /**
      * App 裡所有用到 AI 的工作與分配；大量輸入優先使用較大上下文模型。[lite] 為用較輕量的模型即可。
@@ -96,16 +94,13 @@ object GroqAi {
     /** 需要推理、整合大量資料的工作 */
     private val HEAVY = setOf(AiTask.UNKNOWN, AiTask.REVIEW, AiTask.REPORT, AiTask.CHAT)
 
-    /** 背景大量執行的工作：優先用不限每日次數的 NVIDIA，把 Gemini 的每日額度留給對話與檢討 */
-    private val BULK = setOf(AiTask.NEWS_TAG, AiTask.DIGEST, AiTask.REPORT)
-
     /**
-     * 自動選模型：依工作的難度、資料量與是否在背景大量執行排出候選順序，前一個失敗或被限流就換下一個。
-     * - 簡短判讀（通知、命名、教它辨識、重複判斷、公司說明）：Groq gpt-oss-20b／Qwen3-32B（最快、JSON 穩）→ Gemini Lite → NVIDIA Llama 3.3 70B
-     * - 大量但簡單（新聞標註、重點整理、錢包畫面）：背景工作先用 NVIDIA 長上下文模型（Qwen3-Next、Llama 4 Maverick），再用 Gemini Lite
-     * - 推理整合但資料不多：Groq gpt-oss-120b／Kimi K2 → Gemini Flash → NVIDIA DeepSeek V3.1／Kimi K2／Qwen3-235B
-     * - 推理整合又大量（報告、檢討、對話）：Gemini Flash → NVIDIA DeepSeek V3.1 → …；每日報告在背景，先用 NVIDIA
-     * OpenRouter 免費模型排在最後當備援。額度用完或沒回應的模型會暫停一陣子，直接跳過。
+     * 自動選模型：依工作的難度與資料量排出候選順序，前一個失敗、被限流或回覆不完整就換下一個。
+     * - 簡短判讀（通知、命名、教它辨識、重複判斷、公司說明）：Groq gpt-oss-20b／Qwen3-32B（最快、JSON 穩）→ Gemini Lite → Llama 4 Scout
+     * - 大量但簡單（新聞標註、重點整理、錢包畫面）：Gemini Lite 系列 → OpenRouter 長上下文免費模型 → Gemini Flash
+     * - 推理整合但資料不多：Groq gpt-oss-120b／Kimi K2 → Gemini Flash
+     * - 推理整合又大量（報告、檢討、對話）：Gemini Flash → Gemini 2.5 Flash → Lite → OpenRouter
+     * 額度用完或沒回應的模型會暫停一陣子，直接跳過。
      */
     fun routes(task: AiTask, inputLen: Int): List<Route> {
         val s = MoneyApp.repo.settings.value
@@ -122,31 +117,20 @@ object GroqAi {
         val flash20 = Route(Provider.GEMINI, "gemini-2.0-flash", false)
         val flash25 = Route(Provider.GEMINI, "gemini-2.5-flash", true)
         val heavy = task in HEAVY
-        val bulk = task in BULK
         val fitsGroq = inputLen <= 5000
-        fun nv(list: List<String>, n: Int, big: Boolean) = if (s.nvidiaKey.isBlank()) emptyList()
-            else NvidiaModels.pick(list, n, s.nvidiaModel).map { Route(Provider.NVIDIA, NV + it, big) }
-        val nvFast = nv(NvidiaModels.FAST, 2, false)
-        val nvLong = nv(NvidiaModels.LONG, 3, false)
-        val nvHeavy = nv(NvidiaModels.HEAVY, 3, true)
         // OpenRouter 免費模型：最後的備援（大量資料只用上下文 ≥ 64k 的）
         val or = if (s.openRouterKey.isBlank()) emptyList()
             else OpenRouterModels.pick(big = heavy || !fitsGroq, n = 3, preferred = s.openRouterModel).map { Route(Provider.OPENROUTER, it, heavy) }
         val order = (when {
-            !heavy && fitsGroq && bulk -> nvFast + listOf(g20, gQwen, lite, gScout, lite25, flash20) + or
-            !heavy && fitsGroq -> listOf(g20, gQwen, lite) + nvFast + listOf(gScout, g120, lite25, flash20) + or
-            !heavy && bulk -> nvLong + listOf(lite, lite25, flash20, flash) + or + g20
-            !heavy -> listOf(lite) + nvLong + listOf(lite25, flash20, flash) + or + g20
-            fitsGroq && bulk -> nvHeavy + listOf(g120, gKimi, flash, flash25, lite) + or + listOf(flash20, g20)
-            fitsGroq -> listOf(g120, gKimi, flash) + nvHeavy + listOf(flash25, lite) + or + listOf(flash20, lite25, g20)
-            bulk -> nvHeavy + listOf(flash, flash25, lite) + or + listOf(flash20, lite25, g120)
-            else -> listOf(flash) + nvHeavy + listOf(flash25, lite) + or + listOf(flash20, lite25, g120)
+            !heavy && fitsGroq -> listOf(g20, gQwen, lite, gScout, g120, lite25, flash20) + or
+            !heavy -> listOf(lite, lite25, flash20) + or + listOf(flash, g20)
+            fitsGroq -> listOf(g120, gKimi, flash, flash25, lite) + or + listOf(flash20, lite25, g20)
+            else -> listOf(flash, flash25, lite) + or + listOf(flash20, lite25, g120)
         }).distinctBy { it.model }
         return order.filter {
             when (it.provider) {
                 Provider.GROQ -> s.groqKey.isNotBlank()
                 Provider.GEMINI -> s.geminiKey.isNotBlank()
-                Provider.NVIDIA -> s.nvidiaKey.isNotBlank()
                 Provider.OPENROUTER -> s.openRouterKey.isNotBlank()
             }
         }
@@ -155,7 +139,7 @@ object GroqAi {
     /** 這項工作會先送到 Gemini（可以一次送大量資料），用來決定要送完整資料還是精簡版。 */
     fun bigContext(task: AiTask): Boolean {
         val now = System.currentTimeMillis()
-        return routes(task, Int.MAX_VALUE).firstOrNull { com.enwei.moneymanager.work.AiHealth.cooldownUntil(it.model) <= now }?.provider.let { it == Provider.GEMINI || it == Provider.OPENROUTER || it == Provider.NVIDIA }
+        return routes(task, Int.MAX_VALUE).firstOrNull { com.enwei.moneymanager.work.AiHealth.cooldownUntil(it.model) <= now }?.provider.let { it == Provider.GEMINI || it == Provider.OPENROUTER }
     }
 
     private suspend fun chatJson(
@@ -180,7 +164,6 @@ object GroqAi {
         else system
         // OpenRouter 的免費模型清單一天更新一次（免費模型會增減）
         if (s.openRouterKey.isNotBlank()) runCatching { OpenRouterModels.refresh() }
-        if (s.nvidiaKey.isNotBlank()) runCatching { NvidiaModels.refresh() }
         val all = routes(task, system.length + user.length)
         if (all.isEmpty()) return@withContext null
         val now = System.currentTimeMillis()
@@ -203,7 +186,7 @@ object GroqAi {
                 if (task == AiTask.CHAT && w > 8_000 && r != ready.last().first) continue
                 kotlinx.coroutines.delay(minOf(w, 65_000L))
             } else if (task != AiTask.CHAT) com.enwei.moneymanager.work.AiHealth.pace(r.provider.name,
-                when (r.provider) { Provider.GEMINI -> 1_000; Provider.OPENROUTER -> 3_100; Provider.NVIDIA -> 1_600; Provider.GROQ -> 800 })
+                when (r.provider) { Provider.GEMINI -> 1_000; Provider.OPENROUTER -> 3_100; Provider.GROQ -> 800 })
             quota.record(r.model, gem, estTokens)
             val out = when (r.provider) {
                 Provider.GEMINI -> callGemini(s.geminiKey.trim(), r.model, system, user,
@@ -212,8 +195,6 @@ object GroqAi {
                 // 不加全域鎖：鎖不能重複取得，外層若已持有就會永遠卡住；限流交給下面的暫停機制與各工作的批次間隔
                 Provider.GROQ -> groqJson(s, system, user, maxTokens, r.big || hard, cap, if (r.big) effort else "low", forceModel = r.model)
                 Provider.OPENROUTER -> callCompat(Provider.OPENROUTER, s.openRouterKey.trim(), r.model, system, user, maxOf(1024, maxTokens * 3).coerceAtMost(8192),
-                    timeoutSec = if (r.big) 90 else 50)
-                Provider.NVIDIA -> callCompat(Provider.NVIDIA, s.nvidiaKey.trim(), r.model.removePrefix(NV), system, user, maxOf(1024, maxTokens * 3).coerceAtMost(8192),
                     timeoutSec = if (r.big) 90 else 50)
             }
             if (out == null) errs[r.provider.label] = (lastError ?: "沒有回應").take(80)
@@ -224,13 +205,13 @@ object GroqAi {
             if (out != null) {
                 // 不完整：記住目前最好的，換下一個模型（這個模型沒壞，不暫停）
                 if (score > bestScore) { best = out; bestScore = score }
-                lastError = "${r.provider.label}「${r.model.removePrefix(NV)}」回覆不完整"
+                lastError = "${r.provider.label}「${r.model}」回覆不完整"
                 continue
             }
             // 額度用完或沒回應：這個模型先暫停，之後的呼叫直接用下一個
             val err = lastError.orEmpty()
             // 伺服器有說多久後再試（Retry-After）就照它，否則用預設時間；再加隨機間隔，暫停時間會保存到 App 重開後
-            if ("429" in err && r.provider != Provider.OPENROUTER && r.provider != Provider.NVIDIA) lastBody?.let { quota.learnFrom429(r.model, r.provider == Provider.GEMINI, it) }
+            if ("429" in err && r.provider != Provider.OPENROUTER) lastBody?.let { quota.learnFrom429(r.model, r.provider == Provider.GEMINI, it) }
             // OpenRouter 的免費每日上限是整個帳戶共用：用完時所有免費模型都暫停到 UTC 午夜
             if (r.provider == Provider.OPENROUTER && "每日" in err) {
                 val untilMidnight = java.time.Duration.between(java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC),
@@ -238,9 +219,8 @@ object GroqAi {
                 all.filter { it.provider == Provider.OPENROUTER }.forEach { com.enwei.moneymanager.work.AiHealth.cooldown(it.model, untilMidnight) }
                 continue
             }
-            // 這個模型不提供或拒絕使用：OpenRouter／NVIDIA 記進黑名單，之後自動挑別的
+            // 這個模型不提供或拒絕使用：OpenRouter 記進黑名單，之後自動挑別的
             if (("403" in err || "404" in err) && r.provider == Provider.OPENROUTER) OpenRouterModels.ban(r.model)
-            if (("403" in err || "404" in err) && r.provider == Provider.NVIDIA) NvidiaModels.ban(r.model.removePrefix(NV))
             if ("404" in err || "402" in err || "403" in err) { com.enwei.moneymanager.work.AiHealth.cooldown(r.model, 24 * 3600_000L); continue }
             if ("429" in err || "額度" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
                 retryAfterMs?.coerceIn(5_000L, 3600_000L) ?: if (r.provider == Provider.GEMINI) 15 * 60_000L else 2 * 60_000L)
@@ -339,7 +319,7 @@ object GroqAi {
      */
     private fun callCompat(p: Provider, key: String, model: String, system: String, user: String, maxOut: Int, timeoutSec: Long = 60): JsonObject? {
         val name = p.label
-        val url = if (p == Provider.NVIDIA) "https://integrate.api.nvidia.com/v1/chat/completions" else "https://openrouter.ai/api/v1/chat/completions"
+        val url = "https://openrouter.ai/api/v1/chat/completions"
         var jsonMode = true
         repeat(2) {
             val body = buildJsonObject {
@@ -369,7 +349,7 @@ object GroqAi {
                         if ((resp.code == 400 || resp.code == 422) && jsonMode) { retryPlain = true; return@use null }
                         lastError = when (resp.code) {
                             401, 403 -> "$name 拒絕（${resp.code}）：${serverMessage(text)}"
-                            402 -> if (p == Provider.NVIDIA) "NVIDIA「$model」需要付費（402）" else "OpenRouter 帳戶餘額不足（402）：請確認用的是「:free」模型"
+                            402 -> "OpenRouter 帳戶餘額不足（402）：請確認用的是「:free」模型"
                             404 -> "$name 模型「$model」無法使用（404）：${serverMessage(text)}"
                             429 -> if (p == Provider.OPENROUTER && (text.contains("per-day", true) || text.contains("per day", true)))
                                 "OpenRouter 免費模型今天的每日上限已用完（429），UTC 午夜（台灣早上 8 點）恢復"
@@ -460,7 +440,7 @@ object GroqAi {
 
     /**
      * 查詢這家平台目前可用的模型（id 與上下文長度）：
-     * Groq GET /openai/v1/models、Gemini GET /v1beta/models、NVIDIA GET integrate.api.nvidia.com/v1/models、
+     * Groq GET /openai/v1/models、Gemini GET /v1beta/models、
      * OpenRouter GET /api/v1/models（只列 :free 免費模型）。失敗時回傳 null 並記下原因。
      */
     suspend fun listModels(p: Provider): List<Pair<String, Int>>? = withContext(Dispatchers.IO) {
@@ -483,14 +463,13 @@ object GroqAi {
                 ?.let { (it["models"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e -> (e as? JsonObject)?.let { o ->
                     val methods = (o["supportedGenerationMethods"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { m -> (m as? JsonPrimitive)?.contentOrNull }.orEmpty()
                     str(o, "name")?.removePrefix("models/")?.takeIf { "generateContent" in methods }?.let { it to num(o, "inputTokenLimit") } } } }
-            Provider.NVIDIA -> { NvidiaModels.refresh(force = true); NvidiaModels.available().sorted().map { it to 0 }.ifEmpty { null } }
             Provider.OPENROUTER -> { OpenRouterModels.refresh(force = true); OpenRouterModels.cached().map { it.id to it.context } }
         }?.sortedBy { it.first }
     }
 
     /** 測試用：送最小的請求（不用 JSON 模式、30 秒逾時），成功回傳 null，失敗回傳 HTTP 狀態與伺服器說明。 */
     private fun probe(p: Provider, key: String, model: String): String? {
-        val url = if (p == Provider.NVIDIA) "https://integrate.api.nvidia.com/v1/chat/completions" else "https://openrouter.ai/api/v1/chat/completions"
+        val url = "https://openrouter.ai/api/v1/chat/completions"
         val body = buildJsonObject {
             put("model", model)
             put("messages", buildJsonArray { add(buildJsonObject { put("role", "user"); put("content", "Reply with: ok") }) })
@@ -543,29 +522,6 @@ object GroqAi {
                     bad.isEmpty() -> null
                     bad.size < results.size -> "部分可用（可用：" + results.filter { it.second == null }.joinToString("、") { it.first.substringAfterLast('/') } +
                         "；不能用的已排除）"
-                    else -> results.joinToString("\n") { "${it.first.substringAfterLast('/')}：${it.second}" }
-                }
-            }
-            Provider.NVIDIA -> if (s.nvidiaKey.isBlank()) return@withContext "還沒填 NVIDIA 金鑰"
-            else {
-                NvidiaModels.refresh(force = true)
-                // 同時測試會用到的模型（每個最多 30 秒），測試不暫停模型；成功的模型解除暫停
-                val models = (NvidiaModels.pick(NvidiaModels.FAST, 2, s.nvidiaModel) + NvidiaModels.pick(NvidiaModels.HEAVY, 2)).distinct()
-                if (models.isEmpty()) return@withContext "找不到可用的對話模型（模型清單 ${NvidiaModels.available().size} 個）"
-                val results = kotlinx.coroutines.coroutineScope {
-                    models.map { m ->
-                        async {
-                            val err = probe(Provider.NVIDIA, s.nvidiaKey.trim(), m)
-                            if (err != null && (err.startsWith("HTTP 403") || err.startsWith("HTTP 404"))) NvidiaModels.ban(m)
-                            if (err == null) com.enwei.moneymanager.work.AiHealth.clearCooldown { it == NV + m }
-                            m to err
-                        }
-                    }.map { it.await() }
-                }
-                val bad = results.filter { it.second != null }
-                return@withContext when {
-                    bad.isEmpty() -> null
-                    bad.size < results.size -> "部分可用：" + bad.joinToString("；") { "${it.first.substringAfterLast('/')} ${it.second}" }
                     else -> results.joinToString("\n") { "${it.first.substringAfterLast('/')}：${it.second}" }
                 }
             }

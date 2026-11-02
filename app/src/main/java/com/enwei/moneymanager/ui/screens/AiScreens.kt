@@ -92,15 +92,6 @@ fun AiSettingsScreen(nav: NavController) {
                 ModelField("輕量模型（新聞標註、錢包畫面）", s.geminiLiteModel) { v -> repo.settings.update { it.copy(geminiLiteModel = v) } }
             }
 
-            // NVIDIA NIM：不限每日次數，背景大量工作的主力
-            ProviderCard(
-                Provider.NVIDIA, "不限每日次數・每分鐘約 40 次・金鑰到 build.nvidia.com 申請",
-                s.nvidiaKey, { k -> repo.settings.update { it.copy(nvidiaKey = k.trim()) }; com.enwei.moneymanager.work.AiHealth.clearCooldown { m -> m.startsWith(GroqAi.NV) } },
-                onPickModel = { m -> repo.settings.update { it.copy(nvidiaModel = m) } },
-            ) {
-                ModelField("優先模型（空白＝依工作自動挑）", s.nvidiaModel) { v -> repo.settings.update { it.copy(nvidiaModel = v.trim()) } }
-            }
-
             // OpenRouter：免費模型（:free）當作額外備援
             ProviderCard(
                 Provider.OPENROUTER, "免費模型備援，金鑰到 openrouter.ai 申請",
@@ -194,11 +185,10 @@ private fun RouteOverview() {
     // 大量資料的工作用長輸入的順序，其他用短輸入的順序
     val longTasks = setOf(GroqAi.AiTask.NEWS_TAG, GroqAi.AiTask.DIGEST, GroqAi.AiTask.WALLET,
         GroqAi.AiTask.REVIEW, GroqAi.AiTask.REPORT, GroqAi.AiTask.CHAT)
-    fun short(m: String) = m.removePrefix(GroqAi.NV).substringAfterLast('/').removeSuffix(":free")
+    fun short(m: String) = m.substringAfterLast('/').removeSuffix(":free")
     fun color(p: Provider) = when (p) {
         Provider.GROQ -> androidx.compose.ui.graphics.Color(0xFFF0605A)
         Provider.GEMINI -> androidx.compose.ui.graphics.Color(0xFF3C82E6)
-        Provider.NVIDIA -> androidx.compose.ui.graphics.Color(0xFF76B900)
         Provider.OPENROUTER -> androidx.compose.ui.graphics.Color(0xFF7E57C2)
     }
     Card(Modifier.fillMaxWidth()) {

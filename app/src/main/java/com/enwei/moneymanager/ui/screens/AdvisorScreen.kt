@@ -557,13 +557,18 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     val busy = job?.running == true || chatWork?.running == true
     val err = job?.error ?: chatWork?.error
     // 回到對話時停在上次看的位置，不會每次都被捲到最底
-    val list = rememberLazyListState(com.enwei.moneymanager.work.ChatJob.scrollIndex, com.enwei.moneymanager.work.ChatJob.scrollOffset)
+    // 位置用「畫面最上方那則訊息」記住（重開 App 也記得）：圖表、K 線晚一點載入改變高度也不會跑掉
+    val chatPrefs = remember { MoneyApp.instance.getSharedPreferences("chat_scroll", android.content.Context.MODE_PRIVATE) }
+    val list = rememberLazyListState()
+    var restored by remember { mutableStateOf(false) }
+    val latestChat by androidx.compose.runtime.rememberUpdatedState(store.chat)
     androidx.compose.runtime.DisposableEffect(Unit) {
         com.enwei.moneymanager.work.ChatJob.visible = true
         onDispose {
             com.enwei.moneymanager.work.ChatJob.visible = false
-            com.enwei.moneymanager.work.ChatJob.scrollIndex = list.firstVisibleItemIndex
-            com.enwei.moneymanager.work.ChatJob.scrollOffset = list.firstVisibleItemScrollOffset
+            val first = list.layoutInfo.visibleItemsInfo.firstOrNull { (it.key as? String)?.startsWith("c") == true }
+            chatPrefs.edit().putString("key", first?.key as? String).putInt("offset", first?.let { list.firstVisibleItemScrollOffset.takeIf { _ -> it.index == list.firstVisibleItemIndex } ?: 0 } ?: 0)
+                .putLong("seen", latestChat.lastOrNull()?.time ?: 0).apply()
         }
     }
     // 上萬則新聞的整理在背景執行緒做，畫面不卡
@@ -579,11 +584,19 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     // （對話最多留 40 則，則數可能不變，所以用最後一則的時間判斷有沒有新訊息）
     val last = store.chat.lastOrNull()?.time
     LaunchedEffect(last) {
-        val n = store.chat.size
         if (last == null) return@LaunchedEffect
-        val seen = com.enwei.moneymanager.work.ChatJob.seenLast
-        com.enwei.moneymanager.work.ChatJob.seenLast = last
-        if (seen < 0) list.scrollToItem(n) else if (last != seen) list.animateScrollToItem(n)
+        val n = store.chat.size
+        if (!restored) {
+            restored = true
+            // 第一次進來：沒有新訊息就回到上次看的那則；有新回覆就捲到新回覆的開頭
+            val seen = chatPrefs.getLong("seen", -1)
+            val idx = chatPrefs.getString("key", null)?.let { k -> store.chat.indexOfFirst { "c${it.time}${it.fromUser}" == k } } ?: -1
+            if (last == seen && idx >= 0) list.scrollToItem(idx + 1, chatPrefs.getInt("offset", 0))
+            else list.scrollToItem(n)
+            return@LaunchedEffect
+        }
+        // 對話中出現新訊息：捲到那則的開頭（長回覆從頭讀）
+        list.animateScrollToItem(n)
     }
     val canDown by remember { androidx.compose.runtime.derivedStateOf { list.canScrollForward } }
     Column(Modifier.fillMaxSize().imePadding()) {
