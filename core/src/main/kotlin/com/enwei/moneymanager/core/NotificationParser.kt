@@ -123,7 +123,8 @@ object NotificationParser {
     fun isPromo(text: String): Boolean {
         val t = clean(text)
         val hits = promoWords.count { t.contains(it, ignoreCase = true) }
-        if (doneWords.any { t.contains(it) }) return hits >= 4
+        // 有交易字眼或確切的交易時間（例如 10:04）時，要有很多促銷字眼才算廣告
+        if (doneWords.any { t.contains(it) } || Regex("\\b\\d{1,2}:\\d{2}\\b").containsMatchIn(t)) return hits >= 4
         return hits >= 2 || (t.contains("最高") && t.contains("回饋") && !t.contains("回饋入帳"))
     }
 
