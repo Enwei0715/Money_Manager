@@ -356,7 +356,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                             st.chips.forEach { (t, ok) ->
                                                 val col = when (ok) { true -> StockUp; false -> StockDown; null -> MaterialTheme.colorScheme.onSurfaceVariant }
-                                                Text((when (ok) { true -> "✓"; false -> "✗"; null -> "" }) + t, fontSize = 11.sp, color = col,
+                                                Text(t, fontSize = 11.sp, color = col,
                                                     modifier = Modifier.background(col.copy(alpha = 0.1f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
                                             }
                                         }
