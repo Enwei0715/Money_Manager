@@ -50,6 +50,7 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
         suspend fun check(context: Context) {
             val repo = MoneyApp.repo
             val s = repo.settings.value
+            if (!s.featureStocks) return
             val today = LocalDate.now().toEpochDay()
             val snap = repo.advisorSnapshot(fetch = true)
             val held = snap.holdings.map { it.symbol }

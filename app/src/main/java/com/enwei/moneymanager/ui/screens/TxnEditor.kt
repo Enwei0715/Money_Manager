@@ -434,30 +434,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 original?.rawText?.let {
                     Text("原始內容：$it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                    // 通知自動記帳記錯了（其實是促銷）：放在不起眼的小字，按了先確認，才刪除並記住這類促銷
-                    val o = original
-                    if (o != null && o.source == com.enwei.moneymanager.data.TxnSource.NOTIFICATION) {
-                        val ctx = androidx.compose.ui.platform.LocalContext.current
-                        var ask by remember { mutableStateOf(false) }
-                        Text("記錯了？標記為促銷廣告", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.clickable { ask = true }.padding(horizontal = 16.dp, vertical = 6.dp))
-                        if (ask) AlertDialog(
-                            onDismissRequest = { ask = false },
-                            title = { Text("這則通知是促銷廣告？") },
-                            text = { Text("會刪除這筆交易，並記住這個 App 的這類通知（只存幾個關鍵詞），之後不再記帳。真的是交易請按取消。") },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    ask = false
-                                    scope.launch {
-                                        val phrases = repo.learnPromo(o)
-                                        android.widget.Toast.makeText(ctx, if (phrases.size >= 2) "已刪除，之後含「${phrases.joinToString("、")}」的同類通知不記帳" else "已刪除這筆（關鍵詞不足，沒有記住）", android.widget.Toast.LENGTH_LONG).show()
-                                        nav.popBackStack()
-                                    }
-                                }) { Text("是促銷，刪除") }
-                            },
-                            dismissButton = { TextButton(onClick = { ask = false }) { Text("取消") } },
-                        )
-                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider(thickness = 8.dp, color = MaterialTheme.colorScheme.background)

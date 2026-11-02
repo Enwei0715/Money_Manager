@@ -2013,3 +2013,390 @@ AI 回答	AI answer
 移動停損	Trailing stop
 停利	Take profit
 破季線	Below 60MA
+版本	Version
+執行緒	thread
+股價	Stock prices
+報告完成或失敗	report done or failed
+助理回覆	assistant replies
+進度	Progress
+新聞更新與報告產生的進度	Progress of news updates and report generation
+有新版本時通知	Notify when a new version is available
+標註	Tagging
+分析資料集	Analyzing dataset
+營收	Revenue
+步驟	Step
+全文	Full text
+約	about
+賣	Sell
+框起來的	Boxed
+棒	candles
+近	Last
+每週支出	Weekly spending
+每日支出	Daily spending
+讀取營收中	Loading revenue
+讀不到這幾檔的營收資料	Couldn't load revenue for these stocks
+需要網路	needs network
+或資料來源暫時無法連線	or the source is temporarily unavailable
+億	×100M
+使用代號	Use symbol
+借貸對象與金額	Loan counterparties and amounts
+帳戶餘額	Account balances
+則新聞	news
+空	Bear
+壓	Res
+刪除全部	Delete all
+則對話	chat messages
+自動更新關閉	auto update off
+個	
+依設定的頻率蒐集新聞並整理題材	Collects news and organizes themes at the set interval
+每日報告完成後通知	notifies when the daily report is ready
+自動更新頻率	Auto update interval
+小時	h
+每次會	Each run
+早上	after
+點後資料完整時產生當日報告	am, generates the daily report once data is complete
+刪除失敗	Delete failed
+日高	-day high
+日低	-day low
+我的紀律參數	My discipline settings
+持股紀律建議目前關閉	Holding discipline is off
+按	tap
+開啟	to turn on
+股價上漲	When price rises
+移動停利	trailing take-profit
+從最高價回落	sell the extra shares after falling from the high by
+賣出多賺的股數	sell the extra shares
+想減碼	To reduce
+先設減碼價	set a reduce price first
+跌破時賣出約	sell about
+股價下跌	When price falls
+跌破其中一條賣約	break one line: sell about
+兩條都跌破	Break both
+只留	keep only
+股基本股	base shares
+站上兩條是買入訊號	above both is a buy signal
+容許稍微跌破	Allow small dips
+連續	for
+根才算	bars to count
+避免被洗出場	avoids being shaken out
+輔助參考	Reference
+日均線	-day MAs
+跌破買進價	below buy price by
+短線移動停損	Short-term trailing stop
+從高點回落	falling from the high by
+分批停利	Partial take-profit
+獲利	gain
+先賣	sell
+長線為兩倍	double for long-term
+還不到一股	not yet one share
+設定保本與停利	Set principal and take-profit
+投資原則裡沒有找到可換算的數字	No numbers found in your principles
+已依投資原則帶入	Filled from your principles:
+項	items
+按儲存才生效	takes effect after saving
+一	1
+集保永遠保留	Always keep
+市值約等於原始成本	market value ≈ original cost
+的股數	in shares
+只賣多賺的部分	only sell the extra
+不見價就賣	don't sell on sight
+先設停利價並跟著往上移	set a take-profit price and move it up
+想減碼時	To reduce
+跌破減碼價賣出	Below reduce price, sell
+二	2
+均線	MA
+快線	Fast MA
+慢線	Slow MA
+跌破其中一條	Break one line, sell
+只留基本股	keep base shares
+連續確認	Confirm bars
+根	bars
+股價突破兩條線是買入訊號	Breaking above both lines is a buy signal
+只是短暫稍微跌破	brief small dips
+在容許範圍內	within tolerance
+或沒有連續確認	or not confirmed
+不賣	don't sell
+避免來回震盪被洗出場	to avoid being shaken out by chop
+天數	Days
+逗號分開	comma separated
+用量	usage
+目前程序	Current process
+上一輪	Last run
+持股損益	Holding P/L
+蒐集	Collect
+準備	Prepare
+通知與錢包	Notification and wallet
+已整合在設定中的自動記帳流程	are integrated into auto bookkeeping in Settings
+模型金鑰與分工設定也留在設定	model keys and routing stay in Settings
+不重複建立入口	no duplicate entry
+結果仍需依目前的交易與來源資料判斷	results still depend on current transactions and sources
+自動化確認流程維持原設定	auto-confirm flow keeps your settings
+會依工作類型與資料量選擇	picks
+或	or
+並在額度不足或模型無回應時改用其他可用模型	by task and data size, and switches models when quota runs out or a model doesn't respond
+名稱也會跟著語言切換	name also follows the language
+紅	red
+藍	blue
+功能開關	Features
+關閉後不讀取任何通知	When off, no notifications are read
+不自動記帳	no auto bookkeeping
+只用手動記帳	manual entry only
+股票與投資助理	Stocks & investment assistant
+關閉後隱藏	When off, hides
+裡的股票與助理分頁	stock and assistant tabs in Accounts
+並停止新聞蒐集	and stops news collection
+每日報告與股價提醒等背景工作	daily reports, price alerts and other background work
+功能	features
+通知自動記帳設定	Notification bookkeeping settings
+模型設定	model settings
+有新版	New version
+近三月平均	3-month avg
+點一下修改	Tap to edit
+進度也會顯示在	Progress also shows in
+檢討建議的目標按	goals from the AI review, when adopted,
+會寫到這裡	are written here
+儲蓄率目標	Savings rate goal
+分類預算	Category budgets
+還沒設定	Not set
+全部帶入平均	Fill all with average
+每月金額	Monthly amount
+留空	blank
+帶入近三月平均	Use 3-month avg
+全部期間	All time
+已	
+期	installments
+筆待確認	pending
+通知存取已開啟	Notification access on
+紀錄	Log
+進階	Advanced
+有網路時	Online
+規則或	rules or
+判讀後直接記帳並通知	read it, record directly and notify
+沒把握或找不到帳戶時放	unsure or no matching account → put in
+整合模擬器	Integration simulator
+只試算	dry run
+不寫入	no writes
+以合成通知測試支出	Test spending with synthetic notifications
+收入與轉帳配對	income and transfer matching
+若已啟用	if enabled
+也會測試批次判讀	batch reading is tested too
+在合成商店刷卡消費	card purchase at a synthetic store
+退款通知	Refund notice
+合成商店退款入帳	synthetic store refund
+轉出通知	Transfer-out notice
+跨行轉出	interbank transfer out
+轉入通知	Transfer-in notice
+跨行轉入	interbank transfer in
+交易通知	Transaction notice
+交易已完成	transaction completed
+合成服務	synthetic service
+執行合成情境	Run synthetic scenarios
+情境	Scenario
+本機辨識規則	local rule
+教過的促銷通知	Taught promotions
+只存關鍵詞	keywords only
+點擊刪除	tap to delete
+促銷	Promotion
+沒有紀錄	No records
+交易已刪除	Transaction deleted
+促銷略過	Promo skipped
+已重新記帳	Re-recorded
+沒有記下	Not recorded
+看不出是交易	doesn't look like a transaction
+點一下重新記帳	Tap to record again
+點一下教它這是交易	Tap to teach it this is a transaction
+這則通知沒有標題	This notification has no title
+為避免保存原始內容	to avoid storing the original text
+無法建立本機辨識偏好	a local rule can't be created
+此偏好只保存在本機	This rule is stored only on this device
+判讀期間可讀取這次通知	AI may read this notification while interpreting it
+但不保存通知原文	but the text is not stored
+也不會用來微調	and not used to fine-tune
+請到	Go to
+核對餘額	to check balances
+信用卡的結帳日	card statement dates
+繳款日已帶入	and due dates were imported
+扣繳帳戶與日期請再確認	please confirm autopay accounts and dates
+帳理備份	Ledgerly-backup
+先選取錢包	Select wallet
+並建立電子支付帳戶	and create e-wallet accounts first
+情境會試算支出	Scenarios simulate spending
+退款收入	refunds
+儲值及既有交易比對	top-ups and matching existing transactions
+不同	Different
+指定不同帳戶時才能驗證跨帳戶配對	apps must use different accounts to test cross-account matching
+全程只試算	dry run only
+不會修改帳本	the ledger isn't changed
+合成商店	Synthetic store
+合成退款	Synthetic refund
+合成儲值	Synthetic top-up
+合成畫面文字解析失敗	Synthetic screen text parsing failed
+未執行匯入試算	import simulation not run
+執行錢包合成情境	Run wallet scenarios
+未能對應錢包帳戶	No matching wallet account
+請先選取錢包	select wallet
+並指定電子支付帳戶	and assign an e-wallet account first
+試算完成	Simulation done
+類	categories
+區間	Range
+開	O
+高	H
+低	L
+收	C
+量	Vol
+買點	Buy point
+賣點	Sell point
+顯示哪些均線	Moving averages to show
+自訂天數	Custom days
+最多同時顯示	Show at most
+條	lines
+太多線會看不清楚	too many lines are hard to read
+容許跌破	Tolerance
+根確認	bars to confirm
+破一條賣	sell on one break
+基本股	base shares
+個買賣點	buy/sell points
+依	from
+整理	organized
+請	Ask
+依新聞與營收說明	to explain from news and revenue
+篇	articles
+過熱	overbought
+超賣	oversold
+個月年增率	-month YoY
+最近三個月高於平均	last 3 months above average
+成長加速	accelerating
+最近三個月低於平均	last 3 months below average
+成長放緩	slowing
+日後	days later
+壓力線約	resistance about
+支撐線約	support about
+線型較亂	Choppy pattern
+畫不出明確的趨勢線	no clear trendlines
+依近	based on the last
+日趨勢約	days' trend about
+依波段高低點畫線與統計波動推估	Drawn from swing highs/lows and statistical volatility
+不是預測或投資建議	not a forecast or investment advice
+從	From
+的大小	size
+每天約	about per day
+刪除後無法復原	this can't be undone
+標記颱風假	Mark typhoon day
+自動扣繳日	Autopay day
+沒有內容	No content
+本月剩	left this month
+記這筆後	after this entry
+搜尋分類	Search categories
+找不到	Not found:
+搜尋與篩選	Search & filter
+只看最新	Latest only
+看全部更新說明	All release notes
+段	sections
+下載中	Downloading
+更新說明	Release notes
+分類交易	categorizing transactions
+搜尋可能重複的交易	Finding possible duplicates
+判斷可能重複的交易	checking possible duplicates
+判斷交易	reading transactions
+先暫停	pausing for
+已用完	used up
+系統停止了背景更新	The system stopped the background update
+已完成的部分已保存	finished work is saved
+新聞更新失敗	News update failed
+這一輪完成	This round finished
+則待整理	to summarize
+接續中	continuing
+新聞資料集已更新	News dataset updated
+已整理	Summarized
+待標註	to tag
+待整理	to summarize
+後自動接續	then resumes automatically
+這一輪沒有進展	made no progress this round
+原因	Reason
+天新聞	days of news
+稍後再試	try again later
+已達你設定的目標	reached your target
+已低於你設定的停損價	fell below your stop price
+六	Sat
+帳理	Ledgerly
+核對餘額	to check balances
+所有模型今天的免費額度都用完了	All models have used up today's free quota
+資料超過	Data exceeds
+可安全讀取範圍	the safe limit
+未送出	not sent
+請分批處理或啟用	process in batches or enable
+沒有回覆內容	returned no content
+可能被安全過濾或長度不足	possibly safety-filtered or too short
+回覆不是	reply is not
+模型沒有回覆內容	The model returned no content
+可能是回覆長度不足	possibly too short
+模型回覆不是	The model reply is not
+錢包畫面內容過長	Wallet screen content too long
+判讀	reading
+請縮小交易紀錄範圍後重試	narrow the transaction list and retry
+錢包畫面有單行內容超出安全判讀長度	A wallet screen line exceeds the safe length
+未能完成錢包紀錄判讀	Couldn't finish reading wallet records
+未匯入任何部分結果	nothing imported
+錢包判讀回覆格式不完整	Incomplete wallet reading reply
+未匯入部分結果	partial results not imported
+錢包判讀含有無效紀錄	Wallet reading has invalid records
+錢包判讀的日期無效	Invalid date in wallet reading
+錢包判讀的時間無效	Invalid time in wallet reading
+錢包判讀的金額無效	Invalid amount in wallet reading
+錢包判讀的收支方向無效	Invalid direction in wallet reading
+對話資料超過安全上下文上限	Chat data exceeds the safe context limit
+字元	chars
+未截斷或送出	not truncated or sent
+請稍後重試	please retry later
+這筆是什麼	What is this?
+等待其他	Waiting for other
+工作完成	work to finish
+讀取錢包交易文字	Reading wallet transaction text
+匯入辨識出的交易	Importing recognized transactions
+錢包判讀失敗	Wallet reading failed
+接續上一輪	Continuing last run
+沿用	using news collected at
+標註新聞	tagging news
+批	batches
+合併題材分類	merging themes
+暫停	Paused
+天新聞仍有	days of news still have
+則待標註	to tag
+則未納入完整重點整理	not yet summarized
+暫不產生可能遺漏資料的報告	report postponed to avoid missing data
+稍後會繼續處理	will continue later
+新聞蒐集完整性未確認	news collection completeness unconfirmed
+暫不產生報告	report postponed
+讀取大盤與持股走勢	Reading market and holdings
+讀取熱門個股的月營收	Reading monthly revenue of hot stocks
+確認推薦的代號與價格	Verifying picked symbols and prices
+讀取持股	Reading holdings
+大盤與即時行情	market and live quotes
+搜尋相關新聞	Searching related news
+依紀律檢查	Checking discipline for
+檔持股	holdings
+篇新聞全文	full articles
+確認代號與報價	Verifying symbols and quotes
+無法更新	can't update
+連上網路後再按一次	connect and tap again
+準備中	Preparing
+資料集已更新	Dataset updated
+準備蒐集新聞	Preparing to collect news
+將稍後重試	will retry later
+則待讀	unread
+餘額不足	Insufficient balance
+卡費可能扣款失敗	card payment may fail
+執行失敗	failed
+這一輪的時間用完	This round's time is up
+稍後接續	continues later
+整理收支資料	Organizing income and spending
+分析	Analyzing
+整理不明交易	Sorting unclear transactions
+分類建議	category suggestions
+自動整理新進交易	Auto-tidying new transactions
+自動整理	Auto-tidy
+現金支出	Cash spending
+最近：	Latest: 
+點一下看個股	tap to open the stock
+月線	20MA
+季線	60MA

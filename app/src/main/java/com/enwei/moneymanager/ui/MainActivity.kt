@@ -78,7 +78,6 @@ import com.enwei.moneymanager.ui.screens.SubcategoryScreen
 import com.enwei.moneymanager.ui.screens.PasscodeScreen
 import com.enwei.moneymanager.ui.screens.BackupScreen
 import com.enwei.moneymanager.ui.screens.BudgetScreen
-import com.enwei.moneymanager.ui.screens.WalletReaderScreen
 import com.enwei.moneymanager.ui.screens.CategoryStatScreen
 import com.enwei.moneymanager.ui.screens.ConfigScreen
 import com.enwei.moneymanager.ui.screens.FxScreen
@@ -318,7 +317,6 @@ private fun AppScaffold(nav: NavHostController) {
                     runCatching { java.time.YearMonth.parse(e.arguments!!.getString("month")) }.getOrNull())
             }
             composable("budget") { BudgetScreen(nav) }
-            composable("walletreader") { WalletReaderScreen(nav) }
             composable("config") { ConfigScreen(nav) }
             composable("tool-order") { ToolSettingsScreen(nav) }
             composable("ai-hub") { AiHubScreen(nav) }

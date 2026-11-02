@@ -370,6 +370,9 @@ data class AppSettings(
     val cashByDenom: Boolean = true,
     /** 盤中依紀律（動態停損、分批停利）自動通知 */
     val stockAlertsOn: Boolean = true,
+    /** 功能開關：不用的功能可以整個關掉（關掉後畫面、背景工作與通知都不出現） */
+    val featureNotif: Boolean = true,
+    val featureStocks: Boolean = true,
     /** 已通知過的提醒（「代號:種類」→ 日期 epochDay），同一天不重複 */
     val alertsFired: Map<String, Long> = emptyMap(),
     /** 有新版本時通知 */
@@ -551,6 +554,8 @@ class SettingsStore(context: Context) {
         lastPicks = runCatching { json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), prefs.getString("lastPicks", "{}")!!) }.getOrDefault(emptyMap()),
         cashByDenom = prefs.getBoolean("cashByDenom", true),
         stockAlertsOn = prefs.getBoolean("stockAlertsOn", true),
+        featureNotif = prefs.getBoolean("featureNotif", true),
+        featureStocks = prefs.getBoolean("featureStocks", true),
         alertsFired = runCatching { json.decodeFromString(MapSerializer(String.serializer(), Long.serializer()), prefs.getString("alertsFired", "{}")!!) }.getOrDefault(emptyMap()),
         notifyUpdates = prefs.getBoolean("notifyUpdates", true),
         updateNotified = prefs.getInt("updateNotified", 0),
@@ -727,6 +732,8 @@ class SettingsStore(context: Context) {
             .putString("lastPicks", json.encodeToString(MapSerializer(String.serializer(), String.serializer()), s.lastPicks))
             .putBoolean("cashByDenom", s.cashByDenom)
             .putBoolean("stockAlertsOn", s.stockAlertsOn)
+            .putBoolean("featureNotif", s.featureNotif)
+            .putBoolean("featureStocks", s.featureStocks)
             .putString("alertsFired", json.encodeToString(MapSerializer(String.serializer(), Long.serializer()), s.alertsFired))
             .putBoolean("notifyUpdates", s.notifyUpdates)
             .putInt("updateNotified", s.updateNotified)

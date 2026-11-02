@@ -1,6 +1,8 @@
 package com.enwei.moneymanager.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,6 +35,7 @@ import com.enwei.moneymanager.ui.StockUp
  * 對話用的紀律 K 線：近 60 根日 K、月線與季線，框出依紀律參數算出的買賣點並標上理由，
  * 下面列出目前的依據（站上／跌破月線、季線、停損價…）與依紀律的結論。
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun DisciplineChart(symbol: String, modifier: Modifier = Modifier) {
     val settings by MoneyApp.repo.settings.flow.collectAsStateWithLifecycle()
@@ -80,28 +83,45 @@ fun DisciplineChart(symbol: String, modifier: Modifier = Modifier) {
                     drawLine(col, Offset((i - 1) * cw + cw / 2, y(a)), Offset(i * cw + cw / 2, y(c)), 2f)
                 }
             }
-            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 24f; isFakeBoldText = true }
-            signals.filter { it.index >= from }.forEach { sg ->
+            // 和個股頁一樣：小圓章「買／賣」，只有最新一個寫出理由
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f; isFakeBoldText = true }
+            val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                textSize = 18f; isFakeBoldText = true; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER
+            }
+            val shownSig = signals.filter { it.index >= from }
+            val latest = shownSig.maxByOrNull { it.index }?.index
+            shownSig.forEach { sg ->
                 val i = sg.index - from
                 val cx = i * cw + cw / 2
                 val col = if (sg.buy) StockUp else StockDown
-                val half = maxOf(cw * 0.8f, 7f)
-                val tp = y(b.high[sg.index]) - 4f; val bt = y(b.low[sg.index]) + 4f
-                drawRoundRect(col, Offset(cx - half, tp), Size(half * 2, bt - tp), CornerRadius(half, half), style = Stroke(2.5f))
-                val label = (if (sg.buy) "買" else "賣") + (sg.tag.takeIf { it.isNotBlank() }?.let { "·$it" } ?: "")
-                paint.color = android.graphics.Color.argb(255, (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt())
-                val tw = paint.measureText(label)
-                drawContext.canvas.nativeCanvas.drawText(label, (cx - tw / 2).coerceIn(0f, size.width - tw),
-                    if (sg.buy) (bt + 24f).coerceAtMost(size.height - 2f) else (tp - 6f).coerceAtLeast(22f), paint)
+                val r = 10f
+                val cy = if (sg.buy) (y(b.low[sg.index]) + r + 3f).coerceAtMost(size.height - r) else (y(b.high[sg.index]) - r - 3f).coerceAtLeast(r)
+                drawCircle(col, radius = r, center = Offset(cx, cy))
+                drawContext.canvas.nativeCanvas.drawText(if (sg.buy) "買" else "賣", cx, cy + 6f, badge)
+                if (sg.index == latest) {
+                    val label = sg.tag.ifBlank { if (sg.buy) "買" else "賣" }
+                    paint.color = android.graphics.Color.argb(255, (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt())
+                    val tw = paint.measureText(label)
+                    drawContext.canvas.nativeCanvas.drawText(label, (cx - tw / 2).coerceIn(0f, size.width - tw),
+                        if (sg.buy) (cy + r + 22f).coerceAtMost(size.height - 2f) else (cy - r - 5f).coerceAtLeast(20f), paint)
+                }
             }
         }
-        Text("━ 月線（20 日）　━ 季線（60 日）　框起來的 K 棒＝紀律買賣點", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("━ 月線　━ 季線　●買／●賣＝紀律買賣點（點一下看個股）", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         st?.let { s ->
             Text(s.verdict, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                 color = when (s.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface })
-            s.checks.forEach { (t, ok) ->
-                Text((when (ok) { true -> "✓ "; false -> "✗ "; null -> "・" }) + t, fontSize = 12.sp,
-                    color = when (ok) { true -> StockUp; false -> StockDown; null -> MaterialTheme.colorScheme.onSurfaceVariant })
+            // 依據改成小方塊（和個股頁一樣），不再一條一條長列
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                s.chips.forEach { (t, ok) ->
+                    val col = when (ok) { true -> StockUp; false -> StockDown; null -> MaterialTheme.colorScheme.onSurfaceVariant }
+                    Text((when (ok) { true -> "✓"; false -> "✗"; null -> "" }) + t, fontSize = 11.sp, color = col,
+                        modifier = Modifier.background(col.copy(alpha = 0.1f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+            }
+            signals.lastOrNull()?.let { sg ->
+                Text("最近：${d(sg.index)} ${if (sg.buy) "買" else "賣"}・${sg.reason}", fontSize = 11.sp, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = if (sg.buy) StockUp else StockDown)
             }
         }
     }

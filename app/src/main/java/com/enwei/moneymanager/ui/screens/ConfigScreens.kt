@@ -201,9 +201,21 @@ fun ConfigScreen(nav: NavController) {
                     ) { v -> repo.settings.update { it.copy(colorSetB = v) } }
                 }
 
-                SectionHeader("自動記帳")
-                ConfigRow("通知自動記帳") { nav.navigate("notif") }
-                ConfigRow("錢包畫面讀取") { nav.navigate("walletreader") }
+                SectionHeader("功能開關")
+                ConfigRow("通知自動記帳", onOff(s.featureNotif)) {
+                    askOnOff("通知自動記帳", s.featureNotif, "關閉後不讀取任何通知、不自動記帳，只用手動記帳。") { v -> repo.settings.update { it.copy(featureNotif = v) } }
+                }
+                ConfigRow("股票與投資助理", onOff(s.featureStocks)) {
+                    askOnOff("股票與投資助理", s.featureStocks, "關閉後隱藏「帳戶」裡的股票與助理分頁，並停止新聞蒐集、每日報告與股價提醒等背景工作。") { v ->
+                        repo.settings.update { it.copy(featureStocks = v) }
+                    }
+                }
+                ConfigRow("AI 功能", onOff(s.aiEnabled)) { nav.navigate("ai") }
+
+                if (s.featureNotif) {
+                    SectionHeader("自動記帳")
+                    ConfigRow("通知自動記帳設定") { nav.navigate("notif") }
+                }
 
                 SectionHeader("AI")
                 ConfigRow("AI 模型設定", onOff(s.aiEnabled && (s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()))) { nav.navigate("ai") }
@@ -221,6 +233,7 @@ fun ConfigScreen(nav: NavController) {
                     }
                 }
 
+                if (s.featureStocks) {
                 SectionHeader("股票")
                 ConfigRow("手續費與月退") { nav.navigate("stockfees") }
                 ConfigRow("股價提醒（保本停利、減碼、目標價）", onOff(s.stockAlertsOn)) {
@@ -229,6 +242,7 @@ fun ConfigScreen(nav: NavController) {
                     }
                 }
                 ConfigRow("觀察清單", "${s.watchlist.size} 檔") { nav.navigate("invest") }
+                }
 
                 SectionHeader("安全")
                 ConfigRow("密碼鎖", onOff(s.passcodeOn)) { nav.navigate("passcode") }

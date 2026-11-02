@@ -47,6 +47,8 @@ class TxnNotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName == packageName) return
+        // 設定裡關掉「通知自動記帳」：不讀任何通知
+        if (!com.enwei.moneymanager.MoneyApp.repo.settings.value.featureNotif) return
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         val extras = n.extras

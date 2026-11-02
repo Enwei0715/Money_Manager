@@ -27,7 +27,7 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val repo = MoneyApp.repo
         val s = repo.settings.value
-        if (!s.advisorDaily || !GroqAi.enabled) return Result.success()
+        if (!s.featureStocks || !s.advisorDaily || !GroqAi.enabled) return Result.success()
         // 連續失敗後暫停中：等使用者按「恢復」或暫停時間過了再跑
         if (AiHealth.backgroundPaused()) return Result.success()
         if (AiHealth.networkProblem() != null) return Result.success()

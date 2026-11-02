@@ -1,6 +1,8 @@
 package com.enwei.moneymanager.ui.screens
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.Color
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -118,8 +120,13 @@ private val timeFmt = SimpleDateFormat("M/d HH:mm", Locale.TAIWAN)
 @Composable
 fun MoreScreen(nav: NavController) {
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    val shown = ToolCatalog.shown(settings.toolOrder, settings.hiddenTools)
-    val available = ToolCatalog.available(settings.toolOrder, settings.hiddenTools)
+    // 設定裡關掉的功能，對應的工具也不顯示
+    val off = buildSet {
+        if (!settings.featureStocks) addAll(listOf("advisor", "stockfees"))
+        if (!settings.featureNotif) add("notif")
+    }
+    val shown = ToolCatalog.shown(settings.toolOrder, settings.hiddenTools).filter { it.id !in off }
+    val available = ToolCatalog.available(settings.toolOrder, settings.hiddenTools).filter { it.id !in off }
     // 編輯模式：長按任一格或按右上「編輯」進入；可以移動、切換寬窄、隱藏、從清單加入
     var editing by remember { mutableStateOf(false) }
     val summary = rememberToolSummaries()
@@ -304,6 +311,12 @@ fun NotificationSettingsScreen(nav: NavController) {
     var testMsg by remember { mutableStateOf<String?>(null) }
     var simulationPreviews by remember { mutableStateOf<List<Pair<Boolean, String>>?>(null) }
     var teach by remember { mutableStateOf<TxnNotificationListener.ActiveNote?>(null) }
+    // 三個分頁：紀錄（處理結果）、來源 App（監聽與帳戶）、進階（測試、教過的規則）
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+    var logFilter by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+    // 交易已被刪除的紀錄要顯示成「已刪除」，可以重新記帳
+    val txns by repo.transactions.collectAsStateWithLifecycle(emptyList())
+    val txnIds = remember(txns) { txns.map { it.id }.toHashSet() }
     fun loadNotes() = testScope.launch {
         val n = TxnNotificationListener.activeNotes()
         testMsg = if (n == null) "還讀不到通知列：請確認已開啟通知存取權（開啟後可能要稍等幾秒）" else if (n.isEmpty()) "通知列目前沒有通知" else null
@@ -361,7 +374,18 @@ fun NotificationSettingsScreen(nav: NavController) {
 
     Scaffold(topBar = { BackTopBar("通知自動記帳", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad).imePadding()) {
-            item {
+            if (enabled) item {
+                // 已開啟：只留一行狀態，設定在「來源 App」分頁
+                val today = java.time.LocalDate.now()
+                val todayLog = log.filter { java.time.Instant.ofEpochMilli(it.postedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate() == today }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    com.enwei.moneymanager.ui.components.StatusLine(true, "通知存取已開啟")
+                    Spacer(Modifier.weight(1f))
+                    Text("今天 ${todayLog.size} 則 · 記帳 ${todayLog.count { it.result == "RECORDED" || it.result == "MERGED" }}", fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (!enabled) item {
                 Card(
                     Modifier.fillMaxWidth().padding(16.dp),
                     colors = CardDefaults.cardColors(
@@ -383,6 +407,19 @@ fun NotificationSettingsScreen(nav: NavController) {
                     }
                 }
             }
+            item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
+                    listOf("紀錄", "來源 App", "進階").forEachIndexed { i, l ->
+                        val on = tab == i
+                        Box(Modifier.weight(1f).background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
+                            .clickable { tab = i }.padding(vertical = 7.dp), contentAlignment = Alignment.Center) {
+                            Text(l, fontSize = 13.sp, fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal)
+                        }
+                    }
+                }
+            }
+            if (tab == 1) {
             item {
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     // 入帳方式：有網路就直接記帳（AI 判讀要有把握、找得到帳戶）；沒網路或不確定才放「待確認」
@@ -447,6 +484,8 @@ fun NotificationSettingsScreen(nav: NavController) {
                     modifier = Modifier.clickable { toggle(a.pkg, !on) },
                 )
             }
+            }
+            if (tab == 2) {
             // 測試區（讀通知列、貼上通知）預設收起，需要時再展開
             item {
                 Row(Modifier.fillMaxWidth().clickable { testsFold.toggle() }, verticalAlignment = Alignment.CenterVertically) {
@@ -542,22 +581,75 @@ fun NotificationSettingsScreen(nav: NavController) {
                     )
                 }
             }
-            item { SectionTitle("最近處理紀錄") }
-            items(log.take(if (allLog) 50 else 8), key = { "log${it.id}" }) { e ->
-                val label = when (e.result) {
-                    "RECORDED" -> "已記帳"; "STOCK" -> "股票成交"; "DUPLICATE" -> "重複略過"; "MERGED" -> "合併為轉帳"; "UNPARSED" -> "無法辨識"; "PROMO" -> "促銷廣告略過（點一下可教它這是交易）"; "OFFLINE" -> "等網路後判讀"; else -> "未啟用來源"
-                }
-                ListItem(
-                    overlineContent = { Text("${labelOf[e.packageName] ?: e.packageName} · ${timeFmt.format(Date(e.postedAt))} · $label") },
-                    headlineContent = { Text(listOfNotNull(e.title, e.text).joinToString(" "), maxLines = 3, style = MaterialTheme.typography.bodySmall) },
-                    modifier = Modifier.clickable(enabled = (e.txnId != null && e.result == "RECORDED") || e.result == "UNPARSED" || e.result == "CANDIDATE" || e.result == "PROMO") {
-                        if (e.result == "RECORDED") nav.navigate("txn/${e.txnId}")
-                        else teach = TxnNotificationListener.ActiveNote(e.packageName, e.title, e.text, e.postedAt)
-                    },
-                )
             }
-            if (log.size > 8) item {
-                TextButton(onClick = { allLog = !allLog }, modifier = Modifier.padding(horizontal = 8.dp)) { Text(if (allLog) "收起" else "顯示更多紀錄") }
+            if (tab == 0) {
+                // 篩選：全部／已記帳／待確認／略過／無法辨識
+                val filters = listOf("全部", "已記帳", "待確認", "略過", "無法辨識")
+                item {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        filters.forEachIndexed { i, l ->
+                            androidx.compose.material3.FilterChip(logFilter == i, { logFilter = i; allLog = false }, label = { Text(l, fontSize = 12.sp) })
+                        }
+                    }
+                }
+                fun deleted(e: com.enwei.moneymanager.data.NotificationLogEntity) =
+                    (e.result == "RECORDED" || e.result == "MERGED") && e.txnId != null && e.txnId !in txnIds
+                val pendingIds = txns.filter { it.status == com.enwei.moneymanager.data.TxnStatus.PENDING }.map { it.id }.toHashSet()
+                val shown = log.filter { e ->
+                    when (logFilter) {
+                        1 -> (e.result == "RECORDED" || e.result == "MERGED" || e.result == "STOCK") && !deleted(e) && e.txnId !in pendingIds
+                        2 -> e.txnId in pendingIds || e.result == "OFFLINE"
+                        3 -> e.result == "PROMO" || e.result == "DUPLICATE" || e.result == "CANDIDATE" || deleted(e)
+                        4 -> e.result == "UNPARSED"
+                        else -> true
+                    }
+                }
+                if (shown.isEmpty()) item { Text("沒有紀錄", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp)) }
+                items(shown.take(if (allLog) 100 else 20), key = { "log${it.id}" }) { e ->
+                    val gone = deleted(e)
+                    val pending = e.txnId in pendingIds
+                    val (label, col) = when {
+                        gone -> "交易已刪除" to MaterialTheme.colorScheme.onSurfaceVariant
+                        pending -> "待確認" to Color(0xFFFFA000)
+                        e.result == "RECORDED" -> "已記帳" to MaterialTheme.colorScheme.primary
+                        e.result == "MERGED" -> "合併為轉帳" to MaterialTheme.colorScheme.primary
+                        e.result == "STOCK" -> "股票成交" to MaterialTheme.colorScheme.primary
+                        e.result == "DUPLICATE" -> "重複略過" to MaterialTheme.colorScheme.onSurfaceVariant
+                        e.result == "PROMO" -> "促銷略過" to MaterialTheme.colorScheme.onSurfaceVariant
+                        e.result == "UNPARSED" -> "無法辨識" to MaterialTheme.colorScheme.error
+                        e.result == "OFFLINE" -> "等網路後判讀" to Color(0xFFFFA000)
+                        else -> "未啟用來源" to MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp).clickable {
+                            when {
+                                !gone && e.txnId != null && (e.result == "RECORDED" || e.result == "MERGED") -> nav.navigate("txn/${e.txnId}")
+                                gone -> testScope.launch {
+                                    val r = repo.ingestNotification(e.packageName, e.title, e.text, e.postedAt, force = true)
+                                    testMsg = r?.let { "已重新記帳：${it.message}" } ?: "沒有記下（看不出是交易）"
+                                }
+                                e.result in setOf("UNPARSED", "CANDIDATE", "PROMO") -> teach = TxnNotificationListener.ActiveNote(e.packageName, e.title, e.text, e.postedAt)
+                            }
+                        }) {
+                        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("${labelOf[e.packageName] ?: e.packageName} · ${timeFmt.format(Date(e.postedAt))}", fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1)
+                                Text(label, fontSize = 11.sp, color = col,
+                                    modifier = Modifier.background(col.copy(alpha = 0.12f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
+                            }
+                            Text(listOfNotNull(e.title, e.text).joinToString(" "), fontSize = 13.sp, maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            if (gone) Text("點一下重新記帳", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                            else if (e.result in setOf("UNPARSED", "CANDIDATE", "PROMO")) Text("點一下教它這是交易", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+                testMsg?.let { m -> item { Text(m, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) } }
+                if (shown.size > 20) item {
+                    TextButton(onClick = { allLog = !allLog }, modifier = Modifier.padding(horizontal = 8.dp)) { Text(if (allLog) "收起" else "顯示更多紀錄") }
+                }
             }
             item { Spacer(Modifier.height(32.dp)) }
         }

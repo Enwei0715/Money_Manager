@@ -50,7 +50,6 @@ object ToolCatalog {
         ToolItem("budget", "預算", "budget", L.Review),
         ToolItem("totalstats", "資產走勢", "totalstats", L.Stocks),
         ToolItem("notif", "通知記帳", "notif", L.Notification),
-        ToolItem("walletreader", "錢包讀取", "walletreader", L.Wallet),
         ToolItem("stockfees", "手續費與月退", "stockfees", L.Stocks),
         ToolItem("settings", "App 更新", "settings", L.Update),
     )

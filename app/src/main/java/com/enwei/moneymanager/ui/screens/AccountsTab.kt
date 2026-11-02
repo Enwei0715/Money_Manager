@@ -186,11 +186,14 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
         val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
-        TabRow(
+        // 設定裡關掉股票功能：只剩帳戶
+        val stocksOn = repo.settings.flow.collectAsStateWithLifecycle().value.featureStocks
+        if (!stocksOn && section != 0) section = 0
+        if (stocksOn) TabRow(
             selectedTabIndex = section, containerColor = MaterialTheme.colorScheme.surface,
             indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[section]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
         ) {
-            listOf("帳戶", "股票", "助理").forEachIndexed { i, t ->
+            (if (stocksOn) listOf("帳戶", "股票", "助理") else listOf("帳戶")).forEachIndexed { i, t ->
                 Tab(section == i, { section = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp, group = fitGroup1) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
