@@ -671,13 +671,16 @@ private fun CandleChart(
             var started = false
             for (i in 0 until n) {
                 val v = values[from + i] ?: continue
-                val pt = Offset(i * cw + cw / 2, y(v).coerceIn(0f, priceH))
+                val pt = Offset(i * cw + cw / 2, y(v))
                 if (!started) { p.moveTo(pt.x, pt.y); started = true } else p.lineTo(pt.x, pt.y)
             }
             drawPath(p, col, style = Stroke(width = w))
         }
-        if (showBB) listOf(bb.first, bb.third).forEach { series(it, Color(0xFF90A4AE), 1.5f) }
-        maSeries.forEach { (len, v) -> series(v, maColor(len), 2f) }
+        // 超出價格區的部分直接不畫（不要貼著邊變成直線）
+        androidx.compose.ui.graphics.drawscope.clipRect(0f, 0f, size.width, priceH) {
+            if (showBB) listOf(bb.first, bb.third).forEach { series(it, Color(0xFF90A4AE), 1.5f) }
+            maSeries.forEach { (len, v) -> series(v, maColor(len), 2f) }
+        }
         // 均價、停利價、減碼價、提醒價：虛線（在畫面價格範圍內才畫）
         val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
         levels.forEach { (v, col) -> if (v in lo..hi) drawLine(col, Offset(0f, y(v)), Offset(size.width, y(v)), 2f, pathEffect = dash) }
@@ -716,7 +719,9 @@ private fun CandleChart(
             var lx = 4f
             maSeries.toSortedMap().forEach { (len, v) ->
                 val cur = v.getOrNull(to - 1) ?: return@forEach
-                val t = "MA$len ${"%.1f".format(cur)}"
+                val prevV = v.getOrNull(to - 2)
+                val arrow = when { prevV == null -> ""; cur > prevV -> "↑"; cur < prevV -> "↓"; else -> "→" }
+                val t = "MA$len ${"%.1f".format(cur)}$arrow"
                 lp.color = argb(maColor(len))
                 drawContext.canvas.nativeCanvas.drawText(t, lx, 20f, lp)
                 lx += lp.measureText(t) + 14f

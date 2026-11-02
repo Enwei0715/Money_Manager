@@ -117,16 +117,27 @@ object TradeSignals {
 
     private fun f(v: Double) = if (v >= 100) "%.0f".format(v) else "%.1f".format(v)
 
+    /**
+     * 日 K 的紀律買賣點：每次出現訊號都標（不再只在「模擬持有」時才標賣點）。
+     * - 買：站回季線（月線上彎）、多頭中突破前 20 日高點且量增、多頭回測月線不破（短線）
+     * - 賣：跌破季線；以最近一次買點為基準的停損、移動停損、分批停利
+     * 同一種訊號 5 根內只標一次。
+     */
     fun scan(open: List<Double>, high: List<Double>, low: List<Double>, close: List<Double>, volume: List<Double>, p: Params): List<Signal> {
         val n = close.size
         if (n < 70) return emptyList()
         val ma20 = close.indices.map { Technicals.sma(close, 20, it + 1) }
         val ma60 = close.indices.map { Technicals.sma(close, 60, it + 1) }
         val out = ArrayList<Signal>()
+        val lastTag = HashMap<String, Int>()
+        fun emit(sg: Signal) {
+            if (sg.index - (lastTag[sg.tag] ?: -99) < 5) return
+            lastTag[sg.tag] = sg.index; out += sg
+        }
         var entry: Double? = null
         var peak = 0.0
+        var stopped = false
         var tookProfit = false
-        var lastSignal = -99
         for (i in 61 until n) {
             val c = close[i]; val m20 = ma20[i] ?: continue; val m60 = ma60[i] ?: continue
             val p20 = ma20[i - 1] ?: continue; val p60 = ma60[i - 1] ?: continue
@@ -134,38 +145,38 @@ object TradeSignals {
             val avgVol = (i - 20 until i).map { volume.getOrNull(it) ?: 0.0 }.average()
             val vol = volume.getOrNull(i) ?: 0.0
             val upTrend = m20 > m20Ago && c > m60
-            if (entry == null) {
-                // 只在趨勢向上時買：月線上彎、收盤在季線之上
-                val sig = when {
-                    close[i - 1] <= p60 && c > m60 && m20 > m20Ago && c > m20 ->
-                        Signal(i, true, "站回季線 ${f(m60)}，且在上彎的月線 ${f(m20)} 之上", "站回季線")
-                    upTrend && m20 >= m60 && c > (i - 20 until i).maxOf { high[it] } && avgVol > 0 && vol > avgVol * 1.5 ->
-                        Signal(i, true, "多頭中突破前 20 日高點，量增 ${"%.1f".format(vol / avgVol)} 倍", "突破")
-                    !p.long && upTrend && m20 > m60 && low[i] <= m20 * 1.01 && c > m20 && close[i - 1] > p20 ->
-                        Signal(i, true, "多頭回測月線 ${f(m20)} 不破", "回測月線")
-                    else -> null
+            // 買點（每次出現都標；新的買點成為之後停損／停利的基準）
+            val buy = when {
+                close[i - 1] <= p60 && c > m60 && m20 > m20Ago ->
+                    Signal(i, true, "站回季線 ${f(m60)}，月線 ${f(m20)} 上彎", "站回季線")
+                upTrend && m20 >= m60 && c > (i - 20 until i).maxOf { high[it] } && avgVol > 0 && vol > avgVol * 1.5 ->
+                    Signal(i, true, "多頭中突破前 20 日高點，量增 ${"%.1f".format(vol / avgVol)} 倍", "突破")
+                !p.long && upTrend && m20 > m60 && low[i] <= m20 * 1.01 && c > m20 && close[i - 1] > p20 ->
+                    Signal(i, true, "多頭回測月線 ${f(m20)} 不破", "回測月線")
+                else -> null
+            }
+            if (buy != null) {
+                val before = out.size
+                emit(buy)
+                if (out.size > before) { entry = c; peak = c; stopped = false; tookProfit = false; continue }
+            }
+            // 跌破季線（每次都標）
+            if (close[i - 1] >= p60 && c < m60) emit(Signal(i, false, "跌破季線 ${f(m60)}", "破季線"))
+            // 以最近一次買點為基準的停損、移動停損、分批停利
+            val e = entry ?: continue
+            if (stopped) continue
+            peak = max(peak, high[i])
+            val tp = if (p.long) p.takeProfitPct * 2 else p.takeProfitPct
+            val trailStop = peak * (1 - p.trailPct / 100)
+            when {
+                !p.long && c < e * (1 - p.stopPct / 100) -> {
+                    emit(Signal(i, false, "停損：跌破買進價 ${f(e)} 的 −${"%.0f".format(p.stopPct)}%（${f(e * (1 - p.stopPct / 100))}）", "停損")); stopped = true
                 }
-                if (sig != null && i - lastSignal >= 5) {
-                    out += sig; entry = c; peak = c; tookProfit = false; lastSignal = i
+                peak > e && c < trailStop && (!p.long || c > e) -> {
+                    emit(Signal(i, false, "移動停損：從高點 ${f(peak)} 回落超過 ${"%.0f".format(p.trailPct)}%（${f(trailStop)}）", "移動停損")); stopped = true
                 }
-            } else {
-                peak = max(peak, high[i])
-                val e = entry!!
-                val tp = if (p.long) p.takeProfitPct * 2 else p.takeProfitPct
-                val trailStop = peak * (1 - p.trailPct / 100)
-                val sig = when {
-                    !p.long && c < e * (1 - p.stopPct / 100) ->
-                        Signal(i, false, "停損：跌破買進價 ${f(e)} 的 −${"%.0f".format(p.stopPct)}%（${f(e * (1 - p.stopPct / 100))}）", "停損")
-                    peak > e && c < trailStop && (!p.long || c > e) ->
-                        Signal(i, false, "移動停損：從高點 ${f(peak)} 回落超過 ${"%.0f".format(p.trailPct)}%（${f(trailStop)}）", "移動停損")
-                    !tookProfit && c >= e * (1 + tp / 100) ->
-                        Signal(i, false, "分批停利：獲利達 +${"%.0f".format(tp)}%（先賣 1/3）", "停利")
-                    !p.long && close[i - 1] >= p60 && c < m60 -> Signal(i, false, "跌破季線 ${f(m60)}", "破季線")
-                    else -> null
-                }
-                if (sig != null && i - lastSignal >= 2) {
-                    out += sig; lastSignal = i
-                    if (sig.tag == "停利") tookProfit = true else entry = null
+                !tookProfit && c >= e * (1 + tp / 100) -> {
+                    emit(Signal(i, false, "分批停利：獲利達 +${"%.0f".format(tp)}%（先賣 1/3）", "停利")); tookProfit = true
                 }
             }
         }
@@ -200,12 +211,14 @@ object TradeSignals {
             // 要連續 confirm 根都是這個狀態才算（避免假跌破／假突破）
             val ok = (0 until confirm).all { k -> i - k >= 0 && state(i - k) == st }
             if (!ok) continue
-            val a = mf[i]!!; val b = ms[i]!!
+            // 標在真正突破／跌破的那一根（確認完的是後面幾根）
+            val at = i - confirm + 1
+            val a = mf[at]!!; val b = ms[at]!!
             fun f(v: Double) = if (v >= 100) "%.0f".format(v) else "%.1f".format(v)
             when (st) {
-                2 -> out += Signal(i, true, "站上 ${fast}MA ${f(a)} 與 ${slow}MA ${f(b)}（連續 $confirm 根）", "站上雙線")
-                1 -> if (cur == 2) out += Signal(i, false, "跌破 ${if (close[i] < a * (1 - tol)) "${fast}MA ${f(a)}" else "${slow}MA ${f(b)}"} 超過 ${"%.1f".format(tolerancePct)}%，減碼約 ${"%.0f".format(reducePct)}%", "減碼")
-                0 -> out += Signal(i, false, "同時跌破 ${fast}MA 與 ${slow}MA，減到只剩基本股", "留基本股")
+                2 -> out += Signal(at, true, "站上 ${fast}MA ${f(a)} 與 ${slow}MA ${f(b)}（連續 $confirm 根）", "站上雙線")
+                1 -> if (cur == 2) out += Signal(at, false, "跌破 ${if (close[at] < a * (1 - tol)) "${fast}MA ${f(a)}" else "${slow}MA ${f(b)}"} 超過 ${"%.1f".format(tolerancePct)}%，減碼約 ${"%.0f".format(reducePct)}%", "減碼")
+                0 -> out += Signal(at, false, "同時跌破 ${fast}MA 與 ${slow}MA，減到只剩基本股", "留基本股")
             }
             cur = st
         }

@@ -124,6 +124,16 @@ object InvestData {
                 v += num(vols?.getOrNull(i)) ?: 0.0
             }
             if (c.isEmpty()) continue
+            // 60 分 K：Yahoo 的最後半小時（13:00–13:30）常沒有成交量，併進同一天前一根，量才不會每幾根就缺一根
+            if (interval != "1d") {
+                var i = 1
+                while (i < c.size) {
+                    if (v[i] <= 0.0 && d[i] == d[i - 1]) {
+                        h[i - 1] = maxOf(h[i - 1], h[i]); l[i - 1] = minOf(l[i - 1], l[i]); c[i - 1] = c[i]
+                        d.removeAt(i); c.removeAt(i); h.removeAt(i); o.removeAt(i); l.removeAt(i); v.removeAt(i)
+                    } else i++
+                }
+            }
             val meta = r["meta"] as? JsonObject
             val name = (meta?.get("shortName") as? JsonPrimitive)?.content ?: (meta?.get("longName") as? JsonPrimitive)?.content
             return DailyBars(d, c, h, name, o, l, v)
