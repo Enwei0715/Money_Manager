@@ -3,6 +3,7 @@
     android:description="@string/widget_recent_description"
     android:initialLayout="@layout/widget_recent"
     android:previewImage="@drawable/widget_preview_recent"
+    android:previewLayout="@layout/widget_recent_preview"
     android:minWidth="250dp"
     android:minHeight="180dp"
     android:minResizeWidth="40dp"

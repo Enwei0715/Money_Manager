@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:padding="12dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+            <ImageView android:layout_width="16dp" android:layout_height="16dp" android:layout_marginEnd="6dp" android:contentDescription="@null" android:src="@drawable/ic_w_stocks" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/widget_stocks_label" android:textColor="#FF8A8A8A" android:textSize="12sp" />
+        </LinearLayout>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:text="$ 208,480" android:textColor="#FF333333" android:textSize="24sp" android:layout_marginTop="2dp" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:text="▲ +3,250 (+1.6%)" android:textColor="#FFE53935" android:textSize="12sp" />
+    </LinearLayout>
+</FrameLayout>

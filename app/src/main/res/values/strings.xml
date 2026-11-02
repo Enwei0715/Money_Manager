@@ -15,4 +15,13 @@
     <string name="widget_accounts_label">帳戶餘額</string>
     <string name="widget_recent_label">最近交易</string>
     <string name="widget_summary_label">帳理統計</string>
+    <string name="widget_sample_month_line">本月支出 $ 12,480 · 預算 42%</string>
+    <string name="widget_sample_bank">銀行帳戶</string>
+    <string name="widget_sample_cash">現金</string>
+    <string name="widget_sample_card">信用卡</string>
+    <string name="widget_sample_lunch">11/2  午餐 · 信用卡</string>
+    <string name="widget_sample_coffee">11/2  咖啡 · 悠遊付</string>
+    <string name="widget_sample_salary">11/1  薪資 · 銀行</string>
+    <string name="widget_sample_transport">11/1  捷運 · 悠遊卡</string>
+    <string name="widget_sample_budget_line">總預算 $ 17,160 / $ 29,590（58%）</string>
 </resources>

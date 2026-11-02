@@ -15,4 +15,13 @@
     <string name="widget_accounts_label">Balances</string>
     <string name="widget_recent_label">Recent</string>
     <string name="widget_summary_label">Ledgerly stats</string>
+    <string name="widget_sample_month_line">This month $ 12,480 · Budget 42%</string>
+    <string name="widget_sample_bank">Bank</string>
+    <string name="widget_sample_cash">Cash</string>
+    <string name="widget_sample_card">Credit card</string>
+    <string name="widget_sample_lunch">11/2  Lunch · Card</string>
+    <string name="widget_sample_coffee">11/2  Coffee · Wallet</string>
+    <string name="widget_sample_salary">11/1  Salary · Bank</string>
+    <string name="widget_sample_transport">11/1  Metro · Card</string>
+    <string name="widget_sample_budget_line">Budget $ 17,160 / $ 29,590 (58%)</string>
 </resources>

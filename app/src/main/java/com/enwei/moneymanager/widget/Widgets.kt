@@ -59,8 +59,10 @@ object Widgets {
         (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
     /** 背景、主要文字與次要文字顏色。 */
-    fun style(context: Context, v: RemoteViews, primaryIds: List<Int>, secondaryIds: List<Int>) {
+    fun style(context: Context, v: RemoteViews, primaryIds: List<Int>, secondaryIds: List<Int>, tintIcon: Boolean = true) {
         val d = dark(context)
+        // 標題列的小圖示跟著次要文字顏色（深色模式變淺）
+        if (tintIcon) v.setInt(R.id.w_icon, "setColorFilter", if (d) 0xFFAAAAAA.toInt() else 0xFF8A8A8A.toInt())
         v.setInt(R.id.widget_bg, "setColorFilter", if (d) 0xFF26272B.toInt() else 0xFFFFFFFF.toInt())
         v.setInt(R.id.widget_bg, "setImageAlpha", 255)
         primaryIds.forEach { v.setTextColor(it, if (d) 0xFFEEEEEE.toInt() else 0xFF333333.toInt()) }
@@ -103,7 +105,7 @@ class QuickWidget : BaseWidget() {
     companion object {
         suspend fun build(context: Context): RemoteViews = RemoteViews(context.packageName, R.layout.widget_quick).apply {
             setTextViewText(R.id.w_title, tr("記一筆"))
-            Widgets.style(context, this, emptyList(), listOf(R.id.w_title))
+            Widgets.style(context, this, emptyList(), listOf(R.id.w_title), tintIcon = false)
             setOnClickPendingIntent(R.id.w_root, Widgets.open(context, 101, "txn/0?type=EXPENSE"))
         }
     }
@@ -125,7 +127,17 @@ class TodayWidget : BaseWidget() {
             return RemoteViews(context.packageName, R.layout.widget_today).apply {
                 setTextViewText(R.id.w_title, tr("今日支出"))
                 setTextViewText(R.id.w_value, Money.withSymbol(todayExp, base))
-                setTextViewText(R.id.w_sub, "${tr("本月支出")} ${Money.withSymbol(exp, base)} · ${tr("結餘")} ${Money.full(inc - exp)}")
+                // 有總預算時：下面顯示預算用了多少與進度條
+                val budget = repo.settings.value.budgets[0L]
+                if (budget != null && budget > 0) {
+                    val pct = (exp * 100 / budget).toInt()
+                    setTextViewText(R.id.w_sub, "${tr("本月支出")} ${Money.withSymbol(exp, base)} · ${tr("預算")} $pct%")
+                    setProgressBar(R.id.w_progress, 100, pct.coerceIn(0, 100), false)
+                    setViewVisibility(R.id.w_progress, android.view.View.VISIBLE)
+                } else {
+                    setTextViewText(R.id.w_sub, "${tr("本月支出")} ${Money.withSymbol(exp, base)} · ${tr("結餘")} ${Money.full(inc - exp)}")
+                    setViewVisibility(R.id.w_progress, android.view.View.GONE)
+                }
                 Widgets.style(context, this, emptyList(), listOf(R.id.w_title, R.id.w_sub))
                 setTextColor(R.id.w_value, Widgets.EXPENSE)
                 setOnClickPendingIntent(R.id.w_root, Widgets.open(context, 102, "txns"))
