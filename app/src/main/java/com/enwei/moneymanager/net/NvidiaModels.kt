@@ -43,6 +43,10 @@ object NvidiaModels {
     /** 上次抓到的模型 id（空集合＝還沒抓到，全部當作可用） */
     fun available(): Set<String> = prefs.getStringSet("ids", emptySet()).orEmpty()
 
+    /** 拒絕或不存在的模型：7 天內不再挑 */
+    fun ban(id: String) = prefs.edit().putLong("ban:$id", System.currentTimeMillis() + 7 * 86_400_000L).apply()
+    fun banned(id: String) = prefs.getLong("ban:$id", 0) > System.currentTimeMillis()
+
     fun refresh(force: Boolean = false) {
         if (!force && System.currentTimeMillis() - prefs.getLong("at", 0) < 24 * 3600_000L) return
         val ids = runCatching {
@@ -64,9 +68,9 @@ object NvidiaModels {
             listOf("embed", "vision", "-vl", "guard", "reward", "rerank", "parse", "retriever", "safety", "clip", "ocr", "coder", "flux", "image", "embedding").none { id.contains(it, true) }
         }
         val found = prefs.mapNotNull { k ->
-            if (av.isEmpty()) FALLBACK[k]
+            if (av.isEmpty()) FALLBACK[k]?.takeIf { !banned(it) }
             // 同一個關鍵字有多個版本時取最新（字串排序最後的，例如 deepseek-v3.1 > deepseek-v3）
-            else av.filter { it.contains(k, true) }.maxOrNull()
+            else av.filter { it.contains(k, true) && !banned(it) }.maxOrNull()
         }
         return (listOfNotNull(preferred.trim().takeIf { it.isNotBlank() }) + found).distinct().take(n)
     }

@@ -37,6 +37,13 @@ object OpenRouterModels {
 
     fun lastFetch(): Long = prefs.getLong("at", 0)
 
+    /** 拒絕（403，例如只開放給代理工具）或不存在（404）的模型：7 天內不再挑 */
+    fun ban(id: String) = prefs.edit().putLong("ban:$id", System.currentTimeMillis() + 7 * 86_400_000L).apply()
+    fun banned(id: String) = prefs.getLong("ban:$id", 0) > System.currentTimeMillis()
+
+    /** 不是一般對話用的模型（視覺、只給代理工具用的） */
+    private fun unsuitable(id: String) = listOf("-vl", "vision", "inkling", "-image", "embed", "guard").any { id.contains(it, true) }
+
     /** 一天最多抓一次；[force] 時立即重抓。回傳免費模型數。 */
     fun refresh(force: Boolean = false): Int {
         if (!force && System.currentTimeMillis() - lastFetch() < 24 * 3600_000L) return cached().size
@@ -65,7 +72,7 @@ object OpenRouterModels {
 
     /** 挑幾個模型：[big] 時只要上下文 ≥ 64k 的；依偏好家族、再依上下文長度排序。 */
     fun pick(big: Boolean, n: Int, preferred: String = ""): List<String> {
-        val all = cached().filter { !big || it.context >= 64_000 }
+        val all = cached().filter { (!big || it.context >= 64_000) && !banned(it.id) && !unsuitable(it.id) }
             .sortedWith(compareBy<FreeModel> { rank(it) }.thenByDescending { it.context })
             .map { it.id }
         val first = preferred.trim().takeIf { it.isNotBlank() }

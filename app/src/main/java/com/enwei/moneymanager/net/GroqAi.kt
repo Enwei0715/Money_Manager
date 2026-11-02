@@ -238,7 +238,10 @@ object GroqAi {
                 all.filter { it.provider == Provider.OPENROUTER }.forEach { com.enwei.moneymanager.work.AiHealth.cooldown(it.model, untilMidnight) }
                 continue
             }
-            if ("404" in err || "402" in err) { com.enwei.moneymanager.work.AiHealth.cooldown(r.model, 24 * 3600_000L); continue }
+            // 這個模型不提供或拒絕使用：OpenRouter／NVIDIA 記進黑名單，之後自動挑別的
+            if (("403" in err || "404" in err) && r.provider == Provider.OPENROUTER) OpenRouterModels.ban(r.model)
+            if (("403" in err || "404" in err) && r.provider == Provider.NVIDIA) NvidiaModels.ban(r.model.removePrefix(NV))
+            if ("404" in err || "402" in err || "403" in err) { com.enwei.moneymanager.work.AiHealth.cooldown(r.model, 24 * 3600_000L); continue }
             if ("429" in err || "額度" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
                 retryAfterMs?.coerceIn(5_000L, 3600_000L) ?: if (r.provider == Provider.GEMINI) 15 * 60_000L else 2 * 60_000L)
             else if ("逾時" in err || "timeout" in err.lowercase() || "503" in err || "404" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
@@ -521,13 +524,25 @@ object GroqAi {
             else {
                 OpenRouterModels.refresh(force = true)
                 // 依序試幾個免費模型，有一個回應就算成功
-                val models = OpenRouterModels.pick(false, 3, s.openRouterModel)
-                val results = models.map { m -> m to probe(Provider.OPENROUTER, s.openRouterKey.trim(), m) }
+                // 依序試候選模型，拒絕或不存在的記進黑名單並換下一個，直到找到 3 個能用的
+                val results = ArrayList<Pair<String, String?>>()
+                val tried = HashSet<String>()
+                repeat(3) {
+                    if (results.count { it.second == null } >= 3) return@repeat
+                    val batch = OpenRouterModels.pick(false, 10, s.openRouterModel).filter { it !in tried }.take(3)
+                    batch.forEach { m ->
+                        tried += m
+                        val err = probe(Provider.OPENROUTER, s.openRouterKey.trim(), m)
+                        if (err != null && (err.startsWith("HTTP 403") || err.startsWith("HTTP 404"))) OpenRouterModels.ban(m)
+                        results += m to err
+                    }
+                }
                 val bad = results.filter { it.second != null }
                 results.filter { it.second == null }.forEach { (m, _) -> com.enwei.moneymanager.work.AiHealth.clearCooldown { it == m } }
                 return@withContext when {
                     bad.isEmpty() -> null
-                    bad.size < results.size -> "部分可用：" + bad.joinToString("；") { "${it.first.substringAfterLast('/')} ${it.second}" }
+                    bad.size < results.size -> "部分可用（可用：" + results.filter { it.second == null }.joinToString("、") { it.first.substringAfterLast('/') } +
+                        "；不能用的已排除）"
                     else -> results.joinToString("\n") { "${it.first.substringAfterLast('/')}：${it.second}" }
                 }
             }
@@ -541,6 +556,7 @@ object GroqAi {
                     models.map { m ->
                         async {
                             val err = probe(Provider.NVIDIA, s.nvidiaKey.trim(), m)
+                            if (err != null && (err.startsWith("HTTP 403") || err.startsWith("HTTP 404"))) NvidiaModels.ban(m)
                             if (err == null) com.enwei.moneymanager.work.AiHealth.clearCooldown { it == NV + m }
                             m to err
                         }
