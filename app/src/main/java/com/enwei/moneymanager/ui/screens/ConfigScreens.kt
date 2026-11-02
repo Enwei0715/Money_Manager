@@ -82,12 +82,15 @@ private fun SectionHeader(title: String) {
 }
 
 @Composable
-private fun ConfigRow(title: String, value: String? = null, onClick: () -> Unit) {
+private fun ConfigRow(title: String, value: String? = null, sub: String? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, Modifier.weight(1f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (sub != null) Text(sub, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (value != null) Text(value, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
     }
 }
@@ -101,8 +104,41 @@ private fun lockDelayLabel(sec: Int) = when (sec) {
 }
 
 /** 設定：依用途分組管理帳戶、記帳、外觀、自動化、AI、安全與備份更新。 */
+/** 設定的大分類：首頁只列這幾張卡，點進去才看該類的設定，不必在一長頁裡找。 */
+private data class CfgGroup(val id: String, val title: String, val desc: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val sections: List<String>)
+
+private val cfgGroups = listOf(
+    CfgGroup("ledger", "帳戶與記帳", "帳戶、分類、預算、輸入方式、週期交易", androidx.compose.material.icons.Icons.Outlined.AccountBalanceWallet,
+        listOf("帳戶", "分類與預算", "記帳")),
+    CfgGroup("display", "顯示與外觀", "主題、語言、日曆、期間、搜尋方式", androidx.compose.material.icons.Icons.Outlined.Palette,
+        listOf("外觀", "期間與顯示")),
+    CfgGroup("currency", "幣別與匯率", "主幣別、副幣別、即時匯率", androidx.compose.material.icons.Icons.Outlined.CurrencyExchange, listOf("幣別")),
+    CfgGroup("features", "功能與自動化", "通知自動記帳、AI、股票", androidx.compose.material.icons.Icons.Outlined.Tune,
+        listOf("功能開關", "自動記帳", "AI", "股票")),
+    CfgGroup("notify", "通知", "各類通知的開關與聲音", androidx.compose.material.icons.Icons.Outlined.Notifications, listOf("通知")),
+    CfgGroup("data", "安全與資料", "密碼鎖、備份與還原、App 更新", androidx.compose.material.icons.Icons.Outlined.Lock,
+        listOf("安全", "資料", "關於")),
+)
+
 @Composable
-fun ConfigScreen(nav: NavController) {
+fun ConfigScreen(nav: NavController, group: String? = null) {
+    val grp = cfgGroups.firstOrNull { it.id == group }
+    var query by remember { mutableStateOf("") }
+    val q = query.trim()
+    // 目前畫到哪一節（sec 設定、cfg 依此決定要不要顯示）
+    var cur = ""
+    val searching = grp == null && q.isNotEmpty()
+    @androidx.compose.runtime.NonSkippableComposable @Composable fun sec(title: String) {
+        cur = title
+        if (grp != null && title in grp.sections && grp.sections.size > 1) SectionHeader(title)
+    }
+    @androidx.compose.runtime.NonSkippableComposable @Composable fun cfg(title: String, value: String? = null, onClick: () -> Unit) {
+        when {
+            grp != null -> if (cur in grp.sections) ConfigRow(title, value, onClick = onClick)
+            searching -> if (title.contains(q, true) || com.enwei.moneymanager.ui.tr(title).contains(q, true) || cur.contains(q, true))
+                ConfigRow(title, value, sub = cur, onClick = onClick)
+        }
+    }
     val ctx = LocalContext.current
     val s by repo.settings.flow.collectAsStateWithLifecycle()
     var choice by remember { mutableStateOf<Choice<Any>?>(null) }
@@ -116,101 +152,134 @@ fun ConfigScreen(nav: NavController) {
         ask(title, listOf(false to "OFF", true to "ON"), value, description, onPick)
     val currencies = (listOf("TWD") + FxService.common).distinct()
 
-    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("設定", { nav.popBackStack() }) }) { pad ->
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar(grp?.title ?: "設定", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad)) {
-            item {
-                SectionHeader("帳戶")
-                ConfigRow("帳戶設定") { nav.navigate("accountsettings") }
-                ConfigRow("帳戶群組") { nav.navigate("accountgroups") }
+            // 設定首頁：搜尋＋六個大分類卡片（一個畫面看完）
+            if (grp == null) item {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    androidx.compose.material3.OutlinedTextField(
+                        query, { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("搜尋設定，例如：預算、語言、通知") },
+                        leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Search, null) },
+                        trailingIcon = {
+                            if (query.isNotEmpty()) androidx.compose.material3.IconButton(onClick = { query = "" }) {
+                                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Close, "清除")
+                            }
+                        },
+                        shape = RoundedCornerShape(24.dp),
+                    )
+                    if (!searching) cfgGroups.chunked(2).forEach { rowGroups ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            rowGroups.forEach { g ->
+                                androidx.compose.material3.Card(Modifier.weight(1f).height(118.dp).clickable { nav.navigate("config?g=${g.id}") }) {
+                                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        androidx.compose.material3.Icon(g.icon, null, tint = MaterialTheme.colorScheme.primary)
+                                        Text(g.title, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
+                                        Text(g.desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                            }
+                            if (rowGroups.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                    }
+                    if (!searching) Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+            }
+            if (grp != null || searching) item {
+                sec("帳戶")
+                cfg("帳戶設定") { nav.navigate("accountsettings") }
+                cfg("帳戶群組") { nav.navigate("accountgroups") }
 
-                SectionHeader("分類與預算")
-                ConfigRow("支出分類設定") { nav.navigate("categories?kind=EXPENSE") }
-                ConfigRow("收入分類設定") { nav.navigate("categories?kind=INCOME") }
-                ConfigRow("預算設定") { nav.navigate("budget") }
+                sec("分類與預算")
+                cfg("支出分類設定") { nav.navigate("categories?kind=EXPENSE") }
+                cfg("收入分類設定") { nav.navigate("categories?kind=INCOME") }
+                cfg("預算設定") { nav.navigate("budget") }
 
-                SectionHeader("記帳")
-                ConfigRow("輸入順序", if (s.inputFromCategory) "從分類" else "從金額") {
+                sec("記帳")
+                cfg("輸入順序", if (s.inputFromCategory) "從分類" else "從金額") {
                     ask("輸入順序", listOf(false to "從金額", true to "從分類"), s.inputFromCategory, "新增交易時先跳出哪個輸入面板。") { v ->
                         repo.settings.update { it.copy(inputFromCategory = v) }
                     }
                 }
-                ConfigRow("時間輸入", onOff(s.showTime)) {
+                cfg("時間輸入", onOff(s.showTime)) {
                     askOnOff("時間輸入", s.showTime, "記帳時除了日期也可以設定時間。") { v -> repo.settings.update { it.copy(showTime = v) } }
                 }
-                ConfigRow("週期交易", null) { nav.navigate("recurring") }
-                ConfigRow("自動完成", onOff(s.autocomplete)) {
+                cfg("週期交易", null) { nav.navigate("recurring") }
+                cfg("自動完成", onOff(s.autocomplete)) {
                     askOnOff("自動完成", s.autocomplete, "輸入內容時依過去紀錄建議，並帶入分類。") { v -> repo.settings.update { it.copy(autocomplete = v) } }
                 }
-                SectionHeader("期間與顯示")
-                ConfigRow("起始畫面（每日／日曆）", if (s.startScreen == 1) "日曆" else "每日") {
+                sec("期間與顯示")
+                cfg("起始畫面（每日／日曆）", if (s.startScreen == 1) "日曆" else "每日") {
                     ask("起始畫面", listOf(0 to "每日", 1 to "日曆"), s.startScreen) { v -> repo.settings.update { it.copy(startScreen = v) } }
                 }
-                ConfigRow("日曆標示", if (s.calendarDots) "顏色小點" else "文字") {
+                cfg("日曆標示", if (s.calendarDots) "顏色小點" else "文字") {
                     ask("日曆標示", listOf(false to "文字（休、結、繳、扣）", true to "顏色小點"), s.calendarDots,
                         "放在日曆日期與金額之間；點日期可以看完整名稱。") { v -> repo.settings.update { it.copy(calendarDots = v) } }
                 }
-                ConfigRow("搜尋的篩選方式", if (s.filterStyle == 0) "圖表勾選" else "欄位篩選") {
+                cfg("搜尋的篩選方式", if (s.filterStyle == 0) "圖表勾選" else "欄位篩選") {
                     ask("搜尋的篩選方式", listOf(0 to "圖表勾選（收入／支出圓環、勾選分類與帳戶）", 1 to "欄位篩選（期間、帳戶、分類、金額）"), s.filterStyle) { v ->
                         repo.settings.update { it.copy(filterStyle = v) }
                     }
                 }
-                ConfigRow("每月起始日", "每月 ${s.monthStartDay} 日") {
+                cfg("每月起始日", "每月 ${s.monthStartDay} 日") {
                     ask("每月起始日", (1..28).map { it to "每月 $it 日" }, s.monthStartDay, "例如發薪日是 5 號，設成 5 日就會以 5 號到下月 4 號為一個月。") { v ->
                         repo.settings.update { it.copy(monthStartDay = v) }
                     }
                 }
-                ConfigRow("每週起始日", if (s.weekStartDay == 7) "週日" else "週一") {
+                cfg("每週起始日", if (s.weekStartDay == 7) "週日" else "週一") {
                     ask("每週起始日", listOf(7 to "週日", 1 to "週一"), s.weekStartDay) { v -> repo.settings.update { it.copy(weekStartDay = v) } }
                 }
-                ConfigRow("滑動切換", if (s.swipe == 1) "切換期間" else "無") {
+                cfg("滑動切換", if (s.swipe == 1) "切換期間" else "無") {
                     ask("滑動切換", listOf(0 to "無", 1 to "切換期間"), s.swipe, "在交易頁左右滑動時要做什麼。") { v -> repo.settings.update { it.copy(swipe = v) } }
                 }
-                ConfigRow("顯示說明", onOff(s.showDescription)) {
+                cfg("顯示說明", onOff(s.showDescription)) {
                     askOnOff("顯示說明", s.showDescription, "在交易列表中顯示每筆交易的說明文字。") { v -> repo.settings.update { it.copy(showDescription = v) } }
                 }
 
-                SectionHeader("幣別")
-                ConfigRow("主幣別", "${s.baseCurrency} (${Money.symbolOf(s.baseCurrency).trim()})") {
+                sec("幣別")
+                cfg("主幣別", "${s.baseCurrency} (${Money.symbolOf(s.baseCurrency).trim()})") {
                     ask("主幣別", currencies.map { it to it }, s.baseCurrency, "淨資產與報表統一換算成的幣別。") { c -> repo.settings.update { it.copy(baseCurrency = c) } }
                 }
-                ConfigRow("副幣別", Money.symbolOf(s.subCurrency).trim()) {
+                cfg("副幣別", Money.symbolOf(s.subCurrency).trim()) {
                     ask("副幣別", currencies.map { it to it }, s.subCurrency, "記帳鍵盤上可以一鍵切換的第二種幣別。") { c -> repo.settings.update { it.copy(subCurrency = c) } }
                 }
-                ConfigRow("即時匯率") { nav.navigate("fx") }
+                cfg("即時匯率") { nav.navigate("fx") }
 
-                SectionHeader("外觀")
-                ConfigRow("主題", listOf("跟隨系統", "淺色", "深色")[s.themeMode.coerceIn(0, 2)]) {
+                sec("外觀")
+                cfg("主題", listOf("跟隨系統", "淺色", "深色")[s.themeMode.coerceIn(0, 2)]) {
                     ask("主題", listOf(0 to "跟隨系統", 1 to "淺色", 2 to "深色"), s.themeMode) { v -> repo.settings.update { it.copy(themeMode = v) } }
                 }
-                ConfigRow("語言", listOf("跟隨系統", "繁體中文", "English")[s.language.coerceIn(0, 2)]) {
+                cfg("語言", listOf("跟隨系統", "繁體中文", "English")[s.language.coerceIn(0, 2)]) {
                     ask("語言", listOf(0 to "跟隨系統", 1 to "繁體中文", 2 to "English"), s.language, "App 名稱也會跟著語言切換（帳理／Ledgerly）。") { v ->
                         repo.settings.update { it.copy(language = v) }
                         com.enwei.moneymanager.ui.I18n.init(ctx, v)
                         com.enwei.moneymanager.ui.applyAppLocale(ctx, v)
                     }
                 }
-                ConfigRow("介面大小", uiScaleLabel(s.uiScale)) {
+                cfg("介面大小", uiScaleLabel(s.uiScale)) {
                     ask("介面大小", listOf(0.85f to "較小（85%）", 0.92f to "小（92%）", 1f to "標準（100%）", 1.1f to "大（110%）", 1.2f to "特大（120%）"), s.uiScale) { v ->
                         repo.settings.update { it.copy(uiScale = v) }
                     }
                 }
-                ConfigRow("收支顏色", if (s.colorSetB) "設定 B" else "設定 A") {
+                cfg("收支顏色", if (s.colorSetB) "設定 B" else "設定 A") {
                     ask(
                         "收支顏色", listOf(false to "設定 A", true to "設定 B"), s.colorSetB,
                         "預設收入顯示藍色、支出顯示紅色，也可以反過來。\n\nA. 收入：藍、支出：紅\nB. 收入：紅、支出：藍",
                     ) { v -> repo.settings.update { it.copy(colorSetB = v) } }
                 }
 
-                SectionHeader("功能開關")
-                ConfigRow("通知自動記帳", onOff(s.featureNotif)) {
+                sec("功能開關")
+                cfg("通知自動記帳", onOff(s.featureNotif)) {
                     askOnOff("通知自動記帳", s.featureNotif, "關閉後不讀取任何通知、不自動記帳，只用手動記帳。") { v -> repo.settings.update { it.copy(featureNotif = v) } }
                 }
-                ConfigRow("股票與投資助理", onOff(s.featureStocks)) {
+                cfg("股票與投資助理", onOff(s.featureStocks)) {
                     askOnOff("股票與投資助理", s.featureStocks, "關閉後隱藏「帳戶」裡的股票與助理分頁，並停止新聞蒐集、每日報告與股價提醒等背景工作。") { v ->
                         repo.settings.update { it.copy(featureStocks = v) }
                     }
                 }
-                ConfigRow("AI 功能", onOff(s.aiEnabled)) {
+                cfg("AI 功能", onOff(s.aiEnabled)) {
                     askOnOff("AI 功能", s.aiEnabled, "關閉後隱藏所有 AI 相關畫面與設定（今日報告、問 AI、新聞整理、AI 檢討、AI 中心），背景也不會呼叫 AI；規則辨識與手動記帳照常。") { v ->
                         repo.settings.update { it.copy(aiEnabled = v) }
                         if (v && s.groqKey.isBlank() && s.geminiKey.isBlank()) nav.navigate("ai")
@@ -218,21 +287,21 @@ fun ConfigScreen(nav: NavController) {
                 }
 
                 if (s.featureNotif) {
-                    SectionHeader("自動記帳")
-                    ConfigRow("通知自動記帳設定") { nav.navigate("notif") }
+                    sec("自動記帳")
+                    cfg("通知自動記帳設定") { nav.navigate("notif") }
                 }
 
                 if (s.aiEnabled) {
-                SectionHeader("AI")
-                ConfigRow("AI 模型設定", if (s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()) "已設定金鑰" else "需要設定金鑰") { nav.navigate("ai") }
+                sec("AI")
+                cfg("AI 模型設定", if (s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()) "已設定金鑰" else "需要設定金鑰") { nav.navigate("ai") }
                 // AI 說話的口吻：收支檢討、投資報告、股票助理都會照這個語氣
-                ConfigRow("AI 語氣", com.enwei.moneymanager.net.GroqAi.AiTone.entries.getOrElse(s.aiTone) { com.enwei.moneymanager.net.GroqAi.AiTone.GENTLE }.label) {
+                cfg("AI 語氣", com.enwei.moneymanager.net.GroqAi.AiTone.entries.getOrElse(s.aiTone) { com.enwei.moneymanager.net.GroqAi.AiTone.GENTLE }.label) {
                     ask(
                         "AI 語氣", com.enwei.moneymanager.net.GroqAi.AiTone.entries.mapIndexed { i, t -> i to "${t.label}：${t.desc}" }, s.aiTone,
                         "收支檢討、投資報告與股票助理的口吻；下次產生的內容開始套用。",
                     ) { v -> repo.settings.update { it.copy(aiTone = v) } }
                 }
-                ConfigRow("背景 AI 只用 Wi-Fi", onOff(s.aiWifiOnly)) {
+                cfg("背景 AI 只用 Wi-Fi", onOff(s.aiWifiOnly)) {
                     askOnOff("背景 AI 只用 Wi-Fi", s.aiWifiOnly, "開啟後，新聞標註、重點整理與每日報告只在 Wi-Fi 等不計量網路時於背景執行；手動按「立即更新」與對話不受影響。") { v ->
                         repo.settings.update { it.copy(aiWifiOnly = v) }
                         com.enwei.moneymanager.work.NewsWorker.schedule(ctx, replace = true)
@@ -241,27 +310,27 @@ fun ConfigScreen(nav: NavController) {
                 }
 
                 if (s.featureStocks) {
-                SectionHeader("股票")
-                ConfigRow("手續費與月退") { nav.navigate("stockfees") }
-                ConfigRow("觀察清單", "${s.watchlist.size} 檔") { nav.navigate("invest") }
+                sec("股票")
+                cfg("手續費與月退") { nav.navigate("stockfees") }
+                cfg("觀察清單", "${s.watchlist.size} 檔") { nav.navigate("invest") }
                 }
 
                 // 通知：App 會發的每一種通知集中在這裡開關（股價提醒也搬到這裡）
-                SectionHeader("通知")
+                sec("通知")
                 run {
                     val kinds = com.enwei.moneymanager.notify.NoticeKind.entries.filter { it.available(s) }
                     val on = kinds.count { it.enabled(s) }
-                    ConfigRow("通知類別", "$on / ${kinds.size}") { nav.navigate("notices") }
+                    cfg("通知類別", "$on / ${kinds.size}") { nav.navigate("notices") }
                 }
 
-                SectionHeader("安全")
-                ConfigRow("密碼鎖", onOff(s.passcodeOn)) { nav.navigate("passcode") }
-                SectionHeader("資料")
-                ConfigRow("備份與還原（含 .mmbak）") { nav.navigate("backup") }
+                sec("安全")
+                cfg("密碼鎖", onOff(s.passcodeOn)) { nav.navigate("passcode") }
+                sec("資料")
+                cfg("備份與還原（含 .mmbak）") { nav.navigate("backup") }
 
-                SectionHeader("關於")
-                ConfigRow("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.0.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
-                ConfigRow("開啟時檢查新版本", onOff(s.notifyUpdates)) {
+                sec("關於")
+                cfg("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.1.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
+                cfg("開啟時檢查新版本", onOff(s.notifyUpdates)) {
                     askOnOff("開啟時檢查新版本", s.notifyUpdates, "開啟 App 時有新版本會跳出更新視窗（可略過這一版），背景也會通知。") { v ->
                         repo.settings.update { it.copy(notifyUpdates = v, updateSkipped = 0) }
                     }

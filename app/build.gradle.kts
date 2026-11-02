@@ -18,7 +18,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = buildNumber
-        versionName = "2.0.$buildNumber"
+        versionName = "2.1.$buildNumber"
         buildConfigField("String", "UPDATE_REPO", "\"Enwei0715/Money_Manager\"")
     }
 

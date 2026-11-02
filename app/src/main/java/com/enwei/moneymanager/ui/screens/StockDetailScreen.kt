@@ -157,6 +157,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
         }
     }
     val watched = symbol in settings.watchlist
+    var dtab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
         BackTopBar("$symbol ${name.orEmpty()}", { nav.popBackStack() }) {
             // ☆ 加入／移出觀察清單（沒持有也能在股票頁看報價）
@@ -204,6 +205,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         )
                     }
                 }
+                // 分段：走勢（K 線、強弱）／分析（營收、趨勢推估、持股紀律）／資訊（除權息、提醒、公司、新聞），每段一個畫面看得完
+                com.enwei.moneymanager.ui.components.SubTabs(listOf("走勢", "分析", "資訊"), dtab) { dtab = it }
                 // K 線
                 LaunchedEffect(hourly, held.isNotEmpty(), settings.investPlan.disciplineOn, settings.investPlan.guardOn) {
                     if ((hourly || held.isNotEmpty() && settings.investPlan.disciplineOn && settings.investPlan.guardOn) && hourBars == null) {
@@ -224,7 +227,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     com.enwei.moneymanager.core.TradeSignals.scan(b.open, b.high, b.low, b.close, b.volume, sigParams)
                 }
                 var showSignals by remember { mutableStateOf(true) }
-                Card(Modifier.fillMaxWidth()) {
+                if (dtab == 0) Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         // 第一列：日 K／60 分 K（分段按鈕）；第二列：顯示區間
                         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
@@ -393,7 +396,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                 }
                 // 強弱與階段
-                Card(Modifier.fillMaxWidth()) {
+                if (dtab == 0) Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("強弱", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         val stage = Technicals.stage(c)
@@ -413,9 +416,9 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         )
                     }
                 }
-                if (market == Market.TW) RevenueCard(symbol)
-                ProjectionCard(b)
-                if (held.isNotEmpty() && settings.investPlan.disciplineOn) Card(Modifier.fillMaxWidth()) {
+                if (dtab == 1 && market == Market.TW) RevenueCard(symbol)
+                if (dtab == 1) ProjectionCard(b)
+                if (dtab == 1 && held.isNotEmpty() && settings.investPlan.disciplineOn) Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         val shares = held.sumOf { it.shares }
                         val avg = held.sumOf { it.avgCost * it.shares } / shares
@@ -453,7 +456,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 }
             }
             // 除權息
-            if (divs.isNotEmpty() && b != null) Card(Modifier.fillMaxWidth()) {
+            if (dtab == 2 && divs.isNotEmpty() && b != null) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("除權息", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     val today = java.time.LocalDate.now().toEpochDay()
@@ -493,9 +496,9 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 }
             }
             // 價格提醒
-            if (b != null) PriceAlertCard(symbol, b.close.last(), held.isNotEmpty())
+            if (dtab == 2 && b != null) PriceAlertCard(symbol, b.close.last(), held.isNotEmpty())
             // 公司業務（AI 整理；設定裡關掉 AI 就不顯示）
-            if (settings.aiEnabled) Card(Modifier.fillMaxWidth()) {
+            if (dtab == 2 && settings.aiEnabled) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("這家公司做什麼", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -528,7 +531,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 }
             }
             // 相關新聞
-            if (news.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+            if (dtab == 2 && news.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     var allNews by remember { mutableStateOf(false) }
                     Text("相關新聞（${news.size}）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)

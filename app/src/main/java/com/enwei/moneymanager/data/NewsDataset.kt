@@ -140,12 +140,18 @@ data class ChatMsg(
     val basis: String = "",
 )
 
+/** 一段過去的對話（按「新對話」時把目前的對話收進這裡，可以再打開接著聊）。 */
+@Serializable
+data class ChatThread(val id: Long, val title: String, val msgs: List<ChatMsg>, val updated: Long = System.currentTimeMillis())
+
 @Serializable
 data class NewsStore(
     val items: List<NewsItem> = emptyList(),
     val lastCollect: Long = 0,
     val report: DailyReport? = null,
     val chat: List<ChatMsg> = emptyList(),
+    /** 過去的對話（最新的在前，最多 30 段） */
+    val chatThreads: List<ChatThread> = emptyList(),
     /** 代號 → 公司在做什麼（AI 說明，快取） */
     val business: Map<String, String> = emptyMap(),
     /** 新聞重點庫：「日期|題材」→ 重點（所有新聞都整理進來） */
@@ -245,6 +251,7 @@ class NewsDataset(context: Context) {
     private var savedBlocks: Map<String, NewsBlock> = emptyMap()
     private var savedInbox: List<NewsItem>? = null
     private var savedChat: List<ChatMsg>? = null
+    private var savedThreads: List<ChatThread>? = null
     private var savedGrid: NewsGrid? = null
 
     private val _grid = kotlinx.coroutines.flow.MutableStateFlow(GridProgress(0, 0, 0))
@@ -281,6 +288,8 @@ class NewsDataset(context: Context) {
             val g = readOr(File(dir, "grid.json"), NewsGrid.serializer(), NewsGrid())
             val inbox = readOr(File(dir, "inbox.json"), Inbox.serializer(), Inbox()).items
             val chat = readOr(File(dir, "chat.json"), kotlinx.serialization.builtins.ListSerializer(ChatMsg.serializer()), emptyList())
+            val threads = readOr(File(dir, "chats.json"), kotlinx.serialization.builtins.ListSerializer(ChatThread.serializer()), emptyList())
+            savedThreads = threads
             // 依實際的區塊檔案讀（不只看索引），寫到一半中斷時也不會漏掉已寫好的區塊
             val blocks = (blockDir.listFiles { f -> f.isFile && f.name.endsWith(".json") } ?: emptyArray())
                 .mapNotNull { f -> readOr(f, NewsBlock.serializer().nullable, null) }
@@ -293,6 +302,7 @@ class NewsDataset(context: Context) {
                 lastCollect = g.lastCollect,
                 report = g.report,
                 chat = chat,
+                chatThreads = threads,
                 business = g.business,
                 digests = blocks.mapNotNull { b -> b.article?.let { b.key to it } }.toMap(),
                 history = g.history,
@@ -365,6 +375,8 @@ class NewsDataset(context: Context) {
         for (k in savedBlocks.keys - byKey.keys) File(blockDir, fileOf(k)).delete()
         val inbox = s.items.filter { !it.tagged }
         if (savedInbox != inbox) writeAtomic(File(dir, "inbox.json"), json.encodeToString(Inbox.serializer(), Inbox(items = inbox)))
+        if (savedThreads != s.chatThreads) writeAtomic(File(dir, "chats.json"),
+            json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ChatThread.serializer()), s.chatThreads))
         if (savedChat != s.chat) writeAtomic(File(dir, "chat.json"), json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ChatMsg.serializer()), s.chat))
         val prevInfo = savedGrid?.blocks.orEmpty().associateBy { it.key }
         val grid = NewsGrid(
@@ -380,6 +392,7 @@ class NewsDataset(context: Context) {
         savedBlocks = byKey
         savedInbox = inbox
         savedChat = s.chat
+        savedThreads = s.chatThreads
         savedGrid = grid
     }
 
@@ -399,7 +412,7 @@ class NewsDataset(context: Context) {
                 java.nio.file.Files.deleteIfExists(File(legacy.parentFile, legacy.name + ".tmp").toPath())
                 java.nio.file.Files.deleteIfExists(legacy.toPath())
             }
-            savedBlocks = emptyMap(); savedInbox = null; savedChat = null; savedGrid = null
+            savedBlocks = emptyMap(); savedInbox = null; savedChat = null; savedThreads = null; savedGrid = null
             cache = NewsStore()
             _flow.value = cache
             _grid.value = GridProgress(0, 0, 0)
@@ -795,4 +808,22 @@ class NewsDataset(context: Context) {
         contentFingerprint("", items.sortedBy { it.id }.joinToString("\n") {
             "${it.id}:${it.title}:${it.contentLevel}:${it.content}:${it.duplicateCount}"
         })
+}
+
+
+/** 對話標題：第一個問題的前 18 個字。 */
+fun chatTitle(msgs: List<ChatMsg>): String =
+    msgs.firstOrNull { it.fromUser }?.text?.replace("\n", " ")?.trim()?.let { if (it.length > 18) it.take(18) + "…" else it } ?: "對話"
+
+/** 開新對話：目前的對話（有內容時）收進過去的對話。 */
+fun NewsStore.newChat(): NewsStore =
+    if (chat.isEmpty()) this
+    else copy(chat = emptyList(), chatThreads = (listOf(ChatThread(System.currentTimeMillis(), chatTitle(chat), chat)) + chatThreads).take(30))
+
+/** 打開過去的一段對話：目前的對話先收起來，再把選的那段變成目前的對話。 */
+fun NewsStore.openChat(id: Long): NewsStore {
+    val t = chatThreads.firstOrNull { it.id == id } ?: return this
+    val rest = chatThreads.filter { it.id != id }
+    val parked = if (chat.isEmpty()) rest else listOf(ChatThread(System.currentTimeMillis(), chatTitle(chat), chat)) + rest
+    return copy(chat = t.msgs, chatThreads = parked.take(30))
 }

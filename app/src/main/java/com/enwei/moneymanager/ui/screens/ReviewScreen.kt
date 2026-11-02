@@ -106,6 +106,7 @@ fun ReviewContent(
         }
     } ?: ownOffset
     var data by remember { mutableStateOf<ReviewData?>(null) }
+    var reviewTab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
     LaunchedEffect(span, offset, all) { data = repo.spendingReview(span, offset) }
     val base = lk.base
     fun m(v: Long) = Money.withSymbol(v, base)
@@ -127,9 +128,13 @@ fun ReviewContent(
             val d = data ?: return@Column
             // 交易頁上方已顯示期間，避免重複顯示年月或季度。
             if (period == null) Text(d.title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            // 分段：每段一個畫面看得完（總覽含目標與最大幾筆；結構、習慣、AI 各自一段）
+            val tabNames = listOfNotNull("總覽", "支出結構", "消費習慣", if (settings.aiEnabled) "AI 檢討" else null)
+            val rt = reviewTab.coerceAtMost(tabNames.size - 1)
+            com.enwei.moneymanager.ui.components.SubTabs(tabNames, rt) { reviewTab = it }
 
             // ① 總覽
-            Card(Modifier.fillMaxWidth()) {
+            if (rt == 0) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val netColor = if (d.net >= 0) IncomeColor else ExpenseColor
@@ -177,7 +182,7 @@ fun ReviewContent(
 
             // 預算（每月）：原本在「總計」分頁，移到這裡和檢討一起看
             // 目標與預算：每月的支出上限、各分類上限與儲蓄率目標（可在「預算設定」修改，也可以採用 AI 建議）
-            if (span == ReviewSpan.MONTH && (settings.budgets.isNotEmpty() || settings.savingsGoal != null)) Card(Modifier.fillMaxWidth()) {
+            if (rt == 0 && span == ReviewSpan.MONTH && (settings.budgets.isNotEmpty() || settings.savingsGoal != null)) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("這個月的目標", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -214,7 +219,8 @@ fun ReviewContent(
             }
 
             // ② 支出結構：一條比例條＋兩欄圖例（AI 建議留意的分類以 ● 標出）
-            if (d.categories.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+            if (rt == 1 && d.categories.isEmpty()) Text("這期沒有支出", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (rt == 1 && d.categories.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     val focus = settings.reviews[d.key]?.focus.orEmpty()
                     StructureCard(d, ::m, focus)
@@ -223,7 +229,8 @@ fun ReviewContent(
 
             // ③ 重點觀察（規則）
             // ③ 消費習慣：全部用圖表（每日支出、時段、平日／週末、常去的商家）
-            if (d.expenses.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+            if (rt == 2 && d.expenses.isEmpty()) Text("這期沒有支出", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (rt == 2 && d.expenses.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("消費習慣", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     HabitCharts(d, ::m, lk)
@@ -231,7 +238,7 @@ fun ReviewContent(
             }
 
             // ④ AI 檢討（固定格式）：設定裡關掉 AI 就不顯示
-            if (settings.aiEnabled) Card(Modifier.fillMaxWidth()) {
+            if (rt == 3 && settings.aiEnabled) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("AI 檢討與建議", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -260,10 +267,10 @@ fun ReviewContent(
             }
 
             // ⑤ 最大幾筆
-            if (d.top.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+            if (rt == 0 && d.top.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 12.dp)) {
-                    Text("最大幾筆支出", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp))
-                    d.top.take(5).forEach { t -> MmTxnRow(t, lk) { nav.navigate("txn/${t.id}") } }
+                    Text("最大三筆支出", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp))
+                    d.top.take(3).forEach { t -> MmTxnRow(t, lk) { nav.navigate("txn/${t.id}") } }
                 }
             }
             Spacer(Modifier.height(24.dp))

@@ -325,7 +325,9 @@ private fun AppScaffold(nav: NavHostController) {
                     runCatching { java.time.YearMonth.parse(e.arguments!!.getString("month")) }.getOrNull())
             }
             composable("budget") { BudgetScreen(nav) }
-            composable("config") { ConfigScreen(nav) }
+            composable("config?g={g}", arguments = listOf(navArgument("g") { type = NavType.StringType; defaultValue = "" })) { e ->
+                ConfigScreen(nav, e.arguments?.getString("g")?.takeIf { it.isNotBlank() })
+            }
             composable("tool-order") { ToolSettingsScreen(nav) }
             composable("ai-hub") { AiHubScreen(nav) }
             // 股票搜尋：名稱或代號

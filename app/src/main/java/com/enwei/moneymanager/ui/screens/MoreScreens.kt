@@ -258,7 +258,7 @@ private fun rememberToolSummaries(): Map<String, String> {
         settings.budgets[0L]?.let { b -> put("budget", "本月已用 ${if (b > 0) monthExpense * 100 / b else 0}%（${Money.withSymbol(monthExpense, lk.base)} / ${Money.withSymbol(b, lk.base)}）") }
         put("totalstats", "淨資產 ${Money.withSymbol(balances.filter { it.account.includeInNetWorth && !it.account.archived }.sumOf { lk.fx.convert(it.balance, it.account.currency) }, lk.base)}")
         put("notif", "監聽 ${settings.notifPackages.size} 個 App")
-        put("settings", if (settings.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.0.${settings.updateAvailable}" else "目前 ${BuildConfig.VERSION_NAME}")
+        put("settings", if (settings.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.1.${settings.updateAvailable}" else "目前 ${BuildConfig.VERSION_NAME}")
     }
 }
 

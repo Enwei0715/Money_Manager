@@ -55,7 +55,7 @@ object FullBackupIO {
             rules = db.rules().all(),
             notificationLog = db.notificationLog().all(),
             settings = repo.settings.exportRaw(),
-            advisor = com.enwei.moneymanager.MoneyApp.news.load().let { NewsStore(report = it.report, history = it.history, chat = it.chat, business = it.business, historyKeepDays = it.historyKeepDays) },
+            advisor = com.enwei.moneymanager.MoneyApp.news.load().let { NewsStore(report = it.report, history = it.history, chat = it.chat, chatThreads = it.chatThreads, business = it.business, historyKeepDays = it.historyKeepDays) },
         )
         GZIPOutputStream(out).bufferedWriter().use { it.write(json.encodeToString(FullBackup.serializer(), b)) }
     }
@@ -85,7 +85,7 @@ object FullBackupIO {
         repo.settings.importRaw(b.settings)
         b.advisor?.let { a ->
             com.enwei.moneymanager.MoneyApp.news.update {
-                it.copy(report = a.report, history = a.history, chat = a.chat, business = it.business + a.business, historyKeepDays = a.historyKeepDays)
+                it.copy(report = a.report, history = a.history, chat = a.chat, chatThreads = a.chatThreads.ifEmpty { it.chatThreads }, business = it.business + a.business, historyKeepDays = a.historyKeepDays)
             }
         }
     }

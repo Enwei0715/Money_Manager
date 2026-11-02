@@ -74,6 +74,8 @@ import com.enwei.moneymanager.data.DailyReport
 import com.enwei.moneymanager.data.InvestPlanSettings
 import com.enwei.moneymanager.data.NewsStore
 import com.enwei.moneymanager.data.prunedHistory
+import com.enwei.moneymanager.data.newChat
+import com.enwei.moneymanager.data.openChat
 import com.enwei.moneymanager.data.StockPick
 import com.enwei.moneymanager.data.advisorSnapshot
 import com.enwei.moneymanager.data.askAdvisor
@@ -530,6 +532,8 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
     var confirmClear by remember { mutableStateOf(false) }
+    var showThreads by remember { mutableStateOf(false) }
+    var moreMenu by remember { mutableStateOf(false) }
     // 對話在背景執行：離開畫面也會繼續，回來時看得到回覆；不在畫面上時完成會通知
     val job by com.enwei.moneymanager.work.ChatJob.state.collectAsStateWithLifecycle()
     val chatWork = com.enwei.moneymanager.ui.components.rememberAiWorkStatus("advisor-chat")
@@ -566,19 +570,85 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     }
     val canDown by remember { androidx.compose.runtime.derivedStateOf { list.canScrollForward } }
     Column(Modifier.fillMaxSize().imePadding()) {
-        // 固定在上方的小工具列：對話則數與清除
-        if (store.chat.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("長按訊息可複製或刪除", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            TextButton(enabled = !busy, onClick = { confirmClear = true }) { Text("清除對話") }
+        // 上方工具列：目前對話的標題、過去的對話、新對話、更多（分享、清除）
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (store.chat.isEmpty()) "新對話" else com.enwei.moneymanager.data.chatTitle(store.chat), fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            androidx.compose.material3.IconButton(onClick = { showThreads = true }) {
+                androidx.compose.material3.BadgedBox(badge = {
+                    if (store.chatThreads.isNotEmpty()) androidx.compose.material3.Badge { Text("${store.chatThreads.size}", fontSize = 9.sp) }
+                }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.History, "過去的對話") }
+            }
+            androidx.compose.material3.IconButton(enabled = !busy && store.chat.isNotEmpty(), onClick = {
+                com.enwei.moneymanager.work.ChatJob.seenLast = 0
+                com.enwei.moneymanager.work.ChatJob.state.value = null
+                scope.launch { MoneyApp.news.update { it.newChat() }; list.scrollToItem(0) }
+            }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.AddComment, "新對話") }
+            Box {
+                androidx.compose.material3.IconButton(enabled = store.chat.isNotEmpty(), onClick = { moreMenu = true }) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.MoreVert, "更多")
+                }
+                androidx.compose.material3.DropdownMenu(moreMenu, { moreMenu = false }) {
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("分享這段對話") }, onClick = {
+                        moreMenu = false
+                        val txt = store.chat.joinToString("\n\n") { m ->
+                            (if (m.fromUser) "我：" else "助理：") + com.enwei.moneymanager.data.stripCites(m.text) +
+                                m.points.joinToString("") { "\n・" + com.enwei.moneymanager.data.stripCites(it) }
+                        } + "\n\nAI 分析僅供參考，不是投資建議。"
+                        ctx.startActivity(android.content.Intent.createChooser(
+                            android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, txt), null))
+                    })
+                    androidx.compose.material3.DropdownMenuItem(enabled = !busy, text = { Text("清除這段對話", color = MaterialTheme.colorScheme.error) },
+                        onClick = { moreMenu = false; confirmClear = true })
+                }
+            }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 空白對話：歡迎卡片＋四個常見問題（點一下就問）
                 if (store.chat.isEmpty()) item {
-                    Text("問今天該買什麼、持股怎麼處理、資金怎麼分配，或點下方的常見問題。",
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                    Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = androidx.compose.foundation.shape.CircleShape) {
+                            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.AutoAwesome, null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(14.dp).size(28.dp))
+                        }
+                        Text("想問什麼？", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        Text("我會先查你的持股、資金與近期新聞再回答", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        listOf(
+                            "今天該買什麼？" to "依大盤階段與新聞挑選",
+                            "我的持股怎麼處理？" to "對照你的紀律逐檔說明",
+                            "現在適合加碼嗎？" to "看資金配置與大盤位置",
+                            "最近有什麼重大新聞？" to "整理近三天的重點",
+                        ).chunked(2).forEach { row ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                row.forEach { (q, hint) ->
+                                    androidx.compose.material3.Card(Modifier.weight(1f).height(84.dp).clickable(enabled = !busy && GroqAi.enabled) { send(q) }) {
+                                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Text(q, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                            Text(hint, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 } else item { Spacer(Modifier.height(4.dp)) }
+                val lastAi = store.chat.lastOrNull { !it.fromUser }
                 items(store.chat, key = { "c${it.time}${it.fromUser}" }) { m ->
-                    Bubble(m, newsById, nav) { scope.launch { MoneyApp.news.update { st -> st.copy(chat = st.chat.filterNot { it.time == m.time && it.fromUser == m.fromUser }) } } }
+                    Bubble(
+                        m, newsById, nav,
+                        onDelete = { scope.launch { MoneyApp.news.update { st -> st.copy(chat = st.chat.filterNot { it.time == m.time && it.fromUser == m.fromUser }) } } },
+                        onEdit = if (m.fromUser) ({ input = m.text }) else null,
+                        // 最後一則回覆可以重新產生：拿掉這則回覆，用前一個問題再問一次
+                        onRegenerate = if (m === lastAi && !busy && GroqAi.enabled) ({
+                            val q = store.chat.subList(0, store.chat.indexOf(m)).lastOrNull { it.fromUser }?.text
+                            if (q != null) scope.launch {
+                                MoneyApp.news.update { st -> st.copy(chat = st.chat.filterNot { it.time == m.time && !it.fromUser }) }
+                                com.enwei.moneymanager.work.ChatJob.ask(ctx, q)
+                            }
+                        }) else null,
+                    )
                 }
                 if (busy) item {
                     // 對話生成流程：持股與大盤 → 搜尋新聞 → 讀取全文 → AI 回答 → 確認代號
@@ -613,25 +683,30 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
             ) { androidx.compose.material3.Icon(Icons.Filled.KeyboardArrowDown, "到最新") }
         }
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // 常見問題：對話開始後、輸入框是空的時候才顯示
+        if (store.chat.isNotEmpty() && input.isBlank() && !busy) Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("今天該買什麼？", "我的持股怎麼處理？", "現在適合加碼嗎？", "最近有什麼重大新聞？", "短線資金還能用多少？").forEach { q ->
                 FilterChip(false, { send(q) }, label = { Text(q, fontSize = 12.sp) }, enabled = !busy && GroqAi.enabled)
             }
         }
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(input, { input = it }, placeholder = { Text("問股票助理…") }, modifier = Modifier.weight(1f), maxLines = 3)
+            OutlinedTextField(input, { input = it }, placeholder = { Text("問股票助理…") }, modifier = Modifier.weight(1f), maxLines = 4,
+                shape = RoundedCornerShape(24.dp))
             // AI 回覆中按鈕變成「停止」
-            if (busy) OutlinedButton(
+            if (busy) androidx.compose.material3.FilledTonalIconButton(
                 onClick = { com.enwei.moneymanager.work.ChatJob.stop(ctx, job?.question) },
-                modifier = Modifier.padding(start = 6.dp),
-            ) { Text("停止") }
-            else Button(enabled = input.isNotBlank() && GroqAi.enabled, onClick = { send(input) }, modifier = Modifier.padding(start = 6.dp)) { Text("送出") }
+                modifier = Modifier.padding(start = 6.dp).size(48.dp),
+            ) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Stop, "停止") }
+            else androidx.compose.material3.FilledIconButton(enabled = input.isNotBlank() && GroqAi.enabled, onClick = { send(input) },
+                modifier = Modifier.padding(start = 6.dp).size(48.dp)) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send, "送出")
+            }
         }
     }
     if (confirmClear) AlertDialog(
         onDismissRequest = { confirmClear = false },
-        title = { Text("清除對話？") },
-        text = { Text("刪除全部 ${store.chat.size} 則對話。") },
+        title = { Text("清除這段對話？") },
+        text = { Text("刪除這段對話的 ${store.chat.size} 則訊息（過去的對話不受影響）。") },
         confirmButton = {
             TextButton(onClick = {
                 confirmClear = false
@@ -642,11 +717,50 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } },
     )
+    if (showThreads) ChatThreadsDialog(store, busy, onOpen = { id ->
+        showThreads = false
+        com.enwei.moneymanager.work.ChatJob.seenLast = -1
+        com.enwei.moneymanager.work.ChatJob.state.value = null
+        scope.launch { MoneyApp.news.update { it.openChat(id) } }
+    }) { showThreads = false }
+}
+
+/** 過去的對話：點一段接著聊，可逐段刪除。 */
+@Composable
+private fun ChatThreadsDialog(store: NewsStore, busy: Boolean, onOpen: (Long) -> Unit, onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val fmt = java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("過去的對話") },
+        text = {
+            if (store.chatThreads.isEmpty()) Text("還沒有過去的對話。按「新對話」時，目前的對話會收到這裡。", fontSize = 13.sp)
+            else Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                store.chatThreads.forEach { t ->
+                    Row(Modifier.fillMaxWidth().clickable(enabled = !busy) { onOpen(t.id) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(t.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text("${fmt.format(java.util.Date(t.updated))} · ${t.msgs.size} 則", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        androidx.compose.material3.IconButton(onClick = {
+                            scope.launch { MoneyApp.news.update { st -> st.copy(chatThreads = st.chatThreads.filter { it.id != t.id }) } }
+                        }) { androidx.compose.material3.Icon(Icons.Filled.Delete, "刪除", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
+    )
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun Bubble(m: ChatMsg, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>, nav: NavController, onDelete: () -> Unit) {
+private fun Bubble(
+    m: ChatMsg, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>, nav: NavController,
+    onDelete: () -> Unit, onEdit: (() -> Unit)? = null, onRegenerate: (() -> Unit)? = null,
+) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     var menu by remember { mutableStateOf(false) }
     val clip = androidx.compose.ui.platform.LocalClipboardManager.current
     val text = com.enwei.moneymanager.data.stripCites(m.text)
@@ -672,6 +786,7 @@ private fun Bubble(m: ChatMsg, newsById: Map<String, com.enwei.moneymanager.data
             // 長按：複製、刪除這則
             androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
                 androidx.compose.material3.DropdownMenuItem(text = { Text("複製") }, onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(text)); menu = false })
+                if (onEdit != null) androidx.compose.material3.DropdownMenuItem(text = { Text("編輯後重問") }, onClick = { menu = false; onEdit() })
                 androidx.compose.material3.DropdownMenuItem(text = { Text("刪除", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; onDelete() })
             }
         }
@@ -685,6 +800,24 @@ private fun Bubble(m: ChatMsg, newsById: Map<String, com.enwei.moneymanager.data
         // 引用的新聞：編號和回覆裡的 [1][2] 對應
         val ns = m.newsIds.mapIndexedNotNull { i, id -> newsById[id]?.let { i + 1 to it } }
         if (ns.isNotEmpty()) Column(Modifier.padding(top = 4.dp)) { ns.forEach { (k, n) -> NewsLine(n, num = k) } }
+        // AI 回覆下方的小動作：複製、分享、重新產生（最後一則）
+        if (!m.fromUser) Row(verticalAlignment = Alignment.CenterVertically) {
+            val full = text + m.points.joinToString("") { "\n・" + com.enwei.moneymanager.data.stripCites(it) }
+            androidx.compose.material3.IconButton(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(full)) }, modifier = Modifier.size(36.dp)) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.ContentCopy, "複製", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            androidx.compose.material3.IconButton(onClick = {
+                ctx.startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(android.content.Intent.EXTRA_TEXT, full + "\n\nAI 分析僅供參考，不是投資建議。"), null))
+            }, modifier = Modifier.size(36.dp)) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Share, "分享", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (onRegenerate != null) androidx.compose.material3.IconButton(onClick = onRegenerate, modifier = Modifier.size(36.dp)) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Refresh, "重新產生", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(m.time)), fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+        }
     }
 }
 
@@ -1175,9 +1308,13 @@ private fun PlanTab(nav: NavController) {
     var editGuard by remember { mutableStateOf<com.enwei.moneymanager.data.HoldingPlan?>(null) }
     LaunchedEffect(holdings, settings.investPlan.copy(guards = emptyMap()), settings.investPlan.guards.mapValues { it.value.copy(peak = null) }, settings.stockStyle) { snap = runCatching { repo.advisorSnapshot(fetch = true) }.getOrNull() }
     fun m(v: Long) = Money.withSymbol(v, "TWD")
+    // 分成三段，每段一個畫面看得完：資金（大盤＋配置）、持股紀律、我的紀律（參數＋原則）
+    var sub by rememberSaveable { mutableStateOf(0) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        com.enwei.moneymanager.ui.components.SubTabs(listOf("資金", "持股", "我的紀律"), sub) { sub = it }
         val s = snap
-        if (s == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (s == null && sub < 2) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (sub == 0) {
         // ① 大盤：加權指數 K 線＋階段
         if (s != null) Section("大盤") {
             val idx = s.index
@@ -1213,8 +1350,10 @@ private fun PlanTab(nav: NavController) {
             if (a.reserveShort > 0) Text("⚠ 可動用現金低於預留金額 ${m(a.reserveShort)}", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             if (a.shortOver > 0) Text("⚠ 短線超出計畫 ${m(a.shortOver)}，新的短線單先暫停", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         }
+        }
+        if (sub == 1 && s != null && s.holdings.isEmpty()) Text("目前沒有持股。", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         // ③ 持股紀律＋AI：每檔一張小卡（價位圖、紀律動作、今日報告的 AI 動作）
-        if (s != null && s.holdings.isNotEmpty()) Section("持股紀律與 AI 建議") {
+        if (sub == 1 && s != null && s.holdings.isNotEmpty()) Section("持股紀律與 AI 建議") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("依你設定的門檻提示停損／停利", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                 Switch(settings.investPlan.disciplineOn, { on -> repo.settings.update { it.copy(investPlan = it.investPlan.copy(disciplineOn = on)) } })
@@ -1229,7 +1368,7 @@ private fun PlanTab(nav: NavController) {
             }
         }
         // 紀律參數：和投資原則一樣條列，點「調整」修改數字
-        Section("我的紀律參數", action = "調整" to { editPlan = true }, collapsible = true, initiallyOpen = false) {
+        if (sub == 2) Section("我的紀律參數", action = "調整" to { editPlan = true }) {
             val p = settings.investPlan
             val lines = if (!p.disciplineOn) listOf("持股紀律建議目前關閉（按「調整」開啟）")
             else if (p.guardOn) listOf(
@@ -1246,7 +1385,7 @@ private fun PlanTab(nav: NavController) {
             )
             lines.forEachIndexed { i, l -> Text("${i + 1}. $l", fontSize = 14.sp) }
         }
-        Section("我的投資原則（${settings.investPlan.rules.size} 條）", action = "編輯" to { editRules = true }, collapsible = true, initiallyOpen = false) {
+        if (sub == 2) Section("我的投資原則（${settings.investPlan.rules.size} 條）", action = "編輯" to { editRules = true }) {
             if (settings.investPlan.rules.isEmpty()) Text("尚未設定投資原則。", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             settings.investPlan.rules.forEachIndexed { i, r -> Text("${i + 1}. $r", fontSize = 14.sp) }
         }
