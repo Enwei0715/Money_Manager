@@ -40,6 +40,24 @@ object GroqAi {
 
     enum class Provider(val label: String) { GROQ("Groq"), GEMINI("Gemini"), NVIDIA("NVIDIA"), OPENROUTER("OpenRouter") }
 
+    /** 每家平台最近一次成功與失敗（AI 設定頁顯示，看得出哪家沒在運作） */
+    object ProviderLog {
+        data class Entry(val okAt: Long, val okModel: String, val errAt: Long, val err: String, val calls: Int)
+        private val prefs by lazy { MoneyApp.instance.getSharedPreferences("ai_provider_log", android.content.Context.MODE_PRIVATE) }
+        val flow = kotlinx.coroutines.flow.MutableStateFlow(0)
+        fun get(p: Provider) = Entry(
+            prefs.getLong("${p.name}.okAt", 0), prefs.getString("${p.name}.okModel", "").orEmpty(),
+            prefs.getLong("${p.name}.errAt", 0), prefs.getString("${p.name}.err", "").orEmpty(), prefs.getInt("${p.name}.calls", 0),
+        )
+        fun record(p: Provider, model: String, error: String?) {
+            val e = prefs.edit().putInt("${p.name}.calls", prefs.getInt("${p.name}.calls", 0) + 1)
+            if (error == null) e.putLong("${p.name}.okAt", System.currentTimeMillis()).putString("${p.name}.okModel", model.removePrefix(NV))
+            else e.putLong("${p.name}.errAt", System.currentTimeMillis()).putString("${p.name}.err", error.take(160))
+            e.apply()
+            flow.value++
+        }
+    }
+
     /** NVIDIA 的模型 id 和 Groq 可能相同（例如 openai/gpt-oss-120b）：加上前綴，額度與暫停才不會混在一起 */
     const val NV = "nv:"
 
@@ -188,6 +206,7 @@ object GroqAi {
                 Provider.NVIDIA -> callCompat(Provider.NVIDIA, s.nvidiaKey.trim(), r.model.removePrefix(NV), system, user, maxOf(1024, maxTokens * 3).coerceAtMost(8192),
                     timeoutSec = if (r.big) 150 else 75)
             }
+            ProviderLog.record(r.provider, r.model, if (out != null) null else lastError ?: "沒有回應")
             if (out != null) return@withContext out
             // 額度用完或沒回應：這個模型先暫停，之後的呼叫直接用下一個
             val err = lastError.orEmpty()

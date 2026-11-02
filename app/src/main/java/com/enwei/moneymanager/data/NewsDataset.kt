@@ -624,12 +624,13 @@ class NewsDataset(context: Context) {
             for ((pi, part) in parts.withIndex()) {
                 calls++
                 var result = GroqAi.digestTheme(k.second, k.first, part)
-                if (!covers(result, part) && big) {
+                // 漏掉一半以上才拆小重送；少數漏掉的直接用標題補成重點
+                if (result != null && coverage(result, part) < 0.5 && big) {
                     val retryParts = chunkNews(part, 2_500)
                     if (calls + retryParts.size > maxCalls) { ok = false; break }
                     val retried = ArrayList<DigestPoint>()
                     for (retryPart in retryParts) {
-                        val retryResult = GroqAi.digestTheme(k.second, k.first, retryPart)
+                        val retryResult = GroqAi.digestTheme(k.second, k.first, retryPart)?.let { repair(it, retryPart) }
                         calls++
                         if (!covers(retryResult, retryPart)) { ok = false; break }
                         retried += retryResult.orEmpty()
@@ -637,6 +638,7 @@ class NewsDataset(context: Context) {
                     if (!ok) break
                     result = mergePoints(retried)
                 }
+                result = result?.let { repair(it, part) }
                 if (!covers(result, part)) { ok = false; break }
                 got += result.orEmpty()
                 if (pi < parts.lastIndex) delay(if (big) 5_000 else 12_000)
@@ -782,6 +784,28 @@ class NewsDataset(context: Context) {
         }
         if (chunk.isNotEmpty()) chunks += chunk
         return chunks
+    }
+
+    /** AI 歸類到的新聞比例（重複歸類只算一次） */
+    private fun coverage(points: List<DigestPoint>, items: List<NewsItem>): Double {
+        val ids = items.map { it.id }.toSet()
+        return points.flatMap { it.sourceIds }.toSet().count { it in ids }.toDouble() / ids.size.coerceAtLeast(1)
+    }
+
+    /**
+     * 修正 AI 的歸類：同一則被放進多個重點時只留第一個、拿掉不在這批的編號與空的重點，
+     * 漏掉的新聞用它的摘要或標題自成一點，確保每一則都在重點裡、整理一定有進展。
+     */
+    private fun repair(points: List<DigestPoint>, items: List<NewsItem>): List<DigestPoint> {
+        val ids = items.map { it.id }.toSet()
+        val seen = HashSet<String>()
+        val fixed = points.mapNotNull { p ->
+            val src = p.sourceIds.filter { it in ids && seen.add(it) }
+            if (src.isEmpty()) null else p.copy(sourceIds = src, count = src.size)
+        }
+        val missing = items.filter { it.id !in seen }
+            .map { DigestPoint(it.note.ifBlank { it.title }.take(80), it.symbols, it.sentiment, it.duplicateCount, listOf(it.id)) }
+        return fixed + missing
     }
 
     private fun covers(points: List<DigestPoint>?, items: List<NewsItem>): Boolean {

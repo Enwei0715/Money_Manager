@@ -154,6 +154,14 @@ private fun ProviderCard(
                 }) { Text(if (testing) "測試中…" else "測試連線") }
             }
             result?.let { Text(it, fontSize = 13.sp, color = if (it == "連線成功") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) }
+            // 這家平台最近的實際使用狀況（背景工作也會記錄）
+            val tick by GroqAi.ProviderLog.flow.collectAsStateWithLifecycle()
+            val log = remember(tick) { GroqAi.ProviderLog.get(p) }
+            val fmt = remember { java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN) }
+            if (log.okAt > 0 || log.errAt > 0) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (log.okAt > 0) Text("上次成功 ${fmt.format(java.util.Date(log.okAt))}・${log.okModel}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                if (log.errAt > log.okAt) Text("上次失敗 ${fmt.format(java.util.Date(log.errAt))}：${log.err}", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+            } else if (key.isNotBlank()) Text("還沒有使用紀錄", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
