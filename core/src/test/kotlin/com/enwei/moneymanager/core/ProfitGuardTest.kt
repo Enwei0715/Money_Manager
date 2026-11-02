@@ -34,12 +34,23 @@ class ProfitGuardTest {
     }
 
     @Test fun hourlyMaBreaks() {
-        val one = ProfitGuard.advise(GuardInput(10.0, 100.0, 1200.0, hourMa20 = 101.0, hourMa50 = 95.0))
+        // 跌破超過容許幅度（預設 1%）才算
+        val one = ProfitGuard.advise(GuardInput(10.0, 100.0, 1200.0, hourMa20 = 103.0, hourMa50 = 95.0))
         assertEquals(GuardAction.REDUCE_HALF, one.action)
         assertEquals(5.0, one.sellShares, 0.0)
-        val both = ProfitGuard.advise(GuardInput(10.0, 100.0, 1200.0, hourMa20 = 101.0, hourMa50 = 102.0), GuardRule(baseShares = 2.0))
+        val both = ProfitGuard.advise(GuardInput(10.0, 100.0, 1200.0, hourMa20 = 103.0, hourMa50 = 104.0), GuardRule(baseShares = 2.0))
         assertEquals(GuardAction.TO_BASE, both.action)
         assertEquals(8.0, both.sellShares, 0.0)
+    }
+
+    @Test fun smallDipWithinToleranceHolds() {
+        // 只比 20MA 低 1%（在容許範圍內）：不賣
+        val dip = ProfitGuard.advise(GuardInput(10.0, 100.0, 1200.0, hourMa20 = 101.0, hourMa50 = 95.0))
+        assertEquals(GuardAction.HOLD, dip.action)
+        // 容許幅度設 0：一跌破就減碼，賣出比例依設定
+        val strict = ProfitGuard.advise(GuardInput(10.0, 100.0, 1200.0, hourMa20 = 101.0, hourMa50 = 95.0), GuardRule(tolerancePct = 0.0, reducePct = 30.0))
+        assertEquals(GuardAction.REDUCE_HALF, strict.action)
+        assertEquals(3.0, strict.sellShares, 0.0)
     }
 
     @Test fun reduceTrigger() {
