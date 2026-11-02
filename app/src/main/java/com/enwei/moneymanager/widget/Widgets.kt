@@ -152,6 +152,14 @@ class StocksWidget : BaseWidget() {
     companion object {
         suspend fun build(context: Context): RemoteViews {
             val repo = MoneyApp.repo
+            // 設定裡關掉股票功能：小工具只顯示已關閉，點了開設定
+            if (!repo.settings.value.featureStocks) return RemoteViews(context.packageName, R.layout.widget_stocks).apply {
+                setTextViewText(R.id.w_title, tr("股票"))
+                setTextViewText(R.id.w_value, "—")
+                setTextViewText(R.id.w_sub, tr("股票功能已關閉（設定 → 功能開關）"))
+                Widgets.style(context, this, listOf(R.id.w_value), listOf(R.id.w_title, R.id.w_sub))
+                setOnClickPendingIntent(R.id.w_root, Widgets.open(context, 103, "config"))
+            }
             val fx = repo.fx.first()
             val base = repo.settings.value.baseCurrency
             val open = repo.holdings.first().filter { it.shares > 0.0001 }

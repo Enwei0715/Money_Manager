@@ -206,11 +206,8 @@ fun NavController.openRoute(r: String) {
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
-/** 工具頁：從分頁打開時保留底部分頁列（編輯交易等會丟資料的畫面不在這裡）。 */
-private val TOOL_PAGES = setOf(
-    "pending", "recurring", "fx", "backup", "ai-hub", "budget", "totalstats", "notif", "walletreader",
-    "stockfees", "settings", "config", "stocksearch", "ai", "categories", "accountgroups", "bookmarks",
-)
+/** 編輯畫面：不顯示底部分頁列（避免按到分頁丟掉正在輸入的內容） */
+private val EDITOR_PREFIXES = listOf("txn/", "account/", "trade/", "recurring/{", "search")
 
 private val tabs = listOf(
     Tab("txns", "交易", Icons.AutoMirrored.Outlined.MenuBook),
@@ -267,12 +264,14 @@ private fun AppScaffold(nav: NavHostController) {
     // 鍵盤打開時收起底部分頁列（否則輸入框和鍵盤之間會留一大塊空白）
     @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
     val imeOpen = WindowInsets.isImeVisible
-    // 從「工具」或分頁直接打開的工具頁（待確認、預算、備份…）也保留底部分頁列，分頁標示停在原本的分頁
-    val prevRoute = nav.previousBackStackEntry?.destination?.route
+    // 底部分頁列：除了編輯畫面（記帳、帳戶、交易、週期交易編輯、搜尋，按分頁會丟掉正在輸入的內容）以外，所有畫面都保留；
+    // 分頁標示停在最後一個進過的分頁
     val isTab = tabs.any { it.route == current }
-    val toolPage = current in TOOL_PAGES && tabs.any { it.route == prevRoute }
-    val showBar = !imeOpen && (isTab || toolPage) && (prevRoute == null || tabs.any { it.route == prevRoute })
-    val tabShown = if (isTab) current else prevRoute
+    val editing = current != null && EDITOR_PREFIXES.any { current.startsWith(it) }
+    var lastTab by remember { mutableStateOf("txns") }
+    androidx.compose.runtime.SideEffect { if (isTab && current != null && lastTab != current) lastTab = current }
+    val showBar = !imeOpen && !editing
+    val tabShown = if (isTab) current else lastTab
     val startScreen = remember { MoneyApp.repo.settings.value.startScreen }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

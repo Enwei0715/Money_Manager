@@ -182,7 +182,8 @@ fun ReviewContent(
                             }
                         }
                     }
-                    settings.budgets.entries.sortedBy { it.key }.forEach { (cid, budget) ->
+                    // 分類已刪除或封存的預算不顯示
+                    settings.budgets.entries.filter { (cid, _) -> cid == 0L || lk.category(cid)?.archived == false }.sortedBy { it.key }.forEach { (cid, budget) ->
                         val used = if (cid == 0L) d.expense else d.categories.find { it.id == cid }?.amount ?: 0L
                         BudgetBar(if (cid == 0L) "總預算" else lk.category(cid)?.name ?: "已刪除分類", used, budget)
                     }

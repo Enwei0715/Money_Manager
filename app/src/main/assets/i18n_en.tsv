@@ -2403,3 +2403,13 @@ AI 回答	AI answer
 可能的交易通知來源	Possible transaction sources
 忽略	Ignore
 請在下方填入至少一個金鑰，AI 才會開始運作。	Enter at least one key below to start using AI.
+AI 功能已關閉：今日報告、問 AI 與新聞整理已隱藏（可在設定 → 功能開關開啟）	AI is off: Today, Ask AI and News are hidden (turn on in Settings → Features)
+App 名稱也會跟著語言切換（帳理／Ledgerly）。	The app name also switches with the language (帳理 / Ledgerly).
+B. 收入：紅、支出：藍	B. Income: red, spending: blue
+關閉後隱藏所有 AI 相關畫面與設定（今日報告、問 AI、新聞整理、AI 檢討、AI 中心），背景也不會呼叫 AI；規則辨識與手動記帳照常。	When off, all AI screens and settings are hidden (Today, Ask AI, News, AI review, AI hub) and nothing calls AI in the background; rule-based recognition and manual entry keep working.
+已設定金鑰	Key set
+需要設定金鑰	Key needed
+・沒網路：全部放「待確認」，恢復網路後自動再判讀	• Offline: everything goes to Pending and is read again when back online
+請到「帳戶」核對餘額；信用卡的結帳日、繳款日已帶入，扣繳帳戶與日期請再確認。	Check balances in Accounts; card statement and due dates were imported, please confirm autopay accounts and dates.
+股票功能已關閉（設定 → 功能開關）	Stocks are off (Settings → Features)
+・有網路：辨識後直接記帳並通知；沒把握或找不到帳戶放「待確認」	• Online: record directly and notify; unsure or no account → Pending

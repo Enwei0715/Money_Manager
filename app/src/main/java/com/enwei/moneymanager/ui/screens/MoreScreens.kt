@@ -256,7 +256,6 @@ private fun rememberToolSummaries(): Map<String, String> {
         settings.budgets[0L]?.let { b -> put("budget", "本月已用 ${if (b > 0) monthExpense * 100 / b else 0}%（${Money.withSymbol(monthExpense, lk.base)} / ${Money.withSymbol(b, lk.base)}）") }
         put("totalstats", "淨資產 ${Money.withSymbol(balances.filter { it.account.includeInNetWorth && !it.account.archived }.sumOf { lk.fx.convert(it.balance, it.account.currency) }, lk.base)}")
         put("notif", "監聽 ${settings.notifPackages.size} 個 App")
-        put("walletreader", "讀取 ${settings.screenPackages.size} 個錢包 App")
         put("settings", if (settings.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.0.${settings.updateAvailable}" else "目前 ${BuildConfig.VERSION_NAME}")
     }
 }
@@ -1042,232 +1041,17 @@ fun SettingsScreen(nav: NavController) {
             }
             progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
             updateStatus?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-            release?.notes?.takeIf { it.isNotBlank() && Updater.isNewer(release!!) }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        }
-    }
-}
-
-/** 錢包畫面讀取設定：給不推播消費的街口、悠遊付等錢包使用。 */
-@Composable
-fun WalletReaderScreen(nav: NavController) {
-    val ctx = LocalContext.current
-    val lk = rememberLookups()
-    val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    var enabled by remember { mutableStateOf(com.enwei.moneymanager.notify.WalletScreenReader.isEnabled(ctx)) }
-    OnResume { enabled = com.enwei.moneymanager.notify.WalletScreenReader.isEnabled(ctx) }
-    var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
-    LaunchedEffect(Unit) { apps = withContext(Dispatchers.Default) { installedApps(ctx) } }
-    var filter by remember { mutableStateOf("") }
-    var showAllApps by remember { mutableStateOf(false) }
-    val wallets = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.EWALLET && !it.archived }
-    val today = java.time.LocalDate.now().toEpochDay()
-    val testMode by com.enwei.moneymanager.notify.WalletScreenReader.testMode.collectAsStateWithLifecycle()
-    val scans by com.enwei.moneymanager.notify.WalletScreenReader.scans.collectAsStateWithLifecycle()
-    val testScope = rememberCoroutineScope()
-    var walletSimulation by remember { mutableStateOf<Repository.ScreenIngestResult?>(null) }
-    var walletSimulationProblem by remember { mutableStateOf<String?>(null) }
-
-    fun toggle(pkg: String, on: Boolean) = repo.settings.update {
-        it.copy(
-            screenPackages = if (on) it.screenPackages + pkg else it.screenPackages - pkg,
-            screenReadSince = if (on && pkg !in it.screenReadSince) it.screenReadSince + (pkg to today) else it.screenReadSince,
-        )
-    }
-
-    Scaffold(topBar = { BackTopBar("錢包畫面讀取", { nav.popBackStack() }) }) { pad ->
-        LazyColumn(Modifier.padding(pad)) {
-            item {
-                Card(
-                    Modifier.fillMaxWidth().padding(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
-                    ),
-                ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        com.enwei.moneymanager.ui.components.StatusLine(enabled, if (enabled) "錢包讀取已開啟" else "尚未開啟無障礙服務「帳理錢包讀取」")
-                        Text("打開錢包 App 的交易紀錄頁就會自動匯入，重複的會合併。", style = MaterialTheme.typography.bodySmall)
-                        if (!enabled) Text(
-                            "無法開啟時：設定 → 應用程式 → 帳理 → ⋮ →「允許受限制的設定」。",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        var disclose by remember { mutableStateOf(false) }
-                        Button(onClick = { if (enabled) com.enwei.moneymanager.notify.WalletScreenReader.openSettings(ctx) else disclose = true }) {
-                            Text(if (enabled) "無障礙設定" else "前往開啟")
-                        }
-                        if (disclose) com.enwei.moneymanager.ui.components.AccessDisclosure(1, { com.enwei.moneymanager.notify.WalletScreenReader.openSettings(ctx) }) { disclose = false }
-                    }
-                }
-            }
-            if (wallets.isEmpty()) item {
-                Text("請先新增「電子支付」帳戶（例如街口、悠遊付），匯入的交易才有地方記。",
-                    color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-            }
-            item { SectionTitle("要讀取的錢包 App（已選 ${settings.screenPackages.size}）") }
-            item {
-                if (showAllApps) OutlinedTextField(filter, { filter = it }, label = { Text("搜尋 App") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-                TextButton(onClick = { showAllApps = !showAllApps; filter = "" }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                    Text(if (showAllApps) "只顯示已選的 App" else "＋ 新增要讀取的錢包 App")
-                }
-            }
-            val sorted = apps.filter { (showAllApps || it.pkg in settings.screenPackages) && (filter.isBlank() || it.label.contains(filter, true) || it.pkg.contains(filter, true)) }
-                .sortedByDescending { it.pkg in settings.screenPackages }
-            items(sorted, key = { "w" + it.pkg }) { a ->
-                val on = a.pkg in settings.screenPackages
-                ListItem(
-                    headlineContent = { Text(a.label) },
-                    supportingContent = {
-                        if (on) Column {
-                            var menu by remember { mutableStateOf(false) }
-                            Box {
-                                Text(
-                                    "記入：" + (settings.notifAccountMap[a.pkg]?.let { lk.account(it)?.name } ?: wallets.singleOrNull()?.name ?: "請選擇錢包帳戶") + " ▾",
-                                    color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.clickable { menu = true }.padding(vertical = 4.dp),
-                                )
-                                androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
-                                    wallets.forEach { w ->
-                                        androidx.compose.material3.DropdownMenuItem(text = { Text(w.name) }, onClick = {
-                                            repo.settings.update { it.copy(notifAccountMap = it.notifAccountMap + (a.pkg to w.id)) }; menu = false
-                                        })
-                                    }
-                                }
-                            }
-                            val since = settings.screenReadSince[a.pkg]?.let(java.time.LocalDate::ofEpochDay)
-                            Text(
-                                "匯入 ${since ?: "今天"} 之後的紀錄　（改為過去 30 天）",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.clickable {
-                                    repo.settings.update { it.copy(screenReadSince = it.screenReadSince + (a.pkg to today - 30)) }
-                                }.padding(vertical = 4.dp),
-                            )
-                        } else Text(a.pkg, style = MaterialTheme.typography.labelSmall)
-                    },
-                    trailingContent = { Checkbox(on, { toggle(a.pkg, it) }) },
-                    modifier = Modifier.clickable { toggle(a.pkg, !on) },
-                )
-            }
-            // 測試：確認讀取是否真的有運作
-            item { SectionTitle("測試錢包讀取") }
-            item {
-                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("測試模式（只讀取，不入帳）")
-                            Text("打開錢包的交易紀錄頁後回來查看", style = MaterialTheme.typography.bodySmall)
-                        }
-                        Switch(testMode, { com.enwei.moneymanager.notify.WalletScreenReader.testMode.value = it })
-                    }
-                    val connected = com.enwei.moneymanager.notify.WalletScreenReader.connected
-                    com.enwei.moneymanager.ui.components.StatusLine(
-                        enabled && connected,
-                        when {
-                            !enabled -> "無障礙服務未開啟"
-                            !connected -> "服務已開啟但尚未連線（關閉再開啟一次無障礙服務）"
-                            settings.screenPackages.isEmpty() -> "服務運作中，但還沒有勾選要讀取的錢包 App"
-                            else -> "服務運作中"
-                        },
-                    )
-                    if (scans.isEmpty()) Text("還沒有讀取紀錄", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            if (BuildConfig.DEBUG) {
-                item { SectionTitle("整合模擬器（Debug；只試算、不寫入）") }
-                item {
-                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            "先選取錢包 App 並建立電子支付帳戶。情境會試算支出、退款收入、儲值及既有交易比對；不同 App 指定不同帳戶時才能驗證跨帳戶配對。全程只試算，不會修改帳本。",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Button(enabled = settings.screenPackages.isNotEmpty(), onClick = {
-                            val pkg = settings.screenPackages.firstOrNull() ?: return@Button
-                            val day = java.time.LocalDate.now()
-                            val syntheticLines = listOf(
-                                day.toString(), "合成商店", "支付", "- NT$9,873",
-                                day.toString(), "合成退款", "退款", "+ NT$5,281",
-                                day.toString(), "合成儲值", "儲值", "+ NT$2,387",
-                            )
-                            val records = com.enwei.moneymanager.core.ScreenRecordParser.parse(syntheticLines, day)
-                            if (records.isEmpty()) {
-                                walletSimulationProblem = "合成畫面文字解析失敗；未執行匯入試算"
-                                return@Button
-                            }
-                            walletSimulationProblem = null
-                            testScope.launch { walletSimulation = repo.ingestScreenRecords(pkg, records, dryRun = true) }
-                        }) { Text("執行錢包合成情境") }
-                        walletSimulationProblem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                        walletSimulation?.let { result ->
-                            Text(
-                                if (result.wallet == null) "未能對應錢包帳戶；請先選取錢包 App 並指定電子支付帳戶。"
-                                else "試算完成：${result.total} 筆、會新增 ${result.created} 筆、已存在 ${result.existing} 筆、可合併 ${result.merged} 筆。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (result.wallet == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            )
-                            result.details.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
-                        }
-                    }
-                }
-            }
-            items(scans.size, key = { "scan$it" }) { i ->
-                val e = scans[i]
-                val label = apps.find { it.pkg == e.pkg }?.label ?: e.pkg
-                Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("$label · ${timeFmt.format(Date(e.time))} · 讀到 ${e.lines} 行文字", style = MaterialTheme.typography.labelSmall)
-                        e.status?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
-                        e.problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                        if (e.byAi) Text("版面規則看不懂，由 AI 從畫面整理出 ${e.records.size} 筆", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
-                        e.result?.let { r ->
-                            Text(
-                                if (r.wallet == null) "辨識出 ${r.total} 筆，但找不到要記入的電子支付帳戶（請在下方指定）"
-                                else "辨識出 ${r.total} 筆 → 記入「${r.wallet}」：" +
-                                    "${if (testMode) "會新增" else "新增"} ${r.created} 筆、已存在 ${r.existing} 筆" +
-                                    (if (r.merged > 0) "、和通知／手動記的對上 ${r.merged} 筆（不重複記）" else "") +
-                                    (if (r.tooOld > 0) "、早於開始日 ${r.since} 略過 ${r.tooOld} 筆" else ""),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (r.wallet == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                        var expanded by remember(e.time) { mutableStateOf(false) }
-                        val details = e.result?.details.orEmpty()
-                        if (details.isNotEmpty()) {
-                            // 每一筆的處理結果：新增、已匯入、和通知對上（補名稱）…
-                            details.take(if (expanded) details.size else 6).forEach { d ->
-                                Text(
-                                    d, style = MaterialTheme.typography.bodySmall,
-                                    color = when {
-                                        "同一筆" in d || "轉帳" in d -> MaterialTheme.colorScheme.tertiary
-                                        "新增" in d -> MaterialTheme.colorScheme.onSurface
-                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                )
-                            }
-                            if (details.size > 6) Text(
-                                if (expanded) "收起" else "顯示全部 ${details.size} 筆", color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.bodySmall, modifier = Modifier.clickable { expanded = !expanded }.padding(vertical = 2.dp),
-                            )
-                        } else {
-                            e.records.take(if (expanded) e.records.size else 6).forEach { rec ->
-                                Text(
-                                    "${rec.time.toLocalDate()}${if (rec.dateOnly) "" else " %02d:%02d".format(rec.time.hour, rec.time.minute)}　" +
-                                        "${rec.merchant ?: rec.typeLabel ?: ""}　${if (rec.isIncome || rec.isTopUp) "+" else "-"}${Money.format(rec.amountMinor, "TWD")}",
-                                    style = MaterialTheme.typography.bodySmall, maxLines = 1,
-                                )
-                            }
-                            if (e.records.size > 6) Text(
-                                if (expanded) "收起" else "顯示全部 ${e.records.size} 筆", color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.bodySmall, modifier = Modifier.clickable { expanded = !expanded }.padding(vertical = 2.dp),
-                            )
-                        }
-                    }
+            // 更新說明：和更新視窗一樣只列最新 3 段
+            release?.notes?.takeIf { it.isNotBlank() && Updater.isNewer(release!!) }?.let { notes ->
+                parseNotes(notes).asReversed().take(3).forEach { (title, lines) ->
+                    if (title.isNotBlank()) Text(title, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    lines.forEach { l -> Text("• " + l.removePrefix("・").trim(), fontSize = 12.sp) }
                 }
             }
         }
     }
 }
 
-
-/** Google Play 版的「App 更新」：版本資訊與前往 Play 商店（更新由 Google Play 自動處理）。 */
 @Composable
 private fun PlayUpdateScreen(nav: NavController) {
     val ctx = LocalContext.current
