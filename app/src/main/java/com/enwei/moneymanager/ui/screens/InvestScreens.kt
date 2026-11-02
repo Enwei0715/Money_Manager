@@ -237,7 +237,9 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
             val pct = q?.previousClose?.takeIf { it > 0 }?.let { (q.price - it) / it * 100 }
             Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("stock/$sym") }) {
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("$sym  ${q?.name.orEmpty()}", fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                    // 台股顯示中文名稱，美股維持英文
+                    val nm = (if (com.enwei.moneymanager.core.marketOf(sym) == com.enwei.moneymanager.core.Market.TW) com.enwei.moneymanager.net.TwData.nameOf(sym) else null) ?: q?.name.orEmpty()
+                    Text("$sym  $nm", fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End) {
                         Text(q?.let { formatNum(it.price) } ?: "—", fontSize = 14.sp)
                         if (pct != null) Text((if (pct >= 0) "▲" else "▼") + formatPct(pct), fontSize = 13.sp, color = pnlColor(pct))

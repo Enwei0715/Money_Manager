@@ -56,6 +56,35 @@ fun AppSettings.styleOf(symbol: String): TradeStyle =
 
 fun InvestPlanSettings.rule() = DisciplineRule(shortStopPct, shortTrailPct, longTrailPct, takeProfitPct)
 
+/** K 線紀律買賣點用的參數：長線用較寬的移動停損；開啟保本＋移動停利時用它的回落 %。 */
+fun AppSettings.signalParams(symbol: String): com.enwei.moneymanager.core.TradeSignals.Params {
+    val style = styleOf(symbol)
+    val plan = investPlan
+    return com.enwei.moneymanager.core.TradeSignals.Params(
+        long = style == TradeStyle.LONG,
+        stopPct = plan.shortStopPct,
+        trailPct = if (plan.guardOn) plan.guardTrailPct else if (style == TradeStyle.LONG) plan.longTrailPct else plan.shortTrailPct,
+        takeProfitPct = plan.takeProfitPct,
+    )
+}
+
+/** 對話用：一檔股票依紀律的檢查結果（文字），讓 AI 回答時引用具體依據。 */
+suspend fun Repository.disciplineFacts(symbol: String): String? {
+    val market = com.enwei.moneymanager.core.marketOf(symbol)
+    val b = runCatching { InvestData.bars(symbol, "1y", tw = market == Market.TW) }.getOrNull() ?: return null
+    val live = runCatching { com.enwei.moneymanager.net.QuoteService.live(market, symbol) }.getOrNull()
+    val bars = live?.let { b.withLive(it) } ?: b
+    val p = settings.value.signalParams(symbol)
+    val sig = com.enwei.moneymanager.core.TradeSignals.scan(bars.open, bars.high, bars.low, bars.close, bars.volume, p)
+    val held = holdingsByBroker.first().values.flatten().filter { it.symbol == symbol && it.shares > 0.0001 }
+    val avg = held.takeIf { it.isNotEmpty() }?.let { hs -> hs.sumOf { it.avgCost * it.shares } / hs.sumOf { it.shares } }
+    val st = com.enwei.moneymanager.core.TradeSignals.status(bars.high, bars.close, p, avg, sig) { i ->
+        LocalDate.ofEpochDay(bars.days[i]).let { "${it.monthValue}/${it.dayOfMonth}" }
+    } ?: return null
+    val name = held.firstNotNullOfOrNull { it.name } ?: com.enwei.moneymanager.net.TwData.nameOf(symbol).orEmpty()
+    return "$symbol $name：${st.verdict}；" + st.checks.joinToString("；") { (t, ok) -> (when (ok) { true -> "✓"; false -> "✗"; null -> "" }) + t }
+}
+
 fun InvestPlanSettings.guardRule() = com.enwei.moneymanager.core.GuardRule(guardTrailPct, baseShares)
 
 /**
@@ -485,9 +514,19 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
     onStep("搜尋相關新聞…")
     val related0 = relatedNews(ds, st, question, holdSyms, if (big) 20 else 5)
     // 有找到相關新聞時，資料以新聞為主：小模型把持股／大盤狀況與今日報告縮短，空間留給新聞全文
+    // 問持股怎麼處理（或問到某檔）時：App 先依紀律算出每檔的依據（站上／跌破月線、季線、停損價…），AI 要引用
+    val holdQ = listOf("持股", "怎麼處理", "要不要賣", "該賣", "停損", "停利", "加碼", "續抱", "減碼", "出場", "還能抱", "怎麼辦", "紀律").any { question.contains(it) }
+    val qSyms = (Regex("[0-9]{4,6}[A-Z]?").findAll(question).map { it.value }.toList() +
+        com.enwei.moneymanager.net.TwData.cached().filter { it.name.length >= 2 && question.contains(it.name) }.map { it.code }).distinct()
+    val disciplineSyms = (if (holdQ) qSyms.ifEmpty { holdSyms0(snap) } else qSyms.filter { it in holdSyms0(snap) }).take(4)
+    if (disciplineSyms.isNotEmpty()) onStep("依紀律檢查 ${disciplineSyms.size} 檔持股…")
+    val facts = kotlinx.coroutines.coroutineScope {
+        disciplineSyms.map { sym -> async { runCatching { disciplineFacts(sym) }.getOrNull() } }.mapNotNull { it.await() }
+    }
+    val factsText = if (facts.isEmpty()) "" else "紀律檢查（App 依 K 線與使用者的紀律參數算出，回答持股怎麼處理時要引用這些依據，例如「站上月線」「跌破移動停損價」）：\n" + facts.joinToString("\n")
     // 即時行情（主要指數、費半、美元）：AI 可以直接引用最新的數字
     val live = runCatching { com.enwei.moneymanager.net.InvestData.liveMarketLine() }.getOrDefault("")
-    val sit = live + "\n" + situation(snap).let { if (!big && related0.isNotEmpty()) it.take(700) else it }
+    val sit = live + "\n" + factsText + "\n" + situation(snap).let { if (!big && related0.isNotEmpty()) it.take(700) else it }
     val today2 = if (!big && related0.isNotEmpty()) today.take(160) else today
     val reserved0 = sit.length + today2.length + 2
     // 2. 讀取最相關的前幾篇新聞全文（Groq 2 篇、Gemini 5 篇）
@@ -561,6 +600,9 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
             else -> ch
         }
     }.toMutableList()
+    // 持股怎麼處理：附上每檔的紀律 K 線（框出買賣點並列出依據）
+    if (disciplineSyms.isNotEmpty() && charts.none { it.kind == "signals" })
+        charts.add(0, com.enwei.moneymanager.data.ChatChart("signals", disciplineSyms))
     // 問大盤／整體市場：附上相關指數的走勢比較（加權＋費半，問美股時加那斯達克）
     if (marketQ && charts.none { c -> c.kind == "compare" && c.items.any { it.startsWith("^") } })
         charts.add(0, com.enwei.moneymanager.data.ChatChart("compare", (listOf("^TWII") + indexes + "^SOX").distinct().take(3)))
@@ -584,9 +626,13 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
     // 讀過全文的新聞一定附在回覆下方
     related0.filter { it.id in bodies }.forEach { if (it.id !in ids) ids += it.id }
     val basis = if (related0.isEmpty()) "" else "依據：搜尋到 ${related0.size} 則相關新聞" + (if (bodies.isNotEmpty()) "，讀了 ${bodies.size} 篇全文" else "，全文沒有讀到（用標題與摘要）")
-    val fixed = reply.copy(text = text, points = points, newsIds = ids, cards = cards2, charts = charts.take(3), basis = basis)
+    val fixed = reply.copy(text = text, points = points, newsIds = ids, cards = cards2, charts = charts.take(3), basis = basis +
+        (if (facts.isNotEmpty()) (if (basis.isEmpty()) "依據：" else "；") + "依紀律檢查 ${facts.size} 檔（月線、季線、停損與移動停損價）" else ""))
     // 使用者按了停止：不把回覆加進對話
     kotlinx.coroutines.yield()
     ds.update { it.copy(chat = (it.chat + fixed).takeLast(40), business = it.business + fixed.cards.filter { c -> c.business.isNotBlank() }.associate { c -> c.symbol to c.business }) }
     return fixed
 }
+
+/** 目前持有的股票代號。 */
+private fun holdSyms0(snap: AdvisorSnapshot): List<String> = snap.holdings.map { it.symbol }.distinct()

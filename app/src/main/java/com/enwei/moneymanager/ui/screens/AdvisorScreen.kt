@@ -1495,6 +1495,11 @@ private fun ChatChartView(ch: com.enwei.moneymanager.data.ChatChart, nav: NavCon
     when (ch.kind) {
         "compare" -> com.enwei.moneymanager.ui.components.CompareChart(ch.items)
         "revenue" -> com.enwei.moneymanager.ui.components.RevenueCompare(ch.items)
+        "signals" -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ch.items.forEach { sym ->
+                Box(Modifier.clickable { nav.navigate("stock/$sym") }) { com.enwei.moneymanager.ui.components.DisciplineChart(sym) }
+            }
+        }
         "themes" -> {
             val store by MoneyApp.news.flow.collectAsStateWithLifecycle()
             val st = store ?: return

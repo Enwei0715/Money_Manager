@@ -105,7 +105,8 @@ object TrendLines {
  * - 賣：短線停損、移動停損（從買進後最高價回落）、分批停利、跌破季線
  */
 object TradeSignals {
-    data class Signal(val index: Int, val buy: Boolean, val reason: String)
+    /** [tag] 是畫在 K 線上的短標籤，[reason] 是完整理由。 */
+    data class Signal(val index: Int, val buy: Boolean, val reason: String, val tag: String = "")
 
     data class Params(
         val long: Boolean = false,
@@ -113,6 +114,8 @@ object TradeSignals {
         val trailPct: Double = 8.0,
         val takeProfitPct: Double = 15.0,
     )
+
+    private fun f(v: Double) = if (v >= 100) "%.0f".format(v) else "%.1f".format(v)
 
     fun scan(open: List<Double>, high: List<Double>, low: List<Double>, close: List<Double>, volume: List<Double>, p: Params): List<Signal> {
         val n = close.size
@@ -123,41 +126,97 @@ object TradeSignals {
         var entry: Double? = null
         var peak = 0.0
         var tookProfit = false
-        var lastBuy = -99
+        var lastSignal = -99
         for (i in 61 until n) {
             val c = close[i]; val m20 = ma20[i] ?: continue; val m60 = ma60[i] ?: continue
             val p20 = ma20[i - 1] ?: continue; val p60 = ma60[i - 1] ?: continue
+            val m20Ago = ma20[i - 5] ?: p20
             val avgVol = (i - 20 until i).map { volume.getOrNull(it) ?: 0.0 }.average()
             val vol = volume.getOrNull(i) ?: 0.0
+            val upTrend = m20 > m20Ago && c > m60
             if (entry == null) {
-                val reason = when {
-                    close[i - 1] <= p60 && c > m60 && m20 >= p20 -> "站回季線 ${"%.1f".format(m60)}，月線向上"
-                    c > (i - 20 until i).maxOf { high[it] } && avgVol > 0 && vol > avgVol * 1.5 ->
-                        "突破前 20 日高點，量增 ${"%.1f".format(vol / avgVol)} 倍"
-                    !p.long && m20 > m60 && m20 > p20 && low[i] <= m20 * 1.01 && c > m20 && close[i - 1] > p20 -> "多頭回測月線不破"
+                // 只在趨勢向上時買：月線上彎、收盤在季線之上
+                val sig = when {
+                    close[i - 1] <= p60 && c > m60 && m20 > m20Ago && c > m20 ->
+                        Signal(i, true, "站回季線 ${f(m60)}，且在上彎的月線 ${f(m20)} 之上", "站回季線")
+                    upTrend && m20 >= m60 && c > (i - 20 until i).maxOf { high[it] } && avgVol > 0 && vol > avgVol * 1.5 ->
+                        Signal(i, true, "多頭中突破前 20 日高點，量增 ${"%.1f".format(vol / avgVol)} 倍", "突破")
+                    !p.long && upTrend && m20 > m60 && low[i] <= m20 * 1.01 && c > m20 && close[i - 1] > p20 ->
+                        Signal(i, true, "多頭回測月線 ${f(m20)} 不破", "回測月線")
                     else -> null
                 }
-                if (reason != null && i - lastBuy >= 5) {
-                    out += Signal(i, true, reason); entry = c; peak = c; tookProfit = false; lastBuy = i
+                if (sig != null && i - lastSignal >= 5) {
+                    out += sig; entry = c; peak = c; tookProfit = false; lastSignal = i
                 }
             } else {
                 peak = max(peak, high[i])
                 val e = entry!!
                 val tp = if (p.long) p.takeProfitPct * 2 else p.takeProfitPct
                 val trailStop = peak * (1 - p.trailPct / 100)
-                val reason = when {
-                    !p.long && c < e * (1 - p.stopPct / 100) -> "停損：跌破買進價 ${"%.1f".format(e)} 的 −${"%.0f".format(p.stopPct)}%"
-                    peak > e && c < trailStop && (!p.long || c > e) -> "移動停損：從高點 ${"%.1f".format(peak)} 回落 ${"%.0f".format(p.trailPct)}%"
-                    !tookProfit && c >= e * (1 + tp / 100) -> "分批停利：獲利達 +${"%.0f".format(tp)}%（先賣 1/3）"
-                    !p.long && close[i - 1] >= p60 && c < m60 -> "跌破季線 ${"%.1f".format(m60)}"
+                val sig = when {
+                    !p.long && c < e * (1 - p.stopPct / 100) ->
+                        Signal(i, false, "停損：跌破買進價 ${f(e)} 的 −${"%.0f".format(p.stopPct)}%（${f(e * (1 - p.stopPct / 100))}）", "停損")
+                    peak > e && c < trailStop && (!p.long || c > e) ->
+                        Signal(i, false, "移動停損：從高點 ${f(peak)} 回落超過 ${"%.0f".format(p.trailPct)}%（${f(trailStop)}）", "移動停損")
+                    !tookProfit && c >= e * (1 + tp / 100) ->
+                        Signal(i, false, "分批停利：獲利達 +${"%.0f".format(tp)}%（先賣 1/3）", "停利")
+                    !p.long && close[i - 1] >= p60 && c < m60 -> Signal(i, false, "跌破季線 ${f(m60)}", "破季線")
                     else -> null
                 }
-                if (reason != null) {
-                    out += Signal(i, false, reason)
-                    if (reason.startsWith("分批停利")) tookProfit = true else entry = null
+                if (sig != null && i - lastSignal >= 2) {
+                    out += sig; lastSignal = i
+                    if (sig.tag == "停利") tookProfit = true else entry = null
                 }
             }
         }
         return out
+    }
+
+    /** 目前狀態的依據（一條一條，true＝偏多、false＝偏空、null＝中性）與依紀律的結論。 */
+    data class Status(val checks: List<Pair<String, Boolean?>>, val verdict: String, val bias: Int)
+
+    fun status(high: List<Double>, close: List<Double>, p: Params, avgCost: Double?, signals: List<Signal>, dayLabel: (Int) -> String): Status? {
+        val n = close.size
+        if (n < 61) return null
+        val c = close.last()
+        val m20 = Technicals.sma(close, 20) ?: return null
+        val m60 = Technicals.sma(close, 60) ?: return null
+        val m20Ago = Technicals.sma(close, 20, n - 5) ?: m20
+        val checks = ArrayList<Pair<String, Boolean?>>()
+        checks += (if (c >= m20) "收盤 ${f(c)} 站上月線（20 日線）${f(m20)}" else "收盤 ${f(c)} 跌破月線（20 日線）${f(m20)}") to (c >= m20)
+        checks += (if (c >= m60) "站上季線（60 日線）${f(m60)}" else "跌破季線（60 日線）${f(m60)}") to (c >= m60)
+        checks += (if (m20 >= m20Ago) "月線上彎" else "月線下彎") to (m20 >= m20Ago)
+        checks += (if (m20 >= m60) "多頭排列（月線在季線之上）" else "空頭排列（月線在季線之下）") to (m20 >= m60)
+        val peak = high.takeLast(60).max()
+        val trailStop = peak * (1 - p.trailPct / 100)
+        checks += "近 60 日高點 ${f(peak)}，移動停損價 ${f(trailStop)}（${if (c >= trailStop) "未跌破" else "已跌破"}）" to (c >= trailStop)
+        var verdict: String
+        var bias: Int
+        if (avgCost != null && avgCost > 0) {
+            val gain = (c / avgCost - 1) * 100
+            val stop = avgCost * (1 - p.stopPct / 100)
+            val tp = avgCost * (1 + (if (p.long) p.takeProfitPct * 2 else p.takeProfitPct) / 100)
+            checks += "成本 ${f(avgCost)}，報酬 ${"%+.1f".format(gain)}%" to (gain >= 0)
+            if (!p.long) checks += "停損價 ${f(stop)}（${if (c >= stop) "未跌破" else "已跌破"}）" to (c >= stop)
+            checks += "停利價 ${f(tp)}（${if (c >= tp) "已達到" else "未達到"}）" to null
+            when {
+                !p.long && c < stop -> { verdict = "依紀律：跌破停損價，停損出場"; bias = -1 }
+                c < trailStop && (p.long.not() || c > avgCost) -> { verdict = "依紀律：跌破移動停損價，減碼或出場"; bias = -1 }
+                c >= tp -> { verdict = "依紀律：達停利價，先賣 1/3，其餘用移動停損保護"; bias = 0 }
+                !p.long && c < m60 -> { verdict = "依紀律：短線跌破季線，先減碼"; bias = -1 }
+                c >= m20 && m20 >= m20Ago -> { verdict = "依紀律：站上上彎的月線，續抱"; bias = 1 }
+                else -> { verdict = "依紀律：還沒觸發停損，續抱觀察，等站回月線"; bias = 0 }
+            }
+        } else {
+            when {
+                c >= m20 && m20 >= m20Ago && m20 >= m60 -> { verdict = "依紀律：多頭排列，可等回測月線不破再分批買"; bias = 1 }
+                c < m60 && m20 < m20Ago -> { verdict = "依紀律：趨勢向下，先不買"; bias = -1 }
+                else -> { verdict = "依紀律：方向未明，等站回季線或突破"; bias = 0 }
+            }
+        }
+        signals.lastOrNull()?.takeIf { n - 1 - it.index <= 15 }?.let { sg ->
+            checks += "最近紀律訊號：${dayLabel(sg.index)} ${if (sg.buy) "買" else "賣"}，${sg.reason}" to sg.buy
+        }
+        return Status(checks, verdict, bias)
     }
 }

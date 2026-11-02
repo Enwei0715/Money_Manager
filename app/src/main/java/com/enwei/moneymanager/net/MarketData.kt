@@ -65,7 +65,12 @@ object QuoteService {
             if (q != null) out += q
         }
         out += usJobs.mapNotNull { it.await() }
-        out
+        // 台股名稱用股票清單的中文名稱（Yahoo 的是英文），美股維持英文
+        if (tw.isNotEmpty()) runCatching { TwData.stockList(com.enwei.moneymanager.MoneyApp.instance) }
+        out.map { q ->
+            if (!q.key.startsWith("TW:")) q
+            else TwData.nameOf(q.key.removePrefix("TW:"))?.let { q.copy(name = it) } ?: q
+        }
     }
 
     /** 台股單日漲跌幅上限 10%：超過太多（例如抓到錯的欄位或別檔的價格）就不採用。 */

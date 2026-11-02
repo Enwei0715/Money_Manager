@@ -848,7 +848,7 @@ object GroqAi {
             tone().chat + "cards 只放回覆文字裡實際討論到的個股（App 會在卡片上畫近期 K 線，文字不必描述走勢）；問大盤或整體市場時不要硬放個股，改用指數的 compare 圖；" +
             "資料裡有「即時行情」時，引用指數與匯率要用那裡的數字；" +
             "需要比較或呈現時加 charts（App 用實際資料畫）：{\"kind\": \"compare\", \"items\": [2～5 個代號或指數]} 比較走勢（指數用 ^TWII 加權、^TWOII 櫃買、^SOX 費半、^IXIC 那斯達克、^GSPC 標普、^DJI 道瓊）、" +
-            "{\"kind\": \"themes\", \"items\": [題材名稱]} 題材熱度與多空、{\"kind\": \"revenue\", \"items\": [2～6 個代號]} 月營收年增率比較、{\"kind\": \"holdings\", \"items\": []} 使用者持股損益；" +
+            "{\"kind\": \"themes\", \"items\": [題材名稱]} 題材熱度與多空、{\"kind\": \"signals\", \"items\": [1～3 個代號]} 個股 K 線框出紀律買賣點與依據、{\"kind\": \"revenue\", \"items\": [2～6 個代號]} 月營收年增率比較、{\"kind\": \"holdings\", \"items\": []} 使用者持股損益；" +
             "引用新聞時在句子後面用 [編號] 標出，並把編號放進 news。" +
             (if (focused) "這題有 App 搜尋到的相關新聞（部分附全文摘錄）：結論與每個重點都要根據這些新聞的具體內容（事件、數字、日期、公司），不要寫泛泛的看法；" +
                 "新聞提到的個股都做成 cards，reason 寫新聞裡的具體依據並附 [編號]；新聞沒有提到的就說資料不足，不要猜。" else "") +
@@ -860,12 +860,12 @@ object GroqAi {
         val cards = (r["cards"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonObject)?.let { o -> parsePick(o, sym) } }.orEmpty().distinctBy { it.symbol }.take(8)
         val charts = (r["charts"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
-            val kind = o.str("kind")?.takeIf { it in setOf("compare", "themes", "holdings", "revenue") } ?: return@mapNotNull null
+            val kind = o.str("kind")?.takeIf { it in setOf("compare", "themes", "holdings", "revenue", "signals") } ?: return@mapNotNull null
             val items = (o["items"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.take(40) }.orEmpty()
             com.enwei.moneymanager.data.ChatChart(kind, when (kind) {
                 // 走勢比較可放個股代號或指數（^TWII 加權、^SOX 費半…）
                 "compare" -> items.mapNotNull { Regex("\\^[A-Z0-9]{2,6}").find(it.uppercase())?.value ?: sym.find(it)?.value }.distinct().take(5)
-                "revenue" -> items.mapNotNull { sym.find(it)?.value }.distinct().take(5)
+                "revenue", "signals" -> items.mapNotNull { sym.find(it)?.value }.distinct().take(if (kind == "signals") 3 else 5)
                 else -> items.take(10)
             })
         }.orEmpty().take(3)

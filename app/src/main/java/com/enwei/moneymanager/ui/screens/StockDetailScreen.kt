@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -145,7 +146,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 liveAt = System.currentTimeMillis()
                 runCatching {
                     repo.saveQuotes(listOf(com.enwei.moneymanager.data.QuoteEntity(com.enwei.moneymanager.data.quoteKey(market, symbol), l.price, l.prev,
-                        if (market == Market.TW) "TWD" else "USD", l.name, System.currentTimeMillis())))
+                        if (market == Market.TW) "TWD" else "USD",
+                        (if (market == Market.TW) com.enwei.moneymanager.net.TwData.nameOf(symbol) else null) ?: l.name, System.currentTimeMillis())))
                 }
             }
             kotlinx.coroutines.delay(30_000)
@@ -273,6 +275,17 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                         Text("${if (sg.buy) "● 買" else "● 賣"} ${d(sg.index)}　${sg.reason}", fontSize = 12.sp,
                                             color = if (sg.buy) StockUp else StockDown,
                                             modifier = Modifier.clickable { picked = sg.index })
+                                    }
+                                    // 目前狀態的依據與依紀律的結論
+                                    val avg = held.takeIf { it.isNotEmpty() }?.let { hs -> hs.sumOf { it.avgCost * it.shares } / hs.sumOf { it.shares } }
+                                    com.enwei.moneymanager.core.TradeSignals.status(b.high, b.close, sigParams, avg, signals) { d(it) }?.let { stt ->
+                                        Text(stt.verdict, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                            color = when (stt.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface },
+                                            modifier = Modifier.padding(top = 4.dp))
+                                        stt.checks.forEach { (t, ok) ->
+                                            Text((when (ok) { true -> "✓ "; false -> "✗ "; null -> "・" }) + t, fontSize = 12.sp,
+                                                color = when (ok) { true -> StockUp; false -> StockDown; null -> MaterialTheme.colorScheme.onSurfaceVariant })
+                                        }
                                     }
                                     Text("參數在「助理 → 資金紀律」調整，也可以讓 AI 依你的投資原則帶入；僅供參考。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
@@ -595,16 +608,23 @@ private fun CandleChart(
                 drawPath(Path().apply { moveTo(cx, yy); lineTo(cx - s / 2, yy - s); lineTo(cx + s / 2, yy - s); close() }, down)
             }
         }
-        // 紀律買賣點：買點圈在 K 棒下方、賣點圈在上方
+        // 紀律買賣點：把那根 K 棒整根框起來，買點在下方、賣點在上方標出理由（例如「買·站回季線」）
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 26f; isFakeBoldText = true }
         signals.forEach { sg ->
             val i = sg.index - from
             if (i !in 0 until n) return@forEach
             val cx = i * cw + cw / 2
             val col = if (sg.buy) up else down
-            val r = maxOf(cw * 0.9f, 9f).coerceAtMost(16f)
-            val cy = if (sg.buy) (y(b.low[sg.index]) + r + 4f).coerceAtMost(priceH - r) else (y(b.high[sg.index]) - r - 4f).coerceAtLeast(r)
-            drawCircle(col, radius = r, center = Offset(cx, cy), style = Stroke(2.5f))
-            drawCircle(col, radius = r * 0.35f, center = Offset(cx, cy))
+            val half = maxOf(cw * 0.75f, 7f)
+            val top = y(b.high[sg.index]) - 5f
+            val bot = y(b.low[sg.index]) + 5f
+            drawRoundRect(col, Offset(cx - half, top), Size(half * 2, bot - top), androidx.compose.ui.geometry.CornerRadius(half, half), style = Stroke(2.5f))
+            val label = (if (sg.buy) "買" else "賣") + (sg.tag.takeIf { it.isNotBlank() }?.let { "·$it" } ?: "")
+            paint.color = android.graphics.Color.argb(255, (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt())
+            val tw = paint.measureText(label)
+            val tx = (cx - tw / 2).coerceIn(0f, size.width - tw)
+            val ty = if (sg.buy) (bot + 28f).coerceAtMost(priceH) else (top - 8f).coerceAtLeast(24f)
+            drawContext.canvas.nativeCanvas.drawText(label, tx, ty, paint)
         }
         // 點選的 K 棒：直線標示
         selected?.takeIf { it in from until to }?.let { j ->
