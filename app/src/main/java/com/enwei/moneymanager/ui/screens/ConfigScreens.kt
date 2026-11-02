@@ -218,33 +218,32 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
 
                 sec("記帳")
                 cfg("輸入順序", if (s.inputFromCategory) "從分類" else "從金額") {
-                    ask("輸入順序", listOf(false to "從金額", true to "從分類"), s.inputFromCategory, "新增交易時先跳出哪個輸入面板。") { v ->
+                    ask("輸入順序", listOf(false to "從金額", true to "從分類"), s.inputFromCategory) { v ->
                         repo.settings.update { it.copy(inputFromCategory = v) }
                     }
                 }
                 cfg("時間輸入", onOff(s.showTime)) {
-                    askOnOff("時間輸入", s.showTime, "記帳時除了日期也可以設定時間。") { v -> repo.settings.update { it.copy(showTime = v) } }
+                    askOnOff("時間輸入", s.showTime, null) { v -> repo.settings.update { it.copy(showTime = v) } }
                 }
                 cfg("週期交易", null) { nav.navigate("recurring") }
                 cfg("自動完成", onOff(s.autocomplete)) {
-                    askOnOff("自動完成", s.autocomplete, "輸入內容時依過去紀錄建議，並帶入分類。") { v -> repo.settings.update { it.copy(autocomplete = v) } }
+                    askOnOff("自動完成", s.autocomplete, null) { v -> repo.settings.update { it.copy(autocomplete = v) } }
                 }
                 sec("期間與顯示")
                 cfg("起始畫面（每日／日曆）", if (s.startScreen == 1) "日曆" else "每日") {
                     ask("起始畫面", listOf(0 to "每日", 1 to "日曆"), s.startScreen) { v -> repo.settings.update { it.copy(startScreen = v) } }
                 }
                 cfg("日曆標示", if (s.calendarDots) "顏色小點" else "文字") {
-                    ask("日曆標示", listOf(false to "文字（休、結、繳、扣）", true to "顏色小點"), s.calendarDots,
-                        "放在日曆日期與金額之間；點日期可以看完整名稱。") { v -> repo.settings.update { it.copy(calendarDots = v) } }
+                    ask("日曆標示", listOf(false to "文字", true to "顏色小點"), s.calendarDots) { v -> repo.settings.update { it.copy(calendarDots = v) } }
                 }
                 cfg("搜尋的篩選方式", if (s.filterStyle == 0) "圖表勾選" else "欄位篩選") {
-                    ask("搜尋的篩選方式", listOf(0 to "圖表勾選（收入／支出圓環、勾選分類與帳戶）", 1 to "欄位篩選（期間、帳戶、分類、金額）"), s.filterStyle) { v ->
+                    ask("搜尋的篩選方式", listOf(0 to "圖表勾選", 1 to "欄位篩選"), s.filterStyle) { v ->
                         repo.settings.update { it.copy(filterStyle = v) }
                     }
                 }
                 sec("期間")
                 cfg("每月起始日", "每月 ${s.monthStartDay} 日") {
-                    ask("每月起始日", (1..28).map { it to "每月 $it 日" }, s.monthStartDay, "例如發薪日是 5 號，設成 5 日就會以 5 號到下月 4 號為一個月。") { v ->
+                    ask("每月起始日", (1..28).map { it to "每月 $it 日" }, s.monthStartDay) { v ->
                         repo.settings.update { it.copy(monthStartDay = v) }
                     }
                 }
@@ -253,18 +252,18 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 }
                 sec("列表")
                 cfg("滑動切換", if (s.swipe == 1) "切換期間" else "無") {
-                    ask("滑動切換", listOf(0 to "無", 1 to "切換期間"), s.swipe, "在交易頁左右滑動時要做什麼。") { v -> repo.settings.update { it.copy(swipe = v) } }
+                    ask("滑動切換", listOf(0 to "無", 1 to "切換期間"), s.swipe) { v -> repo.settings.update { it.copy(swipe = v) } }
                 }
                 cfg("顯示說明", onOff(s.showDescription)) {
-                    askOnOff("顯示說明", s.showDescription, "在交易列表中顯示每筆交易的說明文字。") { v -> repo.settings.update { it.copy(showDescription = v) } }
+                    askOnOff("顯示說明", s.showDescription, null) { v -> repo.settings.update { it.copy(showDescription = v) } }
                 }
 
                 sec("幣別")
                 cfg("主幣別", "${s.baseCurrency} (${Money.symbolOf(s.baseCurrency).trim()})") {
-                    ask("主幣別", currencies.map { it to it }, s.baseCurrency, "淨資產與報表統一換算成的幣別。") { c -> repo.settings.update { it.copy(baseCurrency = c) } }
+                    ask("主幣別", currencies.map { it to it }, s.baseCurrency) { c -> repo.settings.update { it.copy(baseCurrency = c) } }
                 }
                 cfg("副幣別", Money.symbolOf(s.subCurrency).trim()) {
-                    ask("副幣別", currencies.map { it to it }, s.subCurrency, "記帳鍵盤上可以一鍵切換的第二種幣別。") { c -> repo.settings.update { it.copy(subCurrency = c) } }
+                    ask("副幣別", currencies.map { it to it }, s.subCurrency) { c -> repo.settings.update { it.copy(subCurrency = c) } }
                 }
                 cfg("即時匯率") { nav.navigate("fx") }
 
@@ -273,7 +272,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                     ask("主題", listOf(0 to "跟隨系統", 1 to "淺色", 2 to "深色"), s.themeMode) { v -> repo.settings.update { it.copy(themeMode = v) } }
                 }
                 cfg("語言", listOf("跟隨系統", "繁體中文", "English")[s.language.coerceIn(0, 2)]) {
-                    ask("語言", listOf(0 to "跟隨系統", 1 to "繁體中文", 2 to "English"), s.language, "App 名稱也會跟著語言切換（帳理／Ledgerly）。") { v ->
+                    ask("語言", listOf(0 to "跟隨系統", 1 to "繁體中文", 2 to "English"), s.language) { v ->
                         repo.settings.update { it.copy(language = v) }
                         com.enwei.moneymanager.ui.I18n.init(ctx, v)
                         com.enwei.moneymanager.ui.applyAppLocale(ctx, v)
@@ -284,24 +283,23 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                         repo.settings.update { it.copy(uiScale = v) }
                     }
                 }
-                cfg("收支顏色", if (s.colorSetB) "設定 B" else "設定 A") {
+                cfg("收支顏色", if (s.colorSetB) "收入紅、支出藍" else "收入藍、支出紅") {
                     ask(
-                        "收支顏色", listOf(false to "設定 A", true to "設定 B"), s.colorSetB,
-                        "預設收入顯示藍色、支出顯示紅色，也可以反過來。\n\nA. 收入：藍、支出：紅\nB. 收入：紅、支出：藍",
+                        "收支顏色", listOf(false to "收入藍、支出紅", true to "收入紅、支出藍"), s.colorSetB,
                     ) { v -> repo.settings.update { it.copy(colorSetB = v) } }
                 }
 
                 sec("功能開關")
                 cfg("通知自動記帳", onOff(s.featureNotif)) {
-                    askOnOff("通知自動記帳", s.featureNotif, "關閉後不讀取任何通知、不自動記帳，只用手動記帳。") { v -> repo.settings.update { it.copy(featureNotif = v) } }
+                    askOnOff("通知自動記帳", s.featureNotif, null) { v -> repo.settings.update { it.copy(featureNotif = v) } }
                 }
                 cfg("股票與投資助理", onOff(s.featureStocks)) {
-                    askOnOff("股票與投資助理", s.featureStocks, "關閉後隱藏「帳戶」裡的股票與助理分頁，並停止新聞蒐集、每日報告與股價提醒等背景工作。") { v ->
+                    askOnOff("股票與投資助理", s.featureStocks, null) { v ->
                         repo.settings.update { it.copy(featureStocks = v) }
                     }
                 }
                 cfg("AI 功能", onOff(s.aiEnabled)) {
-                    askOnOff("AI 功能", s.aiEnabled, "關閉後隱藏所有 AI 相關畫面與設定（今日報告、問 AI、新聞整理、AI 檢討、AI 中心），背景也不會呼叫 AI；規則辨識與手動記帳照常。") { v ->
+                    askOnOff("AI 功能", s.aiEnabled, null) { v ->
                         repo.settings.update { it.copy(aiEnabled = v) }
                         if (v && !s.hasAiKey) nav.navigate("ai")
                     }
@@ -319,11 +317,10 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 cfg("AI 語氣", com.enwei.moneymanager.net.GroqAi.AiTone.entries.getOrElse(s.aiTone) { com.enwei.moneymanager.net.GroqAi.AiTone.GENTLE }.label) {
                     ask(
                         "AI 語氣", com.enwei.moneymanager.net.GroqAi.AiTone.entries.mapIndexed { i, t -> i to "${t.label}：${t.desc}" }, s.aiTone,
-                        "收支檢討、投資報告與股票助理的口吻；下次產生的內容開始套用。",
                     ) { v -> repo.settings.update { it.copy(aiTone = v) } }
                 }
                 cfg("背景 AI 只用 Wi-Fi", onOff(s.aiWifiOnly)) {
-                    askOnOff("背景 AI 只用 Wi-Fi", s.aiWifiOnly, "開啟後，新聞標註、重點整理與每日報告只在 Wi-Fi 等不計量網路時於背景執行；手動按「立即更新」與對話不受影響。") { v ->
+                    askOnOff("背景 AI 只用 Wi-Fi", s.aiWifiOnly, null) { v ->
                         repo.settings.update { it.copy(aiWifiOnly = v) }
                         com.enwei.moneymanager.work.NewsWorker.schedule(ctx, replace = true)
                     }

@@ -433,7 +433,7 @@ private fun CrashReportDialog() {
         title = { Text("上次 App 意外關閉") },
         text = {
             androidx.compose.foundation.layout.Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("以下是錯誤紀錄，按「複製」後貼給開發者可以幫助修正。", fontSize = 13.sp)
+                Text("錯誤紀錄", fontSize = 13.sp)
                 Text(t, fontSize = 10.sp, lineHeight = 12.sp, modifier = Modifier.padding(top = 8.dp))
             }
         },

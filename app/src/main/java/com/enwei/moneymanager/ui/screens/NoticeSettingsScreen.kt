@@ -74,7 +74,7 @@ fun NoticeSettingsScreen(nav: NavController) {
         ) {
             if (!systemOn) Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("系統已關閉帳理的通知，下面的設定都不會生效。", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text("系統已關閉帳理的通知", fontSize = 13.sp, modifier = Modifier.weight(1f))
                     TextButton(onClick = {
                         ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName))
                     }) { Text("開啟") }

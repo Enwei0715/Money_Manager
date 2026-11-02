@@ -340,7 +340,6 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                                     custom = ""
                                                 }) { Text("加入") }
                                             }
-                                            Text("最多同時顯示 5 條，太多線會看不清楚。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                     },
                                     confirmButton = { TextButton(onClick = { mas = mas.sorted().take(5).toSet(); addMa = false }) { Text("完成") } },
@@ -1150,7 +1149,7 @@ private fun ProjectionCard(b: DailyBars) {
                 Text("○ 波段高低點", fontSize = 11.sp, color = pivotCol)
                 Text("▒ 統計區間", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
             }
-            Text("依波段高低點畫線與統計波動推估，不是預測或投資建議。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("僅供參考", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

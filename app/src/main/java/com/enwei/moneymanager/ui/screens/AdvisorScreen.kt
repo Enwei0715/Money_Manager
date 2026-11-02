@@ -126,7 +126,7 @@ fun AdvisorContent(nav: NavController) {
     val aiOn = repo.settings.flow.collectAsStateWithLifecycle().value.aiEnabled
     if (!aiOn) {
         Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            Text("AI 功能已關閉：今日報告、問 AI 與新聞整理已隱藏（可在設定 → 功能開關開啟）", fontSize = 12.sp,
+            Text("AI 功能已關閉", fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             PlanTab(nav)
         }
@@ -631,7 +631,6 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                                 modifier = Modifier.padding(14.dp).size(28.dp))
                         }
                         Text("想問什麼？", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                        Text("我會先查你的持股、資金與近期新聞再回答", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         listOf(
                             "今天該買什麼？" to "依大盤階段與新聞挑選",
                             "我的持股怎麼處理？" to "對照你的紀律逐檔說明",
@@ -751,7 +750,7 @@ private fun ChatThreadsDialog(store: NewsStore, busy: Boolean, onOpen: (Long) ->
         onDismissRequest = onDismiss,
         title = { Text("過去的對話") },
         text = {
-            if (store.chatThreads.isEmpty()) Text("還沒有過去的對話。按「新對話」時，目前的對話會收到這裡。", fontSize = 13.sp)
+            if (store.chatThreads.isEmpty()) Text("還沒有過去的對話", fontSize = 13.sp)
             else Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 store.chatThreads.forEach { t ->
                     Row(Modifier.fillMaxWidth().clickable(enabled = !busy) { onOpen(t.id) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1066,7 +1065,6 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 if (themes.isNotEmpty()) item {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                         Text("題材（近 3 天，共 ${themes.size} 個）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        Text("點題材看 AI 整理的重點", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 val maxCount = themes.maxOfOrNull { it.count }?.coerceAtLeast(1) ?: 1
@@ -1140,7 +1138,6 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("新聞自動更新與每日報告", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        Text("依設定的頻率蒐集新聞並整理題材，每日報告完成後通知。", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = settings.advisorDaily, onCheckedChange = { enabled -> repo.settings.update { it.copy(advisorDaily = enabled) } }, enabled = aiReady)
                 }
@@ -1155,8 +1152,6 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                         }, label = { Text("每 $h 小時", fontSize = 12.sp) })
                     }
                 }
-                Text("每次會：蒐集新聞 → AI 標註 → 合併題材 → 整理重點；早上 7 點後資料完整時產生當日報告。", fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Text("共 ${store.items.size} 則（近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天），已標註 ${stats.tagged} 則", fontSize = 14.sp)
                 stats.coverage?.let { c ->

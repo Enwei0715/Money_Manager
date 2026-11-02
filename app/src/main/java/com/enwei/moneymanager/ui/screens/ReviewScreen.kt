@@ -265,7 +265,7 @@ fun ReviewContent(
                             Text("設定 AI 金鑰後即可產生檢討。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                             TextButton(onClick = { nav.navigate("ai") }) { Text("設定 AI") }
                         }
-                        else -> Text("按「產生」寫出這期的檢討與下期目標", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else -> Text("還沒有這期的檢討", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

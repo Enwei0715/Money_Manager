@@ -239,8 +239,6 @@ fun ToolGrid(
             }
         }
     }
-    if (editing) Text("拖動方框到任何空格，放開就固定在那裡；拖右下角的圓點改大小，點一下可以挑大小，✕ 移除。", fontSize = 12.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
 }
 
 /** 一格的內容：依大小顯示圖示、名稱與摘要。 */

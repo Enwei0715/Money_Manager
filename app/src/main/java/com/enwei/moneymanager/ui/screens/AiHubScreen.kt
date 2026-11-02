@@ -1,5 +1,15 @@
 package com.enwei.moneymanager.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.outlined.Assessment
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.ShowChart
+import androidx.compose.ui.Alignment
 import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,38 +45,25 @@ fun AiHubScreen(nav: NavController) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             AiAllTasksProgress()
-            Text(
-                if (ready) "AI 已啟用" else "AI 尚未設定完成",
-                color = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Text(
-                "通知與錢包 AI 已整合在設定中的自動記帳流程；模型金鑰與分工設定也留在設定，不重複建立入口。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            HubCard("收支檢討", "以選定期間的交易資料產生檢討與分析。") {
-                nav.navigate("review")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).background(if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape))
+                Text(if (ready) "AI 已啟用" else "AI 尚未設定", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 8.dp))
             }
-            HubCard("股票、新聞與資金分析", "查看持倉分析、新聞資料集、每日報告與股票對話。") {
-                nav.navigate("advisor")
-            }
-            Text(
-                "AI 結果仍需依目前的交易與來源資料判斷；自動化確認流程維持原設定。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            HubCard("收支檢討", androidx.compose.material.icons.Icons.Outlined.Assessment) { nav.navigate("review") }
+            if (settings.featureStocks) HubCard("股票助理", androidx.compose.material.icons.Icons.Outlined.ShowChart) { nav.navigate("advisor") }
+            HubCard("待確認與 AI 建議", androidx.compose.material.icons.Icons.Outlined.Inbox) { nav.navigate("pending") }
+            HubCard("AI 設定", androidx.compose.material.icons.Icons.Outlined.Settings) { nav.navigate("ai") }
         }
     }
 }
 
 @Composable
-private fun HubCard(title: String, description: String, onClick: () -> Unit) {
+private fun HubCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 14.dp).weight(1f))
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

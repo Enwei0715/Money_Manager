@@ -60,7 +60,7 @@ fun AiSettingsScreen(nav: NavController) {
                         repo.settings.update { it.copy(aiAutoTidy = v) }
                     }
                     if (s.aiEnabled && !s.hasAiKey)
-                        Text("請在下方填入至少一個金鑰，AI 才會開始運作。", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                        Text("需要至少一個金鑰", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                 }
             }
             if (s.aiEnabled) {

@@ -52,7 +52,7 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (info == null) {
-            Text("設定對象、本金與還款方式，開始追蹤借貸進度。", fontSize = 14.sp, color = gray)
+            Text("還沒有借貸", fontSize = 14.sp, color = gray)
             OutlinedButton(onClick = { nav.navigate("account/${acc.id}") }) { Text("設定借貸") }
         } else {
             val l = Repository.LoanStatus(acc, info, balance)

@@ -163,7 +163,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
             Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("尚無持股", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
-                Text("按右上角＋新增，或在「通知記帳」啟用券商 App 自動記錄成交",
+                Text("還沒有股票交易",
                     color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = { nav.navigate("trade/0") }) { Text("新增股票") }

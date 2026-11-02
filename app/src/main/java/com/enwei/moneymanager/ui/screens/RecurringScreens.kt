@@ -73,11 +73,25 @@ fun RecurringScreen(nav: NavController) {
         floatingActionButton = { FloatingActionButton(onClick = { nav.navigate("recurring/0") }) { Icon(Icons.Filled.Add, "新增") } },
     ) { pad ->
         LazyColumn(Modifier.padding(pad)) {
-            item {
-                Text(
-                    "訂閱、房租、薪水等固定收支，到期自動記帳。",
-                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp),
-                )
+            // 每月固定收支合計（依頻率換算成每月）
+            if (list.isNotEmpty()) item {
+                fun monthly(r: com.enwei.moneymanager.data.RecurringEntity): Long {
+                    val base = lk.fx.convert(r.amount, r.currency).toDouble() / r.interval.coerceAtLeast(1)
+                    return (base * when (r.frequency) { Frequency.DAILY -> 30.0; Frequency.WEEKLY -> 4.33; Frequency.MONTHLY -> 1.0; Frequency.YEARLY -> 1 / 12.0 }).toLong()
+                }
+                val on = list.filter { it.enabled }
+                androidx.compose.material3.Card(Modifier.fillMaxWidth().padding(12.dp)) {
+                    Row(Modifier.padding(16.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("每月固定支出", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            AmountText(on.filter { it.type == TxnType.EXPENSE }.sumOf(::monthly), lk.base, TxnType.EXPENSE)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("每月固定收入", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            AmountText(on.filter { it.type == TxnType.INCOME }.sumOf(::monthly), lk.base, TxnType.INCOME)
+                        }
+                    }
+                }
             }
             if (list.isEmpty()) item { EmptyHint("尚未設定週期交易") }
             items(list, key = { it.id }) { r ->
@@ -181,7 +195,7 @@ fun RecurringEditScreen(nav: NavController, id: Long) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("自動入帳")
-                    Text("關閉時會先放到「待確認」，適合金額會變動的帳單", style = MaterialTheme.typography.bodySmall)
+                    Text("關閉時先放到待確認", style = MaterialTheme.typography.bodySmall)
                 }
                 Switch(autoConfirm, { autoConfirm = it })
             }

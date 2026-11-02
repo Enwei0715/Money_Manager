@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.components
 
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -196,8 +197,15 @@ fun LabelValue(label: String, value: String, modifier: Modifier = Modifier, valu
 
 @Composable
 fun EmptyHint(text: String, modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    // 空白狀態：圓形圖示＋一行字，置中
+    androidx.compose.foundation.layout.Column(modifier.fillMaxWidth().padding(vertical = 40.dp, horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally) {
+        androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = androidx.compose.foundation.shape.CircleShape) {
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Inbox, null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp).size(28.dp))
+        }
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 12.dp))
     }
 }
 

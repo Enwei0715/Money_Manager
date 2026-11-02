@@ -130,9 +130,9 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
                 listOf("用預設", "成交即折", "月退").forEachIndexed { i, label -> FilterChip(mode == i, { mode = i; msg = null }, label = { Text(label) }) }
             }
             when (mode) {
-                1 -> NumberField(disc, { disc = it }, "成交時的折數（例如 0.6）")
+                1 -> NumberField(disc, { disc = it }, "成交折數")
                 2 -> {
-                    NumberField(disc, { disc = it }, "月退後的折數（例如 0.28）")
+                    NumberField(disc, { disc = it }, "月退後折數")
                     NumberField(payDay, { payDay = it.filter(Char::isDigit).take(2) }, "每月退款日（次月）", decimal = false, suffix = "日")
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("從 ${LocalDate.ofEpochDay(since).let { "${it.year}/${it.monthValue}" }} 的交易開始計算", fontSize = 13.sp, modifier = Modifier.weight(1f))

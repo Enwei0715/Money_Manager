@@ -295,7 +295,6 @@ fun PendingScreen(nav: NavController) {
                         Icon(Icons.Filled.DoneAll, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.padding(18.dp).size(32.dp))
                     }
                     Text("都確認完了", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Text("通知記帳沒把握的交易會放在這裡等你確認", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             items(pending, key = { it.id }) { t -> PendingCard(t, lk, nav) }

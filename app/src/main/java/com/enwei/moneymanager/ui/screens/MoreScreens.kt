@@ -152,7 +152,7 @@ fun MoreScreen(nav: NavController) {
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (shown.isEmpty()) Text("還沒有工具，按右上「編輯」從下方清單加入。", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(14.dp))
+            if (shown.isEmpty()) Text("還沒有工具", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(14.dp))
             // 三欄網格：每格可以是 1×1、2×1、3×1、1×2、2×2；編輯時拖動移動、拖角落改大小
             ToolGrid(
                 shown,
@@ -423,16 +423,10 @@ fun NotificationSettingsScreen(nav: NavController) {
             if (tab == 1) {
             item {
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 入帳方式：有網路就直接記帳（AI 判讀要有把握、找得到帳戶）；沒網路或不確定才放「待確認」
-                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(10.dp)) {
-                        Text("・有網路：辨識後直接記帳並通知；沒把握或找不到帳戶放「待確認」\n・沒網路：全部放「待確認」，恢復網路後自動再判讀",
-                            fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(10.dp))
-                    }
                     DropdownField(
                         "無法對應卡號時記入的帳戶", lk.accounts.filter { !it.archived }, lk.account(settings.defaultAccountId),
                         { it.name }, { a -> repo.settings.update { it.copy(defaultAccountId = a.id) } },
                     )
-                    Text("信用卡填寫「末四碼」，通知會自動記到對應的卡片。", style = MaterialTheme.typography.bodySmall)
                 }
             }
             if (candidates.isNotEmpty()) {
@@ -545,7 +539,6 @@ fun NotificationSettingsScreen(nav: NavController) {
                 item { SectionTitle("整合模擬器（Debug；只試算、不寫入）") }
                 item {
                     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("以合成通知測試支出、收入與轉帳配對；若已啟用 AI，也會測試批次判讀。", style = MaterialTheme.typography.bodySmall)
                         Button(onClick = {
                             val packages = settings.notifPackages.toList()
                             val debitPkg = packages.firstOrNull() ?: "com.example.synthetic.bank"
@@ -879,8 +872,6 @@ fun BackupScreen(nav: NavController) {
         Column(Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             status?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             Text("自動雲端備份", style = MaterialTheme.typography.titleMedium)
-            Text("選雲端硬碟或手機裡的檔案，定期自動覆寫完整備份。", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
             val target = bs.autoBackupUri.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
             Text(
                 if (target == null) "尚未選擇備份位置"
@@ -932,7 +923,7 @@ fun BackupScreen(nav: NavController) {
         AlertDialog(
             onDismissRequest = { mmUri = null },
             title = { Text("匯入 Money Manager 資料") },
-            text = { Text("「合併」會保留帳理現有資料，已匯入過的交易不會重複；「取代」會先清空帳理的帳戶、分類、交易與週期設定（股票紀錄保留）。") },
+            text = { Text("合併：保留現有資料　取代：清空後匯入（股票保留）") },
             confirmButton = { TextButton(onClick = { mmUri = null; runMmImport(uri, replace = false) }) { Text("合併") } },
             dismissButton = {
                 Row {
@@ -1100,7 +1091,6 @@ fun SettingsScreen(nav: NavController) {
                         .padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("自動檢查新版本", fontSize = 15.sp)
-                            Text("開啟 App 時有新版會跳出提示，背景也會通知", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         androidx.compose.material3.Switch(settings.notifyUpdates, { v -> repo.settings.update { it.copy(notifyUpdates = v, updateSkipped = 0) } })
                     }
