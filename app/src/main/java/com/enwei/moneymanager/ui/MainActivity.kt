@@ -395,7 +395,7 @@ private fun AppScaffold(nav: NavHostController) {
             }
             composable("pending") { PendingScreen(nav) }
             composable("notif") { NotificationSettingsScreen(nav) }
-            composable("notices") { NoticeSettingsScreen(nav) }
+            composable("notices") { com.enwei.moneymanager.ui.screens.NoticeSettingsScreen(nav) }
             composable("ai") { AiSettingsScreen(nav) }
             composable("fx") { FxScreen(nav) }
             composable(
