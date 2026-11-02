@@ -86,7 +86,7 @@ const val BASE_UI_SCALE = 0.93f
 @Composable
 fun MoneyTheme(dark: Boolean = isSystemInDarkTheme(), uiScale: Float = 1f, content: @Composable () -> Unit) {
     val base = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale * BASE_UI_SCALE, base.fontScale)) {
+    CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale * BASE_UI_SCALE, base.fontScale.coerceIn(0.85f, 1.15f))) {
         MaterialTheme(colorScheme = if (dark) Dark else Light, typography = AppTypography, content = content)
     }
 }
@@ -112,4 +112,31 @@ private val AppTypography = androidx.compose.material3.Typography().let { t ->
         labelMedium = t.labelMedium.sized(12, 16),
         labelSmall = t.labelSmall.sized(11, 14),
     )
+}
+
+
+/**
+ * 全 App 的字級（文字大小一律從這裡取，不再各頁自訂）：
+ * 大數字 26／大標 18／區塊標題 15（粗）／內文 14／次要 13／說明 12／標籤 11／徽章 10。
+ */
+object AppText {
+    val display = androidx.compose.ui.unit.TextUnit(26f, androidx.compose.ui.unit.TextUnitType.Sp)
+    val title = androidx.compose.ui.unit.TextUnit(18f, androidx.compose.ui.unit.TextUnitType.Sp)
+    val section = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp)
+    val body = androidx.compose.ui.unit.TextUnit(14f, androidx.compose.ui.unit.TextUnitType.Sp)
+    val secondary = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp)
+    val caption = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp)
+    val label = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp)
+    val badge = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp)
+}
+
+
+/**
+ * 工具列（標題列、分頁列、底部分頁、狀態列）的文字不跟系統字級放大：高度固定的列不會被撐變形；
+ * 仍會跟 App 的「介面大小」一起等比例縮放。
+ */
+@Composable
+fun ChromeScale(content: @Composable () -> Unit) {
+    val d = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(d.density, 1f), content = content)
 }

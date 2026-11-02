@@ -51,9 +51,9 @@ import java.time.YearMonth
 import java.time.ZoneOffset
 
 @Composable
-fun BackTopBar(title: String, onBack: () -> Unit, actions: @Composable () -> Unit = {}) {
+fun BackTopBar(title: String, onBack: () -> Unit, actions: @Composable () -> Unit = {}) = com.enwei.moneymanager.ui.ChromeScale {
     TopAppBar(
-        title = { Text(title) },
+        title = { Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
         navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
         actions = { actions() },
     )

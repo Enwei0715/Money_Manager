@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
@@ -60,7 +62,7 @@ fun DisciplineChart(symbol: String, modifier: Modifier = Modifier) {
     val ma20 = b.close.indices.map { com.enwei.moneymanager.core.Technicals.sma(b.close, 20, it + 1) }
     val ma60 = b.close.indices.map { com.enwei.moneymanager.core.Technicals.sma(b.close, 60, it + 1) }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text("$symbol $name · 紀律檢查", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text("$symbol $name · 紀律檢查", fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold)
         Canvas(Modifier.fillMaxWidth().height(150.dp)) {
             val lo = (from until b.close.size).minOf { minOf(b.low[it], ma20[it] ?: b.low[it], ma60[it] ?: b.low[it]) }
             val hi = (from until b.close.size).maxOf { maxOf(b.high[it], ma20[it] ?: b.high[it], ma60[it] ?: b.high[it]) }
@@ -107,20 +109,20 @@ fun DisciplineChart(symbol: String, modifier: Modifier = Modifier) {
                 }
             }
         }
-        Text("━ 月線　━ 季線　●買／●賣＝紀律買賣點（點一下看個股）", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("━ 月線　━ 季線　●買／●賣＝紀律買賣點（點一下看個股）", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         st?.let { s ->
-            Text(s.verdict, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+            Text(s.verdict, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold,
                 color = when (s.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface })
             // 依據改成小方塊（和個股頁一樣），不再一條一條長列
             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 s.chips.forEach { (t, ok) ->
                     val col = when (ok) { true -> StockUp; false -> StockDown; null -> MaterialTheme.colorScheme.onSurfaceVariant }
-                    Text(t, fontSize = 11.sp, color = col,
+                    Text(t, fontSize = AppText.label, color = col,
                         modifier = Modifier.background(col.copy(alpha = 0.1f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
                 }
             }
             signals.lastOrNull()?.let { sg ->
-                Text("最近：${d(sg.index)} ${if (sg.buy) "買" else "賣"}・${sg.reason}", fontSize = 11.sp, maxLines = 1,
+                Text("最近：${d(sg.index)} ${if (sg.buy) "買" else "賣"}・${sg.reason}", fontSize = AppText.label, maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = if (sg.buy) StockUp else StockDown)
             }
         }

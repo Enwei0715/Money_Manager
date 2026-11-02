@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -127,7 +129,7 @@ fun ReviewContent(
             }
             val d = data ?: return@Column
             // 交易頁上方已顯示期間，避免重複顯示年月或季度。
-            if (period == null) Text(d.title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            if (period == null) Text(d.title, fontSize = AppText.title, fontWeight = FontWeight.SemiBold)
             // 分段：每段一個畫面看得完（總覽含目標與最大幾筆；結構、習慣、AI 各自一段）
             val tabNames = listOfNotNull("總覽", "變化", "習慣", if (settings.aiEnabled) "AI 建議" else null)
             val rt = reviewTab.coerceAtMost(tabNames.size - 1)
@@ -167,10 +169,10 @@ fun ReviewContent(
                             Row(Modifier.fillMaxWidth()) {
                                 row.forEach { (label, value, c) ->
                                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                                        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                                        Text(label, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                                             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                                         Spacer(Modifier.width(6.dp))
-                                        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = c ?: MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                                        Text(value, fontSize = AppText.secondary, fontWeight = FontWeight.Medium, color = c ?: MaterialTheme.colorScheme.onSurface, maxLines = 1)
                                     }
                                     if (row.size == 1) Spacer(Modifier.weight(1f))
                                 }
@@ -185,7 +187,7 @@ fun ReviewContent(
             if (rt == 0 && span == ReviewSpan.MONTH && (settings.budgets.isNotEmpty() || settings.savingsGoal != null)) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("這個月的目標", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text("這個月的目標", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         TextButton(onClick = { nav.navigate("budget") }) { Text("修改") }
                     }
                     settings.savingsGoal?.let { g ->
@@ -193,15 +195,15 @@ fun ReviewContent(
                         val ok = rate >= g
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("儲蓄率", fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                                Text("目標 ${"%.0f".format(g)}%  ", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("${"%.0f".format(rate)}%", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (ok) IncomeColor else ExpenseColor)
+                                Text("儲蓄率", fontSize = AppText.secondary, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                                Text("目標 ${"%.0f".format(g)}%  ", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${"%.0f".format(rate)}%", fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, color = if (ok) IncomeColor else ExpenseColor)
                             }
                             Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
                                 Box(Modifier.fillMaxWidth((rate / g).toFloat().coerceIn(0f, 1f)).height(6.dp)
                                     .background(if (ok) IncomeColor else ExpenseColor, RoundedCornerShape(3.dp)))
                             }
-                            Text(if (ok) "已達成目標" else "還差 ${"%.0f".format(g - rate)} 個百分點", fontSize = 11.sp,
+                            Text(if (ok) "已達成目標" else "還差 ${"%.0f".format(g - rate)} 個百分點", fontSize = AppText.label,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.End))
                         }
                     }
@@ -223,10 +225,10 @@ fun ReviewContent(
             }
 
             // ② 變化：和上期比各分類增減、支出組成（固定／變動、必要／可省）、和過去比
-            if (rt == 1 && d.expenses.isEmpty()) Text("這期沒有支出", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (rt == 1 && d.expenses.isEmpty()) Text("這期沒有支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (rt == 1 && d.expenses.isNotEmpty()) ChangeCards(d, ::m, lk, settings.txnNecessity)
 
-            if (rt == 2 && d.expenses.isEmpty()) Text("這期沒有支出", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (rt == 2 && d.expenses.isEmpty()) Text("這期沒有支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (rt == 2 && d.expenses.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     HabitCharts(d, ::m, lk)
@@ -237,7 +239,7 @@ fun ReviewContent(
             if (rt == 3 && settings.aiEnabled) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("AI 建議", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text("AI 建議", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         val cached = settings.reviews[d.key]
                         if (GroqAi.enabled) OutlinedButton(
                             enabled = !reviewProgress.running && d.txnCount > 0,
@@ -254,10 +256,10 @@ fun ReviewContent(
                         // 下期目標依實際的前幾期支出校正（舊的檢討也一樣）
                         r != null -> AiReviewBody(r.sane(d), ::m, d, lk, settings.txnNecessity, nav)
                         !GroqAi.enabled -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("需要 AI 金鑰", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                            Text("需要 AI 金鑰", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                             TextButton(onClick = { nav.navigate("ai") }) { Text("設定 AI") }
                         }
-                        else -> Text("還沒有這期的 AI 建議", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else -> Text("還沒有這期的 AI 建議", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -265,7 +267,7 @@ fun ReviewContent(
             // ⑤ 最大幾筆
             if (rt == 0 && d.top.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 12.dp)) {
-                    Text("最大三筆支出", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp))
+                    Text("最大三筆支出", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp))
                     d.top.take(3).forEach { t -> MmTxnRow(t, lk) { nav.navigate("txn/${t.id}") } }
                 }
             }
@@ -277,8 +279,8 @@ fun ReviewContent(
 @Composable
 private fun Stat(label: String, value: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
     Column(modifier) {
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontSize = 14.sp, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = AppText.body, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -295,10 +297,10 @@ private fun AiReviewBody(
             else -> ExpenseColor
         }
         Box(Modifier.size(52.dp).background(c.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
-            Text("${r.score}", fontSize = 18.sp, color = c, fontWeight = FontWeight.Bold)
+            Text("${r.score}", fontSize = AppText.title, color = c, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(12.dp))
-        Text(r.headline, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Text(r.headline, fontSize = AppText.body, modifier = Modifier.weight(1f))
     }
     // 可省金額：每個建議約可省多少（圖表取代文字）
     val savings = r.findings.filter { (it.saving ?: 0) > 0 }.map { Triple(it.text, it.saving!!, "約 ${m(it.saving)}／月") }
@@ -310,23 +312,23 @@ private fun AiReviewBody(
         val fold = com.enwei.moneymanager.ui.components.rememberFold("review." + title, initiallyOpen)
         val open = fold.open
         Row(Modifier.fillMaxWidth().clickable { fold.toggle() }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(title, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             com.enwei.moneymanager.ui.components.FoldToggle(open, count)
         }
         if (open) body()
     }
     @Composable
     fun section(title: String, items: List<String>, mark: String) =
-        fold(title, items.size, false) { items.forEach { Text("$mark $it", fontSize = 14.sp) } }
+        fold(title, items.size, false) { items.forEach { Text("$mark $it", fontSize = AppText.body) } }
     // 新版：每個發現都附依據與建議
     if (r.findings.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
         r.findings.forEach { f ->
             androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp)) {
                 Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(f.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    if (f.basis.isNotBlank()) Text("依據：${f.basis}", fontSize = 12.sp, color = gray)
-                    if (f.action.isNotBlank()) Text("→ ${f.action}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-                    f.saving?.let { Text("約省 ${m(it)}／月", fontSize = 12.sp, color = IncomeColor) }
+                    Text(f.text, fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+                    if (f.basis.isNotBlank()) Text("依據：${f.basis}", fontSize = AppText.caption, color = gray)
+                    if (f.action.isNotBlank()) Text("→ ${f.action}", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary)
+                    f.saving?.let { Text("約省 ${m(it)}／月", fontSize = AppText.caption, color = IncomeColor) }
                 }
             }
         }
@@ -337,8 +339,8 @@ private fun AiReviewBody(
     fold("多角度分析", r.analysis.size, false) {
         r.analysis.forEach { a ->
             Column {
-                Text(a.title, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-                Text(a.text, fontSize = 14.sp)
+                Text(a.title, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary)
+                Text(a.text, fontSize = AppText.body)
             }
         }
     }
@@ -347,8 +349,8 @@ private fun AiReviewBody(
     fold("行動建議", r.actions.size, false) {
         r.actions.forEachIndexed { i, a ->
             Row {
-                Text("${i + 1}. ${a.action}", fontSize = 14.sp, modifier = Modifier.weight(1f))
-                a.saving?.let { Text("每月省 ${m(it)}", fontSize = 13.sp, color = IncomeColor) }
+                Text("${i + 1}. ${a.action}", fontSize = AppText.body, modifier = Modifier.weight(1f))
+                a.saving?.let { Text("每月省 ${m(it)}", fontSize = AppText.secondary, color = IncomeColor) }
             }
         }
     }
@@ -357,7 +359,7 @@ private fun AiReviewBody(
     if (r.expenseCap != null || r.savingsTarget != null || r.caps.isNotEmpty()) NextGoals(r, m, lk, nav)
     Text(
         "產生於 " + java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(r.createdAt)),
-        fontSize = 11.sp, color = gray,
+        fontSize = AppText.label, color = gray,
     )
 }
 
@@ -380,12 +382,12 @@ private fun QuestionCard(
                 val dt = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault())
                 Row(Modifier.fillMaxWidth().clickable { nav.navigate("txn/${t.id}") }) {
                     Text("${dt.monthValue}/${dt.dayOfMonth} ${"%02d:%02d".format(dt.hour, dt.minute)}  ${t.merchant ?: lk.catLabel(t.categoryId) ?: "未命名"}",
-                        fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    Text(m(t.amount), fontSize = 13.sp, color = ExpenseColor)
+                        fontSize = AppText.secondary, modifier = Modifier.weight(1f))
+                    Text(m(t.amount), fontSize = AppText.secondary, color = ExpenseColor)
                 }
             }
-            Text("？ ${q.question}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            if (q.why.isNotBlank()) Text(q.why, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("？ ${q.question}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            if (q.why.isNotBlank()) Text(q.why, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 com.enwei.moneymanager.data.Necessity.entries.forEach { n ->
                     FilterChip(current?.first == n, {
@@ -395,7 +397,7 @@ private fun QuestionCard(
             }
             androidx.compose.material3.OutlinedTextField(
                 note, { v -> note = v; if (current != null) repo.settings.update { st -> st.copy(txnNecessity = st.txnNecessity + txns.associate { it.id to "${current.first.name}|${v.trim()}" }) } },
-                placeholder = { Text("補充說明（選填）", fontSize = 13.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("補充說明（選填）", fontSize = AppText.secondary) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
         }
     }
@@ -420,8 +422,8 @@ private fun StructureCard(d: ReviewData, m: (Long) -> String, focus: List<String
     val total = rows.sumOf { it.second }.coerceAtLeast(1)
     val hot = rows.map { it.first }.filter { n -> focus.any { f -> f.isNotBlank() && (n.contains(f) || f.contains(n)) } }.toSet()
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("支出結構", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        if (hot.isNotEmpty()) Text("● AI 建議留意", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+        Text("支出結構", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        if (hot.isNotEmpty()) Text("● AI 建議留意", fontSize = AppText.label, color = MaterialTheme.colorScheme.error)
     }
     Row(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp))) {
         rows.forEachIndexed { i, r ->
@@ -433,18 +435,18 @@ private fun StructureCard(d: ReviewData, m: (Long) -> String, focus: List<String
             Row(Modifier.weight(1f).padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(8.dp).background(StructurePalette[i % StructurePalette.size], CircleShape))
                 Text(
-                    " " + (if (name in hot) "● " else "") + name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    " " + (if (name in hot) "● " else "") + name, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = if (name in hot) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f),
                 )
-                Text("${v * 100 / total}% ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${v * 100 / total}% ", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
                     if (prev == 0L) "新" else "${if (v >= prev) "▲" else "▼"}${kotlin.math.abs(v - prev) * 100 / prev}%",
-                    fontSize = 11.sp, color = if (v > prev) ExpenseColor else IncomeColor, modifier = Modifier.padding(end = 6.dp),
+                    fontSize = AppText.label, color = if (v > prev) ExpenseColor else IncomeColor, modifier = Modifier.padding(end = 6.dp),
                 )
             }
         }
     }
-    Text("合計 ${m(total)}；點「每日」可看明細", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text("合計 ${m(total)}；點「每日」可看明細", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 
@@ -509,18 +511,18 @@ private fun NextGoals(r: AiReview, m: (Long) -> String, lk: Lookups, nav: NavCon
         (r.savingsTarget == null || settings.savingsGoal == r.savingsTarget)
     androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("下期目標（AI 建議）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            r.expenseCap?.let { Row { Text("總支出上限", fontSize = 13.sp, modifier = Modifier.weight(1f)); Text(m(it), fontSize = 13.sp) } }
-            r.savingsTarget?.let { Row { Text("儲蓄率", fontSize = 13.sp, modifier = Modifier.weight(1f)); Text("${"%.0f".format(it)}% 以上", fontSize = 13.sp) } }
+            Text("下期目標（AI 建議）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            r.expenseCap?.let { Row { Text("總支出上限", fontSize = AppText.secondary, modifier = Modifier.weight(1f)); Text(m(it), fontSize = AppText.secondary) } }
+            r.savingsTarget?.let { Row { Text("儲蓄率", fontSize = AppText.secondary, modifier = Modifier.weight(1f)); Text("${"%.0f".format(it)}% 以上", fontSize = AppText.secondary) } }
             capIds.forEach { (id, c) ->
                 Row {
-                    Text(lk.category(id)?.name ?: c.category, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    Text("上限 ${m(c.cap)}", fontSize = 13.sp)
+                    Text(lk.category(id)?.name ?: c.category, fontSize = AppText.secondary, modifier = Modifier.weight(1f))
+                    Text("上限 ${m(c.cap)}", fontSize = AppText.secondary)
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (adopted) Text("已採用，每月在分析頁看進度", fontSize = 12.sp, color = IncomeColor, modifier = Modifier.weight(1f))
-                else Text("採用後會寫進每月預算與目標", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                if (adopted) Text("已採用，每月在分析頁看進度", fontSize = AppText.caption, color = IncomeColor, modifier = Modifier.weight(1f))
+                else Text("採用後會寫進每月預算與目標", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                 if (!adopted) TextButton(onClick = {
                     repo.settings.update { s ->
                         s.copy(
@@ -543,7 +545,7 @@ private fun ChangeCards(d: ReviewData, m: (Long) -> String, lk: Lookups, necessi
     // ① 和過去比：上期、前三期平均、去年同期
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("支出和過去比", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("支出和過去比", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             listOfNotNull(
                 ("上${d.span.label}" to d.prevExpense).takeIf { d.prevExpense > 0 },
                 ("前三${d.span.label}平均" to d.avgExpense).takeIf { d.avgExpense > 0 },
@@ -551,11 +553,11 @@ private fun ChangeCards(d: ReviewData, m: (Long) -> String, lk: Lookups, necessi
             ).forEach { (label, v) ->
                 val diff = d.expense - v
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(label, fontSize = 13.sp, color = muted, modifier = Modifier.weight(1f))
-                    Text(m(v), fontSize = 13.sp)
+                    Text(label, fontSize = AppText.secondary, color = muted, modifier = Modifier.weight(1f))
+                    Text(m(v), fontSize = AppText.secondary)
                     Text(
                         (if (diff >= 0) "  ▲ " else "  ▼ ") + "%.0f%%".format(kotlin.math.abs(diff) * 100.0 / v.coerceAtLeast(1)),
-                        fontSize = 13.sp, color = if (diff > 0) ExpenseColor else IncomeColor, fontWeight = FontWeight.SemiBold,
+                        fontSize = AppText.secondary, color = if (diff > 0) ExpenseColor else IncomeColor, fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
@@ -565,12 +567,12 @@ private fun ChangeCards(d: ReviewData, m: (Long) -> String, lk: Lookups, necessi
     val changes = d.categories.map { it to (it.amount - it.prev) }.filter { it.second != 0L }.sortedByDescending { kotlin.math.abs(it.second) }.take(6)
     if (changes.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("變化最大的分類（和上${d.span.label}比）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("變化最大的分類（和上${d.span.label}比）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             changes.forEach { (c, diff) ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(c.name, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Text(m(c.amount), fontSize = 13.sp, color = muted)
-                    Text((if (diff > 0) "  +" else "  −") + m(kotlin.math.abs(diff)), fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                    Text(c.name, fontSize = AppText.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(m(c.amount), fontSize = AppText.secondary, color = muted)
+                    Text((if (diff > 0) "  +" else "  −") + m(kotlin.math.abs(diff)), fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold,
                         color = if (diff > 0) ExpenseColor else IncomeColor)
                 }
             }
@@ -589,7 +591,7 @@ private fun ChangeCards(d: ReviewData, m: (Long) -> String, lk: Lookups, necessi
     val (total, fixed, top3) = nums
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("支出組成", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("支出組成", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             SplitBar("固定／變動", listOf("固定" to fixed, "變動" to (total - fixed)), m)
             val tagged = nec.values.sum()
             if (tagged > 0) SplitBar("必要程度", com.enwei.moneymanager.data.Necessity.entries.map { it.label to (nec[it] ?: 0L) } +
@@ -607,7 +609,7 @@ private fun SplitBar(title: String, parts: List<Pair<String, Long>>, m: (Long) -
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
     val total = parts.sumOf { it.second }.coerceAtLeast(1)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(title, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth().height(10.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(5.dp))) {
             parts.forEachIndexed { i, (_, v) ->
                 if (v > 0) Box(Modifier.weight(v.toFloat() / total).height(10.dp).background(palette[i % palette.size]))
@@ -617,7 +619,7 @@ private fun SplitBar(title: String, parts: List<Pair<String, Long>>, m: (Long) -
             parts.forEachIndexed { i, (n, v) ->
                 if (v > 0) Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(8.dp).background(palette[i % palette.size], RoundedCornerShape(4.dp)))
-                    Text(" $n ${v * 100 / total}%　${m(v)}", fontSize = 12.sp)
+                    Text(" $n ${v * 100 / total}%　${m(v)}", fontSize = AppText.caption)
                 }
             }
         }

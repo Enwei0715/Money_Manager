@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.ui.graphics.Color
@@ -169,7 +171,7 @@ fun MoreScreen(nav: NavController) {
             )
             // 可加入的工具：編輯時才顯示
             if (editing && available.isNotEmpty()) {
-                Text("可加入的工具", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 12.dp))
+                Text("可加入的工具", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 12.dp))
                 available.forEach { t ->
                     Row(
                         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
@@ -177,8 +179,8 @@ fun MoreScreen(nav: NavController) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(t.icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                        Text(t.label, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(start = 12.dp))
-                        Text("＋ 加入", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                        Text(t.label, fontSize = AppText.body, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                        Text("＋ 加入", fontSize = AppText.body, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -206,17 +208,17 @@ private fun ToolTile(
             if (wide) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 Icon(t.icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(30.dp))
                 Column(Modifier.padding(start = 10.dp).weight(1f, fill = false)) {
-                    Text(t.label, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
-                    if (!summary.isNullOrBlank()) Text(summary, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                    Text(t.label, fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
+                    if (!summary.isNullOrBlank()) Text(summary, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                 }
             } else Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(t.icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(32.dp))
                 Spacer(Modifier.height(8.dp))
-                Text(t.label, fontSize = 14.sp, lineHeight = 17.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(t.label, fontSize = AppText.body, lineHeight = 17.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
             if (editing) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 listOf("◀" to onLeft, (if (wide) "窄" else "寬") to onToggleWide, "▶" to onRight, "✕" to onHide).forEach { (l, f) ->
-                    Text(l, fontSize = 13.sp, color = if (l == "✕") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    Text(l, fontSize = AppText.secondary, color = if (l == "✕") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.clickable(onClick = f).padding(horizontal = 4.dp, vertical = 2.dp))
                 }
             }
@@ -382,7 +384,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     com.enwei.moneymanager.ui.components.StatusLine(true, "通知存取已開啟")
                     Spacer(Modifier.weight(1f))
-                    Text("今天 ${todayLog.size} 則 · 記帳 ${todayLog.count { it.result == "RECORDED" || it.result == "MERGED" }}", fontSize = 12.sp,
+                    Text("今天 ${todayLog.size} 則 · 記帳 ${todayLog.count { it.result == "RECORDED" || it.result == "MERGED" }}", fontSize = AppText.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -415,7 +417,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         val on = tab == i
                         Box(Modifier.weight(1f).background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
                             .clickable { tab = i }.padding(vertical = 7.dp), contentAlignment = Alignment.Center) {
-                            Text(l, fontSize = 13.sp, fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal)
+                            Text(l, fontSize = AppText.secondary, fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal)
                         }
                     }
                 }
@@ -438,15 +440,15 @@ fun NotificationSettingsScreen(nav: NavController) {
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp)) {
                         Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("${labelOf[pkg] ?: pkg} · ${notes.size} 則", fontSize = 14.sp, maxLines = 1)
-                                Text(notes.first().let { listOfNotNull(it.title, it.text).joinToString(" ") }, fontSize = 12.sp, maxLines = 1,
+                                Text("${labelOf[pkg] ?: pkg} · ${notes.size} 則", fontSize = AppText.body, maxLines = 1)
+                                Text(notes.first().let { listOfNotNull(it.title, it.text).joinToString(" ") }, fontSize = AppText.caption, maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             TextButton(onClick = { repo.settings.update { it.copy(notifIgnored = it.notifIgnored + pkg) } }) {
-                                Text("忽略", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("忽略", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             androidx.compose.material3.FilledTonalButton(onClick = { toggle(pkg, true) },
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) { Text("啟用", fontSize = 13.sp) }
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) { Text("啟用", fontSize = AppText.secondary) }
                         }
                     }
                 }
@@ -592,7 +594,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         filters.forEachIndexed { i, l ->
-                            androidx.compose.material3.FilterChip(logFilter == i, { logFilter = i; allLog = false }, label = { Text(l, fontSize = 12.sp) })
+                            androidx.compose.material3.FilterChip(logFilter == i, { logFilter = i; allLog = false }, label = { Text(l, fontSize = AppText.caption) })
                         }
                     }
                 }
@@ -608,7 +610,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         else -> true
                     }
                 }
-                if (shown.isEmpty()) item { Text("沒有紀錄", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp)) }
+                if (shown.isEmpty()) item { Text("沒有紀錄", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp)) }
                 items(shown.take(if (allLog) 100 else 20), key = { "log${it.id}" }) { e ->
                     val gone = deleted(e)
                     val pending = e.txnId in pendingIds
@@ -637,19 +639,19 @@ fun NotificationSettingsScreen(nav: NavController) {
                         }) {
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("${labelOf[e.packageName] ?: e.packageName} · ${timeFmt.format(Date(e.postedAt))}", fontSize = 11.sp,
+                                Text("${labelOf[e.packageName] ?: e.packageName} · ${timeFmt.format(Date(e.postedAt))}", fontSize = AppText.label,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1)
-                                Text(label, fontSize = 11.sp, color = col,
+                                Text(label, fontSize = AppText.label, color = col,
                                     modifier = Modifier.background(col.copy(alpha = 0.12f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
                             }
-                            Text(listOfNotNull(e.title, e.text).joinToString(" "), fontSize = 13.sp, maxLines = 2,
+                            Text(listOfNotNull(e.title, e.text).joinToString(" "), fontSize = AppText.secondary, maxLines = 2,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            if (gone) Text("點一下重新記帳", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
-                            else if (e.result in setOf("UNPARSED", "CANDIDATE", "PROMO")) Text("點一下教它這是交易", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                            if (gone) Text("點一下重新記帳", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
+                            else if (e.result in setOf("UNPARSED", "CANDIDATE", "PROMO")) Text("點一下教它這是交易", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
-                testMsg?.let { m -> item { Text(m, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) } }
+                testMsg?.let { m -> item { Text(m, color = MaterialTheme.colorScheme.primary, fontSize = AppText.caption, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) } }
                 if (shown.size > 20) item {
                     TextButton(onClick = { allLog = !allLog }, modifier = Modifier.padding(horizontal = 8.dp)) { Text(if (allLog) "收起" else "顯示更多紀錄") }
                 }
@@ -1025,8 +1027,8 @@ fun SettingsScreen(nav: NavController) {
                                 modifier = Modifier.padding(12.dp).size(28.dp))
                         }
                         Column(Modifier.padding(start = 14.dp).weight(1f)) {
-                            Text("目前版本", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(BuildConfig.VERSION_NAME, fontSize = 22.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                            Text("目前版本", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(BuildConfig.VERSION_NAME, fontSize = AppText.title, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
                         }
                         val (chip, chipColor) = when {
                             checking -> "檢查中" to MaterialTheme.colorScheme.surfaceVariant
@@ -1036,18 +1038,18 @@ fun SettingsScreen(nav: NavController) {
                             else -> null to MaterialTheme.colorScheme.surfaceVariant
                         }
                         if (chip != null) Surface(color = chipColor, shape = RoundedCornerShape(50)) {
-                            Text(chip, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                            Text(chip, fontSize = AppText.caption, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
                         }
                     }
-                    if (newer) Text("新版本 ${r!!.tag}", fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    if (newer) Text("新版本 ${r!!.tag}", fontSize = AppText.section, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary)
                     // 失敗或提示訊息（成功時狀態已在標籤裡，不重複）
                     updateStatus?.takeIf { !checking && (r == null || it.startsWith("下載") || it.startsWith("請允許")) }?.let {
-                        Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                        Text(it, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.error)
                     }
                     progress?.let {
                         LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth())
-                        Text("下載中 ${(it * 100).toInt()}%", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("下載中 ${(it * 100).toInt()}%", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     val f = apk
                     when {
@@ -1064,21 +1066,21 @@ fun SettingsScreen(nav: NavController) {
                             Text(if (checking) "檢查中…" else "重新檢查")
                         }
                     }
-                    if (settings.updateCheckLog.isNotBlank()) Text("上次自動檢查：${settings.updateCheckLog}", fontSize = 12.sp,
+                    if (settings.updateCheckLog.isNotBlank()) Text("上次自動檢查：${settings.updateCheckLog}", fontSize = AppText.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             // ② 更新內容：和更新視窗一樣只列最新 3 段
             if (newer && r!!.notes.isNotBlank()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("更新內容", fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    Text("更新內容", fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
                     parseNotes(r.notes).asReversed().take(3).forEach { (title, lines) ->
-                        if (title.isNotBlank()) Text(title, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        if (title.isNotBlank()) Text(title, fontSize = AppText.secondary, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
                         lines.forEach { l ->
                             Row {
-                                Text("•", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 6.dp))
-                                Text(l.removePrefix("・").trim(), fontSize = 13.sp)
+                                Text("•", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 6.dp))
+                                Text(l.removePrefix("・").trim(), fontSize = AppText.secondary)
                             }
                         }
                     }
@@ -1090,7 +1092,7 @@ fun SettingsScreen(nav: NavController) {
                     Row(Modifier.fillMaxWidth().clickable { repo.settings.update { it.copy(notifyUpdates = !it.notifyUpdates, updateSkipped = 0) } }
                         .padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("自動檢查新版本", fontSize = 15.sp)
+                            Text("自動檢查新版本", fontSize = AppText.section)
                         }
                         androidx.compose.material3.Switch(settings.notifyUpdates, { v -> repo.settings.update { it.copy(notifyUpdates = v, updateSkipped = 0) } })
                     }
@@ -1098,8 +1100,8 @@ fun SettingsScreen(nav: NavController) {
                     Row(Modifier.fillMaxWidth().clickable { tokenFold.toggle() }.padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("GitHub Token", fontSize = 15.sp)
-                            Text(if (token.isBlank()) "未設定（公開儲存庫不需要）" else "已設定", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("GitHub Token", fontSize = AppText.section)
+                            Text(if (token.isBlank()) "未設定（公開儲存庫不需要）" else "已設定", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         com.enwei.moneymanager.ui.components.FoldToggle(tokenFold.open)
                     }
@@ -1119,8 +1121,8 @@ private fun PlayUpdateScreen(nav: NavController) {
     val ctx = LocalContext.current
     Scaffold(topBar = { BackTopBar("App 更新", { nav.popBackStack() }) }) { pad ->
         Column(Modifier.padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("目前版本 ${com.enwei.moneymanager.BuildConfig.VERSION_NAME}（build ${com.enwei.moneymanager.BuildConfig.VERSION_CODE}）", fontSize = 14.sp)
-            Text("這個版本從 Google Play 安裝，新版會由 Google Play 自動更新。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("目前版本 ${com.enwei.moneymanager.BuildConfig.VERSION_NAME}（build ${com.enwei.moneymanager.BuildConfig.VERSION_CODE}）", fontSize = AppText.body)
+            Text("這個版本從 Google Play 安裝，新版會由 Google Play 自動更新。", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(onClick = {
                 val id = ctx.packageName
                 runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$id"))) }

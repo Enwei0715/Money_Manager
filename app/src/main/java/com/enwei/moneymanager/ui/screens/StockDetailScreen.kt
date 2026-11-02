@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Canvas
 import androidx.compose.material.icons.filled.Star
@@ -186,9 +188,9 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row {
-                            Text("%.2f".format(last), fontSize = 28.sp, color = color, fontWeight = FontWeight.SemiBold)
+                            Text("%.2f".format(last), fontSize = AppText.display, color = color, fontWeight = FontWeight.SemiBold)
                             Text("  ${if (chg >= 0) "▲" else "▼"} ${"%.2f".format(kotlin.math.abs(chg))}（${"%+.2f".format(chg / prev * 100)}%）",
-                                fontSize = 14.sp, color = color, modifier = Modifier.padding(top = 10.dp))
+                                fontSize = AppText.body, color = color, modifier = Modifier.padding(top = 10.dp))
                         }
                         val n = b.close.size - 1
                         val yearHigh = b.high.takeLast(250).max()
@@ -237,20 +239,20 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                     Modifier.weight(1f).background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
                                         .clickable { if (hourly != h) { hourly = h; count = KlinePrefs.count(h); back = 0f; mas = KlinePrefs.mas(h) } }.padding(vertical = 7.dp),
                                     contentAlignment = Alignment.Center,
-                                ) { Text(l, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal) }
+                                ) { Text(l, fontSize = AppText.secondary, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal) }
                             }
                         }
                         Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("區間", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
+                            Text("區間", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
                             (if (hourly) listOf(25 to "5 天", 50 to "10 天", 100 to "1 個月") else listOf(60 to "3 個月", 120 to "6 個月", 250 to "1 年"))
                                 .forEach { (n, l) ->
                                     val on = count.toInt() == n && back < 1f
-                                    Text(l, fontSize = 13.sp, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    Text(l, fontSize = AppText.secondary, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                                         modifier = Modifier.clickable { count = n.toFloat(); back = 0f }.padding(horizontal = 10.dp, vertical = 4.dp))
                                 }
                             Spacer(Modifier.weight(1f))
-                            if (back >= 1f) Text("回到最新 ›", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
+                            if (back >= 1f) Text("回到最新 ›", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.clickable { back = 0f }.padding(4.dp))
                         }
                         if (kb == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 40.dp))
@@ -269,7 +271,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                 Text(
                                     "${dd.monthValue}/${dd.dayOfMonth}　開 ${"%.2f".format(kb.open[sel])}　高 ${"%.2f".format(kb.high[sel])}　低 ${"%.2f".format(kb.low[sel])}　收 ${"%.2f".format(kb.close[sel])}" +
                                         (chg?.let { "（${"%+.2f".format(it)}%）" } ?: "") + (kb.volume.getOrNull(sel)?.let { "　量 ${"%,.0f".format(it / 1000)} 張" } ?: ""),
-                                    fontSize = 12.sp, color = if ((chg ?: 0.0) >= 0) StockUp else StockDown, modifier = Modifier.padding(top = 6.dp),
+                                    fontSize = AppText.caption, color = if ((chg ?: 0.0) >= 0) StockUp else StockDown, modifier = Modifier.padding(top = 6.dp),
                                 )
                             }
                             // 60 分 K：依「保本＋移動停利」的快慢線規則標買賣點；日 K：依停損／移動停損／停利標
@@ -278,7 +280,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             } else emptyList()
                             val visibleSignals = if (!showSignals) emptyList() else (if (hourly) hourSignals else signals).filter { it.index in from until from + n }
                             sel?.let { j -> visibleSignals.firstOrNull { it.index == j } }?.let { sg ->
-                                Text((if (sg.buy) "買點：" else "賣點：") + sg.reason, fontSize = 12.sp, color = if (sg.buy) StockUp else StockDown)
+                                Text((if (sg.buy) "買點：" else "賣點：") + sg.reason, fontSize = AppText.caption, color = if (sg.buy) StockUp else StockDown)
                             }
                             fun d(i: Int) = java.time.LocalDate.ofEpochDay(kb.days[i]).let { "${it.monthValue}/${it.dayOfMonth}" }
                             val avg = held.takeIf { it.isNotEmpty() }?.let { hs -> hs.sumOf { it.avgCost * it.shares } / hs.sumOf { it.shares } }
@@ -302,7 +304,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             var addMa by remember { mutableStateOf(false) }
                             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("${d(from)}–${d(from + n - 1)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${d(from)}–${d(from + n - 1)}", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 mas.sorted().forEach { len ->
                                     Row(
                                         Modifier.background(maColor(len).copy(alpha = 0.12f), RoundedCornerShape(12.dp)).clickable { mas = mas - len }
@@ -310,13 +312,13 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         Box(Modifier.size(width = 12.dp, height = 3.dp).background(maColor(len)))
-                                        Text(" ${len}${if (hourly) "" else "日"} ✕", fontSize = 12.sp, color = maColor(len))
+                                        Text(" ${len}${if (hourly) "" else "日"} ✕", fontSize = AppText.caption, color = maColor(len))
                                     }
                                 }
-                                Text(if (showBB) "布林 ✕" else "＋布林", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                Text(if (showBB) "布林 ✕" else "＋布林", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).clickable { showBB = !showBB }
                                         .padding(horizontal = 8.dp, vertical = 3.dp))
-                                Text("＋均線", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
+                                Text("＋均線", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(12.dp)).clickable { addMa = true }
                                         .padding(horizontal = 8.dp, vertical = 3.dp))
                             }
@@ -349,7 +351,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             run {
                                 var allSig by remember { mutableStateOf(false) }
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
-                                    Text(stt?.verdict ?: (if (hourly) "保本＋移動停利：60 分 K ${plan.hourFast}MA／${plan.hourSlow}MA" else "紀律買賣點"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+                                    Text(stt?.verdict ?: (if (hourly) "保本＋移動停利：60 分 K ${plan.hourFast}MA／${plan.hourSlow}MA" else "紀律買賣點"), fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
                                         color = when (stt?.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface })
                                     androidx.compose.material3.Switch(showSignals, { showSignals = it }, Modifier.scale(0.75f))
                                 }
@@ -358,14 +360,14 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                             st.chips.forEach { (t, ok) ->
                                                 val col = when (ok) { true -> StockUp; false -> StockDown; null -> MaterialTheme.colorScheme.onSurfaceVariant }
-                                                Text(t, fontSize = 11.sp, color = col,
+                                                Text(t, fontSize = AppText.label, color = col,
                                                     modifier = Modifier.background(col.copy(alpha = 0.1f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
                                             }
                                         }
                                     }
                                     val shown = if (allSig) visibleSignals.reversed() else visibleSignals.takeLast(1)
                                     shown.forEach { sg ->
-                                        Text("${if (sg.buy) "買" else "賣"} ${d(sg.index)}：${sg.reason}", fontSize = 12.sp,
+                                        Text("${if (sg.buy) "買" else "賣"} ${d(sg.index)}：${sg.reason}", fontSize = AppText.caption,
                                             color = if (sg.buy) StockUp else StockDown, maxLines = if (allSig) 2 else 1,
                                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                             modifier = Modifier.clickable { picked = sg.index }.padding(top = 3.dp))
@@ -373,8 +375,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(if (hourly) "容許跌破 ${"%.1f".format(plan.tolerancePct)}%・連續 ${plan.confirmBars} 根確認・破一條賣 ${"%.0f".format(plan.reducePct)}%・基本股 ${plan.baseShares.toLong()} 股"
                                             else "${style.label}：停損 ${"%.0f".format(sigParams.stopPct)}%・移動停損 ${"%.0f".format(sigParams.trailPct)}%・停利 ${"%.0f".format(if (sigParams.long) sigParams.takeProfitPct * 2 else sigParams.takeProfitPct)}%",
-                                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                                        if (visibleSignals.size > 1) Text(if (allSig) "收起" else "全部 ${visibleSignals.size} 個買賣點", fontSize = 11.sp,
+                                            fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                        if (visibleSignals.size > 1) Text(if (allSig) "收起" else "全部 ${visibleSignals.size} 個買賣點", fontSize = AppText.label,
                                             color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { allSig = !allSig }.padding(4.dp))
                                     }
                                 }
@@ -385,7 +387,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                     val on = indicator == i
                                     Box(Modifier.weight(1f).background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
                                         .clickable { indicator = i }.padding(vertical = 5.dp), contentAlignment = Alignment.Center) {
-                                        Text(l, fontSize = 12.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                                        Text(l, fontSize = AppText.caption, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
                                     }
                                 }
                             }
@@ -397,9 +399,9 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 // 強弱與階段
                 if (dtab == 0) Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("強弱", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("強弱", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                         val stage = Technicals.stage(c)
-                        Text("${stage.label}　${stage.hint}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${stage.label}　${stage.hint}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         val idx = index?.close
                         // 個股與大盤近 60 日走勢（以 60 日前為 0%）
                         RelativeChart(c, idx)
@@ -425,8 +427,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         val peak = first?.let { b.peakSince(it) } ?: last
                         val style = settings.styleOf(symbol)
                         val ad = Discipline.advise(style, avg, last, peak, settings.investPlan.rule())
-                        Text("我的持股（${style.label}）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        Text("${"%.0f".format(shares)} 股 · 損益 ${"%+.1f".format((last / avg - 1) * 100)}%", fontSize = 14.sp,
+                        Text("我的持股（${style.label}）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+                        Text("${"%.0f".format(shares)} 股 · 損益 ${"%+.1f".format((last / avg - 1) * 100)}%", fontSize = AppText.body,
                             color = if (last >= avg) StockUp else StockDown)
                         // 價位圖：均價、現價、買進後最高與停利／減碼／提醒價的相對位置
                         PriceLadder(buildList {
@@ -435,7 +437,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             add(Triple("買進後最高", peak, Color(0xFFFFA000)))
                             levels.filter { it.third != "均價" }.forEach { add(Triple(it.third, it.first, it.second)) }
                         })
-                        if (!settings.investPlan.guardOn) Text("${ad.action}：${ad.note}", fontSize = 14.sp, color = if (ad.triggered) MaterialTheme.colorScheme.error else Color.Unspecified)
+                        if (!settings.investPlan.guardOn) Text("${ad.action}：${ad.note}", fontSize = AppText.body, color = if (ad.triggered) MaterialTheme.colorScheme.error else Color.Unspecified)
                         if (settings.investPlan.guardOn) {
                             // 保本＋移動停利（60 分 K 均線在「資金與紀律」頁一起看）
                             val gs = settings.investPlan.guards[symbol]
@@ -447,9 +449,9 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                 com.enwei.moneymanager.core.GuardRule(settings.investPlan.guardTrailPct, settings.investPlan.baseShares, settings.investPlan.reducePct, settings.investPlan.tolerancePct),
                             )
                             Text("保本 ${"%,.0f".format(principal)} · 市值 ${"%,.0f".format(shares * last)}" +
-                                (if (g.excessShares >= 1) " · 多賺 ${g.excessShares.toLong()} 股 · 停利價 ${"%.2f".format(g.takeProfit ?: 0.0)}" else ""), fontSize = 14.sp)
-                            Text("${g.action.label}：${g.note}", fontSize = 14.sp, color = if (g.triggered) MaterialTheme.colorScheme.error else Color.Unspecified)
-                            Text("日 K：" + com.enwei.moneymanager.core.ProfitGuard.dailyTrend(c).summary, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                (if (g.excessShares >= 1) " · 多賺 ${g.excessShares.toLong()} 股 · 停利價 ${"%.2f".format(g.takeProfit ?: 0.0)}" else ""), fontSize = AppText.body)
+                            Text("${g.action.label}：${g.note}", fontSize = AppText.body, color = if (g.triggered) MaterialTheme.colorScheme.error else Color.Unspecified)
+                            Text("日 K：" + com.enwei.moneymanager.core.ProfitGuard.dailyTrend(c).summary, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -457,16 +459,16 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             // 除權息
             if (dtab == 2 && divs.isNotEmpty() && b != null) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("除權息", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("除權息", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                     val today = java.time.LocalDate.now().toEpochDay()
                     val yearCash = divs.filter { it.exEpochDay in (today - 365)..today }.sumOf { it.perShare }
                     val last = b.close.last()
                     Text(
                         "近一年現金股利 ${"%.2f".format(yearCash)} 元" + (if (last > 0 && yearCash > 0) "，殖利率約 ${"%.2f".format(yearCash / last * 100)}%" else ""),
-                        fontSize = 14.sp,
+                        fontSize = AppText.body,
                     )
                     divs.filter { it.exEpochDay > today }.forEach { e ->
-                        Text("即將除權息：${java.time.LocalDate.ofEpochDay(e.exEpochDay)}（${e.exEpochDay - today} 天後）", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("即將除權息：${java.time.LocalDate.ofEpochDay(e.exEpochDay)}（${e.exEpochDay - today} 天後）", fontSize = AppText.body, color = MaterialTheme.colorScheme.primary)
                     }
                     // 歷年現金股利長條圖（舊到新）
                     com.enwei.moneymanager.ui.components.LabeledBars(
@@ -482,16 +484,16 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     val divList = divs.sortedByDescending { it.exEpochDay }
                     divList.take(if (allDivs) 20 else 0).forEach { e ->
                         Row {
-                            Text(java.time.LocalDate.ofEpochDay(e.exEpochDay).toString(), fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Text(java.time.LocalDate.ofEpochDay(e.exEpochDay).toString(), fontSize = AppText.secondary, modifier = Modifier.weight(1f))
                             Text(listOfNotNull(
                                 e.perShare.takeIf { it > 0 }?.let { "現金 ${"%.4f".format(it).trimEnd('0').trimEnd('.')} 元" },
                                 e.stockPerShare.takeIf { it > 0 }?.let { "股票 ${"%.4f".format(it * 10).trimEnd('0').trimEnd('.')} 元" },
-                            ).joinToString("、"), fontSize = 13.sp)
+                            ).joinToString("、"), fontSize = AppText.secondary)
                         }
                     }
                     if (divList.isNotEmpty()) TextButton(onClick = { allDivs = !allDivs }) { Text(if (allDivs) "收起明細" else "除權息明細（${minOf(divList.size, 20)} 次）") }
                     val mine = trades.filter { it.market == market && it.symbol.equals(symbol, true) && it.side == com.enwei.moneymanager.core.StockSide.CASH_DIVIDEND }
-                    if (mine.isNotEmpty()) Text("我已領現金股利 ${"%,.0f".format(mine.sumOf { it.cashAmount })} 元（${mine.map { it.date }.distinct().size} 次）", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                    if (mine.isNotEmpty()) Text("我已領現金股利 ${"%,.0f".format(mine.sumOf { it.cashAmount })} 元（${mine.map { it.date }.distinct().size} 次）", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary)
                 }
             }
             // 價格提醒
@@ -499,7 +501,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             // 公司業務（AI 整理；設定裡關掉 AI 就不顯示）
             if (dtab == 2 && settings.aiEnabled) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("這家公司做什麼", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("這家公司做什麼", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                     val ctx = androidx.compose.ui.platform.LocalContext.current
                     var info by remember(symbol) { mutableStateOf(com.enwei.moneymanager.data.CompanyInfo.get(ctx, symbol)) }
                     var busy by remember { mutableStateOf(false) }
@@ -518,22 +520,22 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             com.enwei.moneymanager.work.ReportJob.state.value?.running != true) refresh()
                     }
                     val text = info?.text ?: business
-                    text?.let { Text(it, fontSize = 14.sp) }
-                    info?.recent?.takeIf { it.isNotBlank() }?.let { Text("近況：$it", fontSize = 13.sp) }
+                    text?.let { Text(it, fontSize = AppText.body) }
+                    info?.recent?.takeIf { it.isNotBlank() }?.let { Text("近況：$it", fontSize = AppText.secondary) }
                     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     if (info != null) Text(
                         "AI 依 ${info!!.basis} 整理 · " + java.text.SimpleDateFormat("M/d", java.util.Locale.TAIWAN).format(java.util.Date(info!!.at)),
-                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (GroqAi.enabled) TextButton(onClick = { refresh() }, enabled = !busy) { Text(if (text == null) "請 AI 依新聞與營收說明" else "重新整理") }
-                    else if (text == null) Text("開啟 AI 後可以查看", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else if (text == null) Text("開啟 AI 後可以查看", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             // 相關新聞
             if (dtab == 2 && news.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     var allNews by remember { mutableStateOf(false) }
-                    Text("相關新聞（${news.size}）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("相關新聞（${news.size}）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                     news.take(if (allNews) news.size else 3).forEach { NewsLine(it) }
                     if (news.size > 3) TextButton(onClick = { allNews = !allNews }) { Text(if (allNews) "收起" else "顯示全部 ${news.size} 則") }
                 }
@@ -553,8 +555,8 @@ private fun InfoGrid(items: List<Pair<String, String>>) {
         Row(Modifier.fillMaxWidth()) {
             row.forEach { (k, v) ->
                 Column(Modifier.weight(1f)) {
-                    Text(k, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(v, fontSize = 14.sp)
+                    Text(k, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(v, fontSize = AppText.body)
                 }
             }
             repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
@@ -574,7 +576,7 @@ fun NewsLine(n: NewsItem, num: Int? = null) {
     // 點新聞開啟原文；舊資料沒有連結時改用搜尋
     val link = n.url.ifBlank { "https://www.google.com/search?tbm=nws&q=" + java.net.URLEncoder.encode(n.title, "UTF-8") }
     Column(Modifier.fillMaxWidth().clickable { runCatching { uri.openUri(link) } }.padding(vertical = 4.dp)) {
-        Text((num?.let { "[$it] " } ?: "") + (if (n.sentiment > 0) "▲ " else if (n.sentiment < 0) "▼ " else "• ") + n.title, fontSize = 13.sp, color = c)
+        Text((num?.let { "[$it] " } ?: "") + (if (n.sentiment > 0) "▲ " else if (n.sentiment < 0) "▼ " else "• ") + n.title, fontSize = AppText.secondary, color = c)
         Text(
             listOfNotNull(
                 n.source.takeIf { it.isNotBlank() },
@@ -583,7 +585,7 @@ fun NewsLine(n: NewsItem, num: Int? = null) {
                 n.theme.takeIf { it.isNotBlank() },
                 java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(n.epochSec * 1000)),
             ).joinToString(" · ") + (n.note.takeIf { it.isNotBlank() }?.let { "　$it" } ?: ""),
-            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -791,7 +793,7 @@ private fun PriceAlertCard(symbol: String, price: Double, held: Boolean) {
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("價格提醒", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("價格提醒", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.enwei.moneymanager.ui.components.NumberField(target, { target = it; save() }, "目標價", Modifier.weight(1f))
                 com.enwei.moneymanager.ui.components.NumberField(stop, { stop = it; save() }, "停損價", Modifier.weight(1f))
@@ -880,7 +882,7 @@ private fun IndicatorChart(b: DailyBars, from: Int, n: Int, kind: Int) {
 @Composable
 private fun IndicatorNote(b: DailyBars, kind: Int) {
     val txt = remember(System.identityHashCode(b), kind) { indicatorText(b, kind) }
-    if (txt.isNotBlank()) Text(txt, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (txt.isNotBlank()) Text(txt, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 private fun indicatorText(b: DailyBars, kind: Int): String {
@@ -951,13 +953,13 @@ private fun RelativeChart(stock: List<Double>, index: List<Double>?, days: Int =
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(12.dp).height(3.dp).background(sc))
-            Text(" 個股 ${"%+.1f".format(sp.last())}%　", fontSize = 11.sp)
+            Text(" 個股 ${"%+.1f".format(sp.last())}%　", fontSize = AppText.label)
             if (ip != null) {
                 Box(Modifier.width(12.dp).height(3.dp).background(idxColor))
-                Text(" 大盤 ${"%+.1f".format(ip.last())}%", fontSize = 11.sp)
+                Text(" 大盤 ${"%+.1f".format(ip.last())}%", fontSize = AppText.label)
             }
             Spacer(Modifier.weight(1f))
-            Text("近 ${s.size} 個交易日", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("近 ${s.size} 個交易日", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -985,7 +987,7 @@ internal fun PriceLadder(points: List<Triple<String, Double, Color>>) {
             pts.sortedBy { it.second }.forEach { (label, v, col) ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(8.dp).background(col, androidx.compose.foundation.shape.CircleShape))
-                    Text(" $label ${"%.2f".format(v)}", fontSize = 11.sp)
+                    Text(" $label ${"%.2f".format(v)}", fontSize = AppText.label)
                 }
             }
         }
@@ -1006,11 +1008,11 @@ private fun RevenueCard(symbol: String) {
     val max = show.maxOf { it.revenue }.takeIf { it > 0 } ?: 1.0
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("月營收", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("月營收", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             Text(
                 "${last.year}/${last.month}：${"%,.1f".format(last.revenue / 1e8)} 億" +
                     (last.yoy?.let { "　年增 ${"%+.1f".format(it)}%" } ?: "") + (last.mom?.let { "　月增 ${"%+.1f".format(it)}%" } ?: ""),
-                fontSize = 13.sp, color = if ((last.yoy ?: 0.0) >= 0) StockUp else StockDown,
+                fontSize = AppText.secondary, color = if ((last.yoy ?: 0.0) >= 0) StockUp else StockDown,
             )
             val track = MaterialTheme.colorScheme.onSurfaceVariant
             androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(110.dp)) {
@@ -1022,17 +1024,17 @@ private fun RevenueCard(symbol: String) {
                 }
             }
             Row {
-                Text("${show.first().year % 100}/${show.first().month}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                Text("紅＝年增、綠＝年減", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${show.first().year % 100}/${show.first().month}", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text("紅＝年增、綠＝年減", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.weight(1f))
-                Text("${last.year % 100}/${last.month}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${last.year % 100}/${last.month}", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             // 年增率走勢（近 13 個月）
             val yoys = show.mapNotNull { it.yoy }
             if (yoys.size >= 3) Text(
                 "近 ${yoys.size} 個月年增率：平均 ${"%+.1f".format(yoys.average())}%，" +
                     (if (yoys.takeLast(3).average() > yoys.average()) "最近三個月高於平均（成長加速）" else "最近三個月低於平均（成長放緩）"),
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -1069,18 +1071,18 @@ private fun ProjectionCard(b: DailyBars) {
     val endIdx = (total - 1 + ahead).toDouble()
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("趨勢推估（未來 20 個交易日）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("趨勢推估（未來 20 個交易日）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             if (trend != null) {
                 val col = when (trend.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface }
-                Text("${trend.pattern}：${trend.hint}" + (trend.breakout?.let { "；$it" } ?: ""), fontSize = 13.sp, color = col)
+                Text("${trend.pattern}：${trend.hint}" + (trend.breakout?.let { "；$it" } ?: ""), fontSize = AppText.secondary, color = col)
                 Text(
                     "20 日後 壓力線約 ${"%.2f".format(trend.upper.at(endIdx))}、支撐線約 ${"%.2f".format(trend.lower.at(endIdx))}（目前 ${"%.2f".format(last)}）",
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 val trendPct = (kotlin.math.exp(slope * ahead) - 1) * 100
                 Text("線型較亂，畫不出明確的趨勢線；依近 $nn 日趨勢約 ${"%+.1f".format(trendPct)}%，區間 ${"%.2f".format(loB.last())}～${"%.2f".format(upB.last())}",
-                    fontSize = 13.sp, color = if (trendPct >= 0) StockUp else StockDown)
+                    fontSize = AppText.secondary, color = if (trendPct >= 0) StockUp else StockDown)
             }
             val up = StockUp; val down = StockDown
             val bandCol = MaterialTheme.colorScheme.primary.copy(alpha = if (trend != null) 0.08f else 0.18f)
@@ -1144,12 +1146,12 @@ private fun ProjectionCard(b: DailyBars) {
                 }
             }
             if (trend != null) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("━ 壓力線", fontSize = 11.sp, color = resCol)
-                Text("━ 支撐線", fontSize = 11.sp, color = supCol)
-                Text("○ 波段高低點", fontSize = 11.sp, color = pivotCol)
-                Text("▒ 統計區間", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                Text("━ 壓力線", fontSize = AppText.label, color = resCol)
+                Text("━ 支撐線", fontSize = AppText.label, color = supCol)
+                Text("○ 波段高低點", fontSize = AppText.label, color = pivotCol)
+                Text("▒ 統計區間", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
             }
-            Text("僅供參考", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("僅供參考", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

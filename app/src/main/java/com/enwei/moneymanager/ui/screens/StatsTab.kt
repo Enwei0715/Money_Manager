@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -162,7 +164,7 @@ fun StatsTab(nav: NavController) {
                         Modifier.border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(8.dp)).clickable { menu = true }
                             .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                    ) { Text(period.label, fontSize = 14.sp); Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp)) }
+                    ) { Text(period.label, fontSize = AppText.body); Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp)) }
                     DropdownMenu(menu, { menu = false }) {
                         Period.entries.forEach { p ->
                             DropdownMenuItem(text = { Text(p.label) }, onClick = { period = p; menu = false; if (p == Period.CUSTOM) pickRange = true })
@@ -176,15 +178,15 @@ fun StatsTab(nav: NavController) {
             val tabs = listOf(TxnType.INCOME to totals.income, TxnType.EXPENSE to totals.expense)
             val idx = tabs.indexOfFirst { it.first == kind }
             val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
-            TabRow(
+            com.enwei.moneymanager.ui.ChromeScale { TabRow(
                 selectedTabIndex = idx, containerColor = MaterialTheme.colorScheme.surface,
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[idx]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
             ) {
                 tabs.forEach { (t, v) ->
-                    Tab(selected = kind == t, onClick = { kind = t }, text = { com.enwei.moneymanager.ui.components.FitText("${t.label}  ${Money.withSymbol(v, lk.base)}", fontSize = 14.sp, group = fitGroup1) },
+                    Tab(selected = kind == t, onClick = { kind = t }, text = { com.enwei.moneymanager.ui.components.FitText("${t.label}  ${Money.withSymbol(v, lk.base)}", fontSize = AppText.body, group = fitGroup1) },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            }
+            } }
             LazyColumn(Modifier.fillMaxSize()) {
                 item {
                     Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
@@ -208,12 +210,12 @@ fun StatsTab(nav: NavController) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Surface(color = chartPalette[i % chartPalette.size], shape = RoundedCornerShape(6.dp), modifier = Modifier.width(56.dp)) {
-                                Text(String.format("%.0f%%", pct), color = onChartColor(chartPalette[i % chartPalette.size]), fontSize = 13.sp,
+                                Text(String.format("%.0f%%", pct), color = onChartColor(chartPalette[i % chartPalette.size]), fontSize = AppText.secondary,
                                     modifier = Modifier.padding(vertical = 5.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                             }
                             Spacer(Modifier.width(14.dp))
-                            Text(cat?.name ?: "未分類", Modifier.weight(1f), fontSize = 14.sp)
-                            Text(Money.withSymbol(v, lk.base), fontSize = 14.sp)
+                            Text(cat?.name ?: "未分類", Modifier.weight(1f), fontSize = AppText.body)
+                            Text(Money.withSymbol(v, lk.base), fontSize = AppText.body)
                         }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
@@ -291,7 +293,7 @@ fun PieChart(slices: List<Pair<String, Long>>) {
             if (pct >= 1f && labels.size < 12) {
                 val layout = measurer.measure(
                     "${com.enwei.moneymanager.ui.tr(name)}\n${"%.1f".format(pct)} %",
-                    TextStyle(fontSize = 13.sp, color = labelColor, lineHeight = 16.sp),
+                    TextStyle(fontSize = AppText.secondary, color = labelColor, lineHeight = 16.sp),
                 )
                 val ly = (c.y + r * 1.22f * sin(mid)).toFloat()
                 labels += Label(chartPalette[i % chartPalette.size], mid, layout, cos(mid) >= 0, ly)
@@ -360,7 +362,7 @@ fun CategoryStatScreen(nav: NavController, categoryId: Long, kind: TxnType, peri
                     Row(Modifier.fillMaxWidth().height(150.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
                         values.forEachIndexed { i, v ->
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(if (v > 0) Money.format(v) else "", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(if (v > 0) Money.format(v) else "", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Canvas(Modifier.width(22.dp).height(100.dp)) {
                                     val h = size.height * v / maxV
                                     drawRect(if (i == values.lastIndex) color else color.copy(alpha = 0.4f), Offset(0f, size.height - h), Size(size.width, h))

@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -48,7 +50,7 @@ import com.enwei.moneymanager.ui.components.Symbols
 @Composable
 private fun GroupHeader(title: String) {
     Text(
-        title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp,
+        title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body,
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, top = 14.dp, bottom = 8.dp),
     )
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -77,7 +79,7 @@ fun AccountSettingsScreen(nav: NavController) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            a.name + if (a.archived) "（隱藏）" else "", Modifier.weight(1f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            a.name + if (a.archived) "（隱藏）" else "", Modifier.weight(1f), fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             color = if (a.archived) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                         )
                         Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)

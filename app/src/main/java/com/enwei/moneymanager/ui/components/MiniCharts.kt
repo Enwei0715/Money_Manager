@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -61,10 +63,10 @@ fun MiniKLine(symbol: String, days: Int = 40, modifier: Modifier = Modifier) {
     val grid = MaterialTheme.colorScheme.outlineVariant
     Column(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("近 $n 個交易日", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Text("近 $n 個交易日", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             Text(
                 "%.2f".format(last) + "  " + (if (pct >= 0) "▲" else "▼") + "%.1f%%".format(kotlin.math.abs(pct)),
-                fontSize = 11.sp, color = if (pct >= 0) StockUp else StockDown,
+                fontSize = AppText.label, color = if (pct >= 0) StockUp else StockDown,
             )
         }
         Canvas(Modifier.fillMaxWidth().height(84.dp).padding(top = 2.dp)) {
@@ -110,13 +112,13 @@ fun CompareBars(
             val c = if (hot) MaterialTheme.colorScheme.error else color
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text((if (hot) "● " else "") + name, fontSize = 12.sp, fontWeight = if (hot) FontWeight.SemiBold else FontWeight.Normal,
+                    Text((if (hot) "● " else "") + name, fontSize = AppText.caption, fontWeight = if (hot) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     val diff = now - prev
-                    Text(fmt(now), fontSize = 12.sp)
+                    Text(fmt(now), fontSize = AppText.caption)
                     if (prev > 0) Text(
                         "  " + (if (diff >= 0) "+" else "−") + "%.0f%%".format(kotlin.math.abs(diff) * 100.0 / prev),
-                        fontSize = 11.sp, color = if (diff > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = AppText.label, color = if (diff > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Box(Modifier.fillMaxWidth().height(8.dp).background(track, RoundedCornerShape(4.dp))) {
@@ -128,9 +130,9 @@ fun CompareBars(
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(14.dp).height(6.dp).background(color, RoundedCornerShape(3.dp)))
-            Text(" 本期　", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(" 本期　", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Box(Modifier.width(14.dp).height(3.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f), RoundedCornerShape(2.dp)))
-            Text(" 上期", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(" 上期", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -146,8 +148,8 @@ fun DailyBarsChart(values: List<Long>, fmt: (Long) -> String, color: Color = Mat
     Column(modifier.fillMaxWidth()) {
         Row {
             val u = if (weekly) "週" else "天"
-            Text(if (weekly) "每週支出" else "每日支出", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Text("平均 ${fmt(avg)}／$u · 最高第 ${peak + 1} $u ${fmt(values[peak])}", fontSize = 11.sp, color = grid)
+            Text(if (weekly) "每週支出" else "每日支出", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("平均 ${fmt(avg)}／$u · 最高第 ${peak + 1} $u ${fmt(values[peak])}", fontSize = AppText.label, color = grid)
         }
         Canvas(Modifier.fillMaxWidth().height(80.dp).padding(top = 4.dp)) {
             val w = size.width / values.size
@@ -189,7 +191,7 @@ fun CompareChart(symbols: List<String>, days: Int = 60, modifier: Modifier = Mod
     if (series.isEmpty()) return
     val grid = MaterialTheme.colorScheme.outlineVariant
     Column(modifier.fillMaxWidth()) {
-        Text("走勢比較（近 $days 個交易日，%）", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text("走勢比較（近 $days 個交易日，%）", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
         Canvas(Modifier.fillMaxWidth().height(120.dp).padding(vertical = 4.dp)) {
             val all = series.flatMap { it.second }
             val hi = maxOf(all.max(), 0.0)
@@ -205,9 +207,9 @@ fun CompareChart(symbols: List<String>, days: Int = 60, modifier: Modifier = Mod
         series.forEachIndexed { si, (name, v) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.width(12.dp).height(3.dp).background(SeriesColors[si % SeriesColors.size]))
-                Text(" $name", fontSize = 11.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(" $name", fontSize = AppText.label, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val last = v.last()
-                Text((if (last >= 0) "+" else "") + "%.1f%%".format(last), fontSize = 11.sp, color = if (last >= 0) StockUp else StockDown)
+                Text((if (last >= 0) "+" else "") + "%.1f%%".format(last), fontSize = AppText.label, color = if (last >= 0) StockUp else StockDown)
             }
         }
     }
@@ -223,10 +225,10 @@ fun SignedBars(title: String, rows: List<Triple<String, Double, String>>, pos: C
     val max = rows.maxOf { kotlin.math.abs(it.second) }.takeIf { it > 0 } ?: 1.0
     val track = MaterialTheme.colorScheme.surfaceVariant
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(title, fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
         rows.forEach { (name, v, label) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(name, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(88.dp))
+                Text(name, fontSize = AppText.label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(88.dp))
                 Row(Modifier.weight(1f).height(10.dp).background(track, RoundedCornerShape(3.dp))) {
                     val f = (kotlin.math.abs(v) / max).toFloat().coerceIn(0.02f, 1f)
                     // 左半邊放負值、右半邊放正值
@@ -237,7 +239,7 @@ fun SignedBars(title: String, rows: List<Triple<String, Double, String>>, pos: C
                         if (v >= 0) Box(Modifier.fillMaxWidth(f).height(10.dp).background(pos, RoundedCornerShape(3.dp)))
                     }
                 }
-                Text(" $label", fontSize = 11.sp, color = if (v >= 0) pos else neg, modifier = Modifier.width(72.dp), maxLines = 1)
+                Text(" $label", fontSize = AppText.label, color = if (v >= 0) pos else neg, modifier = Modifier.width(72.dp), maxLines = 1)
             }
         }
     }
@@ -250,12 +252,12 @@ fun LabeledBars(title: String, rows: List<Triple<String, Long, String>>, color: 
     val max = rows.maxOf { it.second }.coerceAtLeast(1)
     val track = MaterialTheme.colorScheme.surfaceVariant
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(title, fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
         rows.forEach { (name, v, label) ->
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
+                    Text(name, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(label, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
                 }
                 Box(Modifier.fillMaxWidth().height(8.dp).background(track, RoundedCornerShape(3.dp))) {
                     if (v > 0) Box(Modifier.fillMaxWidth((v.toFloat() / max).coerceIn(0.02f, 1f)).height(8.dp).background(color, RoundedCornerShape(3.dp)))
@@ -285,11 +287,11 @@ fun AnnotatedKLine(symbol: String, levels: List<Triple<String, Double, Color>>, 
     val dash = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("近 $n 個交易日", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Text("近 $n 個交易日", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             Box(Modifier.width(10.dp).height(2.dp).background(Color(0xFFFFA000)))
-            Text(" 月線  ", fontSize = 11.sp)
+            Text(" 月線  ", fontSize = AppText.label)
             Box(Modifier.width(10.dp).height(2.dp).background(Color(0xFF7E57C2)))
-            Text(" 季線", fontSize = 11.sp)
+            Text(" 季線", fontSize = AppText.label)
         }
         Canvas(Modifier.fillMaxWidth().height(160.dp).clipToBounds()) {
             val inView = levels.map { it.second }.filter { v -> v > 0 }
@@ -321,8 +323,8 @@ fun AnnotatedKLine(symbol: String, levels: List<Triple<String, Double, Color>>, 
             levels.sortedByDescending { it.second }.forEach { (label, v, col) ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.width(12.dp).height(2.dp).background(col))
-                    Text(" $label ${"%,.0f".format(v)}", fontSize = 11.sp, modifier = Modifier.weight(1f))
-                    Text("距現價 ${"%+.1f".format((v / last - 1) * 100)}%", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(" $label ${"%,.0f".format(v)}", fontSize = AppText.label, modifier = Modifier.weight(1f))
+                    Text("距現價 ${"%+.1f".format((v / last - 1) * 100)}%", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -347,15 +349,15 @@ fun RevenueCompare(symbols: List<String>, modifier: Modifier = Modifier) {
     }
     val rows = data
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("月營收年增率比較", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        if (rows == null) { Text("讀取營收中…", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
-        if (rows.isEmpty()) { Text("讀不到這幾檔的營收資料（需要網路，或資料來源暫時無法連線）", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
+        Text("月營收年增率比較", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
+        if (rows == null) { Text("讀取營收中…", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
+        if (rows.isEmpty()) { Text("讀不到這幾檔的營收資料（需要網路，或資料來源暫時無法連線）", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
         val max = rows.maxOf { kotlin.math.abs(it.second) }.takeIf { it > 0 } ?: 1.0
         rows.sortedByDescending { it.second }.forEach { (name, v, label) ->
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row {
-                    Text(name, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Text(label, fontSize = 11.sp, color = if (v >= 0) StockUp else StockDown)
+                    Text(name, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(label, fontSize = AppText.label, color = if (v >= 0) StockUp else StockDown)
                 }
                 Row(Modifier.fillMaxWidth().height(8.dp)) {
                     // 左半邊放衰退、右半邊放成長
@@ -382,6 +384,6 @@ fun RevenueLine(symbol: String) {
     val yoy = m.yoy ?: return
     Text(
         "營收：${m.year}/${m.month} ${"%,.1f".format(m.revenue / 1e8)} 億 · 年增 ${"%+.1f".format(yoy)}%" + (if (yoy < 0) "（營收衰退，留意理由）" else ""),
-        fontSize = 11.sp, color = if (yoy >= 0) StockUp else StockDown,
+        fontSize = AppText.label, color = if (yoy >= 0) StockUp else StockDown,
     )
 }

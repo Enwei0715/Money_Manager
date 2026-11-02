@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -64,11 +66,11 @@ fun BudgetMeter(
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(if (adding > 0) "記這筆後" else if (daysLeft != null) "本月還有 $daysLeft 天" else "",
-                fontSize = 11.sp, color = muted, modifier = Modifier.weight(1f), maxLines = 1)
+                fontSize = AppText.label, color = muted, modifier = Modifier.weight(1f), maxLines = 1)
             Text(
                 if (left >= 0) "剩 ${Money.format(left)}" + (daysLeft?.takeIf { it > 0 }?.let { " · 每天約 ${Money.format(left / it)}" } ?: "")
                 else "超出 ${Money.format(-left)}",
-                fontSize = 11.sp, color = if (left < 0) ExpenseColor else muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                fontSize = AppText.label, color = if (left < 0) ExpenseColor else muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -86,15 +88,15 @@ fun BudgetInline(name: String, used: Long, cap: Long, adding: Long, modifier: Mo
     val left = cap - after
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text(name, fontSize = 12.sp, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.9f, fill = false))
-        Text(" ${(ratio * 100).toInt()}%", fontSize = 12.sp, color = col, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(name, fontSize = AppText.caption, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.9f, fill = false))
+        Text(" ${(ratio * 100).toInt()}%", fontSize = AppText.caption, color = col, fontWeight = FontWeight.SemiBold, maxLines = 1)
         Box(Modifier.padding(horizontal = 8.dp).weight(1f).height(4.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(2.dp))) {
             if (adding > 0) Box(Modifier.fillMaxWidth(ratio.coerceIn(0f, 1f)).height(4.dp).background(col.copy(alpha = 0.35f), RoundedCornerShape(2.dp)))
             Box(Modifier.fillMaxWidth(if (cap > 0) (used.toFloat() / cap).coerceIn(0f, 1f) else 0f).height(4.dp).background(col, RoundedCornerShape(2.dp)))
         }
         Text(
             (if (adding > 0) "記後" else "") + if (left >= 0) "剩 ${Money.format(left)}" else "超出 ${Money.format(-left)}",
-            fontSize = 12.sp, color = if (left < 0) ExpenseColor else muted, maxLines = 1,
+            fontSize = AppText.caption, color = if (left < 0) ExpenseColor else muted, maxLines = 1,
         )
     }
 }
@@ -111,12 +113,12 @@ fun BudgetRowCompact(name: String, used: Long, cap: Long, modifier: Modifier = M
         (if (onClick != null) modifier.clickable(onClick = onClick) else modifier).padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(name, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.32f))
+        Text(name, fontSize = AppText.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.32f))
         Box(Modifier.weight(0.4f).height(5.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
             Box(Modifier.fillMaxWidth(ratio.coerceIn(0f, 1f)).height(5.dp).background(col, RoundedCornerShape(3.dp)))
         }
         Text(
-            "${Money.format(used)} / ${Money.format(cap)}", fontSize = 12.sp, maxLines = 1,
+            "${Money.format(used)} / ${Money.format(cap)}", fontSize = AppText.caption, maxLines = 1,
             color = if (ratio > 1f) ExpenseColor else MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(0.38f),
         )

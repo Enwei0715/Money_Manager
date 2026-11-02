@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -52,7 +54,7 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (info == null) {
-            Text("還沒有借貸", fontSize = 14.sp, color = gray)
+            Text("還沒有借貸", fontSize = AppText.body, color = gray)
             OutlinedButton(onClick = { nav.navigate("account/${acc.id}") }) { Text("設定借貸") }
         } else {
             val l = Repository.LoanStatus(acc, info, balance)
@@ -63,8 +65,8 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(if (info.lent) "借出給" else "向其借入", fontSize = 13.sp, color = gray)
-                    Text(info.counterparty.ifBlank { acc.name }, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(if (info.lent) "借出給" else "向其借入", fontSize = AppText.secondary, color = gray)
+                    Text(info.counterparty.ifBlank { acc.name }, fontSize = AppText.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
                 Surface(
                     color = if (l.outstanding == 0L) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
@@ -74,13 +76,13 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
                         if (l.outstanding == 0L) "已結清" else if (info.lent) "待收回" else "待償還",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         color = if (l.outstanding == 0L) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
-                        fontSize = 13.sp,
+                        fontSize = AppText.secondary,
                     )
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(if (info.lent) "對方尚欠你" else "你尚欠", fontSize = 13.sp, color = gray)
-                Text(Money.withSymbol(l.outstanding, acc.currency), fontSize = 26.sp)
+                Text(if (info.lent) "對方尚欠你" else "你尚欠", fontSize = AppText.secondary, color = gray)
+                Text(Money.withSymbol(l.outstanding, acc.currency), fontSize = AppText.display)
             }
             if (info.principal > 0) {
                 Column(
@@ -88,8 +90,8 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("本金進度", Modifier.weight(1f), fontSize = 13.sp, color = gray)
-                        Text("${(l.progress * 100).toInt()}%", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("本金進度", Modifier.weight(1f), fontSize = AppText.secondary, color = gray)
+                        Text("${(l.progress * 100).toInt()}%", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary)
                     }
                     LinearProgressIndicator(progress = { l.progress }, modifier = Modifier.fillMaxWidth())
                     LoanDetailLine("本金", Money.withSymbol(info.principal, acc.currency))
@@ -142,11 +144,11 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
 @Composable
 private fun LoanDetailLine(label: String, value: String, alert: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-        Text(label, Modifier.width(88.dp), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, Modifier.width(88.dp), fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             value,
             modifier = Modifier.weight(1f),
-            fontSize = 13.sp,
+            fontSize = AppText.secondary,
             color = if (alert) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
         )
     }
@@ -177,7 +179,7 @@ private fun LoanMoveDialog(acc: AccountEntity, l: Repository.LoanStatus, repay: 
                 if (repay && info.annualRate > 0) NumberField(interest, { interest = it }, "其中利息（另記為利息${if (info.lent) "收入" else "支出"}）")
                 DropdownField(if (info.lent == repay) "收到哪個帳戶" else "從哪個帳戶付", accounts, other, { it.name }, { other = it }, memoryKey = "loan.account")
                 DateField(date, { date = it })
-                if (repay && amt > l.outstanding) Text("超過尚欠金額 ${Money.withSymbol(l.outstanding, acc.currency)}", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                if (repay && amt > l.outstanding) Text("超過尚欠金額 ${Money.withSymbol(l.outstanding, acc.currency)}", color = MaterialTheme.colorScheme.error, fontSize = AppText.secondary)
             }
         },
         confirmButton = {

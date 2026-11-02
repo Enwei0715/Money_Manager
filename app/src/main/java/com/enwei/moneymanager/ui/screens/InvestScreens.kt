@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -150,21 +152,21 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
             Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(
                     if (totalCost > 0) "報酬率 ${formatPct(Money.toDouble(unreal) / Money.toDouble(totalCost) * 100)}" else "",
-                    color = pnlColor(unreal.toDouble()), fontSize = 13.sp, modifier = Modifier.weight(1f),
+                    color = pnlColor(unreal.toDouble()), fontSize = AppText.secondary, modifier = Modifier.weight(1f),
                 )
                 Text(
                     if (settings.lastQuoteUpdate > 0) "報價 " + SimpleDateFormat("HH:mm:ss", Locale.TAIWAN).format(Date(settings.lastQuoteUpdate)) + "（每 30 秒更新）" else "",
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
         if (open.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("尚無持股", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                Text("尚無持股", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body)
                 Spacer(Modifier.height(8.dp))
                 Text("還沒有股票交易",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, textAlign = TextAlign.Center)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = { nav.navigate("trade/0") }) { Text("新增股票") }
             }
@@ -184,7 +186,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                     Modifier.weight(1f).clickable { brokersFold.toggle() }.padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("證券帳戶（${brokers.size}）", fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    Text("證券帳戶（${brokers.size}）", fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
                     Spacer(Modifier.width(8.dp))
                     com.enwei.moneymanager.ui.components.FoldToggle(brokersExpanded)
                 }
@@ -204,17 +206,17 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(b.account.name, fontSize = 14.sp)
+                        Text(b.account.name, fontSize = AppText.body)
                         Text(
                             "持股 ${hs.size} 檔 ${Money.withSymbol(stock, lk.base)} · 現金 ${Money.withSymbol(cashV, lk.base)}",
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         if (hs.isNotEmpty()) Text(
                             "預估損益 ${if (pnl > 0) "+" else ""}${Money.full(pnl)}（${formatPct(if (cost > 0) pnl * 100.0 / cost else 0.0)}）",
-                            fontSize = 12.sp, color = pnlColor(pnl.toDouble()),
+                            fontSize = AppText.caption, color = pnlColor(pnl.toDouble()),
                         )
                     }
-                    Text(Money.withSymbol(stock + cashV, lk.base), fontSize = 14.sp)
+                    Text(Money.withSymbol(stock + cashV, lk.base), fontSize = AppText.body)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
@@ -225,12 +227,12 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                 Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("觀察清單（${settings.watchlist.size}）", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                Text("觀察清單（${settings.watchlist.size}）", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body)
                 TextButton(onClick = { addWatch = true }) { Text("＋ 加入") }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             if (settings.watchlist.isEmpty()) Text("在個股頁按☆加入",
-                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+                fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
         }
         items(settings.watchlist, key = { "w$it" }) { sym ->
             val q = quotes.find { it.key == com.enwei.moneymanager.data.quoteKey(com.enwei.moneymanager.core.marketOf(sym), sym) }
@@ -239,10 +241,10 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     // 台股顯示中文名稱，美股維持英文
                     val nm = (if (com.enwei.moneymanager.core.marketOf(sym) == com.enwei.moneymanager.core.Market.TW) com.enwei.moneymanager.net.TwData.nameOf(sym) else null) ?: q?.name.orEmpty()
-                    Text("$sym  $nm", fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text("$sym  $nm", fontSize = AppText.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(q?.let { formatNum(it.price) } ?: "—", fontSize = 14.sp)
-                        if (pct != null) Text((if (pct >= 0) "▲" else "▼") + formatPct(pct), fontSize = 13.sp, color = pnlColor(pct))
+                        Text(q?.let { formatNum(it.price) } ?: "—", fontSize = AppText.body)
+                        if (pct != null) Text((if (pct >= 0) "▲" else "▼") + formatPct(pct), fontSize = AppText.secondary, color = pnlColor(pct))
                     }
                     IconButton(onClick = { repo.settings.update { it.copy(watchlist = it.watchlist - sym) } }) {
                         Icon(Icons.Filled.Close, "移出觀察", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
@@ -283,7 +285,7 @@ private fun StockHeader(title: String, right: String, color: androidx.compose.ui
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
-        Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+        Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body)
         Text(right, color = color)
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -295,19 +297,19 @@ private fun HoldingRow(h: HoldingView, onClick: () -> Unit) {
     Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("${h.symbol}  ${h.name.orEmpty()}", fontSize = 14.sp, maxLines = 1)
+                Text("${h.symbol}  ${h.name.orEmpty()}", fontSize = AppText.body, maxLines = 1)
                 Text(
                     if (h.shares > 0.0001) "${formatShares(h.shares)} · 均價 ${formatNum(h.avgCost)}" else "已實現 ${formatNum(h.realizedTotal, 0)}",
-                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(Money.withSymbol(Money.toMinor(h.marketValue), h.currency), fontSize = 14.sp)
+                Text(Money.withSymbol(Money.toMinor(h.marketValue), h.currency), fontSize = AppText.body)
                 if (h.price != null) Text(
                     "${formatNum(h.price)} " + (dayPct?.let { (if (it >= 0) "▲" else "▼") + formatPct(it) } ?: ""),
-                    fontSize = 13.sp, color = pnlColor(dayPct ?: 0.0),
+                    fontSize = AppText.secondary, color = pnlColor(dayPct ?: 0.0),
                 )
-                if (h.shares > 0.0001) Text("損益 ${formatNum(h.unrealized, 0)} (${formatPct(h.unrealizedPct)})", fontSize = 12.sp, color = pnlColor(h.unrealized))
+                if (h.shares > 0.0001) Text("損益 ${formatNum(h.unrealized, 0)} (${formatPct(h.unrealizedPct)})", fontSize = AppText.caption, color = pnlColor(h.unrealized))
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -557,7 +559,7 @@ fun TradeEditScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            sd.label, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                            sd.label, fontSize = AppText.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                             color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 2.dp),
                         )
@@ -576,7 +578,7 @@ fun TradeEditScreen(
                     if (v != symbol) { symbol = v; name = ""; feeEdited = false }
                 }, "")
             }
-            lookup?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp)) }
+            lookup?.let { Text(it, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp)) }
             FormLine("名稱") { FormInput(name, { name = it }, "自動帶出，可修改") }
             if (isDividend) {
                 FormLine("股利金額") { FormInput(cash, { cash = it }, "入帳的現金股利（券商的除息金額）", number = true) }
@@ -600,7 +602,7 @@ fun TradeEditScreen(
                         }
                     }
                 }) { FormInput(qty, { qty = it; feeEdited = false }, if (market == Market.TW && byLot) "1 張 = 1000 股" else "股數（零股、美股可含小數）", number = true) }
-                if (market == Market.TW && byLot && shares > 0) Text("= ${formatNum(shares, 0)} 股", fontSize = 13.sp,
+                if (market == Market.TW && byLot && shares > 0) Text("= ${formatNum(shares, 0)} 股", fontSize = AppText.secondary,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 108.dp, top = 4.dp))
                 // 賣出時提示保本紀律：多賺幾股可以賣，超過的算減碼
                 if (side == StockSide.SELL && market == Market.TW && original == null &&
@@ -614,7 +616,7 @@ fun TradeEditScreen(
                         Text(
                             "保本紀律：以這個價格多賺 ${a.excessShares.toLong()} 股可以賣" +
                                 if (shares > a.excessShares && shares > 0) "；超過的 ${formatNum(shares - a.excessShares, 0)} 股算減碼，存檔後保本金額會依比例調降" else "",
-                            fontSize = 12.sp, color = if (shares > a.excessShares) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            fontSize = AppText.caption, color = if (shares > a.excessShares) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(start = 108.dp, top = 4.dp, end = 16.dp),
                         )
                     }
@@ -625,7 +627,7 @@ fun TradeEditScreen(
                         FormLine("分次成交") { FormInput(fills, { fills = it; feeEdited = false }, "選填，每次成交股數用 + 分隔") }
                         if (fillParts.size > 1 && kotlin.math.abs(fillParts.sum() - shares) >= 1e-6) Text(
                             "分次股數合計 ${formatNum(fillParts.sum(), 0)} 與數量 ${formatNum(shares, 0)} 不同，先以一次成交估算",
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 108.dp, top = 4.dp),
+                            fontSize = AppText.caption, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 108.dp, top = 4.dp),
                         )
                     }
                     FormLine("手續費") { FormInput(fee, { fee = it; feeEdited = true }, "", number = true) }
@@ -633,7 +635,7 @@ fun TradeEditScreen(
                     Text(
                         "成交金額 ${formatNum(amount)}　${if (side == StockSide.BUY) "應付" else "應收"} ${formatNum(settle)}\n" +
                             "手續費依 ${feeSettings.discount} 折估算，請以券商帳單為準",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
             }
@@ -713,7 +715,7 @@ fun <T> DropdownLine(label: String, value: String, options: List<Pair<T, String>
     var open by remember { mutableStateOf(false) }
     FormLine(label, onClick = { open = true }) {
         Box {
-            Text(value, fontSize = 14.sp)
+            Text(value, fontSize = AppText.body)
             androidx.compose.material3.DropdownMenu(open, { open = false }) {
                 options.forEach { (v, l) -> androidx.compose.material3.DropdownMenuItem(text = { Text(l) }, onClick = { onPick(v); open = false }) }
             }

@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -51,7 +53,7 @@ fun rememberAiWorkStatus(uniqueName: String): AiWorkStatus? {
 fun AiWorkProgress(status: AiWorkStatus?, modifier: Modifier = Modifier) {
     if (status == null) return
     if (!status.running) {
-        status.error?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error, modifier = modifier) }
+        status.error?.let { Text(it, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.error, modifier = modifier) }
         return
     }
 
@@ -62,7 +64,7 @@ fun AiWorkProgress(status: AiWorkStatus?, modifier: Modifier = Modifier) {
             delay(1000)
         }
     }
-    Text(status.step, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, modifier = modifier)
+    Text(status.step, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary, modifier = modifier)
     if (status.total != null && status.done != null && status.total > 0) {
         LinearProgressIndicator(
             progress = { (status.done.toFloat() / status.total).coerceIn(0f, 1f) },
@@ -74,7 +76,7 @@ fun AiWorkProgress(status: AiWorkStatus?, modifier: Modifier = Modifier) {
     if (status.startedAt > 0) {
         Text(
             "已執行 ${ReportJob.formatDuration(now - status.startedAt)}；離開畫面或 App 後仍會繼續。",
-            fontSize = 11.sp,
+            fontSize = AppText.label,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = modifier,
         )
@@ -84,7 +86,7 @@ fun AiWorkProgress(status: AiWorkStatus?, modifier: Modifier = Modifier) {
         } else {
             "等待網路或背景排程。"
         }
-        Text(waitingText, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
+        Text(waitingText, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
     }
 }
 
@@ -108,13 +110,13 @@ fun AiWorkProgress(
 
     Column(modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         if (progress.error != null) {
-            Text(progress.error, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+            Text(progress.error, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.error)
             return@Column
         }
         if (progress.step.isNotBlank()) {
             Text(
                 progress.step,
-                fontSize = 13.sp,
+                fontSize = AppText.secondary,
                 color = if (progress.running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             )
         }

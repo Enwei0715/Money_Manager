@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.MoreVert
@@ -129,7 +131,7 @@ fun AdvisorContent(nav: NavController) {
     val aiOn = repo.settings.flow.collectAsStateWithLifecycle().value.aiEnabled
     if (!aiOn) {
         Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            Text("AI 功能已關閉", fontSize = 12.sp,
+            Text("AI 功能已關閉", fontSize = AppText.caption,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             PlanTab(nav)
         }
@@ -138,17 +140,17 @@ fun AdvisorContent(nav: NavController) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
         com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = { Column {
-        TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
+        com.enwei.moneymanager.ui.ChromeScale { TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
             listOf("今日", "問 AI", "新聞", "資金紀律").forEachIndexed { i, t ->
-                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp, group = fitGroup1) },
+                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = AppText.body, group = fitGroup1) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        }
+        } }
         loadError?.let { e ->
             Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                Text(e, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                TextButton(onClick = { MoneyApp.news.loadError.value = null }) { Text("知道了", fontSize = 12.sp) }
+                Text(e, fontSize = AppText.caption, modifier = Modifier.weight(1f))
+                TextButton(onClick = { MoneyApp.news.loadError.value = null }) { Text("知道了", fontSize = AppText.caption) }
             }
         }
         } }) {
@@ -171,7 +173,7 @@ fun AssistantScreen(nav: NavController, showBack: Boolean = false) {
     androidx.compose.material3.Scaffold(
         modifier = Modifier.nestedScroll(topScroll.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
+        topBar = { com.enwei.moneymanager.ui.ChromeScale {
             androidx.compose.material3.TopAppBar(
                 scrollBehavior = topScroll,
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
@@ -188,7 +190,7 @@ fun AssistantScreen(nav: NavController, showBack: Boolean = false) {
                     }
                 },
             )
-        },
+        } },
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
             if (settings.featureStocks) AdvisorContent(nav)
@@ -200,7 +202,7 @@ fun AssistantScreen(nav: NavController, showBack: Boolean = false) {
 @Composable
 private fun Disclaimer() = Text(
     "AI 分析僅供參考，不是投資建議。",
-    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant,
 )
 
 /** 今日報告：大盤、題材、推薦卡片、重點新聞、持股動作、資金建議、檢查清單；可切換看過去的報告。 */
@@ -231,13 +233,13 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                         val today = java.time.Instant.ofEpochMilli(it.createdAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate() == java.time.LocalDate.now()
                         (if (old) "歷史報告 · " else if (today) "今日報告 · " else "報告 · ") + fmt.format(java.util.Date(it.createdAt))
                     } ?: "還沒有報告",
-                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    fontSize = AppText.section, fontWeight = FontWeight.SemiBold,
                 )
-                Text(r?.let { "讀了 ${it.newsCount} 則新聞" } ?: "資料集 $recentCount 則新聞", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(r?.let { "讀了 ${it.newsCount} 則新聞" } ?: "資料集 $recentCount 則新聞", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             val count = store.history.size + if (store.report != null) 1 else 0
             if (count > 1) androidx.compose.material3.IconButton(onClick = { showHistory = true }) {
-                androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("$count", fontSize = 9.sp) } }) {
+                androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("$count", fontSize = AppText.badge) } }) {
                     androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.History, "報告歷史")
                 }
             }
@@ -255,7 +257,7 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
         // 背景執行中：實際步驟與耗時（離開畫面或 App 也會繼續）
         JobProgress(job, reportWork)
         if (!GroqAi.enabled) Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("設定 AI 金鑰後即可產生報告。", fontSize = 13.sp, modifier = Modifier.weight(1f))
+            Text("設定 AI 金鑰後即可產生報告。", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
             TextButton(onClick = { nav.navigate("ai") }) { Text("設定 AI") }
         }
         if (r != null) ReportBody(r, newsById, nav)
@@ -327,7 +329,7 @@ private fun PointList(
 /** 報告區塊標題下的小標（例如「短線（2）」）。 */
 @Composable
 private fun SubHead(text: String) =
-    Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+    Text(text, fontSize = AppText.caption, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
 
 @Composable
 private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>, nav: NavController) {
@@ -335,24 +337,24 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
     var rtab by com.enwei.moneymanager.ui.components.rememberTab("advisor.report")
     com.enwei.moneymanager.ui.components.SubTabs(
         listOf("重點", "個股 ${r.picks.size}", "持股 ${r.holdings.size}", "新聞 ${r.keyNews.size}"), rtab) { rtab = it }
-    if (rtab == 1 && r.picks.isEmpty()) Text("這份報告沒有推薦個股。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    if (rtab == 2 && r.holdings.isEmpty()) Text("這份報告沒有持股動作。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    if (rtab == 3 && r.keyNews.isEmpty()) Text("這份報告沒有標出必看新聞。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (rtab == 1 && r.picks.isEmpty()) Text("這份報告沒有推薦個股。", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (rtab == 2 && r.holdings.isEmpty()) Text("這份報告沒有持股動作。", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (rtab == 3 && r.keyNews.isEmpty()) Text("這份報告沒有標出必看新聞。", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
     // ① 重點摘要：階段、展望、題材，摘要拆成條列（前三點，其餘可展開）
     if (rtab == 0) Section("重點摘要") {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
-                Text(r.stage.ifBlank { "趨勢" }, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                Text(r.stage.ifBlank { "趨勢" }, fontSize = AppText.secondary, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
             }
             if (r.outlook.isNotBlank()) {
                 val c = when { r.outlook.contains("多") -> StockUp; r.outlook.contains("空") -> StockDown; else -> MaterialTheme.colorScheme.onSurfaceVariant }
                 Surface(color = c.copy(alpha = 0.14f), shape = RoundedCornerShape(4.dp)) {
-                    Text("短期 ${r.outlook}", fontSize = 13.sp, color = c, fontWeight = FontWeight.SemiBold,
+                    Text("短期 ${r.outlook}", fontSize = AppText.secondary, color = c, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                 }
             }
         }
-        if (r.trend.isNotBlank()) Text(com.enwei.moneymanager.data.stripCites(r.trend), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (r.trend.isNotBlank()) Text(com.enwei.moneymanager.data.stripCites(r.trend), fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (r.summary.isNotBlank()) PointList(r.summary, r.cites, newsById, foldKey = "summary")
     }
     // ② 大盤 K 線與題材熱度
@@ -383,18 +385,18 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
             if (i > 0) androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             Column(Modifier.fillMaxWidth().clickable { nav.navigate("stock/${h.symbol}") }.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(h.symbol, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(h.symbol, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     val c = when {
                         Regex("賣|減|出場|停損").containsMatchIn(h.action) -> StockDown
                         Regex("買|加|進場").containsMatchIn(h.action) -> StockUp
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                     Surface(color = c.copy(alpha = 0.14f), shape = RoundedCornerShape(4.dp)) {
-                        Text(h.action, fontSize = 12.sp, color = c, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                        Text(h.action, fontSize = AppText.caption, color = c, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
                     }
                 }
-                h.stop?.let { Text("停損 ${"%.2f".format(it)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                PointList(h.reason, r.cites, newsById, foldKey = "hold.${h.symbol}", preview = 2, fontSize = 12.sp)
+                h.stop?.let { Text("停損 ${"%.2f".format(it)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                PointList(h.reason, r.cites, newsById, foldKey = "hold.${h.symbol}", preview = 2, fontSize = AppText.caption)
             }
         }
     }
@@ -404,7 +406,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
             newsById[k.id]?.let { n ->
                 if (i > 0) androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 NewsLine(n, num = r.cites.indexOf(k.id).takeIf { it >= 0 }?.plus(1))
-                if (k.why.isNotBlank()) Text("為什麼重要：${k.why}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                if (k.why.isNotBlank()) Text("為什麼重要：${k.why}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -420,7 +422,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
                 r.alloc.forEachIndexed { i, a ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(8.dp).background(palette[i % palette.size], RoundedCornerShape(4.dp)))
-                        Text(" ${a.name} ${"%.0f".format(a.pct / total * 100)}%", fontSize = 12.sp)
+                        Text(" ${a.name} ${"%.0f".format(a.pct / total * 100)}%", fontSize = AppText.caption)
                     }
                 }
             }
@@ -428,8 +430,8 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         if (r.allocation.isNotBlank()) PointList(r.allocation, r.cites, newsById, foldKey = "alloc")
     }
     if (rtab == 0 && (r.checklist.isNotEmpty() || r.warnings.isNotEmpty())) Section("下單前檢查") {
-        r.checklist.forEach { Text("☐ $it", fontSize = 13.sp) }
-        r.warnings.forEach { Text("! $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
+        r.checklist.forEach { Text("☐ $it", fontSize = AppText.secondary) }
+        r.warnings.forEach { Text("! $it", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.error) }
     }
 }
 
@@ -451,25 +453,25 @@ private fun HistoryDialog(store: NewsStore, onOpen: (Long) -> Unit, onDismiss: (
         title = { Text("報告歷史") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("自動刪除", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("自動刪除", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(7 to "7 天後", 30 to "30 天後", 90 to "90 天後", 0 to "不刪除").forEach { (d, l) ->
                         FilterChip(store.historyKeepDays == d, {
                             scope.launch { MoneyApp.news.update { it.copy(historyKeepDays = d).prunedHistory() } }
-                        }, label = { Text(l, fontSize = 12.sp) })
+                        }, label = { Text(l, fontSize = AppText.caption) })
                     }
                 }
                 androidx.compose.material3.HorizontalDivider()
-                if (all.isEmpty()) Text("還沒有報告", fontSize = 13.sp)
+                if (all.isEmpty()) Text("還沒有報告", fontSize = AppText.secondary)
                 Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
                     all.forEachIndexed { i, rep ->
                         Row(Modifier.fillMaxWidth().clickable { onOpen(rep.createdAt) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(fmt.format(java.util.Date(rep.createdAt)) + (if (i == 0 && rep === store.report) "（最新）" else ""), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                Text(fmt.format(java.util.Date(rep.createdAt)) + (if (i == 0 && rep === store.report) "（最新）" else ""), fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                                 Text(
                                     listOf(rep.stage, rep.picks.joinToString("、") { it.name.ifBlank { it.symbol } }).filter { it.isNotBlank() }.joinToString(" · ")
                                         .ifBlank { rep.summary.take(30) },
-                                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
+                                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
                                 )
                             }
                             androidx.compose.material3.IconButton(onClick = { delete(rep.createdAt) }) {
@@ -507,9 +509,9 @@ fun PickCard(
         Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.clickable { fold.toggle() }.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${p.symbol} ${p.name}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    Text("${p.symbol} ${p.name}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    p.price?.let { Text("%.2f".format(it), fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp)) }
+                    p.price?.let { Text("%.2f".format(it), fontSize = AppText.secondary, modifier = Modifier.padding(start = 6.dp)) }
                     if (p.strength.isNotBlank()) Tag(p.strength, when {
                         p.strength.contains("強") -> StockUp.copy(alpha = 0.18f)
                         p.strength.contains("弱") -> StockDown.copy(alpha = 0.18f)
@@ -518,7 +520,7 @@ fun PickCard(
                     com.enwei.moneymanager.ui.components.FoldToggle(false, modifier = Modifier.padding(start = 6.dp))
                 }
                 splitPoints(p.reason).firstOrNull()?.let {
-                    CitedText(it, cites, newsById, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    CitedText(it, cites, newsById, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -527,7 +529,7 @@ fun PickCard(
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${p.symbol} ${p.name}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text("${p.symbol} ${p.name}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 if (p.style.isNotBlank()) Tag(p.style, MaterialTheme.colorScheme.secondaryContainer)
                 if (fold != null) com.enwei.moneymanager.ui.components.FoldToggle(true, modifier = Modifier.padding(start = 6.dp).clickable { fold.toggle() })
                 if (p.strength.isNotBlank()) Tag(
@@ -539,8 +541,8 @@ fun PickCard(
                     },
                 )
             }
-            p.price?.let { Text("現價 ${"%.2f".format(it)}", fontSize = 13.sp) }
-                ?: Text("代號未確認，請自行查證", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+            p.price?.let { Text("現價 ${"%.2f".format(it)}", fontSize = AppText.secondary) }
+                ?: Text("代號未確認，請自行查證", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error)
             // 近期 K 線：一眼看出走勢，不必點進去
             com.enwei.moneymanager.ui.components.MiniKLine(p.symbol)
             com.enwei.moneymanager.ui.components.RevenueLine(p.symbol)
@@ -554,23 +556,23 @@ fun PickCard(
                 Text(
                     "新聞依據：近 3 天 ${ev.size} 則提到 · " + (if (avg > 0.2) "偏多" else if (avg < -0.2) "偏空" else "中性") +
                         " · " + ev.groupingBy { it.theme }.eachCount().entries.sortedByDescending { it.value }.take(2).joinToString("、") { it.key },
-                    fontSize = 11.sp, color = if (avg > 0.2) StockUp else if (avg < -0.2) StockDown else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = AppText.label, color = if (avg > 0.2) StockUp else if (avg < -0.2) StockDown else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            } else Text("新聞依據：資料集近 3 天沒有提到這檔", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
-            if (p.business.isNotBlank()) Text(p.business, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else Text("新聞依據：資料集近 3 天沒有提到這檔", fontSize = AppText.label, color = MaterialTheme.colorScheme.error)
+            if (p.business.isNotBlank()) Text(p.business, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (p.reason.isNotBlank()) PointList(p.reason, cites, newsById)
             if (p.entry.isNotBlank() || p.stop.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (p.entry.isNotBlank()) Text("進場：${p.entry}", fontSize = 12.sp, color = StockUp, modifier = Modifier.weight(1f))
-                if (p.stop.isNotBlank()) Text("停損：${p.stop}", fontSize = 12.sp, color = StockDown, modifier = Modifier.weight(1f))
+                if (p.entry.isNotBlank()) Text("進場：${p.entry}", fontSize = AppText.caption, color = StockUp, modifier = Modifier.weight(1f))
+                if (p.stop.isNotBlank()) Text("停損：${p.stop}", fontSize = AppText.caption, color = StockDown, modifier = Modifier.weight(1f))
             }
-            p.amount?.let { Text("建議投入約 ${Money.withSymbol(it * 100, "TWD")}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) }
+            p.amount?.let { Text("建議投入約 ${Money.withSymbol(it * 100, "TWD")}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary) }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("看 K 線與資訊 ›", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                Text("看 K 線與資訊 ›", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
                 val settings by repo.settings.flow.collectAsStateWithLifecycle()
                 val inList = p.symbol in settings.watchlist
                 TextButton(onClick = {
                     repo.settings.update { it.copy(watchlist = if (inList) it.watchlist - p.symbol else (it.watchlist + p.symbol).distinct()) }
-                }) { Text(if (inList) "★ 觀察中" else "☆ 加入觀察", fontSize = 12.sp) }
+                }) { Text(if (inList) "★ 觀察中" else "☆ 加入觀察", fontSize = AppText.caption) }
             }
         }
     }
@@ -579,7 +581,7 @@ fun PickCard(
 @Composable
 private fun Tag(text: String, bg: Color) {
     Surface(color = bg, shape = RoundedCornerShape(4.dp), modifier = Modifier.padding(start = 4.dp)) {
-        Text(text, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+        Text(text, fontSize = AppText.caption, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
 
@@ -647,11 +649,11 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     Column(Modifier.fillMaxSize().imePadding()) {
         // 上方工具列：目前對話的標題、過去的對話、新對話、更多（分享、清除）
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (store.chat.isEmpty()) "新對話" else com.enwei.moneymanager.data.chatTitle(store.chat), fontSize = 14.sp,
+            Text(if (store.chat.isEmpty()) "新對話" else com.enwei.moneymanager.data.chatTitle(store.chat), fontSize = AppText.body,
                 fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             androidx.compose.material3.IconButton(onClick = { showThreads = true }) {
                 androidx.compose.material3.BadgedBox(badge = {
-                    if (store.chatThreads.isNotEmpty()) androidx.compose.material3.Badge { Text("${store.chatThreads.size}", fontSize = 9.sp) }
+                    if (store.chatThreads.isNotEmpty()) androidx.compose.material3.Badge { Text("${store.chatThreads.size}", fontSize = AppText.badge) }
                 }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.History, "過去的對話") }
             }
             androidx.compose.material3.IconButton(enabled = !busy && store.chat.isNotEmpty(), onClick = {
@@ -688,7 +690,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                             androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.AutoAwesome, null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(14.dp).size(28.dp))
                         }
-                        Text("想問什麼？", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        Text("想問什麼？", fontSize = AppText.title, fontWeight = FontWeight.SemiBold)
                         listOf(
                             "今天該買什麼？" to "依大盤階段與新聞挑選",
                             "我的持股怎麼處理？" to "對照你的紀律逐檔說明",
@@ -699,8 +701,8 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                                 row.forEach { (q, hint) ->
                                     androidx.compose.material3.Card(Modifier.weight(1f).height(84.dp).clickable(enabled = !busy && GroqAi.enabled) { send(q) }) {
                                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                            Text(q, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                                            Text(hint, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                                            Text(q, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                            Text(hint, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                                         }
                                     }
                                 }
@@ -740,7 +742,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                 err?.let { e ->
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(e, fontSize = 13.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+                            Text(e, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
                             // 失敗或停止後可以用同一個問題再問一次
                             job?.question?.takeIf { it.isNotBlank() && GroqAi.enabled }?.let { q ->
                                 TextButton(onClick = { com.enwei.moneymanager.work.ChatJob.ask(ctx, q) }) { Text("重試") }
@@ -760,7 +762,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
         // 常見問題：對話開始後、輸入框是空的時候才顯示
         if (store.chat.isNotEmpty() && input.isBlank() && !busy) Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("今天該買什麼？", "我的持股怎麼處理？", "現在適合加碼嗎？", "最近有什麼重大新聞？", "短線資金還能用多少？").forEach { q ->
-                FilterChip(false, { send(q) }, label = { Text(q, fontSize = 12.sp) }, enabled = !busy && GroqAi.enabled)
+                FilterChip(false, { send(q) }, label = { Text(q, fontSize = AppText.caption) }, enabled = !busy && GroqAi.enabled)
             }
         }
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -808,14 +810,14 @@ private fun ChatThreadsDialog(store: NewsStore, busy: Boolean, onOpen: (Long) ->
         onDismissRequest = onDismiss,
         title = { Text("過去的對話") },
         text = {
-            if (store.chatThreads.isEmpty()) Text("還沒有過去的對話", fontSize = 13.sp)
+            if (store.chatThreads.isEmpty()) Text("還沒有過去的對話", fontSize = AppText.secondary)
             else Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 store.chatThreads.forEach { t ->
                     Row(Modifier.fillMaxWidth().clickable(enabled = !busy) { onOpen(t.id) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(t.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                            Text(t.title, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            Text("${fmt.format(java.util.Date(t.updated))} · ${t.msgs.size} 則", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${fmt.format(java.util.Date(t.updated))} · ${t.msgs.size} 則", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         androidx.compose.material3.IconButton(onClick = {
                             scope.launch { MoneyApp.news.update { st -> st.copy(chatThreads = st.chatThreads.filter { it.id != t.id }) } }
@@ -850,11 +852,11 @@ private fun Bubble(
                     CitedText(m.text, m.newsIds, newsById)
                     m.points.forEach { p ->
                         Row {
-                            Text("•", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 6.dp))
+                            Text("•", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 6.dp))
                             CitedText(p, m.newsIds, newsById)
                         }
                     }
-                    if (m.basis.isNotBlank()) Text(m.basis, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (m.basis.isNotBlank()) Text(m.basis, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             // 長按：複製、刪除這則
@@ -889,7 +891,7 @@ private fun Bubble(
             if (onRegenerate != null) androidx.compose.material3.IconButton(onClick = onRegenerate, modifier = Modifier.size(36.dp)) {
                 androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Refresh, "重新產生", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(m.time)), fontSize = 11.sp,
+            Text(java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(m.time)), fontSize = AppText.label,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
         }
     }
@@ -924,13 +926,13 @@ private fun JobProgress(
                         if (done != null && total != null && total > 0 && step.contains("$done/").not()) "$done/$total" else null,
                         if (startedAt > 0) "已執行 ${com.enwei.moneymanager.work.ReportJob.formatDuration(now - startedAt)}" else null,
                     ).joinToString("・"),
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
     } else {
         val error = job?.error
-        error?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
+        error?.let { Text(it, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.error) }
     }
 }
 
@@ -1038,11 +1040,11 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 else "${store.items.size} 則" + (c?.takeIf { it.recent > 0 }?.let { " · 重點整理 ${it.digested * 100 / it.recent}%" } ?: "") +
                     (if (store.lastCollect > 0) " · " + java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(store.lastCollect)) + " 更新" else "") +
                     (if (!settings.advisorDaily) " · 自動更新關閉" else ""),
-                fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                fontSize = AppText.caption, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 color = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
             )
-            if (!running) TextButton(enabled = GroqAi.enabled, onClick = { com.enwei.moneymanager.work.ReportJob.startNow(ctx, refreshOnly = true) }) { Text("立即更新", fontSize = 12.sp) }
-            TextButton(onClick = { infoOpen = true }) { Text("詳情", fontSize = 12.sp) }
+            if (!running) TextButton(enabled = GroqAi.enabled, onClick = { com.enwei.moneymanager.work.ReportJob.startNow(ctx, refreshOnly = true) }) { Text("立即更新", fontSize = AppText.caption) }
+            TextButton(onClick = { infoOpen = true }) { Text("詳情", fontSize = AppText.caption) }
         }
         if (job?.running == true) {
             LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
@@ -1056,7 +1058,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
             androidx.compose.foundation.text.BasicTextField(
                 query, { query = it; shown = 100 }, singleLine = true,
-                textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
+                textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth(),
                 decorationBox = { inner ->
@@ -1067,10 +1069,10 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                         Icon(Icons.Filled.Search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.width(8.dp))
                         Box(Modifier.weight(1f)) {
-                            if (query.isEmpty()) Text("關鍵字、公司、代號（空白分開可多個）", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            if (query.isEmpty()) Text("關鍵字、公司、代號（空白分開可多個）", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             inner()
                         }
-                        if (anyFilter || sort != 0) Text("清除", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable {
+                        if (anyFilter || sort != 0) Text("清除", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable {
                             query = ""; days = 0; sent = 0; onlyImportant = false; onlyMine = false; sort = 0; theme = emptySet(); symbol = emptySet(); source = emptySet(); shown = 100
                         }.padding(start = 8.dp))
                     }
@@ -1078,7 +1080,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             )
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 @Composable fun chip(on: Boolean, label: String, click: () -> Unit) =
-                    FilterChip(on, { click(); shown = 100 }, label = { Text(label, fontSize = 12.sp, maxLines = 1) }, modifier = Modifier.height(30.dp))
+                    FilterChip(on, { click(); shown = 100 }, label = { Text(label, fontSize = AppText.caption, maxLines = 1) }, modifier = Modifier.height(30.dp))
                 // 時間：點一下依序切換 全部 → 今天 → 3 天 → 7 天
                 chip(days != 0, when (days) { 0 -> "時間"; 1 -> "今天"; else -> "$days 天內" }) { days = when (days) { 0 -> 1; 1 -> 3; 3 -> 7; else -> 0 } }
                 chip(sent == 1, "利多") { sent = if (sent == 1) 0 else 1 }
@@ -1099,7 +1101,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                         Modifier.weight(1f).background(if (sel) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
                             .clickable { view = i }.padding(vertical = 7.dp),
                         contentAlignment = Alignment.Center,
-                    ) { Text(l, fontSize = 13.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
+                    ) { Text(l, fontSize = AppText.secondary, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
                 }
             }
         }
@@ -1110,28 +1112,28 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             if (view == 0) {
                 if (store.items.isEmpty()) item {
                     Text("還沒有新聞。按上方「立即更新」開始蒐集" + (if (!GroqAi.enabled) "（需要先設定 AI 金鑰）" else "") + "。",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp))
+                        fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp))
                 }
                 // grid：市場大局（所有題材重點的彙整）
                 if (store.overview.isNotEmpty()) item {
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("市場大局", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                Text("市場大局", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                                 Text(java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(store.overviewAt)),
-                                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             store.overview.forEach { p ->
                                 Row {
                                     Box(Modifier.padding(top = 7.dp, end = 8.dp).size(5.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)))
-                                    Text(p, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                    Text(p, fontSize = AppText.secondary, modifier = Modifier.weight(1f))
                                 }
                             }
                         }
                     }
                 }
                 if (stats.important.isNotEmpty()) item {
-                    Text("重點新聞", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                    Text("重點新聞", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
                 }
                 items(stats.important.take(6), key = { "i" + it.id }) { n ->
                     Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp)) { Box(Modifier.padding(horizontal = 10.dp)) { NewsLine(n) } }
@@ -1141,7 +1143,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 }
                 if (themes.isNotEmpty()) item {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                        Text("題材（近 3 天，共 ${themes.size} 個）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text("題材（近 3 天，共 ${themes.size} 個）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     }
                 }
                 val maxCount = themes.maxOfOrNull { it.count }?.coerceAtLeast(1) ?: 1
@@ -1151,9 +1153,9 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                         Column(Modifier.fillMaxWidth().clickable { expandedTheme = if (open) null else t.key }.padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(t.key, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1,
+                                Text(t.key, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                                Text("${t.count} 則 · " + (if (t.avgSentiment > 0.2) "偏多" else if (t.avgSentiment < -0.2) "偏空" else "中性"), fontSize = 12.sp,
+                                Text("${t.count} 則 · " + (if (t.avgSentiment > 0.2) "偏多" else if (t.avgSentiment < -0.2) "偏空" else "中性"), fontSize = AppText.caption,
                                     color = if (t.avgSentiment > 0.2) StockUp else if (t.avgSentiment < -0.2) StockDown else MaterialTheme.colorScheme.onSurfaceVariant)
                                 Icon(if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1163,11 +1165,11 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                             }
                             if (open) {
                                 val ds2 = digestsByTheme[t.key].orEmpty()
-                                if (ds2.isEmpty()) Text("這個題材的重點還在整理中。", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (ds2.isEmpty()) Text("這個題材的重點還在整理中。", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 ds2.take(3).forEach { d ->
-                                    Text("${d.day.substring(5)}（${d.count} 則）", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("${d.day.substring(5)}（${d.count} 則）", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     d.points.take(5).forEach { p ->
-                                        Text("• ${p.text}" + (if (p.symbols.isNotEmpty()) "（${p.symbols.joinToString("、")}）" else ""), fontSize = 13.sp)
+                                        Text("• ${p.text}" + (if (p.symbols.isNotEmpty()) "（${p.symbols.joinToString("、")}）" else ""), fontSize = AppText.secondary)
                                     }
                                 }
                                 TextButton(onClick = { theme = setOf(t.key); view = 1 }) { Text("看這個題材的 ${t.count} 則新聞 ›") }
@@ -1182,7 +1184,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 }
             } else {
                 if (filteredOrNull == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                else if (filtered.isEmpty()) item { Text("沒有符合條件的新聞", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                else if (filtered.isEmpty()) item { Text("沒有符合條件的新聞", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 // 依日期分組（排序為「最新」時），每天一個標題
                 val zoneTw = java.time.ZoneId.of("Asia/Taipei")
                 val todayTw = java.time.LocalDate.now(zoneTw)
@@ -1195,7 +1197,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                         Text(
                             (when (d) { todayTw -> "今天 · "; todayTw.minusDays(1) -> "昨天 · "; else -> "" }) +
                                 "${d.monthValue}/${d.dayOfMonth}（${com.enwei.moneymanager.core.Recurrence.weekdayName(d.dayOfWeek)}）· ${dayCounts[d] ?: 0} 則",
-                            fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary,
+                            fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(top = 6.dp),
                         )
                     }
@@ -1215,33 +1217,33 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("新聞自動更新與每日報告", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("新聞自動更新與每日報告", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                     }
                     Switch(checked = settings.advisorDaily, onCheckedChange = { enabled -> repo.settings.update { it.copy(advisorDaily = enabled) } }, enabled = aiReady)
                 }
-                if (!aiReady) TextButton(onClick = { infoOpen = false; nav.navigate("ai") }) { Text("需先啟用 AI 並設定金鑰：前往 AI 設定 ›", fontSize = 12.sp) }
+                if (!aiReady) TextButton(onClick = { infoOpen = false; nav.navigate("ai") }) { Text("需先啟用 AI 並設定金鑰：前往 AI 設定 ›", fontSize = AppText.caption) }
                 // 背景蒐集新聞與整理題材的頻率
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("自動更新頻率", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text("自動更新頻率", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
                     listOf(1, 3, 6).forEach { h ->
                         FilterChip(settings.newsIntervalHours == h, {
                             repo.settings.update { it.copy(newsIntervalHours = h) }
                             com.enwei.moneymanager.work.NewsWorker.schedule(ctx, replace = true)
-                        }, label = { Text("每 $h 小時", fontSize = 12.sp) })
+                        }, label = { Text("每 $h 小時", fontSize = AppText.caption) })
                     }
                 }
                 androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Text("共 ${store.items.size} 則（近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天），已標註 ${stats.tagged} 則", fontSize = 14.sp)
+                Text("共 ${store.items.size} 則（近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天），已標註 ${stats.tagged} 則", fontSize = AppText.body)
                 stats.coverage?.let { c ->
                     val pct = if (c.recent > 0) c.digested * 100 / c.recent else 0
                     Text("近 3 天 ${c.recent} 則，已整理進重點 ${c.digested} 則（$pct%）" + (if (c.pending > 0) "；待標註 ${c.pending} 則" else ""),
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 val grid by com.enwei.moneymanager.MoneyApp.news.grid.collectAsStateWithLifecycle()
                 if (grid.blocks > 0) Text(
                     "近 3 天 ${grid.blocks} 個區塊（日期×題材），完整 ${grid.complete} 個" + (if (grid.unread > 0) "；待讀 ${grid.unread} 則" else "") +
                         (if (grid.done) "；資料集完整" else ""),
-                    fontSize = 12.sp, color = if (grid.done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = AppText.caption, color = if (grid.done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
@@ -1278,7 +1280,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 }
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("$kind（${rows.size}）" + (if (sel.isNotEmpty()) " · 已選 ${sel.size}" else ""), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text("$kind（${rows.size}）" + (if (sel.isNotEmpty()) " · 已選 ${sel.size}" else ""), fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         if (sel.isNotEmpty()) TextButton(onClick = { setSel(emptySet()) }) { Text("清除") }
                         TextButton(onClick = { pickList = null }) { Text("完成" + (if (filteredOrNull != null) "（${filtered.size} 則）" else "")) }
                     }
@@ -1295,11 +1297,11 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                             ) {
                                 androidx.compose.material3.Checkbox(on, { setSel(if (it) sel + r.a else sel - r.a) })
                                 Column(Modifier.weight(1f)) {
-                                    Text(r.b, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                    Text(r.b, fontSize = AppText.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                     Box(Modifier.fillMaxWidth(r.c.toFloat() / maxN).height(3.dp).background(
                                         if (r.d > 0.2) StockUp else if (r.d < -0.2) StockDown else MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp)))
                                 }
-                                Text("${r.c} 則", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp))
+                                Text("${r.c} 則", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp))
                             }
                         }
                     }
@@ -1363,14 +1365,14 @@ private fun DigestFolder(d: com.enwei.moneymanager.data.ThemeDigest) {
     val open = fold.open
     Column(Modifier.fillMaxWidth().clickable { fold.toggle() }.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${d.theme}　${d.day.substring(5)} · ${d.count} 則", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("${d.theme}　${d.day.substring(5)} · ${d.count} 則", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             com.enwei.moneymanager.ui.components.FoldToggle(open, d.points.size)
         }
         (if (open) d.points else d.points.take(1)).forEach { p ->
             Text(
                 (if (p.sentiment > 0) "▲ " else if (p.sentiment < 0) "▼ " else "• ") + p.text +
                     (if (p.symbols.isNotEmpty()) "（${p.symbols.joinToString(",")}）" else "") + if (p.count > 1) " ×${p.count}" else "",
-                fontSize = 13.sp, maxLines = if (open) Int.MAX_VALUE else 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                fontSize = AppText.secondary, maxLines = if (open) Int.MAX_VALUE else 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 color = if (p.sentiment > 0) StockUp else if (p.sentiment < 0) StockDown else MaterialTheme.colorScheme.onSurface,
             )
         }
@@ -1381,7 +1383,7 @@ private fun DigestFolder(d: com.enwei.moneymanager.data.ThemeDigest) {
 @Composable
 private fun ChipRow(label: String, content: @Composable () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(min = 36.dp))
+        Text(label, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(min = 36.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { content() }
     }
 }
@@ -1413,7 +1415,7 @@ private fun PlanTab(nav: NavController) {
                 Triple("支撐（60 日低）", idx.low.takeLast(60).min(), Color(0xFF26A69A)),
             ) else emptyList())
             StageChip(s.indexStage.label, s.indexStage.hint)
-            if (s.sox != null) Text("費城半導體：${s.soxStage.label}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (s.sox != null) Text("費城半導體：${s.soxStage.label}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         // ② 資金配置：比例條（長線、短線、可投入、預留）＋與目標比較
         if (s != null) Section("資金配置", action = "調整" to { editPlan = true }) {
@@ -1431,21 +1433,21 @@ private fun PlanTab(nav: NavController) {
                 parts.forEach { (n, v, c) ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(8.dp).background(c, RoundedCornerShape(4.dp)))
-                        Text(" $n ${m(v)}", fontSize = 12.sp)
+                        Text(" $n ${m(v)}", fontSize = AppText.caption)
                     }
                 }
             }
             Bucket("長線（目標 ${"%.0f".format(settings.investPlan.longRatio * 100)}%）", a.longValue, a.longTarget, a.longRoom, ::m)
             Bucket("短線（目標 ${"%.0f".format(100 - settings.investPlan.longRatio * 100)}%）", a.shortValue, a.shortTarget, a.shortRoom, ::m)
-            if (a.reserveShort > 0) Text("⚠ 可動用現金低於預留金額 ${m(a.reserveShort)}", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-            if (a.shortOver > 0) Text("⚠ 短線超出計畫 ${m(a.shortOver)}，新的短線單先暫停", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            if (a.reserveShort > 0) Text("⚠ 可動用現金低於預留金額 ${m(a.reserveShort)}", color = MaterialTheme.colorScheme.error, fontSize = AppText.caption)
+            if (a.shortOver > 0) Text("⚠ 短線超出計畫 ${m(a.shortOver)}，新的短線單先暫停", color = MaterialTheme.colorScheme.error, fontSize = AppText.caption)
         }
         }
-        if (sub == 1 && s != null && s.holdings.isEmpty()) Text("目前沒有持股。", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (sub == 1 && s != null && s.holdings.isEmpty()) Text("目前沒有持股。", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
         // ③ 持股紀律＋AI：每檔一張小卡（價位圖、紀律動作、今日報告的 AI 動作）
         if (sub == 1 && s != null && s.holdings.isNotEmpty()) Section("持股紀律與 AI 建議") {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("依你設定的門檻提示停損／停利", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text("依你設定的門檻提示停損／停利", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                 Switch(settings.investPlan.disciplineOn, { on -> repo.settings.update { it.copy(investPlan = it.investPlan.copy(disciplineOn = on)) } })
             }
             val store by MoneyApp.news.flow.collectAsStateWithLifecycle()
@@ -1473,11 +1475,11 @@ private fun PlanTab(nav: NavController) {
                 "短線移動停損：從高點回落 ${"%.0f".format(p.shortTrailPct)}%；長線 ${"%.0f".format(p.longTrailPct)}%",
                 "分批停利：獲利 ${"%.0f".format(p.takeProfitPct)}% 先賣 1/3（長線為兩倍）",
             )
-            lines.forEachIndexed { i, l -> Text("${i + 1}. $l", fontSize = 14.sp) }
+            lines.forEachIndexed { i, l -> Text("${i + 1}. $l", fontSize = AppText.body) }
         }
         if (sub == 2) Section("我的投資原則（${settings.investPlan.rules.size} 條）", action = "編輯" to { editRules = true }) {
-            if (settings.investPlan.rules.isEmpty()) Text("尚未設定投資原則。", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            settings.investPlan.rules.forEachIndexed { i, r -> Text("${i + 1}. $r", fontSize = 14.sp) }
+            if (settings.investPlan.rules.isEmpty()) Text("尚未設定投資原則。", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            settings.investPlan.rules.forEachIndexed { i, r -> Text("${i + 1}. $r", fontSize = AppText.body) }
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -1497,7 +1499,7 @@ private fun GuardRow(h: com.enwei.moneymanager.data.HoldingPlan, nav: NavControl
     Column(Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         // 第一行：名稱（不被擠成直排）＋展開；第二行：紀律動作標籤
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${h.symbol} ${h.name.orEmpty()}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+            Text("${h.symbol} ${h.name.orEmpty()}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             com.enwei.moneymanager.ui.components.FoldToggle(open, modifier = Modifier.padding(start = 6.dp))
         }
@@ -1507,32 +1509,32 @@ private fun GuardRow(h: com.enwei.moneymanager.data.HoldingPlan, nav: NavControl
         ) {
             Text(
                 (if (g.triggered) g.action.label.substringBefore('：') + "：賣 ${g.sellShares.toLong()} 股" else g.action.label.substringBefore('，')),
-                fontSize = 12.sp, maxLines = 2, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                fontSize = AppText.caption, maxLines = 2, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
-        if (gi == null || g == null) { Text("讀不到現價", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
+        if (gi == null || g == null) { Text("讀不到現價", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
         Text(
             if (g.excessShares >= 1) "多賺 ${g.excessShares.toLong()} 股 · 停利價 ${f(g.takeProfit)}"
             else if (g.excessValue > 0) "多賺 ${"%,.0f".format(g.excessValue)} 元，還不到一股" else "比成本少 ${"%,.0f".format(-g.excessValue)} 元",
-            fontSize = 13.sp, color = if (g.excessValue >= 0) StockUp else StockDown,
+            fontSize = AppText.secondary, color = if (g.excessValue >= 0) StockUp else StockDown,
         )
         if (open) {
             Text(
                 "${"%.0f".format(gi.shares)} 股 · 現價 ${f(gi.price)} · 市值 ${"%,.0f".format(gi.shares * gi.price)} · 保本 ${"%,.0f".format(gi.principal)}" +
                     (if (h.autoPrincipal) "（自動）" else "") + (g.peak?.let { " · 最高 ${f(it)}" } ?: ""),
-                fontSize = 13.sp,
+                fontSize = AppText.secondary,
             )
             Text(
                 "60 分 K：20MA ${f(gi.hourMa20)}" + (gi.hourMa20?.let { if (gi.price < it) "（跌破）" else "（之上）" } ?: "") +
                     "、50MA ${f(gi.hourMa50)}" + (gi.hourMa50?.let { if (gi.price < it) "（跌破）" else "（之上）" } ?: "") +
                     (gi.reduceAt?.let { " · 減碼價 ${f(it)}" } ?: ""),
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            h.trend?.let { Text("日 K：${it.summary}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            Text(g.note, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            h.trend?.let { Text("日 K：${it.summary}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Text(g.note, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row {
-                TextButton(onClick = onEdit) { Text("設定保本與停利", fontSize = 12.sp) }
-                TextButton(onClick = { nav.navigate("stock/${h.symbol}") }) { Text("看 K 線", fontSize = 12.sp) }
+                TextButton(onClick = onEdit) { Text("設定保本與停利", fontSize = AppText.caption) }
+                TextButton(onClick = { nav.navigate("stock/${h.symbol}") }) { Text("看 K 線", fontSize = AppText.caption) }
             }
         }
     }
@@ -1555,16 +1557,16 @@ private fun GuardDialog(h: com.enwei.moneymanager.data.HoldingPlan, gs: com.enwe
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumberField(principal, { principal = it }, "保本金額（空白為自動）", suffix = "元")
                 if (gi != null) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(onClick = { principal = "%.0f".format(gi.shares * gi.price) }) { Text("改成目前市值", fontSize = 12.sp) }
-                    OutlinedButton(onClick = { principal = "" }) { Text("自動", fontSize = 12.sp) }
+                    OutlinedButton(onClick = { principal = "%.0f".format(gi.shares * gi.price) }) { Text("改成目前市值", fontSize = AppText.caption) }
+                    OutlinedButton(onClick = { principal = "" }) { Text("自動", fontSize = AppText.caption) }
                 }
                 NumberField(tp, { tp = it }, "手動停利價", suffix = "元")
                 NumberField(reduce, { reduce = it }, "減碼價（跌破賣一半）", suffix = "元")
                 if (gi != null) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(3, 5, 8).forEach { pct -> OutlinedButton(onClick = { reduce = "%.2f".format(gi.price * (1 - pct / 100.0)) }) { Text("−$pct%", fontSize = 12.sp) } }
+                    listOf(3, 5, 8).forEach { pct -> OutlinedButton(onClick = { reduce = "%.2f".format(gi.price * (1 - pct / 100.0)) }) { Text("−$pct%", fontSize = AppText.caption) } }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("重設移動停利的最高價", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text("重設移動停利的最高價", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
                     Switch(resetPeak, { resetPeak = it })
                 }
             }
@@ -1600,7 +1602,7 @@ private fun Section(
                 (if (collapsible) Modifier.clickable { fold.toggle() } else Modifier).fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(title, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 action?.let { (l, f) -> TextButton(onClick = f) { Text(l) } }
                 if (collapsible) com.enwei.moneymanager.ui.components.FoldToggle(open)
             }
@@ -1647,9 +1649,9 @@ private fun StageChip(label: String, hint: String) {
     // 說明放在標籤下方：放旁邊時說明一長，標籤會被擠到中間、左邊留一大塊空白
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
-            Text(label, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+            Text(label, fontSize = AppText.secondary, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
         }
-        if (hint.isNotBlank()) Text(hint, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (hint.isNotBlank()) Text(hint, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1657,14 +1659,14 @@ private fun StageChip(label: String, hint: String) {
 private fun Bucket(label: String, used: Long, target: Long, room: Long, m: (Long) -> String) {
     Column {
         Row {
-            Text(label, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            Text("${m(used)} / ${m(target)}", fontSize = 13.sp)
+            Text(label, fontSize = AppText.body, modifier = Modifier.weight(1f))
+            Text("${m(used)} / ${m(target)}", fontSize = AppText.secondary)
         }
         val f = if (target > 0) (used.toFloat() / target).coerceIn(0f, 1f) else 0f
         Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
             Box(Modifier.fillMaxWidth(f).height(6.dp).background(if (used > target) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)))
         }
-        Text("還可投入 ${m(room)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("還可投入 ${m(room)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1700,7 +1702,7 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("持股紀律建議")
-                        Text("依你設定的參數計算，預設關閉", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("依你設定的參數計算，預設關閉", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(disciplineOn, {
                         disciplineOn = it
@@ -1727,14 +1729,14 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
                             aiBusy = false
                         }
                     }) { Text(if (aiBusy) "AI 讀取中…" else "依我的投資原則帶入（AI）") }
-                    aiNote?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    aiNote?.let { Text(it, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("保本＋移動停利", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Text("保本＋移動停利", fontSize = AppText.body, modifier = Modifier.weight(1f))
                         Switch(guardOn, { guardOn = it })
                     }
                     if (guardOn) {
-                        @Composable fun head(t: String) = Text(t, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
-                        @Composable fun note(t: String) = Text(t, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        @Composable fun head(t: String) = Text(t, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+                        @Composable fun note(t: String) = Text(t, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         head("一、股價上漲：保本＋移動停利")
                         note("集保永遠保留「市值約等於原始成本」的股數，只賣多賺的部分；不見價就賣，先設停利價並跟著往上移。")
                         NumberField(gTrail, { gTrail = it }, "移動停利：從最高價回落", suffix = "%")
@@ -1853,24 +1855,24 @@ private fun NewsScheduleInfo() {
         // 問 AI 的對話流程：搜尋新聞 → 讀全文 → AI 回答 → 確認代號
         chatJob?.let { c ->
             if (c.running) {
-                Text("AI 對話程序：「${c.question.take(16)}${if (c.question.length > 16) "…" else ""}」", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("AI 對話程序：「${c.question.take(16)}${if (c.question.length > 16) "…" else ""}」", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
                 ChatSteps(c.step)
-                Text(c.step.ifBlank { "準備中…" } + " · 已 ${((now - c.startedAt) / 1000).coerceAtLeast(0)} 秒", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-            } else if (now - c.startedAt < 6 * 3600_000L) Text("上一次對話（${hm.format(java.util.Date(c.startedAt))}）：${c.error ?: c.step.ifBlank { "已回覆" }}", fontSize = 12.sp,
+                Text(c.step.ifBlank { "準備中…" } + " · 已 ${((now - c.startedAt) / 1000).coerceAtLeast(0)} 秒", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
+            } else if (now - c.startedAt < 6 * 3600_000L) Text("上一次對話（${hm.format(java.util.Date(c.startedAt))}）：${c.error ?: c.step.ifBlank { "已回覆" }}", fontSize = AppText.caption,
                 color = if (c.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
         }
         // 目前的排程程序（執行中時顯示步驟與進度；結束後顯示上一輪的結果）
         job?.let { j ->
             if (j.running) {
-                Text("目前程序", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("目前程序", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
                 PipelineSteps(j.step, refreshOnly = j.refreshOnly)
                 Text(j.step + (if (j.done != null && j.total != null) "（${j.done}/${j.total}）" else "") +
                     (j.etaAt?.takeIf { it > now }?.let { " · 約剩 ${com.enwei.moneymanager.work.ReportJob.formatDuration(it - now)}" } ?: ""),
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-            } else Text("上一輪（${hm.format(java.util.Date(j.startedAt))} 開始）：${j.error ?: j.step}", fontSize = 12.sp,
+                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
+            } else Text("上一輪（${hm.format(java.util.Date(j.startedAt))} 開始）：${j.error ?: j.step}", fontSize = AppText.caption,
                 color = if (j.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        lines.forEach { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        lines.forEach { Text(it, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (health.paused(now)) TextButton(onClick = { com.enwei.moneymanager.work.AiHealth.resume() }) { Text("恢復背景更新") }
     }
 }
@@ -1913,23 +1915,23 @@ private fun ChatChartView(ch: com.enwei.moneymanager.data.ChatChart, nav: NavCon
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun ThemeBars(rows: List<Pair<com.enwei.moneymanager.data.TopicStat, List<String>>>, nav: NavController) {
-    if (rows.isEmpty()) { Text("還沒有足夠的產業題材新聞", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return }
+    if (rows.isEmpty()) { Text("還沒有足夠的產業題材新聞", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant); return }
     val max = rows.maxOf { it.first.count }.coerceAtLeast(1)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("產業題材（長條＝新聞則數，顏色＝多空）", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text("產業題材（長條＝新聞則數，顏色＝多空）", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
         rows.forEach { (t, syms) ->
             val c = when { t.avgSentiment > 0.2 -> StockUp; t.avgSentiment < -0.2 -> StockDown; else -> MaterialTheme.colorScheme.onSurfaceVariant }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(t.key, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
-                    Text("${t.count} 則 · " + (if (t.avgSentiment > 0.2) "偏多" else if (t.avgSentiment < -0.2) "偏空" else "中性"), fontSize = 11.sp, color = c)
+                    Text(t.key, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
+                    Text("${t.count} 則 · " + (if (t.avgSentiment > 0.2) "偏多" else if (t.avgSentiment < -0.2) "偏空" else "中性"), fontSize = AppText.label, color = c)
                 }
                 Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
                     Box(Modifier.fillMaxWidth(t.count.toFloat() / max).height(6.dp).background(c, RoundedCornerShape(3.dp)))
                 }
                 if (syms.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     syms.forEach { sym ->
-                        Text(sym, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
+                        Text(sym, fontSize = AppText.label, color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(4.dp))
                                 .clickable { nav.navigate("stock/$sym") }.padding(horizontal = 6.dp, vertical = 1.dp))
                     }
@@ -1946,9 +1948,9 @@ private fun AiHoldLine(a: com.enwei.moneymanager.data.AdvisorHolding) {
     // AI 動作在上、理由在下（不擠在同一行）
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
-            Text("AI：${a.action}", fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+            Text("AI：${a.action}", fontSize = AppText.caption, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
         }
-        Text(com.enwei.moneymanager.data.stripCites(a.reason), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(com.enwei.moneymanager.data.stripCites(a.reason), fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1958,9 +1960,9 @@ private fun HoldingCard(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwe
     val g = h.price?.let { (it / h.avgCost - 1) * 100 }
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${h.symbol} ${h.name.orEmpty()}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+            Text("${h.symbol} ${h.name.orEmpty()}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1,
                 modifier = Modifier.weight(1f).clickable { nav.navigate("stock/${h.symbol}") })
-            g?.let { Text("%+.1f%%".format(it), fontSize = 13.sp, color = if (it >= 0) StockUp else StockDown) }
+            g?.let { Text("%+.1f%%".format(it), fontSize = AppText.secondary, color = if (it >= 0) StockUp else StockDown) }
             // 長線／短線：點一下切換
             Surface(
                 color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(4.dp),
@@ -1968,7 +1970,7 @@ private fun HoldingCard(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwe
                     val next = TradeStyle.entries[(h.style.ordinal + 1) % TradeStyle.entries.size]
                     repo.settings.update { it.copy(stockStyle = it.stockStyle + (h.symbol to next.name)) }
                 },
-            ) { Text(h.style.label, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+            ) { Text(h.style.label, fontSize = AppText.caption, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
         }
         val ad = h.advice
         PriceLadder(buildList {
@@ -1984,8 +1986,8 @@ private fun HoldingCard(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwe
             Surface(
                 color = if (ad.triggered) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
                 shape = RoundedCornerShape(4.dp),
-            ) { Text("紀律：${ad.action}", fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
-            Text(ad.note, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
+            ) { Text("紀律：${ad.action}", fontSize = AppText.caption, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+            Text(ad.note, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp))
         }
         ai?.let { AiHoldLine(it) }
@@ -2016,8 +2018,8 @@ private fun StepRow(steps: List<String>, cur: Int) {
                 i == cur -> "●" to MaterialTheme.colorScheme.primary
                 else -> "○" to MaterialTheme.colorScheme.onSurfaceVariant
             }
-            Text("$mark $s", fontSize = 12.sp, color = col, fontWeight = if (i == cur) FontWeight.SemiBold else FontWeight.Normal)
-            if (i < steps.lastIndex) Text("  →  ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$mark $s", fontSize = AppText.caption, color = col, fontWeight = if (i == cur) FontWeight.SemiBold else FontWeight.Normal)
+            if (i < steps.lastIndex) Text("  →  ", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

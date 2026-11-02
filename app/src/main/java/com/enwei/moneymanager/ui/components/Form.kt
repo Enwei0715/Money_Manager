@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,7 +49,7 @@ fun FormLine(
 fun FormInput(value: String, onChange: (String) -> Unit, placeholder: String = "", number: Boolean = false) {
     BasicTextField(
         value = value, onValueChange = onChange, singleLine = true,
-        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
+        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         keyboardOptions = if (number) KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default,
         modifier = Modifier.fillMaxWidth(),

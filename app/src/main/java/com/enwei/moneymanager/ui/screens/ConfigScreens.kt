@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
@@ -90,7 +92,7 @@ private fun uiScaleLabel(v: Float) = when {
 @Composable
 private fun SectionHeader(title: String) {
     Text(
-        title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp,
+        title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body,
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, top = 14.dp, bottom = 6.dp),
     )
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -103,10 +105,10 @@ private fun ConfigRow(title: String, value: String? = null, sub: String? = null,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (sub != null) Text(sub, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (sub != null) Text(sub, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (value != null) Text(value, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
+        if (value != null) Text(value, color = MaterialTheme.colorScheme.primary, fontSize = AppText.body)
     }
 }
 
@@ -194,7 +196,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                                 androidx.compose.material3.Card(Modifier.weight(1f).height(64.dp).clickable { nav.navigate(g.route ?: "config?g=${g.id}") }) {
                                     Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                                         androidx.compose.material3.Icon(g.icon, null, tint = MaterialTheme.colorScheme.primary)
-                                        Text(g.title, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1,
+                                        Text(g.title, fontSize = AppText.section, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1,
                                             overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp))
                                     }
                                 }
@@ -202,7 +204,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                             if (rowGroups.size == 1) Spacer(Modifier.weight(1f))
                         }
                     }
-                    if (!searching) Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (!searching) Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.fillMaxWidth().padding(top = 6.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
@@ -366,7 +368,7 @@ private fun PinPad(title: String, entered: Int, error: Boolean, onDigit: (Char) 
         Spacer(Modifier.height(80.dp))
         Icon(androidx.compose.ui.res.painterResource(com.enwei.moneymanager.R.drawable.ic_stat_ledger), null, tint = Color.White, modifier = Modifier.size(72.dp))
         Spacer(Modifier.height(40.dp))
-        Text(if (error) "密碼錯誤，請再試一次" else title, color = Color.White, fontSize = 18.sp)
+        Text(if (error) "密碼錯誤，請再試一次" else title, color = Color.White, fontSize = AppText.title)
         Spacer(Modifier.height(36.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             repeat(4) { i ->
@@ -388,7 +390,7 @@ private fun PinPad(title: String, entered: Int, error: Boolean, onDigit: (Char) 
                     ) {
                         if (k == "⌫") Icon(Icons.AutoMirrored.Outlined.Backspace, "刪除", tint = Color.White, modifier = Modifier.size(32.dp))
                         else if (k == "bio") Icon(androidx.compose.material.icons.Icons.Rounded.Fingerprint, "生物辨識", tint = Color.White, modifier = Modifier.size(34.dp))
-                        else Text(k, color = Color.White, fontSize = 30.sp)
+                        else Text(k, color = Color.White, fontSize = AppText.display)
                     }
                 }
             }
@@ -470,14 +472,14 @@ fun BudgetScreen(nav: NavController) {
                         Box(Modifier.clickable { editing = 0L to "總預算" }) {
                             if (total != null) com.enwei.moneymanager.ui.components.BudgetMeter("總預算", used(0L) ?: 0L, total, Modifier.fillMaxWidth(), daysLeft = daysLeft)
                             else Row(Modifier.fillMaxWidth()) {
-                                Text("總預算", fontSize = 14.sp, modifier = Modifier.weight(1f))
-                                Text("未設定", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                                Text("總預算", fontSize = AppText.body, modifier = Modifier.weight(1f))
+                                Text("未設定", fontSize = AppText.body, color = MaterialTheme.colorScheme.primary)
                             }
                         }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         Row(Modifier.fillMaxWidth().clickable { editGoal = true }, verticalAlignment = Alignment.CenterVertically) {
-                            Text("儲蓄率目標", fontSize = 14.sp, modifier = Modifier.weight(1f))
-                            Text(s.savingsGoal?.let { "%.0f%%".format(it) } ?: "未設定", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                            Text("儲蓄率目標", fontSize = AppText.body, modifier = Modifier.weight(1f))
+                            Text(s.savingsGoal?.let { "%.0f%%".format(it) } ?: "未設定", fontSize = AppText.body, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
@@ -487,8 +489,8 @@ fun BudgetScreen(nav: NavController) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("分類預算", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                            Text("合計 ${Money.format(setCats.sumOf { s.budgets[it.id] ?: 0L })}", fontSize = 12.sp, color = gray)
+                            Text("分類預算", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text("合計 ${Money.format(setCats.sumOf { s.budgets[it.id] ?: 0L })}", fontSize = AppText.caption, color = gray)
                         }
                         setCats.forEach { c ->
                             com.enwei.moneymanager.ui.components.BudgetRowCompact(c.name, used(c.id) ?: 0L, s.budgets[c.id] ?: 0L, Modifier.fillMaxWidth()) {
@@ -503,17 +505,17 @@ fun BudgetScreen(nav: NavController) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("新增分類預算", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text("新增分類預算", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                             if (suggest.isNotEmpty()) TextButton(onClick = {
                                 // 只填還沒設定、平均 500 元以上的分類
                                 unsetCats.forEach { c -> suggest[c.id]?.takeIf { it >= 50_000 }?.let { setCap(c.id, it) } }
                                 if (!s.budgets.containsKey(0L)) suggest[0L]?.let { setCap(0L, it) }
-                            }) { Text("全部帶入平均", fontSize = 13.sp) }
+                            }) { Text("全部帶入平均", fontSize = AppText.secondary) }
                         }
                         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             unsetCats.forEach { c ->
                                 androidx.compose.material3.AssistChip(onClick = { editing = c.id to c.name }, label = {
-                                    Text("＋ " + c.name + (suggest[c.id]?.let { " ${Money.format(it)}" } ?: ""), fontSize = 12.sp)
+                                    Text("＋ " + c.name + (suggest[c.id]?.let { " ${Money.format(it)}" } ?: ""), fontSize = AppText.caption)
                                 })
                             }
                         }
@@ -612,8 +614,8 @@ fun PasscodeScreen(nav: NavController) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("生物辨識（指紋／臉部）", fontSize = 14.sp)
-                        if (!bioOk) Text("此裝置尚未設定生物辨識", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("生物辨識（指紋／臉部）", fontSize = AppText.body)
+                        if (!bioOk) Text("此裝置尚未設定生物辨識", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     androidx.compose.material3.Switch(s.biometric && bioOk, { v -> repo.settings.update { it.copy(biometric = v) } }, enabled = bioOk)
                 }

@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.clickable
@@ -162,7 +164,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
         modifier = Modifier.nestedScroll(topScroll.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
+            com.enwei.moneymanager.ui.ChromeScale { TopAppBar(
                 scrollBehavior = topScroll,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, scrolledContainerColor = MaterialTheme.colorScheme.surface),
                 title = { Text(listOf("帳戶", "股票").getOrElse(section) { "帳戶" }) },
@@ -187,7 +189,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     }
                   }
                 },
-            )
+            ) }
         },
         snackbarHost = { androidx.compose.material3.SnackbarHost(snack) },
     ) { pad ->
@@ -199,15 +201,15 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
         // 助理已移到底部分頁：舊的記憶位置改回股票
         if (section > 1) section = 1
         com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = {
-        if (stocksOn) TabRow(
+        if (stocksOn) com.enwei.moneymanager.ui.ChromeScale { TabRow(
             selectedTabIndex = section, containerColor = MaterialTheme.colorScheme.surface,
             indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[section]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
         ) {
             (if (stocksOn) listOf("帳戶", "股票") else listOf("帳戶")).forEachIndexed { i, t ->
-                Tab(section == i, { section = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp, group = fitGroup1) },
+                Tab(section == i, { section = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = AppText.body, group = fitGroup1) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        }
+        } }
         }) {
         if (section == 1) StockContent(nav, refreshTick) { msg -> scope.launch { snack.showSnackbar(com.enwei.moneymanager.ui.tr(msg)) } }
         else LazyColumn(Modifier.fillMaxSize()) {
@@ -226,7 +228,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                 ) {
                     Column(Modifier.padding(14.dp)) {
                         Text("借貸提醒", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                        loanNotes.forEach { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSecondaryContainer) }
+                        loanNotes.forEach { Text(it, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSecondaryContainer) }
                     }
                 }
             }
@@ -244,7 +246,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                             w.cards.joinToString("、") { (c, amt) -> "${c.name} ${Money.withSymbol(amt, c.currency)}" } +
                                 "\n${w.date.monthValue}/${w.date.dayOfMonth} 起自動扣繳共 ${Money.withSymbol(w.needed, w.from.currency)}，" +
                                 "目前餘額 ${Money.withSymbol(w.balance, w.from.currency)}，還差 ${Money.withSymbol(w.shortBy, w.from.currency)}",
-                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer,
+                            fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onErrorContainer,
                         )
                     }
                 }
@@ -354,8 +356,8 @@ private fun AccountLine(
         Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = if (sub != null || note != null) 12.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(name, style = MaterialTheme.typography.bodyLarge)
-                if (!sub.isNullOrEmpty()) Text(sub, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                note?.let { (t, c) -> Text(t, fontSize = 12.sp, color = c) }
+                if (!sub.isNullOrEmpty()) Text(sub, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                note?.let { (t, c) -> Text(t, fontSize = AppText.caption, color = c) }
             }
             right()
         }
@@ -367,7 +369,7 @@ private fun AccountLine(
 private fun CreditCardMetric(label: String, value: String, color: Color, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        Text(value, color = color, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, color = color, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -454,7 +456,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
+            com.enwei.moneymanager.ui.ChromeScale { TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
                 title = { Text(acc?.name ?: "", maxLines = 1) },
@@ -465,27 +467,27 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         IconButton(onClick = { month = if (tab == 0) month.plusMonths(1) else month.plusYears(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                     }
                 },
-            )
+            ) }
         },
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize()) {
             item {
                 val fitGroup2 = com.enwei.moneymanager.ui.components.rememberFitGroup()
-                TabRow(
+                com.enwei.moneymanager.ui.ChromeScale { TabRow(
                     selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface,
                     indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
                 ) {
                     detailTabs.forEachIndexed { i, t ->
-                        Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = 14.sp, group = fitGroup2) },
+                        Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = AppText.body, group = fitGroup2) },
                             selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                }
+                } }
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("結算期間", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(if (tab == 2) "全部" else "${start.monthValue}.${start.dayOfMonth}.${start.year % 100} ~ ${end.monthValue}.${end.dayOfMonth}.${end.year % 100}",
-                            fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                            fontSize = AppText.title, fontWeight = FontWeight.SemiBold)
                     }
                     IconButton(onClick = { reconcileOpen = true }) { Icon(Icons.Outlined.FactCheck, "對帳") }
                     IconButton(onClick = { chart = !chart }) {
@@ -512,10 +514,10 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("持股市值 ${Money.withSymbol(value)}", fontSize = 14.sp)
-                            Text("原幣成本 ${Money.full(cost)} · 預估損益 ${Money.full(pnl)}", fontSize = 13.sp,
+                            Text("持股市值 ${Money.withSymbol(value)}", fontSize = AppText.body)
+                            Text("原幣成本 ${Money.full(cost)} · 預估損益 ${Money.full(pnl)}", fontSize = AppText.secondary,
                                 color = if (pnl >= 0) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown)
-                            Text("交割帳戶：${lk.account(acc.linkedAccountId)?.name ?: "未設定（按右上編輯）"}", fontSize = 13.sp,
+                            Text("交割帳戶：${lk.account(acc.linkedAccountId)?.name ?: "未設定（按右上編輯）"}", fontSize = AppText.secondary,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         androidx.compose.material3.OutlinedButton(onClick = { nav.navigate("trade/0?broker=${acc.id}") }) { Text("＋ 交易") }
@@ -534,16 +536,16 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("應繳 ${Money.withSymbol(st?.payable ?: 0, acc.currency)}" + (st?.dueDate?.let { "　繳款日 ${it.monthValue}/${it.dayOfMonth}" } ?: ""), fontSize = 14.sp)
+                        Text("應繳 ${Money.withSymbol(st?.payable ?: 0, acc.currency)}" + (st?.dueDate?.let { "　繳款日 ${it.monthValue}/${it.dayOfMonth}" } ?: ""), fontSize = AppText.body)
                         Text("未出帳 ${Money.withSymbol(st?.outstanding ?: 0, acc.currency)}" + if (acc.creditLimit > 0) "　可用額度 ${Money.full(acc.creditLimit + current)}" else "",
-                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
                             listOfNotNull(
                                 acc.statementDay?.let { "結帳日 $it 日" },
                                 settings.cardDueOffset[acc.id]?.let { "結帳後 $it 天繳款" } ?: acc.dueDay?.let { "繳款日 $it 日" },
                                 st?.autopayDate?.let { "${it.monthValue}/${it.dayOfMonth} 由「${lk.account(acc.autopayFromId)?.name}」自動扣繳" } ?: "未設定自動扣繳",
                             ).joinToString(" · "),
-                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     androidx.compose.material3.OutlinedButton(onClick = {
@@ -599,7 +601,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         DualBarChart(deps, wds, labels, IncomeColor, ExpenseColor)
                         if (isBroker) Text(
                             "折線：現金＋持股市值　長條：存入／提出",
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     }
@@ -698,15 +700,15 @@ private fun PeriodRow(title: String, sub: String, deposit: Long, withdrawal: Lon
     Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(title, fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                 if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Row {
                     Text(Money.full(deposit), color = IncomeColor, modifier = Modifier.width(96.dp), textAlign = TextAlign.End,
-                        fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(Money.full(withdrawal), color = ExpenseColor, modifier = Modifier.width(96.dp), textAlign = TextAlign.End,
-                        fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text("餘額 ${Money.full(balance)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -750,7 +752,7 @@ fun TotalStatsScreen(nav: NavController) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Column(Modifier.padding(20.dp)) {
                     Text("餘額（不含股票）", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(Money.full(worth.last()), fontSize = 30.sp, fontWeight = FontWeight.SemiBold)
+                    Text(Money.full(worth.last()), fontSize = AppText.display, fontWeight = FontWeight.SemiBold)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 LineChart(worth, labels, MaterialTheme.colorScheme.primary, Modifier.padding(vertical = 12.dp))

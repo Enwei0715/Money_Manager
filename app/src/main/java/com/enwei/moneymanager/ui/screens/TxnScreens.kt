@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -124,7 +126,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
             Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                 androidx.compose.foundation.text.BasicTextField(
                     q, { q = it }, singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     decorationBox = { inner ->
@@ -150,7 +152,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
                             month != null -> "${month.year}年${month.monthValue}月"
                             else -> "全部期間"
                         },
-                        fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        fontSize = AppText.body, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.weight(1f).clickable {
                             if (from != null) { from = null; to = null }
                             else {
@@ -166,11 +168,11 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 if (showFilter) {
                     FormLine("期間", onClick = { pickRange = true }) {
-                        Text(if (from == null) "" else "$from ~ ${to ?: from}", fontSize = 14.sp)
+                        Text(if (from == null) "" else "$from ~ ${to ?: from}", fontSize = AppText.body)
                     }
                     FormLine("帳戶", onClick = { accMenu = true }) {
                         Box {
-                            Text(lk.account(accountId)?.name.orEmpty(), fontSize = 14.sp)
+                            Text(lk.account(accountId)?.name.orEmpty(), fontSize = AppText.body)
                             DropdownMenu(accMenu, { accMenu = false }) {
                                 DropdownMenuItem(text = { Text("全部") }, onClick = { accountId = null; accMenu = false })
                                 lk.accounts.forEach { a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { accountId = a.id; accMenu = false }) }
@@ -179,7 +181,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
                     }
                     FormLine("分類", onClick = { catMenu = true }) {
                         Box {
-                            Text(lk.category(categoryId)?.name.orEmpty(), fontSize = 14.sp)
+                            Text(lk.category(categoryId)?.name.orEmpty(), fontSize = AppText.body)
                             DropdownMenu(catMenu, { catMenu = false }) {
                                 DropdownMenuItem(text = { Text("全部") }, onClick = { categoryId = null; catMenu = false })
                                 lk.categories.forEach { c -> DropdownMenuItem(text = { Text("${c.kind.label}・${c.name}") }, onClick = { categoryId = c.id; catMenu = false }) }
@@ -213,9 +215,9 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
                     Donut("收入", part.income, whole.income, IncomeColor, Modifier.weight(1f), ring = 58.dp)
                     Donut("支出", part.expense, whole.expense, ExpenseColor, Modifier.weight(1f), ring = 58.dp)
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("合計", fontSize = 13.sp)
-                        Text(Money.withSymbol(part.total, lk.base), fontSize = 14.sp, maxLines = 1)
-                        Text("${result.size} 筆", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("合計", fontSize = AppText.secondary)
+                        Text(Money.withSymbol(part.total, lk.base), fontSize = AppText.body, maxLines = 1)
+                        Text("${result.size} 筆", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -232,7 +234,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    chart.label(lk), fontSize = 14.sp, maxLines = 1,
+                    chart.label(lk), fontSize = AppText.body, maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = { chartApplied = false }) { Text("清除") }
@@ -294,7 +296,7 @@ fun PendingScreen(nav: NavController) {
                     Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = androidx.compose.foundation.shape.CircleShape) {
                         Icon(Icons.Filled.DoneAll, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.padding(18.dp).size(32.dp))
                     }
-                    Text("都確認完了", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("都確認完了", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                 }
             }
             items(pending, key = { it.id }) { t -> PendingCard(t, lk, nav) }
@@ -315,19 +317,19 @@ private fun PendingCard(t: com.enwei.moneymanager.data.TxnEntity, lk: Lookups, n
     androidx.compose.material3.Card(Modifier.fillMaxWidth().clickable { nav.navigate("txn/${t.id}") }) {
         Column(Modifier.padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(t.merchant?.takeIf { it.isNotBlank() } ?: t.type.label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                Text(t.merchant?.takeIf { it.isNotBlank() } ?: t.type.label, fontSize = AppText.section, fontWeight = FontWeight.SemiBold,
                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 com.enwei.moneymanager.ui.components.AmountText(t.amount, t.currency, t.type, Modifier.padding(end = 6.dp))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Surface(color = if (cat == null) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
                     shape = RoundedCornerShape(4.dp)) {
-                    Text(cat ?: "未分類", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    Text(cat ?: "未分類", fontSize = AppText.caption, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                 }
                 Text(
                     listOfNotNull(lk.account(t.accountId)?.name ?: "未指定帳戶", "%d/%d %02d:%02d".format(dt.monthValue, dt.dayOfMonth, dt.hour, dt.minute), t.source.label)
                         .joinToString(" · "),
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
             }
@@ -346,7 +348,7 @@ private fun PendingSection(title: String, action: (@Composable () -> Unit)? = nu
     androidx.compose.material3.Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(title, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 action?.invoke()
             }
             content()
@@ -375,7 +377,7 @@ private fun AiSuggestionSection(lk: Lookups) {
         action = if (open.size > 1) ({ TextButton(onClick = { scope.launch { open.forEach { repo.acceptAiSuggestion(it) } } }) { Text("全部接受") } }) else null,
     ) {
         if (aiOn && unknown > 0) Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("有 $unknown 筆不明或未分類的收支", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Text("有 $unknown 筆不明或未分類的收支", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             OutlinedButton(enabled = !unknownProgress.running, onClick = {
                 scope.launch { com.enwei.moneymanager.work.AiBackgroundWork.runUnknownSort() }
             }) { Text(if (unknownProgress.running) "整理中…" else "AI 整理") }
@@ -386,10 +388,10 @@ private fun AiSuggestionSection(lk: Lookups) {
             if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text((t.merchant ?: "未命名") + "　" + com.enwei.moneymanager.core.Money.withSymbol(t.amount, t.currency), fontSize = 14.sp,
+                    Text((t.merchant ?: "未命名") + "　" + com.enwei.moneymanager.core.Money.withSymbol(t.amount, t.currency), fontSize = AppText.body,
                         maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                    Text("→ ${lk.catLabel(sg.categoryId) ?: "?"}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    if (sg.reason.isNotBlank()) Text(sg.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("→ ${lk.catLabel(sg.categoryId) ?: "?"}", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    if (sg.reason.isNotBlank()) Text(sg.reason, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 TextButton(onClick = { repo.rejectAiSuggestion(sg) }) { Text("略過") }
                 Button(onClick = { scope.launch { repo.acceptAiSuggestion(sg) } }) { Text("接受") }
@@ -423,7 +425,7 @@ private fun DuplicateSection(lk: Lookups) {
     // AI 自動整理紀錄：收合成一張小卡，點開才看
     if (settings.aiTidyLog.isNotEmpty()) PendingSection("AI 自動整理紀錄（${settings.aiTidyLog.size}）",
         action = { Box(Modifier.clickable { logFold.toggle() }) { com.enwei.moneymanager.ui.components.FoldToggle(showLog) } }) {
-        if (showLog) settings.aiTidyLog.take(10).forEach { Text("• $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (showLog) settings.aiTidyLog.take(10).forEach { Text("• $it", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     if (tidyProgress.running || tidyProgress.error != null)
         com.enwei.moneymanager.ui.components.AiWorkProgress(tidyProgress, Modifier.fillMaxWidth().padding(horizontal = 4.dp))
@@ -447,14 +449,14 @@ private fun DuplicateSection(lk: Lookups) {
         pairs.forEach { p ->
             val v = verdicts[p.key]
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            Text(com.enwei.moneymanager.core.Money.withSymbol(p.keep.amount, p.keep.currency) + " · ${p.keep.type.label}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text("保留：${line(p.keep)}", fontSize = 12.sp)
-            Text("刪除：${line(p.drop)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(com.enwei.moneymanager.core.Money.withSymbol(p.keep.amount, p.keep.currency) + " · ${p.keep.type.label}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            Text("保留：${line(p.keep)}", fontSize = AppText.caption)
+            Text("刪除：${line(p.drop)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (v != null) Text(
                 (if (v.same) "AI：同一筆" else "AI：不是同一筆") +
                     (if (v.same) listOfNotNull(v.name, lk.catLabel(v.categoryId)).joinToString(" · ", prefix = " → ").takeIf { it != " → " }.orEmpty() else "") +
                     (if (v.reason.isNotBlank()) "（${v.reason}）" else ""),
-                fontSize = 12.sp, color = if (v.same) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                fontSize = AppText.caption, color = if (v.same) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { repo.dismissDuplicate(p) }) { Text("不是重複") }

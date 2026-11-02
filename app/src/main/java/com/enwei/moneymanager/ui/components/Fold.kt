@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import android.content.Context
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -55,7 +57,7 @@ fun FoldToggle(open: Boolean, count: Int? = null, modifier: Modifier = Modifier)
         Row(Modifier.padding(start = 10.dp, end = 6.dp, top = 3.dp, bottom = 3.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (open) "收合" else "展開" + (count?.let { " $it" } ?: ""),
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSecondaryContainer,
+                fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Icon(
                 if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, null,

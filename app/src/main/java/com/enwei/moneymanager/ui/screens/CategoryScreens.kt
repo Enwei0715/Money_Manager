@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -204,7 +206,7 @@ private fun CategoryEditDialog(c: CategoryEntity, roots: List<CategoryEntity>, o
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(if (c.parentId == null) "→ 移為子分類" else "移至其他大分類", fontSize = 14.sp)
+                            Text(if (c.parentId == null) "→ 移為子分類" else "移至其他大分類", fontSize = AppText.body)
                             Text(
                                 parentId?.let { p -> "所屬：${roots.find { it.id == p }?.name ?: "?"}" } ?: "目前為大分類",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

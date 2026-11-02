@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -232,17 +234,17 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         modifier = Modifier.nestedScroll(topScroll.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (TxnSelect.active) TopAppBar(
+            if (TxnSelect.active) com.enwei.moneymanager.ui.ChromeScale { TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                 navigationIcon = { IconButton(onClick = { TxnSelect.ids = emptySet() }) { Icon(Icons.Filled.Close, "取消選取") } },
-                title = { Text("已選 ${TxnSelect.ids.size} 筆", fontSize = 16.sp) },
+                title = { Text("已選 ${TxnSelect.ids.size} 筆", fontSize = AppText.section) },
                 actions = {
                     TextButton(onClick = { TxnSelect.ids = inPeriod.map { it.id }.toSet() }) { Text("全選") }
                     TextButton(onClick = { batchCat = true }) { Text("分類") }
                     TextButton(onClick = { batchAcc = true }) { Text("帳戶") }
                     TextButton(onClick = { batchDelete = true }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
                 },
-            ) else TopAppBar(
+            ) } else com.enwei.moneymanager.ui.ChromeScale { TopAppBar(
                 scrollBehavior = topScroll,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, scrolledContainerColor = MaterialTheme.colorScheme.surface),
                 title = {
@@ -256,7 +258,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                                 tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> "${month.year}年"
                                 else -> "${month.year}年${month.monthValue}月"
                             },
-                            fontSize = 16.sp, modifier = Modifier.clickable { month = Periods.monthOf(LocalDate.now(), startDay) },
+                            fontSize = AppText.section, modifier = Modifier.clickable { month = Periods.monthOf(LocalDate.now(), startDay) },
                         )
                         IconButton(onClick = { step(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                     }
@@ -267,7 +269,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     }
                     IconButton(onClick = { nav.navigate("search?month=$month") }) { Icon(Icons.Outlined.Search, "搜尋") }
                 },
-            )
+            ) }
         },
         floatingActionButton = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -293,7 +295,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         Column(Modifier.padding(pad).fillMaxSize().then(swipeModifier)) {
             val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
             com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = { Column {
-            TabRow(
+            com.enwei.moneymanager.ui.ChromeScale { TabRow(
                 selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface,
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
             ) {
@@ -306,7 +308,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                             modifier = Modifier.padding(vertical = 10.dp))
                     }
                 }
-            }
+            } }
             if (tab < 2) SummaryBar(totals, lk.base)
             // 每日：這個月的總預算進度（有設定總預算、看的是這個月時）
             val budget = settings.budgets[0L]
@@ -334,10 +336,10 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                                 Modifier.weight(1f).background(if (sel) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(6.dp))
                                     .clickable { calSpan = i }.padding(vertical = 4.dp),
                                 contentAlignment = Alignment.Center,
-                            ) { Text(l, fontSize = 12.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
+                            ) { Text(l, fontSize = AppText.caption, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
                         }
                     }
-                    Text("長按日期記一筆", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp))
+                    Text("長按日期記一筆", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp))
                     }
                     when (calSpan) {
                         0, 1 -> CalendarView(range, all, accounts, settings, lk, nav, DayOfWeek.of(settings.weekStartDay), carry, settings.memos) { memoEditing = it }
@@ -376,7 +378,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 if (kinds.size != 1) Text("選取的交易要都是支出或都是收入（轉帳沒有分類）。")
                 else androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 420.dp)) {
                     items(lk.categories.filter { it.kind == kinds.first() && !it.archived }.sortedBy { lk.catLabel(it.id) }, key = { it.id }) { c ->
-                        Text(lk.catLabel(c.id) ?: c.name, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().clickable {
+                        Text(lk.catLabel(c.id) ?: c.name, fontSize = AppText.body, modifier = Modifier.fillMaxWidth().clickable {
                             val list = chosen.filter { it.type == kinds.first() }
                             scope.launch { list.forEach { repo.saveTxn(it.copy(categoryId = c.id)) } }
                             TxnSelect.ids = emptySet(); batchCat = false
@@ -393,7 +395,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         text = {
             androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 420.dp)) {
                 items(lk.accounts.filter { !it.archived }, key = { it.id }) { a ->
-                    Text(a.name, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().clickable {
+                    Text(a.name, fontSize = AppText.body, modifier = Modifier.fillMaxWidth().clickable {
                         scope.launch { chosen.forEach { repo.saveTxn(it.copy(accountId = a.id)) } }
                         TxnSelect.ids = emptySet(); batchAcc = false
                     }.padding(vertical = 10.dp))
@@ -431,8 +433,8 @@ fun SummaryBar(t: Totals, base: String) {
 @Composable
 private fun SummaryCell(label: String, value: String, color: Color, modifier: Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = 12.sp)
-        Text(value, color = color, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, fontSize = AppText.caption)
+        Text(value, color = color, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -491,7 +493,7 @@ fun NoData(text: String = "沒有資料") {
     Column(Modifier.fillMaxWidth().padding(top = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         // 自己的空白圖示（不沿用舊 App 的貓咪對話框）
         Icon(com.enwei.moneymanager.ui.components.LineIcons.Inbox, null, tint = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.size(64.dp))
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = AppText.body, modifier = Modifier.padding(top = 12.dp))
     }
 }
 
@@ -513,11 +515,11 @@ fun DayBlock(
         BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 5.dp, bottom = 5.dp)) {
             val compact = maxWidth < 400.dp
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("${day.dayOfMonth}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("${day.dayOfMonth}", fontSize = AppText.section, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(6.dp))
                 val chip = when (day.dayOfWeek) { DayOfWeek.SUNDAY -> SundayColor; DayOfWeek.SATURDAY -> SaturdayColor; else -> Color(0xFF8C8C8C) }
                 Surface(color = chip, shape = RoundedCornerShape(3.dp)) {
-                    Text("週${Recurrence.weekdayName(day.dayOfWeek)}", color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                    Text("週${Recurrence.weekdayName(day.dayOfWeek)}", color = Color.White, fontSize = AppText.caption, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
                 }
                 Spacer(Modifier.weight(1f))
                 Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = if (compact) 11.sp else 13.sp,
@@ -569,21 +571,21 @@ fun TradeRow(tr: com.enwei.moneymanager.data.StockTradeEntity, lk: Lookups, acco
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.width(80.dp)) {
-            Text("股票", color = gray, fontSize = 11.sp)
-            Text(side, color = gray, fontSize = 11.sp)
+            Text("股票", color = gray, fontSize = AppText.label)
+            Text(side, color = gray, fontSize = AppText.label)
         }
         Column(Modifier.weight(1f)) {
-            Text("${tr.symbol} ${tr.name.orEmpty()}".trim(), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(listOfNotNull(detail, cashAcc?.name ?: "未指定交割帳戶").joinToString(" · "), color = gray, fontSize = 12.sp, maxLines = 1,
+            Text("${tr.symbol} ${tr.name.orEmpty()}".trim(), fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(listOfNotNull(detail, cashAcc?.name ?: "未指定交割帳戶").joinToString(" · "), color = gray, fontSize = AppText.caption, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
             val affects = accountId == null || tr.cashAccountId == accountId
             // 和其他列一致：金額不帶正負號，流入用收入色、流出用支出色
-            Text(Money.withSymbol(kotlin.math.abs(flow), tr.currency), fontSize = 14.sp,
+            Text(Money.withSymbol(kotlin.math.abs(flow), tr.currency), fontSize = AppText.body,
                 color = if (!affects || flow == 0L) gray else if (flow > 0) IncomeColor else ExpenseColor)
-            if (balanceAfter != null && affects) Text("(${Money.full(balanceAfter)})", fontSize = 11.sp, color = gray)
+            if (balanceAfter != null && affects) Text("(${Money.full(balanceAfter)})", fontSize = AppText.label, color = gray)
         }
     }
 }
@@ -613,21 +615,21 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
     ) {
         Column(Modifier.width(80.dp)) {
             val parent = cat?.parentId?.let { lk.category(it) }
-            Text(if (t.type == TxnType.TRANSFER) "轉帳" else (parent ?: cat)?.name ?: "未分類", color = gray, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (parent != null && t.type != TxnType.TRANSFER) Text(cat!!.name, color = gray, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (t.type == TxnType.TRANSFER) "轉帳" else (parent ?: cat)?.name ?: "未分類", color = gray, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (parent != null && t.type != TxnType.TRANSFER) Text(cat!!.name, color = gray, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
             // 來源（通知、錢包…）不另佔一行，打開交易可以看到；只有「待確認」標在金額下方
         }
         Column(Modifier.weight(1f)) {
-            if (title != null) Text(title, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (title != null) Text(title, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(accountText, color = gray, fontSize = if (title != null) 14.sp else 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = AppText.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
-            Text(Money.withSymbol(t.amount, t.currency), color = color, fontSize = 14.sp)
-            if (t.status == TxnStatus.PENDING) Text("待確認", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)
-            if (balanceAfter != null) Text("(${Money.full(balanceAfter)})", fontSize = 11.sp, color = gray)
-            else if (t.currency != lk.base && lk.fx.hasRate(t.currency)) Text("≈" + Money.full(lk.fx.convert(t.amount, t.currency)), fontSize = 11.sp, color = gray)
+            Text(Money.withSymbol(t.amount, t.currency), color = color, fontSize = AppText.body)
+            if (t.status == TxnStatus.PENDING) Text("待確認", color = MaterialTheme.colorScheme.primary, fontSize = AppText.label)
+            if (balanceAfter != null) Text("(${Money.full(balanceAfter)})", fontSize = AppText.label, color = gray)
+            else if (t.currency != lk.base && lk.fx.hasRate(t.currency)) Text("≈" + Money.full(lk.fx.convert(t.amount, t.currency)), fontSize = AppText.label, color = gray)
         }
     }
 }
@@ -699,7 +701,7 @@ private fun CalendarView(
     Column(Modifier.fillMaxSize().then(if (fit) Modifier else Modifier.verticalScroll(rememberScrollState())).background(MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(vertical = 6.dp)) {
             headers.forEach { d ->
-                Text("週${Recurrence.weekdayName(d)}", Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 13.sp, color = weekdayColor(d, gray))
+                Text("週${Recurrence.weekdayName(d)}", Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = AppText.secondary, color = weekdayColor(d, gray))
             }
         }
         // 標示用顏色小點時，在星期列下方放一行圖例
@@ -710,7 +712,7 @@ private fun CalendarView(
             calendarMarks(SundayColor, IncomeColor, MaterialTheme.colorScheme.primary, ExpenseColor, TransferColor).forEach { (label, c) ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(6.dp).background(c, CircleShape))
-                    Text(" $label", fontSize = 10.sp, color = gray)
+                    Text(" $label", fontSize = AppText.badge, color = gray)
                 }
             }
         }
@@ -750,7 +752,7 @@ private fun CalendarView(
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 if (date.dayOfMonth == 1) "${date.monthValue}.1" else "${date.dayOfMonth}",
-                                fontSize = 13.sp, maxLines = 1, softWrap = false,
+                                fontSize = AppText.secondary, maxLines = 1, softWrap = false,
                                 color = when {
                                     isToday -> MaterialTheme.colorScheme.surface
                                     holiday != null -> SundayColor.copy(alpha = alpha)
@@ -773,7 +775,7 @@ private fun CalendarView(
                         ) {
                             marks.forEach { (label, c) ->
                                 if (settings.calendarDots) Box(Modifier.size(6.dp).background(c.copy(alpha = alpha), CircleShape))
-                                else Text(label, fontSize = 9.sp, lineHeight = 10.sp, color = c.copy(alpha = alpha), maxLines = 1, softWrap = false)
+                                else Text(label, fontSize = AppText.badge, lineHeight = 10.sp, color = c.copy(alpha = alpha), maxLines = 1, softWrap = false)
                             }
                         }
                         Spacer(Modifier.weight(1f))
@@ -793,13 +795,13 @@ private fun CalendarView(
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 // 日期在上、假日名稱在下（名稱很長時不會把按鈕擠掉）
                 Column(Modifier.weight(1f)) {
-                    Text("${day.year}/${day.monthValue}/${day.dayOfMonth}（${Recurrence.weekdayName(day.dayOfWeek)}）", fontSize = 16.sp, maxLines = 1)
+                    Text("${day.year}/${day.monthValue}/${day.dayOfMonth}（${Recurrence.weekdayName(day.dayOfWeek)}）", fontSize = AppText.section, maxLines = 1)
                     com.enwei.moneymanager.core.TaiwanHolidays.label(day)?.let {
-                        Text(it, fontSize = 12.sp, color = SundayColor, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        Text(it, fontSize = AppText.caption, color = SundayColor, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
                 }
-                TextButton(onClick = { sheetDay = null; onMemo(Memo(0, day.toMillis(), "")) }) { Text("＋備註", fontSize = 13.sp, maxLines = 1, softWrap = false) }
-                TextButton(onClick = { sheetDay = null; nav.navigate("txn/0?date=${day.toEpochDay()}") }) { Text("＋記一筆", fontSize = 13.sp, maxLines = 1, softWrap = false) }
+                TextButton(onClick = { sheetDay = null; onMemo(Memo(0, day.toMillis(), "")) }) { Text("＋備註", fontSize = AppText.secondary, maxLines = 1, softWrap = false) }
+                TextButton(onClick = { sheetDay = null; nav.navigate("txn/0?date=${day.toEpochDay()}") }) { Text("＋記一筆", fontSize = AppText.secondary, maxLines = 1, softWrap = false) }
             }
             val dayCardEvents = cardEvents[day].orEmpty()
             val weekday = day.dayOfWeek != DayOfWeek.SATURDAY && day.dayOfWeek != DayOfWeek.SUNDAY
@@ -811,11 +813,11 @@ private fun CalendarView(
                     horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     dayCardEvents.forEach { event ->
-                        Text("${event.kind.label}・${event.accountName}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Text("${event.kind.label}・${event.accountName}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
                     }
                     // 平日才需要：颱風等天然災害停止上班時，銀行也停止營業，信用卡結帳、繳款與扣繳會順延
-                    if (canTyphoon) Text(if (typhoon) "取消颱風假" else "標記颱風假", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
+                    if (canTyphoon) Text(if (typhoon) "取消颱風假" else "標記颱風假", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.clickable { repo.setTyphoonDay(day, !typhoon) }.padding(horizontal = 6.dp, vertical = 2.dp))
                 }
             }
@@ -824,7 +826,7 @@ private fun CalendarView(
             Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 4.dp)) {
                 dayMemos.forEach { m -> MemoLine(m) { sheetDay = null; onMemo(m) } }
                 if (dayMemos.isNotEmpty() || txns.isNotEmpty()) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                if (txns.isEmpty()) Text("沒有交易", color = gray, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+                if (txns.isEmpty()) Text("沒有交易", color = gray, fontSize = AppText.secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
                 else txns.sortedByDescending { it.date }.forEach { t -> MmTxnRow(t, lk) { sheetDay = null; nav.navigate("txn/${t.id}") } }
             }
             Spacer(Modifier.height(24.dp))
@@ -897,7 +899,7 @@ private fun MemoLine(m: Memo, onClick: () -> Unit) {
     ) {
         MemoDot(m.color, Modifier.size(12.dp))
         Spacer(Modifier.width(14.dp))
-        Text(m.title.ifBlank { m.text.lineSequence().firstOrNull().orEmpty() }, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Text(m.title.ifBlank { m.text.lineSequence().firstOrNull().orEmpty() }, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f))
         if (m.pinned) Icon(Icons.Filled.PushPin, "置頂", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
     }
@@ -922,15 +924,15 @@ fun MemoDialog(memo: Memo, onSaved: () -> Unit = {}, onDismiss: () -> Unit) {
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(memo.title.ifBlank { "備註" }, fontSize = 20.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                        Text(memo.title.ifBlank { "備註" }, fontSize = AppText.title, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
                         Text("${date.year}/${date.monthValue}/${date.dayOfMonth}（${Recurrence.weekdayName(date.dayOfWeek)}）" + if (memo.pinned) " · 置頂" else "",
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = { editing = true }) { Icon(Icons.Filled.Edit, "編輯") }
                 }
             },
             text = {
-                Text(memo.text.ifBlank { "（沒有內容）" }, fontSize = 15.sp, lineHeight = 24.sp,
+                Text(memo.text.ifBlank { "（沒有內容）" }, fontSize = AppText.section, lineHeight = 24.sp,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 420.dp).verticalScroll(rememberScrollState()))
             },
             confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
@@ -958,7 +960,7 @@ fun MemoDialog(memo: Memo, onSaved: () -> Unit = {}, onDismiss: () -> Unit) {
                 com.enwei.moneymanager.ui.components.DateField(date, { date = it })
                 OutlinedTextField(title, { title = it }, label = { Text("標題") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(text, { text = it }, label = { Text("內容") }, minLines = 3, modifier = Modifier.fillMaxWidth())
-                Text("主題色", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("主題色", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 // 12 種主題色，兩排各 6 個；第一個為不上色
                 com.enwei.moneymanager.data.memoColors.chunked(6).forEachIndexed { row, list ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1047,7 +1049,7 @@ private fun YearCalendar(year: Int, all: List<TxnEntity>, lk: Lookups, startDay:
                                 .clickable { onMonth(ym) }.padding(6.dp),
                             verticalArrangement = Arrangement.spacedBy(1.dp),
                         ) {
-                            Text("${ym.monthValue}月", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("${ym.monthValue}月", fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold)
                             FitAmount(Money.full(t.income), IncomeColor)
                             FitAmount(Money.full(t.expense), ExpenseColor)
                             FitAmount(Money.full(t.total), MaterialTheme.colorScheme.onSurface)
@@ -1073,7 +1075,7 @@ private fun YearCalendar(year: Int, all: List<TxnEntity>, lk: Lookups, startDay:
             val top = totals.maxByOrNull { it.value.expense }?.takeIf { it.value.expense > 0 }
             Text(
                 "全年收入 ${Money.full(income0)}　支出 ${Money.full(year0)}" + (top?.let { "　支出最多：${it.key.monthValue}月" } ?: ""),
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
             )
         }

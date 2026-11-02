@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -326,7 +328,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         modifier = Modifier.height(48.dp).clickable { nav.navigate("recurring/0") },
                     ) {
                         Icon(Icons.Outlined.Repeat, "週期", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-                        Text("週期/分期", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("週期/分期", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }) {
                     Row {
@@ -344,7 +346,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     Column {
                         Text(
                             (if (currency != lk.base) Money.symbolOf(currency) else "") + expr,
-                            fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = AppText.section, color = MaterialTheme.colorScheme.onSurface,
                         )
                         if (Calculator.hasOperator(expr)) Calculator.evaluate(expr)?.let {
                             Text("= ${Calculator.format(it)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -360,20 +362,20 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("猜你是", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("猜你是", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     guesses.forEach { g ->
                         val sel = categoryId == g.categoryId && (g.merchant == null || merchant == g.merchant)
                         androidx.compose.material3.FilterChip(sel, {
                             categoryId = g.categoryId; catAuto = false
                             if (g.merchant != null) { merchant = g.merchant; merchantAuto = false }
                         }, label = {
-                            Text(listOfNotNull(g.merchant, lk.catLabel(g.categoryId)).joinToString(" · ") + "（${g.count} 次）", fontSize = 12.sp, maxLines = 1)
+                            Text(listOfNotNull(g.merchant, lk.catLabel(g.categoryId)).joinToString(" · ") + "（${g.count} 次）", fontSize = AppText.caption, maxLines = 1)
                         })
                     }
                 }
                 if (type == TxnType.TRANSFER && showFee) {
                     FormRow("手續費", color, panel == Panel.FEE, onClick = { focusManager.clearFocus(); panel = Panel.FEE }) {
-                        Text(feeExpr, fontSize = 14.sp)
+                        Text(feeExpr, fontSize = AppText.body)
                     }
                 }
                 if (type == TxnType.TRANSFER) {
@@ -580,7 +582,7 @@ private fun PlaceholderText(value: String?, placeholder: String) {
 private fun UnderlineField(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier, singleLine: Boolean = true) {
     BasicTextField(
         value = value, onValueChange = onChange, singleLine = singleLine,
-        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
+        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         modifier = modifier.fillMaxWidth(),
         decorationBox = { inner ->
@@ -609,7 +611,7 @@ private fun BottomPanel(
                 when (panel) {
                     Panel.AMOUNT -> "金額"; Panel.FEE -> "手續費"; Panel.CATEGORY -> "分類"; Panel.TO_ACCOUNT -> "轉入帳戶"; else -> "帳戶"
                 },
-                color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f),
+                color = Color.White, fontSize = AppText.body, modifier = Modifier.weight(1f),
             )
             when (panel) {
                 Panel.AMOUNT, Panel.FEE -> Box {
@@ -643,7 +645,7 @@ private fun BottomPanel(
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     BasicTextField(
                         query, { query = it }, singleLine = true,
-                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
+                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         modifier = Modifier.weight(1f),
                         decorationBox = { inner ->
@@ -654,7 +656,7 @@ private fun BottomPanel(
                             ) {
                                 Icon(Icons.Outlined.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Box { if (query.isEmpty()) Text("搜尋分類", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp); inner() }
+                                Box { if (query.isEmpty()) Text("搜尋分類", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body); inner() }
                             }
                         },
                     )
@@ -663,7 +665,7 @@ private fun BottomPanel(
                         Surface(
                             shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.clickable { onCategory(cid) },
-                        ) { Text("建議：" + (lk.catLabel(cid) ?: ""), fontSize = 14.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
+                        ) { Text("建議：" + (lk.catLabel(cid) ?: ""), fontSize = AppText.body, maxLines = 1, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
                     }
                 }
                 val q = query.trim()
@@ -728,7 +730,7 @@ private fun BottomPanel(
                 LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(300.dp)) {
                     groups.forEach { (type, accs) ->
                     item(key = "h${type.name}", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                        Text(st.groupLabel(type), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Text(st.groupLabel(type), fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow).padding(horizontal = 12.dp, vertical = 4.dp))
                     }
                     items(accs, key = { it.id }) { a ->
@@ -761,18 +763,18 @@ private fun Keypad(expr: String, calcMode: Boolean, onExpr: (String) -> Unit, on
         var e = expr
         value.forEach { e = Calculator.append(e, it) }
         onExpr(e)
-    }) { Text(label, fontSize = 24.sp, textAlign = TextAlign.Center) }
+    }) { Text(label, fontSize = AppText.display, textAlign = TextAlign.Center) }
 
     Column {
         if (calcMode) Row(Modifier.fillMaxWidth()) {
             listOf("+" to '+', "−" to '-', "×" to '×', "÷" to '÷').forEach { (l, k) ->
                 Key(Modifier.weight(1f), MaterialTheme.colorScheme.surfaceVariant, onClick = { onExpr(Calculator.append(expr, k)) }) {
-                    Text(l, fontSize = 22.sp)
+                    Text(l, fontSize = AppText.title)
                 }
             }
             Key(Modifier.weight(1f), MaterialTheme.colorScheme.surfaceVariant, onClick = {
                 Calculator.evaluate(expr)?.let { onExpr(Calculator.format(it)) }
-            }) { Text("=", fontSize = 22.sp) }
+            }) { Text("=", fontSize = AppText.title) }
         }
         Row(Modifier.fillMaxWidth()) {
             Digit(Modifier.weight(1f), "1"); Digit(Modifier.weight(1f), "2"); Digit(Modifier.weight(1f), "3")
@@ -780,7 +782,7 @@ private fun Keypad(expr: String, calcMode: Boolean, onExpr: (String) -> Unit, on
         }
         Row(Modifier.fillMaxWidth()) {
             Digit(Modifier.weight(1f), "4"); Digit(Modifier.weight(1f), "5"); Digit(Modifier.weight(1f), "6")
-            Key(Modifier.weight(1f), onClick = { onExpr(Calculator.append(expr, '-')) }) { Text("-", fontSize = 24.sp) }
+            Key(Modifier.weight(1f), onClick = { onExpr(Calculator.append(expr, '-')) }) { Text("-", fontSize = AppText.display) }
         }
         Row(Modifier.fillMaxWidth()) {
             Digit(Modifier.weight(1f), "7"); Digit(Modifier.weight(1f), "8"); Digit(Modifier.weight(1f), "9")
@@ -791,7 +793,7 @@ private fun Keypad(expr: String, calcMode: Boolean, onExpr: (String) -> Unit, on
         Row(Modifier.fillMaxWidth()) {
             Digit(Modifier.weight(1f), "00"); Digit(Modifier.weight(1f), "0"); Digit(Modifier.weight(1f), ".")
             Key(Modifier.weight(1f), MaterialTheme.colorScheme.primary, onClick = onDone) {
-                Text(if (Calculator.hasOperator(expr)) "=" else "完成", color = Color.White, fontSize = 18.sp)
+                Text(if (Calculator.hasOperator(expr)) "=" else "完成", color = Color.White, fontSize = AppText.title)
             }
         }
     }
@@ -816,10 +818,10 @@ private fun SourceDialog(t: TxnEntity, onDismiss: () -> Unit) {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(4.dp)) {
-                        Text(t.source.label, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                        Text(t.source.label, fontSize = AppText.caption, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                     }
                     if (byAi) Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
-                        Text("AI 判讀", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                        Text("AI 判讀", fontSize = AppText.caption, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                     }
                 }
                 notes.forEach { n ->
@@ -827,11 +829,11 @@ private fun SourceDialog(t: TxnEntity, onDismiss: () -> Unit) {
                     Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(lines.firstOrNull().orEmpty(), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                                Text(time, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(lines.firstOrNull().orEmpty(), fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                Text(time, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            lines.getOrNull(1)?.let { Text(it, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
-                            if (lines.size > 2) Text(lines.drop(2).joinToString("\n"), fontSize = 13.sp)
+                            lines.getOrNull(1)?.let { Text(it, fontSize = AppText.section, fontWeight = FontWeight.SemiBold) }
+                            if (lines.size > 2) Text(lines.drop(2).joinToString("\n"), fontSize = AppText.secondary)
                         }
                     }
                 }

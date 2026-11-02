@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -64,7 +66,7 @@ fun AiSettingsScreen(nav: NavController) {
                         repo.settings.update { it.copy(aiAutoTidy = v) }
                     }
                     if (s.aiEnabled && !s.hasAiKey)
-                        Text("需要至少一個金鑰", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                        Text("需要至少一個金鑰", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error)
                 }
             }
             var tab by com.enwei.moneymanager.ui.components.rememberTab("ai.tab")
@@ -102,13 +104,13 @@ fun AiSettingsScreen(nav: NavController) {
                 val n = remember(s.openRouterKey) { com.enwei.moneymanager.net.OpenRouterModels.cached().size }
                 Text(
                     "免費模型 $n 個・每分鐘 20 次・每天 50 次（儲值 10 美元後 1,000 次）",
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
             Text(
                 "金鑰只存在這支手機、不放進備份",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             }
         }
@@ -119,8 +121,8 @@ fun AiSettingsScreen(nav: NavController) {
 private fun SwitchRow(title: String, desc: String, on: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 14.sp)
-            Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, fontSize = AppText.body)
+            Text(desc, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(on, onChange, enabled = enabled)
     }
@@ -140,8 +142,8 @@ private fun ProviderCard(
     var testing by remember { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(p.label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(p.label, fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            Text(desc, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(
                 k, { k = it; onKey(it) }, label = { Text("${p.label} API 金鑰") }, singleLine = true,
                 visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(),
@@ -155,15 +157,15 @@ private fun ProviderCard(
                     scope.launch { result = GroqAi.testProvider(p)?.let { if (it.startsWith("部分可用")) it else "連線失敗：$it" } ?: "連線成功"; testing = false }
                 }) { Text(if (testing) "測試中…" else "測試連線") }
             }
-            result?.let { Text(it, fontSize = 13.sp, color = if (it == "連線成功") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) }
+            result?.let { Text(it, fontSize = AppText.secondary, color = if (it == "連線成功") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) }
             // 這家平台最近的實際使用狀況（背景工作也會記錄）
             val tick by GroqAi.ProviderLog.flow.collectAsStateWithLifecycle()
             val log = remember(tick) { GroqAi.ProviderLog.get(p) }
             val fmt = remember { java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN) }
             if (log.okAt > 0 || log.errAt > 0) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                if (log.okAt > 0) Text("上次成功 ${fmt.format(java.util.Date(log.okAt))}・${log.okModel}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                if (log.errAt > log.okAt) Text("上次失敗 ${fmt.format(java.util.Date(log.errAt))}：${log.err}", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-            } else if (key.isNotBlank()) Text("還沒有使用紀錄", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (log.okAt > 0) Text("上次成功 ${fmt.format(java.util.Date(log.okAt))}・${log.okModel}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
+                if (log.errAt > log.okAt) Text("上次失敗 ${fmt.format(java.util.Date(log.errAt))}：${log.err}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error)
+            } else if (key.isNotBlank()) Text("還沒有使用紀錄", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (showModels && onPickModel != null) ModelListDialog(p, { onPickModel(it); showModels = false }) { showModels = false }
         }
     }
@@ -198,15 +200,15 @@ private fun RouteOverview() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         androidx.compose.foundation.layout.Box(Modifier.padding(end = 4.dp).size(8.dp)
                             .background(color(p), androidx.compose.foundation.shape.CircleShape))
-                        Text(p.label, fontSize = 12.sp)
+                        Text(p.label, fontSize = AppText.caption)
                     }
                 }
             }
             GroqAi.AiTask.entries.forEach { t ->
                 val rs = GroqAi.routes(t, if (t in longTasks) Int.MAX_VALUE else 0)
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(t.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    if (rs.isEmpty()) Text("沒有可用的模型", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                    Text(t.label, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold)
+                    if (rs.isEmpty()) Text("沒有可用的模型", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error)
                     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         rs.take(5).forEachIndexed { i, r ->
                             val cooling = com.enwei.moneymanager.work.AiHealth.cooldownUntil(r.model) > now
@@ -214,7 +216,7 @@ private fun RouteOverview() {
                                 color = color(r.provider).copy(alpha = if (cooling) 0.06f else if (i == 0) 0.28f else 0.14f),
                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
                             ) {
-                                Text(short(r.model), fontSize = 11.sp, maxLines = 1,
+                                Text(short(r.model), fontSize = AppText.label, maxLines = 1,
                                     color = if (cooling) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                             }
@@ -244,15 +246,15 @@ private fun ModelListDialog(p: Provider, onPick: (String) -> Unit, onDismiss: ()
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(q, { q = it }, singleLine = true, placeholder = { Text("搜尋") }, modifier = Modifier.fillMaxWidth())
                 when {
-                    error != null -> Text(error!!, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                    error != null -> Text(error!!, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.error)
                     list == null -> androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
                     else -> androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 420.dp)) {
                         val shown = list!!.filter { q.isBlank() || it.first.contains(q.trim(), true) }
                         items(shown.size) { i ->
                             val (id, ctx) = shown[i]
                             Row(Modifier.fillMaxWidth().clickable { onPick(id) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(id, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                                if (ctx > 0) Text("${ctx / 1000}k", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(id, fontSize = AppText.secondary, modifier = Modifier.weight(1f))
+                                if (ctx > 0) Text("${ctx / 1000}k", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }

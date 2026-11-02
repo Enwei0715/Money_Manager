@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -88,9 +90,9 @@ fun UpdatePrompt() {
         icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.SystemUpdate, null, tint = MaterialTheme.colorScheme.primary) },
         title = {
             Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Text("有新版本 ${r.tag}", fontSize = 20.sp)
+                Text("有新版本 ${r.tag}", fontSize = AppText.title)
                 Text("目前 ${BuildConfig.VERSION_NAME}" + (r.sizeBytes.takeIf { it > 0 }?.let { " · 約 ${"%.1f".format(it / 1_048_576.0)} MB" } ?: ""),
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         text = {
@@ -100,18 +102,18 @@ fun UpdatePrompt() {
                     list.forEach { (title, lines) ->
                         androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)) {
                             Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                if (title.isNotBlank()) Text(title, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                                lines.forEach { l -> Text("• " + l.removePrefix("・").removePrefix("-").trim(), fontSize = 12.sp, lineHeight = 17.sp) }
+                                if (title.isNotBlank()) Text(title, fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                                lines.forEach { l -> Text("• " + l.removePrefix("・").removePrefix("-").trim(), fontSize = AppText.caption, lineHeight = 17.sp) }
                             }
                         }
                     }
                 }
-                if (sections.size > 3) TextButton(onClick = { showAll = !showAll }) { Text(if (showAll) "只看最新" else "看全部更新說明（${sections.size} 段）", fontSize = 12.sp) }
+                if (sections.size > 3) TextButton(onClick = { showAll = !showAll }) { Text(if (showAll) "只看最新" else "看全部更新說明（${sections.size} 段）", fontSize = AppText.caption) }
                 progress?.let { p ->
                     LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth())
-                    Text("下載中 ${"%.0f".format(p * 100)}%", fontSize = 12.sp)
+                    Text("下載中 ${"%.0f".format(p * 100)}%", fontSize = AppText.caption)
                 }
-                error?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
+                error?.let { Text(it, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {

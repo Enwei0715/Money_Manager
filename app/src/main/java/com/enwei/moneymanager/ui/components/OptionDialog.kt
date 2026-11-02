@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,11 +40,11 @@ fun <T> OptionDialog(
         Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
             Column {
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, Modifier.weight(1f), fontSize = 16.sp)
+                    Text(title, Modifier.weight(1f), fontSize = AppText.section)
                     IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "關閉") }
                 }
                 if (description != null) Text(
-                    description, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    description, fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
                 ) else androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -53,7 +55,7 @@ fun <T> OptionDialog(
                             Modifier.fillMaxWidth().clickable { onPick(v); onDismiss() }.padding(horizontal = 16.dp, vertical = 11.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(label, Modifier.weight(1f), fontSize = 14.sp,
+                            Text(label, Modifier.weight(1f), fontSize = AppText.body,
                                 color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                             if (sel) Icon(Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.primary)
                         }

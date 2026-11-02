@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import android.app.NotificationManager
 import androidx.compose.material.icons.filled.MoreVert
 import android.content.Intent
@@ -76,7 +78,7 @@ fun NoticeSettingsScreen(nav: NavController) {
         ) {
             if (!systemOn) Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("系統已關閉帳理的通知", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text("系統已關閉帳理的通知", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
                     TextButton(onClick = {
                         ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName))
                     }) { Text("開啟") }
@@ -85,7 +87,7 @@ fun NoticeSettingsScreen(nav: NavController) {
             AppNotices.groups.forEach { (gid, glabel) ->
                 val kinds = NoticeKind.entries.filter { it.group == gid && it.available(s) }
                 if (kinds.isEmpty()) return@forEach
-                Text(glabel, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp))
+                Text(glabel, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp))
                 Card(Modifier.fillMaxWidth()) {
                     Column {
                         kinds.forEachIndexed { i, k ->
@@ -102,8 +104,8 @@ fun NoticeSettingsScreen(nav: NavController) {
                             Row(Modifier.fillMaxWidth().clickable { toggle(!on) }.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(k.label, fontSize = 15.sp)
-                                    if (blocked) Text("系統已關閉這一類", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                                    Text(k.label, fontSize = AppText.section)
+                                    if (blocked) Text("系統已關閉這一類", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error)
                                 }
                                 androidx.compose.foundation.layout.Box {
                                     androidx.compose.material3.IconButton(onClick = { menu = true }) {

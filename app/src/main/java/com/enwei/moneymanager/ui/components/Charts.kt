@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -68,7 +70,7 @@ fun LineChart(values: List<Long>, labels: List<String>, color: Color, modifier: 
             while (g <= hi + 1e-9) {
                 val y = h - ((g - lo) / (hi - lo) * h).toFloat()
                 drawLine(grid, Offset(left, y), Offset(size.width, y), strokeWidth = 2f)
-                val t = measurer.measure(axisLabel(g), TextStyle(fontSize = 10.sp, color = textColor))
+                val t = measurer.measure(axisLabel(g), TextStyle(fontSize = AppText.badge, color = textColor))
                 drawText(t, topLeft = Offset(left - t.size.width - 6f, y - t.size.height / 2))
                 g += step
             }
@@ -81,8 +83,8 @@ fun LineChart(values: List<Long>, labels: List<String>, color: Color, modifier: 
         Row(Modifier.fillMaxWidth().padding(start = AxisWidth.dp)) {
             labels.forEachIndexed { i, l ->
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(l, fontSize = 11.sp, color = textColor)
-                    Text(Money.full(values.getOrElse(i) { 0 }), fontSize = 9.sp, maxLines = 1, textAlign = TextAlign.Center)
+                    Text(l, fontSize = AppText.label, color = textColor)
+                    Text(Money.full(values.getOrElse(i) { 0 }), fontSize = AppText.badge, maxLines = 1, textAlign = TextAlign.Center)
                 }
             }
         }
@@ -109,7 +111,7 @@ fun DualBarChart(first: List<Long>, second: List<Long>, labels: List<String>, fi
             while (g <= hi + 1e-9) {
                 val y = h - (g / hi * h).toFloat()
                 drawLine(grid, Offset(left, y), Offset(size.width, y), strokeWidth = 2f)
-                val t = measurer.measure(axisLabel(g), TextStyle(fontSize = 10.sp, color = textColor))
+                val t = measurer.measure(axisLabel(g), TextStyle(fontSize = AppText.badge, color = textColor))
                 drawText(t, topLeft = Offset(left - t.size.width - 6f, y - t.size.height / 2))
                 g += step
             }
@@ -126,9 +128,9 @@ fun DualBarChart(first: List<Long>, second: List<Long>, labels: List<String>, fi
         Row(Modifier.fillMaxWidth().padding(start = AxisWidth.dp)) {
             labels.forEachIndexed { i, l ->
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(l, fontSize = 11.sp, color = textColor)
-                    Text(Money.full(first.getOrElse(i) { 0 }), fontSize = 9.sp, color = firstColor, maxLines = 1)
-                    Text(Money.full(second.getOrElse(i) { 0 }), fontSize = 9.sp, color = secondColor, maxLines = 1)
+                    Text(l, fontSize = AppText.label, color = textColor)
+                    Text(Money.full(first.getOrElse(i) { 0 }), fontSize = AppText.badge, color = firstColor, maxLines = 1)
+                    Text(Money.full(second.getOrElse(i) { 0 }), fontSize = AppText.badge, color = secondColor, maxLines = 1)
                 }
             }
         }

@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -123,22 +125,25 @@ fun AiStatusBar(nav: NavController, padNav: Boolean = false, onOpen: (String) ->
 private fun progress(done: Int?, total: Int?) = if (done != null && total != null && total > 0) done.toFloat() / total else null
 
 @Composable
-private fun Line(l: AiLine, onOpen: (String) -> Unit) {
+private fun Line(l: AiLine, onOpen: (String) -> Unit) = com.enwei.moneymanager.ui.ChromeScale { LineBody(l, onOpen) }
+
+@Composable
+private fun LineBody(l: AiLine, onOpen: (String) -> Unit) {
     val warn = MaterialTheme.colorScheme.error
     Column(Modifier.fillMaxWidth().clickable(enabled = l.route != null) { l.route?.let { onOpen(it) } }) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
             if (l.running) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
-            else Text("!", color = if (l.warn) warn else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            else Text("!", color = if (l.warn) warn else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.caption)
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 // 進行中：標題一行＋細節一行；暫停或錯誤時最多三行，原因才看得到
-                Text(l.text, fontSize = 12.sp, maxLines = if (l.running) 1 else 3, overflow = TextOverflow.Ellipsis,
+                Text(l.text, fontSize = AppText.caption, maxLines = if (l.running) 1 else 3, overflow = TextOverflow.Ellipsis,
                     fontWeight = if (l.detail != null) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
                     color = if (l.warn) warn else MaterialTheme.colorScheme.onSurface)
-                l.detail?.let { Text(it, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                l.detail?.let { Text(it, fontSize = AppText.label, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             l.action?.let { (label, act) ->
-                Text(label, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp,
+                Text(label, color = MaterialTheme.colorScheme.primary, fontSize = AppText.caption,
                     modifier = Modifier.clickable(onClick = act).padding(start = 10.dp, top = 2.dp, bottom = 2.dp))
             }
         }

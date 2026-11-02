@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -126,11 +128,11 @@ fun ManageRow(
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    title, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    title, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = if (dimmed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                 )
                 if (!subtitle.isNullOrBlank()) Text(
-                    subtitle, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    subtitle, fontSize = AppText.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

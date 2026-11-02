@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -21,7 +23,7 @@ import androidx.compose.ui.unit.sp
  * 每段一個畫面就看得完，不必一直往下滑找資訊。
  */
 @Composable
-fun SubTabs(options: List<String>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
+fun SubTabs(options: List<String>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) = com.enwei.moneymanager.ui.ChromeScale {
     Row(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
         options.forEachIndexed { i, label ->
             val sel = i == selected
@@ -31,7 +33,7 @@ fun SubTabs(options: List<String>, selected: Int, modifier: Modifier = Modifier,
                     .clickable { onSelect(i) }.padding(vertical = 7.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(label, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                Text(label, fontSize = AppText.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (sel) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
             }

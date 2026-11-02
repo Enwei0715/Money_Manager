@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -146,7 +148,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
             Spacer(Modifier.height(12.dp))
             FormLine("群組", onClick = { typeMenu = true }) {
                 Box {
-                    Text(type.label, fontSize = 14.sp)
+                    Text(type.label, fontSize = AppText.body)
                     DropdownMenu(typeMenu, { typeMenu = false }) {
                         AccountType.entries.forEach { t -> DropdownMenuItem(text = { Text(t.label) }, onClick = { type = t; typeMenu = false }) }
                     }
@@ -193,7 +195,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 }
             }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${Money.symbolOf(currency).trim()} ", fontSize = 14.sp)
+                    Text("${Money.symbolOf(currency).trim()} ", fontSize = AppText.body)
                     FormInput(initial, { s -> initial = s.filter { it.isDigit() || it == '.' || it == '-' } }, "0.00", number = true)
                 }
             }
@@ -232,12 +234,12 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 if (dueOffset != null) FormLine("繳款日", trailing = {
                     androidx.compose.material3.TextButton(onClick = { dueOffset = null }) { Text("改用固定日") }
                 }) {
-                    Text("結帳日＋$dueOffset 天" + (sDay?.let { s0 -> CardCycle(s0, 1, shift, dueOffset).let { c -> "（本期 ${c.nextDueDate(LocalDate.now().minusDays(1))}）" } } ?: ""), fontSize = 14.sp)
+                    Text("結帳日＋$dueOffset 天" + (sDay?.let { s0 -> CardCycle(s0, 1, shift, dueOffset).let { c -> "（本期 ${c.nextDueDate(LocalDate.now().minusDays(1))}）" } } ?: ""), fontSize = AppText.body)
                 } else FormLine("繳款日") { FormInput(dueDay, { dueDay = it.filter(Char::isDigit).take(2) }, "", number = true) }
                 FormLine("扣繳日") { FormInput(autopayDay, { autopayDay = it.filter(Char::isDigit).take(2) }, "銀行實際扣款日，空白＝繳款日", number = true) }
                 FormLine("扣繳帳戶", onClick = { autopayMenu = true }) {
                     Box {
-                        Text(lk.account(autopayFrom)?.name ?: "不自動扣繳", fontSize = 14.sp)
+                        Text(lk.account(autopayFrom)?.name ?: "不自動扣繳", fontSize = AppText.body)
                         DropdownMenu(autopayMenu, { autopayMenu = false }) {
                             DropdownMenuItem(text = { Text("不自動扣繳") }, onClick = { autopayFrom = null; autopayMenu = false })
                             lk.accounts.filter { it.type != AccountType.CREDIT_CARD && !it.archived }.forEach { a ->
@@ -271,7 +273,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                             disc != null -> "${disc} 折 ›"
                             else -> "使用預設 ›"
                         },
-                        fontSize = 14.sp,
+                        fontSize = AppText.body,
                     )
                 }
             } else if (type == AccountType.EWALLET || type == AccountType.TRANSIT_CARD) {
@@ -384,7 +386,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).height(52.dp),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-            ) { Text("儲存", fontSize = 14.sp) }
+            ) { Text("儲存", fontSize = AppText.body) }
             if (original != null && name.isNotBlank()) Text(
                 "修改「目前餘額」會自動調整期初餘額，不會新增或改動任何交易。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

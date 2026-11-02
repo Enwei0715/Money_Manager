@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,7 +52,7 @@ fun StageBar(step: String, withReport: Boolean, modifier: Modifier = Modifier) {
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             repeat(n) { i ->
-                Text(NewsStages.short[i], fontSize = 11.sp, maxLines = 1, textAlign = TextAlign.Center, modifier = Modifier.weight(1f),
+                Text(NewsStages.short[i], fontSize = AppText.label, maxLines = 1, textAlign = TextAlign.Center, modifier = Modifier.weight(1f),
                     fontWeight = if (i == cur) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (i <= cur) on else MaterialTheme.colorScheme.onSurfaceVariant)
             }

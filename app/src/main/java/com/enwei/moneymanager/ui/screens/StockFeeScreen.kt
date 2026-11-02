@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -75,7 +77,7 @@ fun StockFeeScreen(nav: NavController) {
             Modifier.padding(pad).imePadding().fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("預設（沒有個別設定的證券帳戶使用）", fontSize = 14.sp)
+            Text("預設（沒有個別設定的證券帳戶使用）", fontSize = AppText.body)
             NumberField(discount, { discount = it; saveFees() }, "台股手續費折數（1 = 不打折，2.8 折填 0.28）")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumberField(minFee, { minFee = it; saveFees() }, "整股最低手續費", Modifier.weight(1f), suffix = "元")
@@ -84,10 +86,10 @@ fun StockFeeScreen(nav: NavController) {
             NumberField(usFee, { usFee = it; saveFees() }, "美股每筆手續費", suffix = "USD")
 
             HorizontalDivider()
-            Text("各證券帳戶", fontSize = 14.sp)
+            Text("各證券帳戶", fontSize = AppText.body)
             if (brokers.isEmpty()) Text(
                 "還沒有證券帳戶。",
-                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             brokers.forEach { b -> BrokerFeeCard(b, lk, settings.brokerRebates[b.id]) }
 
@@ -119,10 +121,10 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(b.name, fontSize = 14.sp)
+                    Text(b.name, fontSize = AppText.body)
                     Text(
                         "交割帳戶：${lk.account(b.linkedAccountId)?.name ?: "未設定"} · 台股買賣 ${mine.size} 筆",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -135,7 +137,7 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
                     NumberField(disc, { disc = it }, "月退後折數")
                     NumberField(payDay, { payDay = it.filter(Char::isDigit).take(2) }, "每月退款日（次月）", decimal = false, suffix = "日")
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("從 ${LocalDate.ofEpochDay(since).let { "${it.year}/${it.monthValue}" }} 的交易開始計算", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Text("從 ${LocalDate.ofEpochDay(since).let { "${it.year}/${it.monthValue}" }} 的交易開始計算", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
                         if (first != null && YearMonth.from(LocalDate.ofEpochDay(first)).atDay(1).toEpochDay() < since) OutlinedButton(onClick = {
                             since = YearMonth.from(LocalDate.ofEpochDay(first)).atDay(1).toEpochDay()
                         }) { Text("從第一筆開始") }
@@ -145,7 +147,7 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
             }
             val d = disc.toDoubleOrNull()?.takeIf { it in 0.01..1.0 }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                msg?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f)) } ?: Spacer(Modifier.weight(1f))
+                msg?.let { Text(it, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f)) } ?: Spacer(Modifier.weight(1f))
                 Button(enabled = mode == 0 || d != null, onClick = {
                     scope.launch {
                         when (mode) {
@@ -159,13 +161,13 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
             }
             if (mode == 2 && rule != null && months.isNotEmpty()) {
                 HorizontalDivider()
-                Text("各月退佣", fontSize = 14.sp)
+                Text("各月退佣", fontSize = AppText.body)
                 months.take(8).forEach { m ->
                     val booked = m.booked
                     Row {
-                        Text("${m.month.year}/${m.month.monthValue}", fontSize = 13.sp, modifier = Modifier.width(72.dp))
+                        Text("${m.month.year}/${m.month.monthValue}", fontSize = AppText.secondary, modifier = Modifier.width(72.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("${m.trades} 筆 · 實收手續費 ${m.paidFee.toLong()} 元", fontSize = 13.sp)
+                            Text("${m.trades} 筆 · 實收手續費 ${m.paidFee.toLong()} 元", fontSize = AppText.secondary)
                             Text(
                                 when {
                                     booked != null -> "已入帳 ${com.enwei.moneymanager.core.Money.full(booked.amount)} 元" +
@@ -173,7 +175,7 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
                                     LocalDate.now().isBefore(m.payDate) -> "預估退 ${m.rebate.toLong()} 元，${m.payDate.monthValue}/${m.payDate.dayOfMonth} 入帳"
                                     else -> "預估退 ${m.rebate.toLong()} 元（已由銀行通知記錄或無須退款）"
                                 },
-                                fontSize = 13.sp,
+                                fontSize = AppText.secondary,
                                 color = if (booked != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -191,7 +193,7 @@ private fun FeeCalculator(brokers: List<AccountEntity>, rebates: Map<Long, Rebat
     var shares by remember { mutableStateOf("1000") }
     var price by remember { mutableStateOf("") }
     var etf by remember { mutableStateOf(false) }
-    Text("手續費試算", fontSize = 14.sp)
+    Text("手續費試算", fontSize = AppText.body)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         NumberField(shares, { shares = it }, "股數", Modifier.weight(1f), decimal = false)
         NumberField(price, { price = it }, "成交價", Modifier.weight(1f))
@@ -211,7 +213,7 @@ private fun FeeCalculator(brokers: List<AccountEntity>, rebates: Map<Long, Rebat
     fun fee(d: Double) = max(min, floor(amount * StockCalc.TW_FEE_RATE * d))
     Text(
         "成交金額 ${"%,.0f".format(amount)} 元${if (odd) "（零股）" else ""}\n原價手續費 ${full.toLong()} 元 · 賣出交易稅 ${tax.toLong()} 元",
-        fontSize = 13.sp,
+        fontSize = AppText.secondary,
     )
     val rows = buildList {
         add("預設（${s.feeDiscount} 折）" to "手續費 ${fee(s.feeDiscount).toLong()} 元")
@@ -225,8 +227,8 @@ private fun FeeCalculator(brokers: List<AccountEntity>, rebates: Map<Long, Rebat
     }
     rows.forEach { (name, v) ->
         Column {
-            Text(name, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(v, fontSize = 14.sp)
+            Text(name, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(v, fontSize = AppText.body)
         }
     }
 }

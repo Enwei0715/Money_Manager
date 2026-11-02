@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,21 +49,21 @@ fun StockSearch(onPick: (TwData.StockInfo) -> Unit, maxHeight: Dp = 360.dp, auto
     }
     Column {
         OutlinedTextField(q, { q = it.take(20) }, label = { Text(autoFocusHint) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        if (loading) Text("搜尋中…", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+        if (loading) Text("搜尋中…", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
         if (!loading && q.isNotBlank() && results.isEmpty()) {
-            Text(if (failed) "讀不到股票清單（需要網路）；也可以直接輸入完整代號" else "找不到符合的股票", fontSize = 12.sp,
+            Text(if (failed) "讀不到股票清單（需要網路）；也可以直接輸入完整代號" else "找不到符合的股票", fontSize = AppText.caption,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
             // 直接輸入代號也能用
-            if (q.trim().uppercase().matches(Regex("[0-9]{4,6}[A-Z]?|[A-Z][A-Z.\\-]{0,5}"))) Text("使用代號 ${q.trim().uppercase()} ›", fontSize = 14.sp,
+            if (q.trim().uppercase().matches(Regex("[0-9]{4,6}[A-Z]?|[A-Z][A-Z.\\-]{0,5}"))) Text("使用代號 ${q.trim().uppercase()} ›", fontSize = AppText.body,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable { onPick(TwData.StockInfo(q.trim().uppercase(), "")) }.padding(vertical = 10.dp))
         }
         LazyColumn(Modifier.heightIn(max = maxHeight)) {
             items(results, key = { it.code }) { s ->
                 Row(Modifier.fillMaxWidth().clickable { onPick(s) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(s.code, fontSize = 14.sp, modifier = Modifier.padding(end = 12.dp))
-                    Text(s.name, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    if (s.industry.isNotBlank()) Text(s.industry, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(s.code, fontSize = AppText.body, modifier = Modifier.padding(end = 12.dp))
+                    Text(s.name, fontSize = AppText.body, modifier = Modifier.weight(1f))
+                    if (s.industry.isNotBlank()) Text(s.industry, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }

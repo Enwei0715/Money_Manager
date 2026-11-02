@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -131,7 +133,7 @@ fun ChartFilterPage(
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).height(52.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(enabled = month != null, onClick = { month = month?.minusMonths(1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
             Text(
-                month?.let { "${it.year}年${it.monthValue}月" } ?: "全部期間", fontSize = 14.sp,
+                month?.let { "${it.year}年${it.monthValue}月" } ?: "全部期間", fontSize = AppText.body,
                 modifier = Modifier.clickable { month = if (month == null) Periods.monthOf(LocalDate.now(), startDay) else null },
             )
             IconButton(enabled = month != null, onClick = { month = month?.plusMonths(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
@@ -144,30 +146,30 @@ fun ChartFilterPage(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                if (draft.active) draft.label(lk) else "勾選要篩選的項目", fontSize = 14.sp, maxLines = 1,
+                if (draft.active) draft.label(lk) else "勾選要篩選的項目", fontSize = AppText.body, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
             if (draft.active) Surface(
                 shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 8.dp).clickable { onApply(draft) },
-            ) { Text("篩選", color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) }
+            ) { Text("篩選", color = Color.White, fontSize = AppText.body, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) }
         }
         // 已選項目的金額（圓環比例在按「篩選」後顯示於搜尋結果上方）
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("收入 ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(Money.full(if (draft.active) selIncome else totalIncome), fontSize = 13.sp, color = IncomeColor, maxLines = 1, modifier = Modifier.weight(1f))
-            Text("支出 ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(Money.full(if (draft.active) selExpense else totalExpense), fontSize = 13.sp, color = ExpenseColor, maxLines = 1, modifier = Modifier.weight(1f))
-            Text("合計 ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(Money.withSymbol(if (draft.active) selIncome - selExpense else totalIncome - totalExpense, lk.base), fontSize = 13.sp, maxLines = 1)
+            Text("收入 ", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(Money.full(if (draft.active) selIncome else totalIncome), fontSize = AppText.secondary, color = IncomeColor, maxLines = 1, modifier = Modifier.weight(1f))
+            Text("支出 ", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(Money.full(if (draft.active) selExpense else totalExpense), fontSize = AppText.secondary, color = ExpenseColor, maxLines = 1, modifier = Modifier.weight(1f))
+            Text("合計 ", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(Money.withSymbol(if (draft.active) selIncome - selExpense else totalIncome - totalExpense, lk.base), fontSize = AppText.secondary, maxLines = 1)
         }
         val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
-        TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
+        com.enwei.moneymanager.ui.ChromeScale { TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
             listOf("收入" to incomeSel, "支出" to expenseSel, "帳戶" to accSel).forEachIndexed { i, (t, sel) ->
-                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(if (sel.isEmpty()) t else "$t •", fontSize = 14.sp, group = fitGroup1) },
+                Tab(tab == i, { tab = i }, text = { com.enwei.moneymanager.ui.components.FitText(if (sel.isEmpty()) t else "$t •", fontSize = AppText.body, group = fitGroup1) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = gray)
             }
-        }
+        } }
         when (tab) {
             0, 1 -> {
                 val type = if (tab == 0) TxnType.INCOME else TxnType.EXPENSE
@@ -179,7 +181,7 @@ fun ChartFilterPage(
                 val ids = (byCat.map { it.key } + lk.categories.filter { it.kind == type && it.parentId == null && !it.archived }.map { it.id }).distinct()
                 val amounts = byCat.associate { it.key to it.value }
                 FilterHeader(sel.size == ids.size && ids.isNotEmpty(), { set(if (it) ids.toSet() else emptySet()) }) {
-                    Text(type.label, fontSize = 12.sp, color = if (type == TxnType.INCOME) IncomeColor else ExpenseColor)
+                    Text(type.label, fontSize = AppText.caption, color = if (type == TxnType.INCOME) IncomeColor else ExpenseColor)
                 }
                 // 子分類：點大分類右邊的「›」展開，可以只勾其中幾個子分類
                 val subAmounts = inPeriod.filter { it.type == type && it.categoryId != null }.groupBy { it.categoryId!! }
@@ -195,7 +197,7 @@ fun ChartFilterPage(
                             FilterRow(lk.category(id)?.name ?: "未分類", id in sel, { on -> set(if (on) sel - subIds + id else sel - id - subIds) },
                                 partial = partial,
                                 expand = if (subs.isEmpty()) null else (id in expanded) to { expanded = if (id in expanded) expanded - id else expanded + id }) {
-                                Text(amounts[id]?.let { Money.withSymbol(it, lk.base) } ?: "", fontSize = 13.sp, color = color)
+                                Text(amounts[id]?.let { Money.withSymbol(it, lk.base) } ?: "", fontSize = AppText.secondary, color = color)
                             }
                         }
                         if (id in expanded) items(subs, key = { "s${it.id}" }) { c ->
@@ -206,7 +208,7 @@ fun ChartFilterPage(
                                 val next = if (v) cur + c.id else cur - c.id
                                 set(if (subIds.isNotEmpty() && subIds.all { it in next }) next - subIds + id else next)
                             }, indent = true) {
-                                Text(subAmounts[c.id]?.let { Money.withSymbol(it, lk.base) } ?: "", fontSize = 12.sp, color = color.copy(alpha = 0.85f))
+                                Text(subAmounts[c.id]?.let { Money.withSymbol(it, lk.base) } ?: "", fontSize = AppText.caption, color = color.copy(alpha = 0.85f))
                             }
                         }
                     }
@@ -217,8 +219,8 @@ fun ChartFilterPage(
                 val ids = accs.map { it.id }
                 FilterHeader(accSel.size == ids.size && ids.isNotEmpty(), { accSel = if (it) ids.toSet() else emptySet() }) {
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("收入／轉入", fontSize = 11.sp, color = IncomeColor)
-                        Text("支出／轉出", fontSize = 11.sp, color = ExpenseColor)
+                        Text("收入／轉入", fontSize = AppText.label, color = IncomeColor)
+                        Text("支出／轉出", fontSize = AppText.label, color = ExpenseColor)
                     }
                 }
                 LazyColumn(Modifier.fillMaxSize()) {
@@ -227,7 +229,7 @@ fun ChartFilterPage(
                         val group = accs.filter { it.type == type }
                         if (group.isEmpty()) return@forEach
                         item(key = "g$type") {
-                            Text(st.groupLabel(type), fontSize = 12.sp, color = gray,
+                            Text(st.groupLabel(type), fontSize = AppText.caption, color = gray,
                                 modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, top = 10.dp, bottom = 4.dp))
                         }
                         items(group, key = { "a${it.id}" }) { a ->
@@ -239,12 +241,12 @@ fun ChartFilterPage(
                             FilterRow(a.name, a.id in accSel, { accSel = if (it) accSel + a.id else accSel - a.id }) {
                                 if (inc + exp + tIn + tOut > 0) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Column(horizontalAlignment = Alignment.End) {
-                                        Text(Money.withSymbol(inc, lk.base), fontSize = 13.sp, color = IncomeColor)
-                                        Text(Money.withSymbol(tIn, lk.base), fontSize = 11.sp, color = gray)
+                                        Text(Money.withSymbol(inc, lk.base), fontSize = AppText.secondary, color = IncomeColor)
+                                        Text(Money.withSymbol(tIn, lk.base), fontSize = AppText.label, color = gray)
                                     }
                                     Column(horizontalAlignment = Alignment.End) {
-                                        Text(Money.withSymbol(exp, lk.base), fontSize = 13.sp, color = ExpenseColor)
-                                        Text(Money.withSymbol(tOut, lk.base), fontSize = 11.sp, color = gray)
+                                        Text(Money.withSymbol(exp, lk.base), fontSize = AppText.secondary, color = ExpenseColor)
+                                        Text(Money.withSymbol(tOut, lk.base), fontSize = AppText.label, color = gray)
                                     }
                                 }
                             }
@@ -264,7 +266,7 @@ private fun FilterHeader(allOn: Boolean, onAll: (Boolean) -> Unit, right: @Compo
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(allOn, onAll, colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary))
-        Text("全部", fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Text("全部", fontSize = AppText.body, modifier = Modifier.weight(1f))
         right()
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -289,7 +291,7 @@ private fun FilterRow(
         else Checkbox(checked, onCheck, colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary))
         Text(name, fontSize = if (indent) 13.sp else 14.sp, maxLines = 1)
         if (expand != null) Text(
-            if (expand.first) " ⌄" else " ›", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            if (expand.first) " ⌄" else " ›", fontSize = AppText.section, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.clickable(onClick = expand.second).padding(horizontal = 10.dp, vertical = 8.dp),
         )
         Spacer(Modifier.weight(1f))
@@ -308,7 +310,7 @@ fun Donut(label: String, part: Long, total: Long, color: Color, modifier: Modifi
     LaunchedEffect(target) { anim.animateTo(target, tween(700, easing = FastOutSlowInEasing)) }
     val track = color.copy(alpha = 0.22f)
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = 13.sp)
+        Text(label, fontSize = AppText.secondary)
         Box(Modifier.padding(vertical = 6.dp).size(ring), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
                 val w = 9.dp.toPx()
@@ -317,9 +319,9 @@ fun Donut(label: String, part: Long, total: Long, color: Color, modifier: Modifi
                 drawArc(track, 0f, 360f, false, topLeft, Size(d, d), style = Stroke(w))
                 drawArc(color, -90f, 360f * anim.value, false, topLeft, Size(d, d), style = Stroke(w, cap = StrokeCap.Round))
             }
-            Text("${(anim.value * 100).toInt()}%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("${(anim.value * 100).toInt()}%", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
         }
-        Text(Money.full(if (part > 0) part else total), fontSize = 13.sp, maxLines = 1)
-        if (part > 0) Text(Money.full(total), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Text(Money.full(if (part > 0) part else total), fontSize = AppText.secondary, maxLines = 1)
+        if (part > 0) Text(Money.full(total), fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     }
 }

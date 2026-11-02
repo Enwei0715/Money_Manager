@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -201,7 +203,7 @@ fun ToolGrid(
                         Modifier.align(Alignment.TopStart).offset((-6).dp, (-6).dp).size(22.dp)
                             .background(MaterialTheme.colorScheme.error, CircleShape).clickable { onRemove(t.id) },
                         contentAlignment = Alignment.Center,
-                    ) { Text("✕", fontSize = 11.sp, color = MaterialTheme.colorScheme.onError) }
+                    ) { Text("✕", fontSize = AppText.label, color = MaterialTheme.colorScheme.onError) }
                     // 右下角把手：拖動改大小
                     Box(
                         Modifier.align(Alignment.BottomEnd).offset(4.dp, 4.dp).size(24.dp)
@@ -221,7 +223,7 @@ fun ToolGrid(
                                 )
                             },
                         contentAlignment = Alignment.Center,
-                    ) { Text("⤡", fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimary) }
+                    ) { Text("⤡", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onPrimary) }
                 }
             }
         }
@@ -231,7 +233,7 @@ fun ToolGrid(
     if (sel != null) {
         val (cw, ch) = sizeOf(sel)
         Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            Text("「${tools.first { it.id == sel }.label}」的大小", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("「${tools.first { it.id == sel }.label}」的大小", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(1 to 1, 2 to 1, 3 to 1, 1 to 2, 2 to 2).forEach { (w, h) ->
                     FilterChip(cw == w && ch == h, { place[sel]?.let { p -> onResize(sel, w, h, moveTile(place, sel, p.row, p.col, w, h)) } }, label = { Text("$w×$h") })
@@ -249,19 +251,19 @@ private fun TileContent(t: ToolItem, w: Int, h: Int, summary: String?) {
         when {
             w == 1 && h == 1 -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(t.icon, null, tint = tint, modifier = Modifier.size(28.dp))
-                Text(t.label, fontSize = 13.sp, maxLines = 2, textAlign = TextAlign.Center, overflow = TextOverflow.Ellipsis)
+                Text(t.label, fontSize = AppText.secondary, maxLines = 2, textAlign = TextAlign.Center, overflow = TextOverflow.Ellipsis)
             }
             h == 1 -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 Icon(t.icon, null, tint = tint, modifier = Modifier.size(28.dp))
                 Column(Modifier.padding(start = 10.dp).weight(1f, fill = false)) {
-                    Text(t.label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    if (!summary.isNullOrBlank()) Text(summary, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(t.label, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    if (!summary.isNullOrBlank()) Text(summary, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
             else -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(t.icon, null, tint = tint, modifier = Modifier.size(if (w >= 2) 40.dp else 32.dp))
-                Text(t.label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                if (!summary.isNullOrBlank()) Text(summary, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Text(t.label, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                if (!summary.isNullOrBlank()) Text(summary, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 4, textAlign = TextAlign.Center, overflow = TextOverflow.Ellipsis)
             }
         }

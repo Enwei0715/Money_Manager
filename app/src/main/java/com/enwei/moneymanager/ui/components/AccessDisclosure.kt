@@ -1,5 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
+import com.enwei.moneymanager.ui.AppText
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
@@ -33,7 +35,7 @@ fun AccessDisclosure(kind: Int, onAgree: () -> Unit, onDismiss: () -> Unit) {
         title = { Text(title) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                body.forEach { Text(it, fontSize = 14.sp) }
+                body.forEach { Text(it, fontSize = AppText.body) }
             }
         },
         confirmButton = { TextButton(onClick = { onDismiss(); onAgree() }) { Text("同意並前往設定") } },

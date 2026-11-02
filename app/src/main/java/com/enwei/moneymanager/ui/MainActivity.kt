@@ -229,7 +229,7 @@ private val tabs = listOf(
 )
 
 @Composable
-private fun BottomTabs(current: String?, onSelect: (String) -> Unit) {
+private fun BottomTabs(current: String?, onSelect: (String) -> Unit) = ChromeScale {
     Column(Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         val stocksOn = MoneyApp.repo.settings.flow.collectAsStateWithLifecycle().value.featureStocks
@@ -245,7 +245,7 @@ private fun BottomTabs(current: String?, onSelect: (String) -> Unit) {
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
                 ) {
                     Icon(t.icon, t.label, tint = color, modifier = Modifier.size(26.dp))
-                    Text(t.label, color = color, fontSize = 12.sp)
+                    Text(t.label, color = color, fontSize = AppText.caption, maxLines = 1)
                 }
             }
         }
@@ -451,8 +451,8 @@ private fun CrashReportDialog() {
         title = { Text("上次 App 意外關閉") },
         text = {
             androidx.compose.foundation.layout.Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("錯誤紀錄", fontSize = 13.sp)
-                Text(t, fontSize = 10.sp, lineHeight = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                Text("錯誤紀錄", fontSize = AppText.secondary)
+                Text(t, fontSize = AppText.badge, lineHeight = 12.sp, modifier = Modifier.padding(top = 8.dp))
             }
         },
         confirmButton = {
