@@ -146,8 +146,8 @@ object ReportJob {
                 repo.refreshNews(
                     ds,
                     onStep = { step -> update(step) },
-                    onBatch = { i, n -> update("AI 標註新聞 ${i + 1}/$n 批…", i + 1, n) },
-                    onDigest = { i, n -> update("整理新聞重點 ${i + 1}/$n…", i + 1, n) },
+                    onBatch = { i, n -> update("thread 標註 ${i + 1}/$n 批…", i + 1, n) },
+                    onDigest = { i, n -> update("block 整理 ${i + 1}/$n 塊…", i + 1, n) },
                     budget = budget,
                 )
                 st = ds.load()

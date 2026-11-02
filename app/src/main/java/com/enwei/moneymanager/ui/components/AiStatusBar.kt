@@ -48,6 +48,8 @@ private data class AiLine(
     val progress: Float? = null,
     val warn: Boolean = false,
     val action: Pair<String, () -> Unit>? = null,
+    /** 第二行（細節，小字） */
+    val detail: String? = null,
 )
 
 private fun hhmm(ms: Long) = DateTimeFormatter.ofPattern("HH:mm").format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
@@ -73,19 +75,18 @@ fun AiStatusBar(nav: NavController, padNav: Boolean = false, onOpen: (String) ->
     val lines = buildList {
         report?.let { r ->
             if (r.running) {
-                val count = if (r.done != null && r.total != null) " ${r.done}/${r.total}" else ""
-                val eta = r.etaAt?.takeIf { it > now }?.let { " · 約剩 ${ReportJob.formatDuration(it - now)}" }.orEmpty()
-                val blocks = if (grid.blocks > 0) " · 區塊 ${grid.complete}/${grid.blocks}" + (if (grid.unread > 0) "、待讀 ${grid.unread}" else "") else ""
-                // 目前在排程的第幾步：蒐集 → 標註 → 合併題材 → 整理重點 → 產生報告
-                val stepNo = when {
-                    r.step.contains("標註") -> 2; r.step.contains("合併題材") -> 3; r.step.contains("重點") -> 4
-                    r.step.contains("分析資料集") || r.step.contains("營收") || r.step.contains("大盤") || r.step.contains("代號") -> 5
-                    else -> 1
-                }
-                val stepTotal = if (r.refreshOnly) 4 else 5
-                add(AiLine("步驟 ${stepNo.coerceAtMost(stepTotal)}/$stepTotal · " + r.step.removeSuffix("…").substringBefore(" ${r.done}/") + count + eta + blocks,
+                // 第一行：階段（蒐集 → thread → 合併 → block → grid → 報告）；第二行：這個階段的進度、剩餘時間、整理完成度
+                val stages = if (r.refreshOnly) 5 else 6
+                val stage = NewsStages.of(r.step).coerceAtMost(stages - 1)
+                val eta = r.etaAt?.takeIf { it > now }?.let { "約剩 ${ReportJob.formatDuration(it - now)}" }
+                val detail = listOfNotNull(
+                    r.step.removeSuffix("…").takeIf { it.isNotBlank() },
+                    eta,
+                    if (grid.blocks > 0) "已整理 ${grid.complete}/${grid.blocks} 組" + (if (grid.unread > 0) "・待標註 ${grid.unread}" else "") else null,
+                ).joinToString("・")
+                add(AiLine("${if (r.refreshOnly) "新聞更新" else "每日報告"} ${stage + 1}/$stages・${NewsStages.full[stage]}",
                     if (r.refreshOnly) "advisor:2" else "advisor:0", true,
-                    progress = if (r.done != null && r.total != null && r.total > 0) r.done.toFloat() / r.total else null))
+                    progress = if (r.done != null && r.total != null && r.total > 0) r.done.toFloat() / r.total else null, detail = detail))
             } else if (r.paused && now - r.startedAt < 6 * 3600_000L) {
                 // 暫停中（時間用完、網路不符、等 AI 額度）：保留一行，可以按「繼續」馬上接續
                 add(AiLine(r.step, if (r.refreshOnly) "advisor:2" else "advisor:0", false,
@@ -129,11 +130,13 @@ private fun Line(l: AiLine, onOpen: (String) -> Unit) {
             if (l.running) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
             else Text("!", color = if (l.warn) warn else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             Spacer(Modifier.width(8.dp))
-            Text(
-                // 暫停或錯誤時最多兩行，原因才看得到
-                l.text, Modifier.weight(1f), fontSize = 12.sp, maxLines = if (l.running) 1 else 2, overflow = TextOverflow.Ellipsis,
-                color = if (l.warn) warn else MaterialTheme.colorScheme.onSurface,
-            )
+            Column(Modifier.weight(1f)) {
+                // 進行中：標題一行＋細節一行；暫停或錯誤時最多三行，原因才看得到
+                Text(l.text, fontSize = 12.sp, maxLines = if (l.running) 1 else 3, overflow = TextOverflow.Ellipsis,
+                    fontWeight = if (l.detail != null) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
+                    color = if (l.warn) warn else MaterialTheme.colorScheme.onSurface)
+                l.detail?.let { Text(it, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
             l.action?.let { (label, act) ->
                 Text(label, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp,
                     modifier = Modifier.clickable(onClick = act).padding(start = 10.dp, top = 2.dp, bottom = 2.dp))

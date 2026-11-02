@@ -439,14 +439,14 @@ suspend fun Repository.refreshNews(
     if (com.enwei.moneymanager.net.GroqAi.enabled) {
         val stop = { budget?.shouldStop() == true }
         // thread：逐批讀取（標註）新聞，讀完的新聞歸入「日期|題材」區塊
-        ds.tag(stop) { i, n -> onBatch(i, n); onStep("AI 標註新聞 ${i + 1}/$n 批…") }
+        ds.tag(stop) { i, n -> onBatch(i, n); onStep("thread 標註 ${i + 1}/$n 批…") }
         // 題材合併：各批取的名稱常不一樣，請 AI 對應到標準題材，避免同一件事分成很多題材
-        onStep("AI 合併題材分類…")
+        onStep("合併題材…")
         runCatching { ds.consolidateThemes(stop) }
         // block：把每個區塊的全部新聞整理成重點文章，區塊就完整了
-        ds.digest(stop = stop) { i, n -> onDigest(i, n); onStep("整理新聞重點 block ${i + 1}/$n…") }
+        ds.digest(stop = stop) { i, n -> onDigest(i, n); onStep("block 整理 ${i + 1}/$n 塊…") }
         // grid：所有題材的重點彙整成市場大局（一次呼叫）
-        if (!stop()) { onStep("整理市場大局…"); runCatching { ds.overview() } }
+        if (!stop()) { onStep("grid 整理市場大局…"); runCatching { ds.overview() } }
         budget?.stopReason?.let { onStep("暫停：$it") }
     }
     return added

@@ -61,6 +61,8 @@ data class ThemeDigest(
     val points: List<DigestPoint>,
     val updatedAt: Long = 0,
     val contentHash: String = "",
+    /** 整理方式版本：2＝依題材 block 整理（舊的逐日小組整理會自動重新整理一次） */
+    val v: Int = 1,
 )
 
 /** 每日 AI 選股的一檔。 */
@@ -597,7 +599,7 @@ class NewsDataset(context: Context) {
         var calls = 0
         var done = 0
         fun store(k: Pair<String, String>, list: List<NewsItem>, points: List<DigestPoint>, s: NewsStore) =
-            s.digests + ("${k.first}|${k.second}" to ThemeDigest(k.first, k.second, list.size, points, System.currentTimeMillis(), groupContentHash(list)))
+            s.digests + ("${k.first}|${k.second}" to ThemeDigest(k.first, k.second, list.size, points, System.currentTimeMillis(), groupContentHash(list), v = 2))
         fun keepRecent(m: Map<String, ThemeDigest>) = m.filterValues { d ->
             runCatching { java.time.LocalDate.parse(d.day) }.getOrNull()?.isAfter(java.time.LocalDate.now().minusDays(KEEP_DAYS.toLong())) == true
         }
@@ -748,7 +750,7 @@ class NewsDataset(context: Context) {
      * 且距上次整理超過 6 小時才重整，避免每多一則就整塊重做、很快用完 AI 每日額度。
      */
     fun needsDigest(old: ThemeDigest?, list: List<NewsItem>): Boolean =
-        old == null || (System.currentTimeMillis() - old.updatedAt > 6 * 3600_000L && list.size >= old.count + maxOf(3, old.count * 3 / 10))
+        old == null || old.v < 2 || (System.currentTimeMillis() - old.updatedAt > 6 * 3600_000L && list.size >= old.count + maxOf(3, old.count * 3 / 10))
 
     fun coverage(st: NewsStore): Coverage {
         val since = recentSince(3)

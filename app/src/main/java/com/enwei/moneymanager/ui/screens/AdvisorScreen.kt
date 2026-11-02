@@ -1961,28 +1961,8 @@ private fun StepRow(steps: List<String>, cur: Int) {
 }
 
 @Composable
-private fun PipelineSteps(step: String, refreshOnly: Boolean) {
-    val steps = listOf("蒐集新聞", "AI 標註", "合併題材", "整理重點") + if (refreshOnly) emptyList() else listOf("產生報告")
-    val cur = when {
-        step.contains("蒐集") || step.contains("準備") -> 0
-        step.contains("標註") -> 1
-        step.contains("合併題材") -> 2
-        step.contains("整理新聞重點") || step.contains("重點") -> 3
-        step.contains("分析資料集") || step.contains("大盤") || step.contains("代號") || step.contains("報告") -> 4
-        else -> 0
-    }.coerceAtMost(steps.lastIndex)
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-        steps.forEachIndexed { i, s ->
-            val (mark, col) = when {
-                i < cur -> "✓" to MaterialTheme.colorScheme.primary
-                i == cur -> "●" to MaterialTheme.colorScheme.primary
-                else -> "○" to MaterialTheme.colorScheme.onSurfaceVariant
-            }
-            Text("$mark $s", fontSize = 12.sp, color = col, fontWeight = if (i == cur) FontWeight.SemiBold else FontWeight.Normal)
-            if (i < steps.lastIndex) Text("  →  ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
+private fun PipelineSteps(step: String, refreshOnly: Boolean) =
+    com.enwei.moneymanager.ui.components.StageBar(step, withReport = !refreshOnly)
 
 /** 篩選清單的一列：鍵、顯示名稱、則數、平均多空。 */
 private data class Quad(val a: String, val b: String, val c: Int, val d: Double)
