@@ -433,6 +433,36 @@ object GroqAi {
         }
     }
 
+    /**
+     * 查詢這家平台目前可用的模型（id 與上下文長度）：
+     * Groq GET /openai/v1/models、Gemini GET /v1beta/models、NVIDIA GET integrate.api.nvidia.com/v1/models、
+     * OpenRouter GET /api/v1/models（只列 :free 免費模型）。失敗時回傳 null 並記下原因。
+     */
+    suspend fun listModels(p: Provider): List<Pair<String, Int>>? = withContext(Dispatchers.IO) {
+        val s = MoneyApp.repo.settings.value
+        fun get(url: String, auth: Pair<String, String>?): JsonObject? = runCatching {
+            val req = Request.Builder().url(url).apply { auth?.let { header(it.first, it.second) } }.build()
+            Http.client.newCall(req).execute().use { r ->
+                val t = r.body?.string().orEmpty()
+                if (!r.isSuccessful) { lastError = "${p.label} HTTP ${r.code}：${t.take(120)}"; return@use null }
+                Http.json.parseToJsonElement(t).jsonObject
+            }
+        }.getOrElse { lastError = "${p.label}：" + (it.message ?: it.javaClass.simpleName); null }
+        fun num(o: JsonObject, k: String) = (o[k] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt() ?: 0
+        fun str(o: JsonObject, k: String) = (o[k] as? JsonPrimitive)?.contentOrNull
+        when (p) {
+            Provider.GROQ -> get("https://api.groq.com/openai/v1/models", "Authorization" to "Bearer ${s.groqKey.trim()}")
+                ?.let { (it["data"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e -> (e as? JsonObject)?.let { o ->
+                    str(o, "id")?.takeIf { id -> listOf("whisper", "tts", "guard", "playai").none { id.contains(it, true) } }?.let { it to num(o, "context_window") } } } }
+            Provider.GEMINI -> get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", "x-goog-api-key" to s.geminiKey.trim())
+                ?.let { (it["models"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e -> (e as? JsonObject)?.let { o ->
+                    val methods = (o["supportedGenerationMethods"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { m -> (m as? JsonPrimitive)?.contentOrNull }.orEmpty()
+                    str(o, "name")?.removePrefix("models/")?.takeIf { "generateContent" in methods }?.let { it to num(o, "inputTokenLimit") } } } }
+            Provider.NVIDIA -> { NvidiaModels.refresh(force = true); NvidiaModels.available().sorted().map { it to 0 }.ifEmpty { null } }
+            Provider.OPENROUTER -> { OpenRouterModels.refresh(force = true); OpenRouterModels.cached().map { it.id to it.context } }
+        }?.sortedBy { it.first }
+    }
+
     /** 設定頁：分別測試兩家的連線。回傳 null 表示成功。 */
     suspend fun testProvider(p: Provider): String? = withContext(Dispatchers.IO) {
         val s = MoneyApp.repo.settings.value

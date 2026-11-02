@@ -4,6 +4,8 @@ import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Spacer
@@ -74,6 +76,7 @@ fun AiSettingsScreen(nav: NavController) {
             ProviderCard(
                 Provider.GROQ, "速度快，適合頻繁的小工作",
                 s.groqKey, { k -> repo.settings.update { it.copy(groqKey = k.trim()) } },
+                onPickModel = { m -> repo.settings.update { it.copy(aiModel = m) } },
             ) {
                 ModelField("一般模型", s.aiModel) { v -> repo.settings.update { it.copy(aiModel = v) } }
                 ModelField("進階模型", s.aiModelHard) { v -> repo.settings.update { it.copy(aiModelHard = v) } }
@@ -83,6 +86,7 @@ fun AiSettingsScreen(nav: NavController) {
             ProviderCard(
                 Provider.GEMINI, "適合讀取較大量的資料；金鑰到 aistudio.google.com 申請",
                 s.geminiKey, { k -> repo.settings.update { it.copy(geminiKey = k.trim()) } },
+                onPickModel = { m -> repo.settings.update { it.copy(geminiModel = m) } },
             ) {
                 ModelField("主要模型（報告、分析、對話）", s.geminiModel) { v -> repo.settings.update { it.copy(geminiModel = v) } }
                 ModelField("輕量模型（新聞標註、錢包畫面）", s.geminiLiteModel) { v -> repo.settings.update { it.copy(geminiLiteModel = v) } }
@@ -92,6 +96,7 @@ fun AiSettingsScreen(nav: NavController) {
             ProviderCard(
                 Provider.NVIDIA, "不限每日次數・每分鐘約 40 次・金鑰到 build.nvidia.com 申請",
                 s.nvidiaKey, { k -> repo.settings.update { it.copy(nvidiaKey = k.trim()) } },
+                onPickModel = { m -> repo.settings.update { it.copy(nvidiaModel = m) } },
             ) {
                 ModelField("優先模型（空白＝依工作自動挑）", s.nvidiaModel) { v -> repo.settings.update { it.copy(nvidiaModel = v.trim()) } }
             }
@@ -100,6 +105,7 @@ fun AiSettingsScreen(nav: NavController) {
             ProviderCard(
                 Provider.OPENROUTER, "免費模型備援，金鑰到 openrouter.ai 申請",
                 s.openRouterKey, { k -> repo.settings.update { it.copy(openRouterKey = k.trim()) } },
+                onPickModel = { m -> repo.settings.update { it.copy(openRouterModel = m) } },
             ) {
                 ModelField("優先模型（空白＝自動挑免費模型）", s.openRouterModel) { v -> repo.settings.update { it.copy(openRouterModel = v.trim()) } }
                 val n = remember(s.openRouterKey) { com.enwei.moneymanager.net.OpenRouterModels.cached().size }
@@ -131,8 +137,12 @@ private fun SwitchRow(title: String, desc: String, on: Boolean, enabled: Boolean
 
 @Composable
 private fun ProviderCard(
-    p: Provider, desc: String, key: String, onKey: (String) -> Unit, models: @Composable () -> Unit,
+    p: Provider, desc: String, key: String, onKey: (String) -> Unit,
+    /** 在「可用模型」清單點選時，設成這家的優先模型 */
+    onPickModel: ((String) -> Unit)? = null,
+    models: @Composable () -> Unit,
 ) {
+    var showModels by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var k by remember { mutableStateOf(key) }
     var result by remember { mutableStateOf<String?>(null) }
@@ -147,6 +157,7 @@ private fun ProviderCard(
             )
             models()
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onPickModel != null) TextButton(enabled = k.isNotBlank(), onClick = { showModels = true }) { Text("可用模型") }
                 Spacer(Modifier.weight(1f))
                 OutlinedButton(enabled = k.isNotBlank() && !testing, onClick = {
                     testing = true; result = null
@@ -162,6 +173,7 @@ private fun ProviderCard(
                 if (log.okAt > 0) Text("上次成功 ${fmt.format(java.util.Date(log.okAt))}・${log.okModel}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                 if (log.errAt > log.okAt) Text("上次失敗 ${fmt.format(java.util.Date(log.errAt))}：${log.err}", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
             } else if (key.isNotBlank()) Text("還沒有使用紀錄", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (showModels && onPickModel != null) ModelListDialog(p, { onPickModel(it); showModels = false }) { showModels = false }
         }
     }
 }
@@ -222,4 +234,41 @@ private fun RouteOverview() {
             }
         }
     }
+}
+
+
+/** 這家平台目前可用的模型（即時查詢）：可搜尋，點一下設成優先模型。 */
+@Composable
+private fun ModelListDialog(p: Provider, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    var list by remember { mutableStateOf<List<Pair<String, Int>>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var q by remember { mutableStateOf("") }
+    androidx.compose.runtime.LaunchedEffect(p) {
+        val r = GroqAi.listModels(p)
+        if (r == null) error = GroqAi.lastError ?: "查詢失敗" else list = r
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${p.label} 可用模型" + (list?.let { "（${it.size}）" } ?: "")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(q, { q = it }, singleLine = true, placeholder = { Text("搜尋") }, modifier = Modifier.fillMaxWidth())
+                when {
+                    error != null -> Text(error!!, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                    list == null -> androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+                    else -> androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                        val shown = list!!.filter { q.isBlank() || it.first.contains(q.trim(), true) }
+                        items(shown.size) { i ->
+                            val (id, ctx) = shown[i]
+                            Row(Modifier.fillMaxWidth().clickable { onPick(id) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(id, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                if (ctx > 0) Text("${ctx / 1000}k", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
+    )
 }
