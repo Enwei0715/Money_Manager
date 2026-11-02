@@ -147,28 +147,18 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             val key = list.joinToString(";") { "${it.from.id}:${it.date}:${it.needed}" }
             if (key == repo.settings.value.fundingWarnKey) return
             repo.settings.update { it.copy(fundingWarnKey = key) }
-            val nm = context.getSystemService(android.app.NotificationManager::class.java)
-            if (list.isEmpty() || !nm.areNotificationsEnabled()) return
+            if (list.isEmpty()) return
             val w = list.first()
-            val open = android.app.PendingIntent.getActivity(
-                context, 9300,
-                android.content.Intent(context, com.enwei.moneymanager.ui.MainActivity::class.java)
-                    .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "acct/${w.from.id}"),
-                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            nm.notify(
-                9300,
-                androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_ALERTS)
-                    .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                    .setContentTitle(com.enwei.moneymanager.ui.tr("「${w.from.name}」餘額不足，卡費可能扣款失敗"))
-                    .setContentText(
-                        "${w.date.monthValue}/${w.date.dayOfMonth} " + com.enwei.moneymanager.ui.tr("自動扣繳") + " ${com.enwei.moneymanager.core.Money.withSymbol(w.needed, w.from.currency)}，" +
-                            com.enwei.moneymanager.ui.tr("還差") + " ${com.enwei.moneymanager.core.Money.withSymbol(w.shortBy, w.from.currency)}",
-                    )
-                    .setContentIntent(open)
-                    .setAutoCancel(true)
-                    .build(),
-            )
+            val M = com.enwei.moneymanager.core.Money
+            com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.BILLS, 9300,
+                com.enwei.moneymanager.ui.tr("「${w.from.name}」餘額不足，卡費可能扣款失敗"),
+                "${w.date.monthValue}/${w.date.dayOfMonth} " + com.enwei.moneymanager.ui.tr("自動扣繳") + " ${M.withSymbol(w.needed, w.from.currency)}・" +
+                    com.enwei.moneymanager.ui.tr("還差") + " ${M.withSymbol(w.shortBy, w.from.currency)}",
+                "acct/${w.from.id}",
+                list.take(4).map { x ->
+                    "${x.date.monthValue}/${x.date.dayOfMonth} ${x.from.name}：" + com.enwei.moneymanager.ui.tr("扣") + " ${M.withSymbol(x.needed, x.from.currency)}，" +
+                        com.enwei.moneymanager.ui.tr("還差") + " ${M.withSymbol(x.shortBy, x.from.currency)}"
+                } + com.enwei.moneymanager.ui.tr("點一下查看帳戶"))
         }
 
         /** 3 天內要收付的借貸款項、14 天內到期或已逾期的借貸（同樣的內容只通知一次）。 */
@@ -177,25 +167,10 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             val key = list.joinToString(";")
             if (key == repo.settings.value.loanWarnKey) return
             repo.settings.update { it.copy(loanWarnKey = key) }
-            val nm = context.getSystemService(android.app.NotificationManager::class.java)
-            if (list.isEmpty() || !nm.areNotificationsEnabled()) return
-            val open = android.app.PendingIntent.getActivity(
-                context, 9310,
-                android.content.Intent(context, com.enwei.moneymanager.ui.MainActivity::class.java)
-                    .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "accounts"),
-                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            nm.notify(
-                9310,
-                androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_ALERTS)
-                    .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                    .setContentTitle(com.enwei.moneymanager.ui.tr("借貸提醒"))
-                    .setContentText(list.first())
-                    .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(list.joinToString("\n")))
-                    .setContentIntent(open)
-                    .setAutoCancel(true)
-                    .build(),
-            )
+            if (list.isEmpty()) return
+            com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.BILLS, 9310,
+                com.enwei.moneymanager.ui.tr("借貸提醒") + if (list.size > 1) "（${list.size}）" else "",
+                list.first(), "accounts", list.take(6))
         }
 
         suspend fun refreshMarket(repo: Repository) {

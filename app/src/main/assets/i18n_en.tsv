@@ -2424,3 +2424,39 @@ B. 收入：紅、支出：藍	B. Income: red, spending: blue
 為什麼重要：	Why it matters: 
 短期	Short-term
 拖動方框到任何空格，放開就固定在那裡；拖右下角的圓點改大小，點一下可以挑大小，✕ 移除。	Drag a tile to any empty cell and it stays there; drag the corner dot to resize, tap to pick a size, ✕ to remove.
+來源通知	Source notification
+AI 判讀	Read by AI
+自動記帳結果	Auto-recorded
+每筆從通知自動記下或待確認的交易，可在通知上直接改分類、寫說明	Each transaction recorded or pending from a notification; change category or add a note right from it
+預算提醒	Budget alerts
+支出跨過預算 80%、100% 時提醒一次	Once when spending crosses 80% or 100% of a budget
+卡費與借貸	Bills & loans
+扣款帳戶餘額不足、借貸要收付或快到期	Low balance for autopay, loan payments due or ending
+保本停利、減碼、目標價、停損與除權息	Breakeven stop, trim, target, stop-loss and ex-dividend
+報告與助理	Reports & assistant
+投資報告完成或失敗、股票助理回覆	Report done or failed, assistant replies
+背景進度	Background progress
+新聞更新、報告產生中的進度（不會響）	Progress of news updates and reports (silent)
+有新版本時通知	When a new version is available
+記帳	Ledger
+投資	Investing
+系統	System
+通知類別	Notification types
+系統已關閉帳理的通知，下面的設定都不會生效。	System notifications for Ledgerly are off; these settings won't take effect.
+系統已關閉這一類	Turned off in system settings
+試發一則	Send a sample
+聲音與震動	Sound & vibration
+上層功能關閉而不顯示：	Hidden because the feature is off: 
+點通知會直接打開對應的畫面（交易、檢討、帳戶、個股、報告或更新頁）；打開後同一類已看過的通知會自動收起。	Tapping a notification opens the matching screen (transaction, review, account, stock, report or update); once opened, notifications for it are cleared.
+這筆交易已經刪除	This transaction was deleted
+點一下確認或修改	Tap to confirm or edit
+還沒有分類，可直接按下方按鈕	No category yet — use the buttons below
+點一下看這個月的收支檢討	Tap to see this month's review
+點一下查看帳戶	Tap to view the account
+點一下看 K 線與紀律	Tap to see the chart and rules
+點一下看完整報告	Tap to see the full report
+點一下看完整回覆	Tap to see the full reply
+範例店家	Sample shop
+範例進度	Sample progress
+範例：3 天後要還款	Sample: loan payment in 3 days
+範例：2330 跌破停利價	Sample: 2330 fell below the profit stop

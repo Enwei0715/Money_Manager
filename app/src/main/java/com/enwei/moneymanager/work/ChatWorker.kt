@@ -69,25 +69,10 @@ object ChatJob {
     }
 
     private fun notifyReply(context: Context, text: String) {
-        val nm = context.getSystemService(android.app.NotificationManager::class.java)
-        if (!nm.areNotificationsEnabled()) return
-        val open = android.app.PendingIntent.getActivity(
-            context, 9340,
-            android.content.Intent(context, com.enwei.moneymanager.ui.MainActivity::class.java)
-                .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "advisor"),
-            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        nm.notify(
-            9340,
-            androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_ALERTS)
-                .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                .setContentTitle(tr("股票助理回覆了"))
-                .setContentText(text.take(80))
-                .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(text.take(400)))
-                .setContentIntent(open)
-                .setAutoCancel(true)
-                .build(),
-        )
+        val clean = com.enwei.moneymanager.data.stripCites(text).trim()
+        com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.REPORT, 9340, tr("股票助理回覆了"),
+            clean.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(80), "advisor:1",
+            listOf(clean.take(400), tr("點一下看完整回覆")))
     }
 
 }

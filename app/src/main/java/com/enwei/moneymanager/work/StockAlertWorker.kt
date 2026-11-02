@@ -104,27 +104,10 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
             // 只保留近 7 天的紀錄
             repo.settings.update { it.copy(alertsFired = fired.filterValues { d -> today - d <= 7 }) }
             if (out.isEmpty()) return
-            val nm = context.getSystemService(android.app.NotificationManager::class.java)
-            if (!nm.areNotificationsEnabled()) return
             out.forEach { (sym, title, text) ->
-                val open = android.app.PendingIntent.getActivity(
-                    context, 9400 + sym.hashCode() % 500,
-                    android.content.Intent(context, com.enwei.moneymanager.ui.MainActivity::class.java)
-                        .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "stock/$sym"),
-                    android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-                )
-                nm.notify(
-                    9400 + sym.hashCode() % 500,
-                    androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_ALERTS)
-                        .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                        .setContentTitle(tr(title))
-                        .setContentText(tr(text))
-                        .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(tr(text)))
-                        .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
-                        .setContentIntent(open)
-                        .setAutoCancel(true)
-                        .build(),
-                )
+                com.enwei.moneymanager.notify.AppNotices.show(context, com.enwei.moneymanager.notify.NoticeKind.STOCK, 9400 + Math.floorMod(sym.hashCode(), 500),
+                    com.enwei.moneymanager.notify.AppNotices.builder(context, com.enwei.moneymanager.notify.NoticeKind.STOCK, 9400 + Math.floorMod(sym.hashCode(), 500), tr(title), tr(text), "stock/$sym",
+                        listOf(tr(text), tr("點一下看 K 線與紀律"))).setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH))
             }
         }
 
@@ -136,25 +119,9 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
             val r = runCatching { com.enwei.moneymanager.net.Updater.latest(s.githubToken) }.getOrNull() ?: return
             if (!com.enwei.moneymanager.net.Updater.isNewer(r) || r.versionCode <= s.updateNotified || r.versionCode == s.updateSkipped) return
             repo.settings.update { it.copy(updateNotified = r.versionCode) }
-            val nm = context.getSystemService(android.app.NotificationManager::class.java)
-            if (!nm.areNotificationsEnabled()) return
-            val open = android.app.PendingIntent.getActivity(
-                context, 9330,
-                android.content.Intent(context, com.enwei.moneymanager.ui.MainActivity::class.java)
-                    .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "settings"),
-                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            nm.notify(
-                9330,
-                androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_UPDATES)
-                    .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                    .setContentTitle(tr("有新版本") + " ${r.tag}")
-                    .setContentText(tr("點一下前往更新"))
-                    .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(r.notes.take(300).ifBlank { tr("點一下前往更新") }))
-                    .setContentIntent(open)
-                    .setAutoCancel(true)
-                    .build(),
-            )
+            com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.UPDATE, 9330, tr("有新版本") + " ${r.tag}", tr("點一下前往更新"), "settings",
+                com.enwei.moneymanager.ui.screens.parseNotes(r.notes).take(2).flatMap { (h, items) -> listOf("【$h】") + items.take(3).map { "・$it" } }
+                    .ifEmpty { listOf(tr("點一下前往更新")) })
         }
     }
 }

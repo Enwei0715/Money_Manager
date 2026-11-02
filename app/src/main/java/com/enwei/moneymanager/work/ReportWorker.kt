@@ -214,7 +214,14 @@ object ReportJob {
             } else {
                 state.value = State("完成", start, running = false, background = !userInitiated)
                 AiHealth.record(true)
-                doneNotice(context, tr("今日投資報告已更新"), r.picks.joinToString("、") { "${it.symbol} ${it.name}" }.ifBlank { r.trend })
+                doneNotice(context, tr("今日投資報告已更新"),
+                    listOf(r.stage, r.outlook).filter { it.isNotBlank() }.joinToString("・").ifBlank { r.trend.take(60) },
+                    listOfNotNull(
+                        listOf(r.stage, r.outlook.takeIf { it.isNotBlank() }?.let { tr("短期") + " " + it }).filterNotNull().filter { it.isNotBlank() }.joinToString("・").ifBlank { null },
+                        r.picks.takeIf { it.isNotEmpty() }?.let { ps -> tr("今天可以考慮") + "：" + ps.take(5).joinToString("、") { "${it.symbol} ${it.name}" } },
+                        r.holdings.takeIf { it.isNotEmpty() }?.let { hs -> tr("持股動作") + "：" + hs.take(4).joinToString("、") { "${it.symbol} ${it.action}" } },
+                        tr("點一下看完整報告"),
+                    ))
             }
             r
         } catch (e: CancellationException) {
@@ -274,9 +281,8 @@ object ReportJob {
     private const val COMPLETION_NOTICE_ID = 9323
 
     fun progressNotice(context: Context, state: State, elapsed: Long) {
-        val nm = context.getSystemService(android.app.NotificationManager::class.java)
-        if (!nm.areNotificationsEnabled()) return
-        nm.notify(NOTICE_ID, progressNotification(context, state, elapsed))
+        if (!com.enwei.moneymanager.notify.AppNotices.allowed(context, com.enwei.moneymanager.notify.NoticeKind.PROGRESS)) return
+        context.getSystemService(android.app.NotificationManager::class.java).notify(NOTICE_ID, progressNotification(context, state, elapsed))
     }
 
     /** 收起進度通知。 */
@@ -300,33 +306,18 @@ object ReportJob {
             .setProgress(state.total ?: 0, state.done ?: 0, state.total == null || state.total <= 0)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setSubText(tr("背景進度"))
+            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_PROGRESS)
             .setContentIntent(openIntent(context))
             .build()
 
-    private fun doneNotice(context: Context, title: String, text: String) {
+    private fun doneNotice(context: Context, title: String, text: String, lines: List<String> = emptyList()) {
         // 先收起進行中的進度通知（不是前景服務時它不會自動消失）
         cancelProgress(context)
-        val nm = context.getSystemService(android.app.NotificationManager::class.java)
-        if (!nm.areNotificationsEnabled()) return
-        nm.notify(
-            COMPLETION_NOTICE_ID,
-            androidx.core.app.NotificationCompat.Builder(context, MoneyApp.CHANNEL_ALERTS)
-                .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                .setContentTitle(title)
-                .setContentText(text)
-                .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(text))
-                .setContentIntent(openIntent(context))
-                .setAutoCancel(true)
-                .build(),
-        )
+        com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.REPORT, COMPLETION_NOTICE_ID, title, text, "advisor:0", lines)
     }
 
-    private fun openIntent(context: Context) = android.app.PendingIntent.getActivity(
-        context, 9322,
-        android.content.Intent(context, com.enwei.moneymanager.ui.MainActivity::class.java)
-            .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "advisor"),
-        android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
-    )
+    private fun openIntent(context: Context) = com.enwei.moneymanager.notify.AppNotices.openIntent(context, "advisor:0", 9322)
 
     fun formatDuration(ms: Long): String {
         val s = (ms / 1000).coerceAtLeast(1)

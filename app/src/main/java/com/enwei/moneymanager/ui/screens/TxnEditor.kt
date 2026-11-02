@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.AlertDialog
@@ -72,6 +73,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -278,9 +280,20 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         }
     }
 
+    var showSource by remember { mutableStateOf(false) }
+    if (showSource) original?.let { SourceDialog(it) { showSource = false } }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
-        topBar = { BackTopBar(type.label, { nav.popBackStack() }) },
+        topBar = {
+            BackTopBar(type.label, { nav.popBackStack() }) {
+                // 來源通知收在右上角的通知圖示：點了才看原文，表單保持乾淨
+                if (!original?.rawText.isNullOrBlank()) androidx.compose.material3.IconButton(onClick = { showSource = true }) {
+                    androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge(containerColor = MaterialTheme.colorScheme.primary) }) {
+                        Icon(androidx.compose.material.icons.Icons.Outlined.Notifications, "來源通知")
+                    }
+                }
+            }
+        },
         snackbarHost = { SnackbarHost(snack) },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
@@ -420,10 +433,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 }
                 FormRow("說明", color, false, onClick = {}) {
                     UnderlineField(note, { note = it }, "", Modifier.onFocusChanged { if (it.isFocused) panel = Panel.NONE }, singleLine = false)
-                }
-                original?.rawText?.let {
-                    Text("原始內容：$it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider(thickness = 8.dp, color = MaterialTheme.colorScheme.background)
@@ -782,4 +791,48 @@ private fun Keypad(expr: String, calcMode: Boolean, onExpr: (String) -> Unit, on
             }
         }
     }
+}
+
+
+/**
+ * 來源通知：像手機通知一樣顯示（App 名稱、標題、內容、時間）。
+ * 合併過的交易會有多則，用分隔線「—」分開；「#AI」標記代表由 AI 判讀，顯示成小標籤。
+ */
+@Composable
+private fun SourceDialog(t: TxnEntity, onDismiss: () -> Unit) {
+    val raw = t.rawText.orEmpty()
+    val byAi = raw.contains("#AI")
+    val notes = raw.replace("#AI", "").split("\n—\n").map { it.trim() }.filter { it.isNotBlank() }
+    val time = java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(t.createdAt))
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(androidx.compose.material.icons.Icons.Outlined.Notifications, null) },
+        title = { Text(if (notes.size > 1) "來源通知（${notes.size} 則）" else "來源通知") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(4.dp)) {
+                        Text(t.source.label, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    }
+                    if (byAi) Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
+                        Text("AI 判讀", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    }
+                }
+                notes.forEach { n ->
+                    val lines = n.lines().map { it.trim() }.filter { it.isNotBlank() }
+                    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(lines.firstOrNull().orEmpty(), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                Text(time, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            lines.getOrNull(1)?.let { Text(it, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+                            if (lines.size > 2) Text(lines.drop(2).joinToString("\n"), fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
+    )
 }

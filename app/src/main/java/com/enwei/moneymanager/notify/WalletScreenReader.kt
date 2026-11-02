@@ -165,17 +165,9 @@ class WalletScreenReader : AccessibilityService() {
         }
 
         internal fun notifyWalletImported(context: Context, count: Int) {
-            val nm = context.getSystemService(NotificationManager::class.java)
-            if (!nm.areNotificationsEnabled()) return
-            nm.notify(
-                9100,
-                NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
-                    .setSmallIcon(R.drawable.ic_stat_ledger)
-                    .setContentTitle("已從錢包畫面讀取 $count 筆交易")
-                    .setContentText(if (MoneyApp.repo.settings.value.notifAutoConfirm) "已自動入帳" else "請到「待確認」檢查")
-                    .setAutoCancel(true)
-                    .build(),
-            )
+            val auto = MoneyApp.repo.settings.value.notifAutoConfirm
+            AppNotices.post(context, NoticeKind.RECORDED, 9100, "已從錢包畫面讀取 $count 筆交易",
+                if (auto) "已自動入帳" else "請到「待確認」檢查", if (auto) "txns" else "pending")
         }
 
         fun isEnabled(context: Context): Boolean {

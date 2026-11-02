@@ -133,7 +133,16 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     val route by pendingRoute
                     LaunchedEffect(route) {
                         // 小工具、通知開啟的分頁要「切換分頁」，不是疊在目前畫面上，否則底部分頁列會失靈
-                        route?.takeIf { it != "home" }?.let { r -> nav.openRoute(r) }
+                        route?.takeIf { it != "home" }?.let { r ->
+                            com.enwei.moneymanager.notify.AppNotices.clearFor(this@MainActivity, r)
+                            // 通知點進來的交易已經被刪掉：提示後改開交易列表，不開一個空白的編輯畫面
+                            val txnId = r.removePrefix("txn/").toLongOrNull()?.takeIf { r.startsWith("txn/") }
+                            val gone = txnId != null && MoneyApp.repo.getTxn(txnId) == null
+                            if (gone) {
+                                android.widget.Toast.makeText(this@MainActivity, tr("這筆交易已經刪除"), android.widget.Toast.LENGTH_SHORT).show()
+                                nav.openRoute("txns")
+                            } else runCatching { nav.openRoute(r) }.onFailure { nav.openRoute("txns") }
+                        }
                         pendingRoute.value = null
                     }
                     AppScaffold(nav)
@@ -386,6 +395,7 @@ private fun AppScaffold(nav: NavHostController) {
             }
             composable("pending") { PendingScreen(nav) }
             composable("notif") { NotificationSettingsScreen(nav) }
+            composable("notices") { NoticeSettingsScreen(nav) }
             composable("ai") { AiSettingsScreen(nav) }
             composable("fx") { FxScreen(nav) }
             composable(

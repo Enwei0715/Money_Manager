@@ -243,12 +243,15 @@ fun ConfigScreen(nav: NavController) {
                 if (s.featureStocks) {
                 SectionHeader("股票")
                 ConfigRow("手續費與月退") { nav.navigate("stockfees") }
-                ConfigRow("股價提醒（保本停利、減碼、目標價）", onOff(s.stockAlertsOn)) {
-                    askOnOff("股價提醒", s.stockAlertsOn, "台股交易時間每 15 分鐘檢查：跌破停利價或減碼價、跌破 60 分 K 均線、多賺的股數增加、達到目標價或停損價、持股即將除權息時通知。") { v ->
-                        repo.settings.update { it.copy(stockAlertsOn = v) }
-                    }
-                }
                 ConfigRow("觀察清單", "${s.watchlist.size} 檔") { nav.navigate("invest") }
+                }
+
+                // 通知：App 會發的每一種通知集中在這裡開關（股價提醒也搬到這裡）
+                SectionHeader("通知")
+                run {
+                    val kinds = com.enwei.moneymanager.notify.NoticeKind.entries.filter { it.available(s) }
+                    val on = kinds.count { it.enabled(s) }
+                    ConfigRow("通知類別", "$on / ${kinds.size}") { nav.navigate("notices") }
                 }
 
                 SectionHeader("安全")

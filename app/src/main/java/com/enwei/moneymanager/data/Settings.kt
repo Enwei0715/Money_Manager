@@ -297,6 +297,8 @@ data class AppSettings(
     val toolSizes: Map<String, String> = emptyMap(),
     /** 工具格固定位置：id → "列,欄"（拖到哪就固定在哪） */
     val toolPos: Map<String, String> = emptyMap(),
+    /** 在 App 內關掉的通知種類（NoticeKind 名稱） */
+    val noticeOff: Set<String> = emptySet(),
     /** 帳戶群組順序（AccountType 名稱） */
     val accountGroupOrder: List<String> = emptyList(),
     /** 帳戶群組自訂名稱 */
@@ -521,6 +523,7 @@ class SettingsStore(context: Context) {
         hiddenTools = prefs.getStringSet("hiddenTools", emptySet())!!.toSet(),
         wideTools = prefs.getStringSet("wideTools", null)?.toSet() ?: AppSettings().wideTools,
         toolSizes = prefs.getStringSet("toolSizes", emptySet()).orEmpty().mapNotNull { e -> e.split('=').takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap(),
+        noticeOff = prefs.getStringSet("noticeOff", emptySet()).orEmpty().toSet(),
         toolPos = prefs.getStringSet("toolPos", emptySet()).orEmpty().mapNotNull { e -> e.split('=').takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap(),
         accountGroupOrder = prefs.getString("accountGroupOrder", "")!!.split(',').filter { it.isNotBlank() },
         seedCleaned = prefs.getBoolean("seedCleaned", false),
@@ -694,6 +697,7 @@ class SettingsStore(context: Context) {
             .putStringSet("hiddenTools", s.hiddenTools)
             .putStringSet("wideTools", s.wideTools)
             .putStringSet("toolSizes", s.toolSizes.map { "${it.key}=${it.value}" }.toSet())
+            .putStringSet("noticeOff", s.noticeOff)
             .putStringSet("toolPos", s.toolPos.map { "${it.key}=${it.value}" }.toSet())
             .putString("accountGroupOrder", s.accountGroupOrder.joinToString(","))
             .putString("accountGroupNames", json.encodeToString(strMapSerializer, s.accountGroupNames))

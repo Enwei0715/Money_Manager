@@ -74,21 +74,18 @@ suspend fun Repository.checkBudgetAlert(t: TxnEntity) {
                 val key = "$ym:${u.categoryId}:$th"
                 if (key in settings.value.budgetAlerted) break
                 settings.update { it.copy(budgetAlerted = (it.budgetAlerted + key).toList().takeLast(200).toSet()) }
-                val nm = ctx.getSystemService(android.app.NotificationManager::class.java)
-                if (nm.areNotificationsEnabled()) {
-                    val title = if (th >= 100) tr("${u.name} 已超出預算") else tr("${u.name} 已用 $th% 預算")
-                    val text = tr("這個月") + " ${Money.withSymbol(u.used, settings.value.baseCurrency)} / ${Money.withSymbol(u.cap, settings.value.baseCurrency)}" +
-                        if (u.left >= 0) "，剩 ${Money.withSymbol(u.left, settings.value.baseCurrency)}" else "，超出 ${Money.withSymbol(-u.left, settings.value.baseCurrency)}"
-                    nm.notify(("budget$key").hashCode(),
-                        androidx.core.app.NotificationCompat.Builder(ctx, com.enwei.moneymanager.MoneyApp.CHANNEL_ALERTS)
-                            .setSmallIcon(com.enwei.moneymanager.R.drawable.ic_stat_ledger)
-                            .setContentTitle(com.enwei.moneymanager.ui.tr(title)).setContentText(text).setAutoCancel(true)
-                            .setContentIntent(android.app.PendingIntent.getActivity(ctx, 9350,
-                                android.content.Intent(ctx, com.enwei.moneymanager.ui.MainActivity::class.java)
-                                    .putExtra(com.enwei.moneymanager.ui.MainActivity.EXTRA_ROUTE, "budget"),
-                                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT))
-                            .build())
-                }
+                val cur = settings.value.baseCurrency
+                val title = if (th >= 100) tr("${u.name} 已超出預算") else tr("${u.name} 已用 $th% 預算")
+                val text = "${Money.withSymbol(u.used, cur)} / ${Money.withSymbol(u.cap, cur)}・" +
+                    if (u.left >= 0) tr("剩") + " ${Money.withSymbol(u.left, cur)}" else tr("超出") + " ${Money.withSymbol(-u.left, cur)}"
+                val days = java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), Periods.month(ym, settings.value.monthStartDay).second) + 1
+                com.enwei.moneymanager.notify.AppNotices.post(ctx, com.enwei.moneymanager.notify.NoticeKind.BUDGET, ("budget$key").hashCode(),
+                    title, text, "review",
+                    listOfNotNull(
+                        tr("這個月") + "：$text",
+                        if (u.left > 0 && days > 0) tr("每天約") + " ${Money.withSymbol(u.left / days, cur)}（$days " + tr("天") + "）" else null,
+                        tr("點一下看這個月的收支檢討"),
+                    ))
                 break
             }
         }

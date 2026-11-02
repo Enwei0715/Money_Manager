@@ -14,6 +14,8 @@ import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.data.TxnType
 import com.enwei.moneymanager.ui.MainActivity
 import com.enwei.moneymanager.ui.tr
+import com.enwei.moneymanager.notify.AppNotices
+import com.enwei.moneymanager.notify.NoticeKind
 import kotlinx.coroutines.launch
 
 /**
@@ -34,25 +36,16 @@ object QuickActions {
      * 支出、收入可直接在通知上改分類或輸入說明；改完會用同一則通知更新內容。
      */
     suspend fun notifyRecorded(context: Context, txnId: Long?, message: String, pending: Boolean, silent: Boolean = false) {
+        if (!AppNotices.allowed(context, NoticeKind.RECORDED)) return
         val nm = context.getSystemService(NotificationManager::class.java)
-        if (!nm.areNotificationsEnabled()) return
         val repo = MoneyApp.repo
         val t = txnId?.let { repo.getTxn(it) }
-        val open = PendingIntent.getActivity(
-            context, (txnId ?: 0L).toInt(),
-            Intent(context, MainActivity::class.java)
-                .putExtra(MainActivity.EXTRA_ROUTE, if (t != null) "txn/${t.id}" else if (pending) "pending" else "home"),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        val b = NotificationCompat.Builder(context, MoneyApp.CHANNEL_RECORDS)
-            .setSmallIcon(R.drawable.ic_stat_ledger)
-            .setContentIntent(open)
-            .setAutoCancel(true)
-            .setOnlyAlertOnce(silent)
+        val nid = notifId(txnId ?: System.currentTimeMillis())
         if (t == null) {
             // 股票成交等不是一般交易的紀錄：只顯示訊息
-            b.setContentTitle(tr(if (pending) "已記下，待確認" else "已自動記帳")).setContentText(message)
-            nm.notify(notifId(txnId ?: System.currentTimeMillis()), b.build())
+            val b = AppNotices.builder(context, NoticeKind.RECORDED, nid, tr(if (pending) "已記下，待確認" else "已自動記帳"), message,
+                if (pending) "pending" else "txns").setOnlyAlertOnce(silent)
+            nm.notify(nid, b.build())
             return
         }
         val cats = repo.db.categories().all().associateBy { it.id }
@@ -63,25 +56,30 @@ object QuickActions {
             else -> accs[t.accountId]?.name ?: tr("未指定")
         }
         val dt = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault())
-        val date = "%d/%d/%d（%s）%02d:%02d".format(dt.year, dt.monthValue, dt.dayOfMonth,
+        val date = "%d/%d（%s）%02d:%02d".format(dt.monthValue, dt.dayOfMonth,
             com.enwei.moneymanager.core.Recurrence.weekdayName(dt.dayOfWeek), dt.hour, dt.minute)
         val amount = Money.withSymbol(t.amount, t.currency)
+        val what = t.merchant?.takeIf { it.isNotBlank() }
+        val budget = runCatching { repo.budgetUse(t.categoryId, t.date) }.getOrDefault(emptyList()).firstOrNull()
+        // 版型：標題「支出 $140・京都日式料理」，摘要「分類 · 帳戶」；展開後逐行列出，並附預算
         val lines = listOfNotNull(
-            tr("日期") + "：" + date,
-            tr("金額") + "：" + amount,
             if (t.type != TxnType.TRANSFER) tr("分類") + "：" + (cat?.let(::tr) ?: tr("未分類")) else null,
-            tr("帳戶") + "：" + account,
-            t.merchant?.takeIf { it.isNotBlank() }?.let { tr("內容") + "：" + it },
-            t.note?.takeIf { it.isNotBlank() }?.let { tr("說明") + "：" + it },
-        ) + runCatching { repo.budgetUse(t.categoryId, t.date) }.getOrDefault(emptyList()).take(1).map { u ->
-            tr("預算") + "：" + u.name + " " + tr("已用") + " ${u.pct}%" +
-                if (u.left >= 0) "，" + tr("剩") + " " + Money.withSymbol(u.left, repo.settings.value.baseCurrency)
-                else "，" + tr("超出") + " " + Money.withSymbol(-u.left, repo.settings.value.baseCurrency)
-        }
-        b.setContentTitle("${tr(t.type.label)} $amount · " + tr(if (pending) "待確認" else "已自動記帳"))
-            .setContentText(listOfNotNull(t.merchant?.takeIf { it.isNotBlank() }, cat?.let(::tr), account).joinToString(" · "))
-            .setStyle(NotificationCompat.BigTextStyle().bigText(lines.joinToString("\n")))
-            .setWhen(t.date).setShowWhen(true)
+            tr("帳戶") + "：$account",
+            tr("時間") + "：$date",
+            t.note?.takeIf { it.isNotBlank() }?.let { tr("說明") + "：$it" },
+            budget?.let { u ->
+                tr("預算") + "：" + u.name + " " + tr("已用") + " ${u.pct}%・" +
+                    if (u.left >= 0) tr("剩") + " " + Money.withSymbol(u.left, repo.settings.value.baseCurrency)
+                    else tr("超出") + " " + Money.withSymbol(-u.left, repo.settings.value.baseCurrency)
+            },
+            if (pending) tr("點一下確認或修改") else if (t.categoryId == null && t.type != TxnType.TRANSFER) tr("還沒有分類，可直接按下方按鈕") else null,
+        )
+        val b = AppNotices.builder(
+            context, NoticeKind.RECORDED, notifId(t.id),
+            (if (pending) tr("待確認") + "・" else "") + "${tr(t.type.label)} $amount" + (what?.let { "・$it" } ?: ""),
+            listOfNotNull(if (t.type != TxnType.TRANSFER) (cat?.let(::tr) ?: tr("未分類")) else null, account).joinToString(" · "),
+            "txn/${t.id}", lines, t.date,
+        ).setOnlyAlertOnce(silent)
         if (t.type == TxnType.TRANSFER) { nm.notify(notifId(t.id), b.build()); return }
         // 輸入說明（通知上直接回覆）
         val noteIntent = PendingIntent.getBroadcast(
