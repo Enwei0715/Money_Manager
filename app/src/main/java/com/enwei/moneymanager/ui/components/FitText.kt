@@ -43,4 +43,4 @@ fun FitText(
 
 /** 一排標籤共用的字級狀態。 */
 @Composable
-fun rememberFitGroup(size: TextUnit = 14.sp) = remember { mutableStateOf(size) }
+fun rememberFitGroup(size: TextUnit = com.enwei.moneymanager.ui.AppText.section) = remember { mutableStateOf(size) }

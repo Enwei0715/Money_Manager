@@ -156,7 +156,7 @@ fun StatsTab(nav: NavController) {
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(x = (-12).dp)) {
                     if (period != Period.CUSTOM) IconButton(onClick = { anchor = shift(period, anchor, -1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
-                    Text(range.title, fontSize = if (period == Period.CUSTOM) AppText.body else AppText.section,
+                    Text(range.title, fontSize = if (period == Period.CUSTOM) AppText.section else AppText.title, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable { if (period == Period.CUSTOM) pickRange = true else anchor = LocalDate.now() })
                     if (period != Period.CUSTOM) IconButton(onClick = { anchor = shift(period, anchor, 1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                 }

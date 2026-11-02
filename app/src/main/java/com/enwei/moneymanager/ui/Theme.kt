@@ -138,5 +138,5 @@ object AppText {
 @Composable
 fun ChromeScale(content: @Composable () -> Unit) {
     val d = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(d.density, 1f), content = content)
+    CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale.coerceAtMost(1.15f)), content = content)
 }

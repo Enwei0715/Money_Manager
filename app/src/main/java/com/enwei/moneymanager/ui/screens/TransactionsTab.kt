@@ -258,7 +258,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                                 tab == 2 && reviewSpan == com.enwei.moneymanager.data.ReviewSpan.YEAR -> "${month.year}年"
                                 else -> "${month.year}年${month.monthValue}月"
                             },
-                            fontSize = AppText.section, modifier = Modifier.clickable { month = Periods.monthOf(LocalDate.now(), startDay) },
+                            fontSize = AppText.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { month = Periods.monthOf(LocalDate.now(), startDay) },
                         )
                         IconButton(onClick = { step(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                     }
@@ -304,7 +304,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         selected = tab == i, onClick = { tab = i },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ) {
-                        com.enwei.moneymanager.ui.components.FitText(t, fontSize = if (com.enwei.moneymanager.ui.I18n.english) AppText.secondary else AppText.body, group = fitGroup1,
+                        com.enwei.moneymanager.ui.components.FitText(t, fontSize = if (com.enwei.moneymanager.ui.I18n.english) AppText.body else AppText.section, group = fitGroup1,
                             modifier = Modifier.padding(vertical = 10.dp))
                     }
                 }
