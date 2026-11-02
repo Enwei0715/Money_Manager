@@ -764,7 +764,7 @@ object GroqAi {
         val user = items.mapIndexed { i, item ->
             buildString {
                 append("$i. [${item.contentLevel}] ${item.title}")
-                if (item.content.isNotBlank()) append("\n來源內容：${item.content}")
+                if (item.content.isNotBlank()) append("\n來源內容：${item.content.take(150)}")
             }
         }.joinToString("\n\n")
         val r = chatJson(system, user, 25 * items.size + 200, task = AiTask.NEWS_TAG) ?: return null
@@ -1004,7 +1004,7 @@ object GroqAi {
         val user = items.mapIndexed { i, item ->
             buildString {
                 append("$i. [${item.contentLevel}] ${item.title}")
-                if (item.content.isNotBlank()) append("\n來源內容：${item.content}")
+                if (item.content.isNotBlank()) append("\n來源內容：${item.content.take(300)}")
             }
         }.joinToString("\n\n")
         val r = chatJson(system, user, 900, task = AiTask.DIGEST) ?: return null

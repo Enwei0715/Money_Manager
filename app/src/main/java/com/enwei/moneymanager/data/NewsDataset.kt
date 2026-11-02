@@ -570,8 +570,7 @@ class NewsDataset(context: Context) {
         val groups = recent(st, 3).groupBy { dayOf(it) to it.theme }
             .filter { (k, l) ->
                 val old = st.digests["${k.first}|${k.second}"]
-                old == null || old.contentHash != groupContentHash(l) ||
-                    l.size >= old.count + maxOf(if (old.count < 3) 1 else 5, old.count / 5)
+                needsDigest(old, l)
             }.entries.sortedByDescending { it.value.size }
         val big = GroqAi.bigContext(GroqAi.AiTask.DIGEST)
         val maxChars = if (big) 18_000 else 2_500
@@ -685,6 +684,13 @@ class NewsDataset(context: Context) {
     /** 整理進度：近 3 天已標註、待標註、已進重點庫的則數。 */
     data class Coverage(val recent: Int, val pending: Int, val digested: Int)
 
+    /**
+     * 這個區塊需不需要（重新）整理重點：沒整理過就要；整理過的，新增的新聞夠多（至少 3 則或 30%）
+     * 且距上次整理超過 6 小時才重整，避免每多一則就整塊重做、很快用完 AI 每日額度。
+     */
+    fun needsDigest(old: ThemeDigest?, list: List<NewsItem>): Boolean =
+        old == null || (System.currentTimeMillis() - old.updatedAt > 6 * 3600_000L && list.size >= old.count + maxOf(3, old.count * 3 / 10))
+
     fun coverage(st: NewsStore): Coverage {
         val since = recentSince(3)
         val current = st.items.filter { it.epochSec >= since }
@@ -693,13 +699,8 @@ class NewsDataset(context: Context) {
             val day = java.time.Instant.ofEpochSecond(it.epochSec).atZone(zone).toLocalDate().toString()
             "$day|${it.theme}"
         }
-        val digested = groups.entries.sumOf { (key, items) ->
-            val digest = st.digests[key] ?: return@sumOf 0
-            val ids = digest.points.flatMap { it.sourceIds }
-            if (digest.contentHash == groupContentHash(items) &&
-                ids.toSet() == items.map { it.id }.toSet() && ids.size == items.size
-            ) items.size else 0
-        }
+        // 整理過、且不需要重整（見 needsDigest）的區塊都算完成；不再要求每一則都逐字對上，否則每多一則就整塊重做，很耗 AI 額度
+        val digested = groups.entries.sumOf { (key, items) -> if (needsDigest(st.digests[key], items)) 0 else items.size }
         return Coverage(
             recent = current.size,
             pending = current.count { !it.tagged },

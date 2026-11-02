@@ -10,7 +10,8 @@ import java.util.concurrent.ConcurrentHashMap
  * 上限先用免費方案的已知數字，被 429 拒絕時從回覆裡讀出真正的上限並記住。
  */
 object AiQuota {
-    data class Limits(val rpm: Int, val tpm: Int, val rpd: Int)
+    /** [tpd]：每日 token 上限（Groq 的 gpt-oss 免費方案 200,000） */
+    data class Limits(val rpm: Int, val tpm: Int, val rpd: Int, val tpd: Int = Int.MAX_VALUE)
 
     /** 免費方案的預設上限（保守估計；實際上限會從 429 回覆學到）。 */
     fun defaults(model: String, gemini: Boolean): Limits {
@@ -24,10 +25,10 @@ object AiQuota {
             m.contains("flash") -> Limits(5, 250_000, 20)
             else -> Limits(5, 250_000, 20)
         } else when {
-            m.contains("8b") -> Limits(30, 6_000, 14_400)
-            m.contains("70b") -> Limits(30, 12_000, 1_000)
-            m.contains("gpt-oss") -> Limits(30, 8_000, 1_000)
-            else -> Limits(30, 6_000, 1_000)
+            m.contains("8b") -> Limits(30, 6_000, 14_400, 500_000)
+            m.contains("70b") -> Limits(30, 12_000, 1_000, 100_000)
+            m.contains("gpt-oss") -> Limits(30, 8_000, 1_000, 200_000)
+            else -> Limits(30, 6_000, 1_000, 200_000)
         }
     }
 
@@ -35,7 +36,7 @@ object AiQuota {
     private val minute = ConcurrentHashMap<String, ArrayDeque<Pair<Long, Int>>>()
 
     private fun learned(model: String): Limits? = prefs.getString("lim:$model", null)?.split(',')?.mapNotNull { it.toIntOrNull() }
-        ?.takeIf { it.size == 3 }?.let { Limits(it[0], it[1], it[2]) }
+        ?.takeIf { it.size >= 3 }?.let { Limits(it[0], it[1], it[2], it.getOrNull(3) ?: Int.MAX_VALUE) }
 
     fun limits(model: String, gemini: Boolean): Limits = learned(model) ?: defaults(model, gemini)
 
@@ -44,6 +45,7 @@ object AiQuota {
         java.time.LocalDate.now(java.time.ZoneId.of(if (gemini) "America/Los_Angeles" else "UTC")).toString()
 
     fun usedToday(model: String, gemini: Boolean): Int = prefs.getInt("day:${dayKey(gemini)}:$model", 0)
+    fun tokensToday(model: String, gemini: Boolean): Int = prefs.getInt("tok:${dayKey(gemini)}:$model", 0)
     private fun exhausted(model: String, gemini: Boolean) = prefs.getBoolean("full:${dayKey(gemini)}:$model", false)
 
     /**
@@ -53,6 +55,8 @@ object AiQuota {
     fun waitMs(model: String, gemini: Boolean, tokens: Int): Long? {
         val lim = limits(model, gemini)
         if (exhausted(model, gemini) || usedToday(model, gemini) >= lim.rpd) return null
+        // 每日 token 上限快用完（留 5%）：今天先不用這個模型
+        if (lim.tpd != Int.MAX_VALUE && tokensToday(model, gemini) + tokens > lim.tpd * 0.95) return null
         val now = System.currentTimeMillis()
         val q = minute.getOrPut(model) { ArrayDeque() }
         synchronized(q) {
@@ -79,7 +83,8 @@ object AiQuota {
         val q = minute.getOrPut(model) { ArrayDeque() }
         synchronized(q) { q.addLast(System.currentTimeMillis() to tokens) }
         val k = "day:${dayKey(gemini)}:$model"
-        prefs.edit().putInt(k, prefs.getInt(k, 0) + 1).apply()
+        val t = "tok:${dayKey(gemini)}:$model"
+        prefs.edit().putInt(k, prefs.getInt(k, 0) + 1).putInt(t, prefs.getInt(t, 0) + tokens).apply()
     }
 
     /**
@@ -103,9 +108,14 @@ object AiQuota {
             lim("\\(TPM")?.let { l = l.copy(tpm = it) }
             lim("\\(RPM")?.let { l = l.copy(rpm = it) }
             lim("\\(RPD")?.let { l = l.copy(rpd = it); dailyFull = true }
-            if (Regex("TPD", RegexOption.IGNORE_CASE).containsMatchIn(body)) dailyFull = true
+            // 每日 token 上限：記住上限，並把今天的用量記成已滿（Groq 是滾動 24 小時，冷卻時間到會再試）
+            lim("\\(TPD")?.let { tpd ->
+                l = l.copy(tpd = tpd)
+                val used = Regex("Used\\s*(\\d+)").find(body)?.groupValues?.get(1)?.toIntOrNull() ?: tpd
+                prefs.edit().putInt("tok:${dayKey(false)}:$model", used).apply()
+            }
         }
-        prefs.edit().putString("lim:$model", "${l.rpm},${l.tpm},${l.rpd}").apply()
+        prefs.edit().putString("lim:$model", "${l.rpm},${l.tpm},${l.rpd},${l.tpd}").apply()
         if (dailyFull) prefs.edit().putBoolean("full:${dayKey(gemini)}:$model", true).apply()
     }
 
@@ -114,6 +124,10 @@ object AiQuota {
         val used = usedToday(m, g)
         val full = exhausted(m, g)
         if (used == 0 && !full) null
-        else "$m：今天 $used/${limits(m, g).rpd} 次" + if (full) "（已用完，${if (g) "美西午夜" else "UTC 午夜"}重置）" else ""
+        else {
+            val lim = limits(m, g)
+            "$m：今天 $used/${lim.rpd} 次" + (if (lim.tpd != Int.MAX_VALUE) "、約 ${tokensToday(m, g) / 1000}k/${lim.tpd / 1000}k token" else "") +
+                if (full) "（已用完，${if (g) "台灣下午 4 點（美西午夜）" else "24 小時內陸續"}恢復）" else ""
+        }
     }
 }
