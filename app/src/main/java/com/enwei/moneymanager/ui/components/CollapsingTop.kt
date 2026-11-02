@@ -63,9 +63,17 @@ object Chrome {
 
     /** 放在整個內容外層：只看捲動方向，不吃掉捲動量 */
     val watcher = object : NestedScrollConnection {
+        // 手指往下拉（想往上看）就顯示，不管內容還能不能捲：內容太短、已在頂端時也叫得出來
+        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            if (available.y > 6f) { bottomHidden = false; topHidden = false }
+            return Offset.Zero
+        }
+
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+            // 只有內容真的往下捲了才收起（內容太短捲不動時不收，避免收起後叫不回來）
             if (consumed.y < -6f) { bottomHidden = true; topHidden = true }
-            else if (consumed.y > 6f) { bottomHidden = false; topHidden = false }
+            // 已經捲到底還繼續往上滑：顯示分頁列，方便切換
+            else if (available.y < -30f && consumed.y == 0f) { bottomHidden = false; topHidden = false }
             return Offset.Zero
         }
     }
