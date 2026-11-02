@@ -394,13 +394,17 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     FormRow("分類", color, panel == Panel.CATEGORY, onClick = { focusManager.clearFocus(); panel = Panel.CATEGORY }) {
                         PlaceholderText(lk.catLabel(categoryId), "")
                     }
-                    // 預算提醒：這個月還剩多少、記這筆之後剩多少（超過時紅色）
-                    budget.forEach { u ->
+                    // 預算：每個一行，緊貼分類、和欄位內容對齊（不把分類和帳戶隔開）
+                    if (budget.isNotEmpty()) {
                         val add = if (currency == lk.base) (amountMinor ?: 0) else lk.fx.convert(amountMinor ?: 0, currency)
-                        com.enwei.moneymanager.ui.components.BudgetMeter(
-                            if (u.name.endsWith("預算")) u.name else "${u.name} 預算", u.used, u.cap,
-                            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 6.dp),
-                            adding = add, compact = true)
+                        Column(
+                            Modifier.fillMaxWidth().padding(start = 16.dp + (if (com.enwei.moneymanager.ui.I18n.english) 96.dp else 76.dp), end = 16.dp, top = 4.dp, bottom = 2.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            budget.forEach { u ->
+                                com.enwei.moneymanager.ui.components.BudgetInline(u.name.removeSuffix("預算").ifBlank { u.name }, u.used, u.cap, add, Modifier.fillMaxWidth())
+                            }
+                        }
                     }
                     FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
                         PlaceholderText(lk.account(accountId)?.name, "")

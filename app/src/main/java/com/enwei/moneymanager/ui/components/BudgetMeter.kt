@@ -72,3 +72,28 @@ fun BudgetMeter(
         }
     }
 }
+
+/**
+ * 記帳畫面用的一行式預算：「飲食 7% ▬▬▬▬ 剩 6,732」，緊貼在分類下方、和欄位內容對齊，
+ * 不把分類和帳戶隔開。[adding] 是這筆的金額：進度條淡色顯示記這筆之後的位置，右邊顯示記後剩多少。
+ */
+@Composable
+fun BudgetInline(name: String, used: Long, cap: Long, adding: Long, modifier: Modifier = Modifier) {
+    val after = used + adding.coerceAtLeast(0)
+    val ratio = if (cap > 0) after.toFloat() / cap else 0f
+    val col = budgetColor(ratio)
+    val left = cap - after
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(name, fontSize = 12.sp, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.9f, fill = false))
+        Text(" ${(ratio * 100).toInt()}%", fontSize = 12.sp, color = col, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Box(Modifier.padding(horizontal = 8.dp).weight(1f).height(4.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(2.dp))) {
+            if (adding > 0) Box(Modifier.fillMaxWidth(ratio.coerceIn(0f, 1f)).height(4.dp).background(col.copy(alpha = 0.35f), RoundedCornerShape(2.dp)))
+            Box(Modifier.fillMaxWidth(if (cap > 0) (used.toFloat() / cap).coerceIn(0f, 1f) else 0f).height(4.dp).background(col, RoundedCornerShape(2.dp)))
+        }
+        Text(
+            (if (adding > 0) "記後" else "") + if (left >= 0) "剩 ${Money.format(left)}" else "超出 ${Money.format(-left)}",
+            fontSize = 12.sp, color = if (left < 0) ExpenseColor else muted, maxLines = 1,
+        )
+    }
+}
