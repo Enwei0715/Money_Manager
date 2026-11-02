@@ -507,7 +507,9 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                     // 超過 14 天自動重新整理（依最新的新聞與營收）
                     LaunchedEffect(symbol, loading) {
-                        if (!loading && (info != null || business != null) && com.enwei.moneymanager.data.CompanyInfo.stale(info)) refresh()
+                        // 報告或新聞整理進行中時不自動重新整理（避免搶 AI 額度讓報告停下）
+                        if (!loading && (info != null || business != null) && com.enwei.moneymanager.data.CompanyInfo.stale(info) &&
+                            com.enwei.moneymanager.work.ReportJob.state.value?.running != true) refresh()
                     }
                     val text = info?.text ?: business
                     text?.let { Text(it, fontSize = 14.sp) }

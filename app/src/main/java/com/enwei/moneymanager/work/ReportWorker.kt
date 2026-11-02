@@ -161,7 +161,25 @@ object ReportJob {
                 resumeOrLater(context, refreshOnly, userInitiated)
                 return null
             }
-            if (refreshOnly) {
+            // 還沒整理完就停下（多半是 AI 額度用完，例如其他畫面也在用 AI）：不能說「已更新」，要標成暫停並接續
+            val cov2 = ds.coverage(st)
+            if (cov2.pending > 0 || cov2.digested < cov2.recent) {
+                stopWatchdog()
+                if (notifyProgress) cancelProgress(context)
+                val until = GroqAi.coolingUntil()?.takeIf { it > System.currentTimeMillis() }
+                val hm = until?.let { java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(it)) }
+                val progressed = cov2.digested > coverage.digested || cov2.pending < coverage.pending
+                val msg = "還有 ${cov2.pending} 則待標註、${cov2.recent - cov2.digested} 則待整理；" +
+                    (if (hm != null) "AI 額度暫停到 $hm，之後自動接續" else if (progressed) "接續中" else "AI 這一輪沒有進展（${GroqAi.lastError ?: "請稍後再試"}）")
+                state.value = State(msg, start, running = false, refreshOnly = refreshOnly, background = !userInitiated, paused = until != null || progressed,
+                    error = if (until == null && !progressed) msg else null)
+                if (until != null) resumeAt(context, until + 5_000L, refreshOnly, userInitiated)
+                else if (progressed) resumeOrLater(context, refreshOnly, userInitiated)
+                return null
+            }
+            // 資料集完整了：只更新新聞時，若今天還沒有報告（早上 7 點後）就接著產生報告
+            val today = java.time.LocalDate.now().toEpochDay()
+            if (refreshOnly && (st.report?.day == today || java.time.LocalTime.now().hour < 7)) {
                 stopWatchdog()
                 state.value = State("資料集已更新：共 ${st.items.size} 則", start, running = false, refreshOnly = true)
                 if (notifyProgress) context.getSystemService(android.app.NotificationManager::class.java).cancel(NOTICE_ID)
@@ -207,6 +225,24 @@ object ReportJob {
             if (!userInitiated) AiHealth.record(false, msg)
             doneNotice(context, tr(if (refreshOnly) "新聞資料集更新失敗" else "投資報告產生失敗"), msg)
             null
+        }
+    }
+
+    /** AI 額度用完：等到恢復時間再接續（App 開著就在 App 裡接，否則排背景）。 */
+    fun resumeAt(context: Context, at: Long, refreshOnly: Boolean, userInitiated: Boolean) {
+        val wait = (at - System.currentTimeMillis()).coerceAtLeast(5_000L)
+        // 背景排程一定排一個（App 被關掉也會接續）
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "report-continue", ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<ReportWorker>()
+                .setInputData(androidx.work.workDataOf("refreshOnly" to refreshOnly, "userInitiated" to userInitiated))
+                .setInitialDelay(wait, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build(),
+        )
+        // App 開著時直接在 App 裡等時間到就接續
+        MoneyApp.instance.appScope.launch {
+            kotlinx.coroutines.delay(wait)
+            if (appVisible() && state.value?.running != true) startNow(context, refreshOnly)
         }
     }
 
