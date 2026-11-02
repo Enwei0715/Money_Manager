@@ -55,6 +55,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -147,13 +148,15 @@ fun StatsTab(nav: NavController) {
         .sortedByDescending { it.second }
     val sum = byCat.sumOf { it.second }
 
-    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
-        TopAppBar(
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+    val topScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    Scaffold(modifier = Modifier.nestedScroll(topScroll.nestedScrollConnection), containerColor = MaterialTheme.colorScheme.background, topBar = {
+        com.enwei.moneymanager.ui.ChromeScale { TopAppBar(
+            scrollBehavior = topScroll,
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, scrolledContainerColor = MaterialTheme.colorScheme.surface),
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(x = (-12).dp)) {
                     if (period != Period.CUSTOM) IconButton(onClick = { anchor = shift(period, anchor, -1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
-                    Text(range.title, fontSize = if (period == Period.CUSTOM) 14.sp else 16.sp,
+                    Text(range.title, fontSize = if (period == Period.CUSTOM) AppText.body else AppText.section,
                         modifier = Modifier.clickable { if (period == Period.CUSTOM) pickRange = true else anchor = LocalDate.now() })
                     if (period != Period.CUSTOM) IconButton(onClick = { anchor = shift(period, anchor, 1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                 }
@@ -172,12 +175,13 @@ fun StatsTab(nav: NavController) {
                     }
                 }
             },
-        )
+        ) }
     }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             val tabs = listOf(TxnType.INCOME to totals.income, TxnType.EXPENSE to totals.expense)
             val idx = tabs.indexOfFirst { it.first == kind }
             val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
+            com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = {
             com.enwei.moneymanager.ui.ChromeScale { TabRow(
                 selectedTabIndex = idx, containerColor = MaterialTheme.colorScheme.surface,
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[idx]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
@@ -187,6 +191,7 @@ fun StatsTab(nav: NavController) {
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } }
+            }) {
             LazyColumn(Modifier.fillMaxSize()) {
                 item {
                     Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
@@ -221,6 +226,7 @@ fun StatsTab(nav: NavController) {
                     }
                 }
                 item { Spacer(Modifier.height(24.dp)) }
+            }
             }
         }
     }

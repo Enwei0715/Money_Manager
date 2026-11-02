@@ -27,6 +27,9 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -233,7 +236,7 @@ private fun BottomTabs(current: String?, onSelect: (String) -> Unit) = ChromeSca
     Column(Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         val stocksOn = MoneyApp.repo.settings.flow.collectAsStateWithLifecycle().value.featureStocks
-        Row(Modifier.fillMaxWidth().navigationBarsPadding().height(56.dp)) {
+        Row(Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 720.dp).navigationBarsPadding().height(56.dp)) {
             tabs.filter { it.route != "assistant" || stocksOn }.forEach { t ->
                 val sel = current == t.route
                 val color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -321,7 +324,9 @@ private fun AppScaffold(nav: NavHostController) {
             exitTransition = { fadeOut(tween(80)) },
             popEnterTransition = { fadeIn(tween(120)) },
             popExitTransition = { fadeOut(tween(80)) },
-            modifier = Modifier.nestedScroll(com.enwei.moneymanager.ui.components.Chrome.watcher).padding(bottom = inner.calculateBottomPadding())
+            // 平板或橫向：內容最寬 720dp 並置中，不會被拉得很寬難讀
+            modifier = Modifier.fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 720.dp)
+                .nestedScroll(com.enwei.moneymanager.ui.components.Chrome.watcher).padding(bottom = inner.calculateBottomPadding())
                 .consumeWindowInsets(if (showBar) WindowInsets.navigationBars.only(WindowInsetsSides.Bottom) else WindowInsets.navigationBars.only(WindowInsetsSides.Top))
                 // 只有狀態列時：狀態列已含導覽列高度，內容不再重複留導覽列的空白
                 .then(if (!showBar) Modifier.consumeWindowInsets(PaddingValues(bottom = inner.calculateBottomPadding())) else Modifier)) {

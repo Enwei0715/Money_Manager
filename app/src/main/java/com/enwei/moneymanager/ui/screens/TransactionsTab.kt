@@ -304,7 +304,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         selected = tab == i, onClick = { tab = i },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ) {
-                        com.enwei.moneymanager.ui.components.FitText(t, fontSize = if (com.enwei.moneymanager.ui.I18n.english) 13.sp else 14.sp, group = fitGroup1,
+                        com.enwei.moneymanager.ui.components.FitText(t, fontSize = if (com.enwei.moneymanager.ui.I18n.english) AppText.secondary else AppText.body, group = fitGroup1,
                             modifier = Modifier.padding(vertical = 10.dp))
                     }
                 }
@@ -522,9 +522,9 @@ fun DayBlock(
                     Text("週${Recurrence.weekdayName(day.dayOfWeek)}", color = Color.White, fontSize = AppText.caption, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
                 }
                 Spacer(Modifier.weight(1f))
-                Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = if (compact) 11.sp else 13.sp,
+                Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = if (compact) AppText.label else AppText.secondary,
                     modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = if (compact) 11.sp else 13.sp,
+                Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = if (compact) AppText.label else AppText.secondary,
                     modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -621,7 +621,7 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
         }
         Column(Modifier.weight(1f)) {
             if (title != null) Text(title, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(accountText, color = gray, fontSize = if (title != null) 14.sp else 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(accountText, color = gray, fontSize = if (title != null) AppText.body else AppText.section, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = AppText.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))

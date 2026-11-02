@@ -51,7 +51,7 @@ fun BudgetMeter(
     val col = budgetColor(ratio)
     val left = cap - after
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val fs = if (compact) 12.sp else 13.sp
+    val fs = if (compact) AppText.caption else AppText.secondary
     Column(modifier, verticalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(name, fontSize = fs, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))

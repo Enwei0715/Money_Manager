@@ -289,7 +289,7 @@ private fun FilterRow(
         if (partial) androidx.compose.material3.TriStateCheckbox(androidx.compose.ui.state.ToggleableState.Indeterminate, { onCheck(true) },
             colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary))
         else Checkbox(checked, onCheck, colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary))
-        Text(name, fontSize = if (indent) 13.sp else 14.sp, maxLines = 1)
+        Text(name, fontSize = if (indent) AppText.secondary else AppText.body, maxLines = 1)
         if (expand != null) Text(
             if (expand.first) " ⌄" else " ›", fontSize = AppText.section, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.clickable(onClick = expand.second).padding(horizontal = 10.dp, vertical = 8.dp),

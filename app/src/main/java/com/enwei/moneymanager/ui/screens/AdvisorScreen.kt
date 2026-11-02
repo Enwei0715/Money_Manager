@@ -10,6 +10,8 @@ import androidx.compose.material.icons.outlined.AddComment
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.foundation.background
@@ -306,7 +308,7 @@ internal fun splitPoints(text: String): List<String> {
 @Composable
 private fun PointList(
     text: String, cites: List<String>, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>,
-    foldKey: String? = null, preview: Int = 3, fontSize: androidx.compose.ui.unit.TextUnit = 13.sp,
+    foldKey: String? = null, preview: Int = 3, fontSize: androidx.compose.ui.unit.TextUnit = AppText.secondary,
 ) {
     val points = remember(text) { splitPoints(text) }
     if (points.isEmpty()) return
@@ -1021,90 +1023,67 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
     var pickList by remember { mutableStateOf<String?>(null) }   // 開啟中的清單：題材／個股／來源
     // 兩個檢視：「重點」（重點新聞＋題材，點題材展開 AI 整理的重點）與「全部新聞」（依日期）。有篩選條件時自動切到全部新聞
     var view by rememberSaveable { mutableStateOf(0) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var filterOpen by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
     var expandedTheme by remember { mutableStateOf<String?>(null) }
     var allThemes by remember { mutableStateOf(false) }
     LaunchedEffect(anyFilter) { if (anyFilter) view = 1 }
     val digestsByTheme = remember(store.digests) { store.digests.values.groupBy { it.theme }.mapValues { (_, l) -> l.sortedByDescending { it.day } } }
     Column(Modifier.fillMaxSize()) {
+        val filterCount = listOf(days != 0, sent != 0, onlyImportant, onlyMine, theme.isNotEmpty(), symbol.isNotEmpty(), source.isNotEmpty(), sort != 0).count { it }
         com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = { Column {
-        // 狀態列：一行看懂資料集狀態，詳細與設定在「詳情」
-        Row(
-            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { infoOpen = true }.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val running = job?.running == true
-            val c = stats.coverage
-            Text(
-                if (running) job?.step.orEmpty()
-                else "${store.items.size} 則" + (c?.takeIf { it.recent > 0 }?.let { " · 重點整理 ${it.digested * 100 / it.recent}%" } ?: "") +
-                    (if (store.lastCollect > 0) " · " + java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(store.lastCollect)) + " 更新" else "") +
-                    (if (!settings.advisorDaily) " · 自動更新關閉" else ""),
-                fontSize = AppText.caption, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                color = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
-            )
-            if (!running) TextButton(enabled = GroqAi.enabled, onClick = { com.enwei.moneymanager.work.ReportJob.startNow(ctx, refreshOnly = true) }) { Text("立即更新", fontSize = AppText.caption) }
-            TextButton(onClick = { infoOpen = true }) { Text("詳情", fontSize = AppText.caption) }
-        }
-        if (job?.running == true) {
-            LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
-            // 新聞頁上方也顯示排程步驟
-            Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 14.dp, vertical = 4.dp)) {
-                PipelineSteps(job?.step.orEmpty(), refreshOnly = job?.refreshOnly == true)
-            }
-        }
-        // 搜尋與篩選固定在最上方：一行搜尋＋一行快速條件（左右滑），題材／個股／來源點開清單複選
-        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            androidx.compose.foundation.text.BasicTextField(
-                query, { query = it; shown = 100 }, singleLine = true,
-                textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier.fillMaxWidth(),
-                decorationBox = { inner ->
-                    Row(
-                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Filled.Search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(8.dp))
-                        Box(Modifier.weight(1f)) {
-                            if (query.isEmpty()) Text("關鍵字、公司、代號（空白分開可多個）", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                            inner()
-                        }
-                        if (anyFilter || sort != 0) Text("清除", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable {
-                            query = ""; days = 0; sent = 0; onlyImportant = false; onlyMine = false; sort = 0; theme = emptySet(); symbol = emptySet(); source = emptySet(); shown = 100
-                        }.padding(start = 8.dp))
-                    }
-                },
-            )
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                @Composable fun chip(on: Boolean, label: String, click: () -> Unit) =
-                    FilterChip(on, { click(); shown = 100 }, label = { Text(label, fontSize = AppText.caption, maxLines = 1) }, modifier = Modifier.height(30.dp))
-                // 時間：點一下依序切換 全部 → 今天 → 3 天 → 7 天
-                chip(days != 0, when (days) { 0 -> "時間"; 1 -> "今天"; else -> "$days 天內" }) { days = when (days) { 0 -> 1; 1 -> 3; 3 -> 7; else -> 0 } }
-                chip(sent == 1, "利多") { sent = if (sent == 1) 0 else 1 }
-                chip(sent == 2, "利空") { sent = if (sent == 2) 0 else 2 }
-                chip(onlyImportant, "重要") { onlyImportant = !onlyImportant }
-                if (mine.isNotEmpty()) chip(onlyMine, "我的持股") { onlyMine = !onlyMine }
-                chip(theme.isNotEmpty(), if (theme.isEmpty()) "題材 ▾" else if (theme.size == 1) theme.first() + " ▾" else "題材 ${theme.size} ▾") { pickList = "題材" }
-                chip(symbol.isNotEmpty(), if (symbol.isEmpty()) "個股 ▾" else if (symbol.size == 1) symbol.first() + " ▾" else "個股 ${symbol.size} ▾") { pickList = "個股" }
-                chip(source.isNotEmpty(), if (source.isEmpty()) "來源 ▾" else if (source.size == 1) source.first() + " ▾" else "來源 ${source.size} ▾") { pickList = "來源" }
-                // 排序：點一下切換
-                chip(sort != 0, listOf("最新", "最重要", "多空最強")[sort] + " ⇅") { sort = (sort + 1) % 3 }
-            }
-            // 重點／全部新聞
-            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
-                listOf("重點", "全部新聞" + (if (filteredOrNull != null) "（${filtered.size}）" else "")).forEachIndexed { i, l ->
+        // 精簡工具列（漸進式揭露）：重點／全部切換＋搜尋、篩選、更多三個圖示；搜尋框與篩選條件點了才展開
+        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
+                listOf("重點", "全部" + (if (filteredOrNull != null) " ${filtered.size}" else "")).forEachIndexed { i, l ->
                     val sel = view == i
                     Box(
                         Modifier.weight(1f).background(if (sel) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
-                            .clickable { view = i }.padding(vertical = 7.dp),
+                            .clickable { view = i }.padding(vertical = 6.dp),
                         contentAlignment = Alignment.Center,
-                    ) { Text(l, fontSize = AppText.secondary, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
+                    ) { Text(l, fontSize = AppText.secondary, maxLines = 1, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
                 }
             }
+            androidx.compose.material3.IconButton(onClick = { searchOpen = !searchOpen }) {
+                Icon(Icons.Filled.Search, "搜尋", tint = if (query.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            androidx.compose.material3.IconButton(onClick = { filterOpen = true }) {
+                androidx.compose.material3.BadgedBox(badge = { if (filterCount > 0) androidx.compose.material3.Badge { Text("$filterCount", fontSize = AppText.badge) } }) {
+                    Icon(androidx.compose.material.icons.Icons.Outlined.Tune, "篩選",
+                        tint = if (filterCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            androidx.compose.material3.IconButton(onClick = { infoOpen = true }) {
+                Icon(androidx.compose.material.icons.Icons.Outlined.Info, "資料集與更新", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
+        // 排程進行中：一條細的階段進度（點了看詳情）
+        if (job?.running == true) Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { infoOpen = true }
+            .padding(start = 14.dp, end = 14.dp, bottom = 6.dp)) {
+            PipelineSteps(job?.step.orEmpty(), refreshOnly = job?.refreshOnly == true)
+        }
+        // 搜尋框：按搜尋圖示才出現
+        if (searchOpen || query.isNotEmpty()) androidx.compose.foundation.text.BasicTextField(
+            query, { query = it; shown = 100 }, singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+            decorationBox = { inner ->
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        if (query.isEmpty()) Text("關鍵字、公司、代號", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        inner()
+                    }
+                    if (query.isNotEmpty()) Text("清除", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { query = ""; shown = 100 }.padding(start = 8.dp))
+                }
+            },
+        )
         } }) {
         // 換條件或換檢視後清單回到最上面
         LaunchedEffect(query, days, sent, onlyImportant, onlyMine, sort, theme, symbol, source, view) { listState.scrollToItem(0) }
@@ -1211,6 +1190,35 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
+        }
+        // 篩選條件（底部面板）：時間、多空、重要、我的持股、題材／個股／來源、排序
+        if (filterOpen) androidx.compose.material3.ModalBottomSheet(onDismissRequest = { filterOpen = false }, containerColor = MaterialTheme.colorScheme.surface) {
+            @Composable fun chip(on: Boolean, label: String, click: () -> Unit) =
+                FilterChip(on, { click(); shown = 100 }, label = { Text(label, fontSize = AppText.caption, maxLines = 1) })
+            @Composable fun group(title: String, body: @Composable () -> Unit) {
+                Text(title, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { body() }
+            }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("篩選新聞", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    if (filterCount > 0) TextButton(onClick = {
+                        days = 0; sent = 0; onlyImportant = false; onlyMine = false; sort = 0; theme = emptySet(); symbol = emptySet(); source = emptySet(); shown = 100
+                    }) { Text("全部清除") }
+                }
+                group("時間") { listOf(0 to "全部", 1 to "今天", 3 to "3 天內", 7 to "7 天內").forEach { (d, l) -> chip(days == d, l) { days = d } } }
+                group("多空") { listOf(0 to "全部", 1 to "利多", 2 to "利空").forEach { (v, l) -> chip(sent == v, l) { sent = v } } }
+                group("範圍") {
+                    chip(onlyImportant, "只看重要") { onlyImportant = !onlyImportant }
+                    if (mine.isNotEmpty()) chip(onlyMine, "我的持股") { onlyMine = !onlyMine }
+                }
+                group("分類") {
+                    chip(theme.isNotEmpty(), if (theme.isEmpty()) "題材 ▾" else "題材 ${theme.size} ▾") { pickList = "題材" }
+                    chip(symbol.isNotEmpty(), if (symbol.isEmpty()) "個股 ▾" else "個股 ${symbol.size} ▾") { pickList = "個股" }
+                    chip(source.isNotEmpty(), if (source.isEmpty()) "來源 ▾" else "來源 ${source.size} ▾") { pickList = "來源" }
+                }
+                group("排序") { listOf("最新", "最重要", "多空最強").forEachIndexed { i, l -> chip(sort == i, l) { sort = i } } }
+            }
         }
         // 資料集詳情與設定（自動更新開關、更新、刪除、排程狀態）
         if (infoOpen) androidx.compose.material3.ModalBottomSheet(onDismissRequest = { infoOpen = false }, containerColor = MaterialTheme.colorScheme.surface) {
@@ -1618,7 +1626,7 @@ private fun Section(
 @Composable
 fun CitedText(
     text: String, ids: List<String>, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>,
-    fontSize: androidx.compose.ui.unit.TextUnit = 14.sp, color: Color = Color.Unspecified, modifier: Modifier = Modifier,
+    fontSize: androidx.compose.ui.unit.TextUnit = AppText.body, color: Color = Color.Unspecified, modifier: Modifier = Modifier,
 ) {
     val link = MaterialTheme.colorScheme.primary
     val annotated = remember(text, ids, System.identityHashCode(newsById)) {
