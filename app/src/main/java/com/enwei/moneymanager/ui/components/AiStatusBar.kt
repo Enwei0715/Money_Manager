@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
@@ -56,7 +57,7 @@ private fun hhmm(ms: Long) = DateTimeFormatter.ofPattern("HH:mm").format(Instant
  * 新聞資料集的區塊完成度，以及限流或連續失敗暫停的原因。沒有事情時不佔空間。
  */
 @Composable
-fun AiStatusBar(nav: NavController, onOpen: (String) -> Unit = { nav.navigate(it) }) {
+fun AiStatusBar(nav: NavController, padNav: Boolean = false, onOpen: (String) -> Unit = { nav.navigate(it) }) {
     val report by ReportJob.state.collectAsStateWithLifecycle()
     val chat by ChatJob.state.collectAsStateWithLifecycle()
     val review by AiBackgroundWork.reviewProgress.collectAsStateWithLifecycle()
@@ -112,7 +113,8 @@ fun AiStatusBar(nav: NavController, onOpen: (String) -> Unit = { nav.navigate(it
         }
     }
     if (lines.isEmpty()) return
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh)
+        .then(if (padNav) Modifier.navigationBarsPadding() else Modifier)) {
         lines.forEach { l -> Line(l, onOpen) }
     }
 }

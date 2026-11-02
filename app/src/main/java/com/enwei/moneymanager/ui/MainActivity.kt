@@ -18,6 +18,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -283,6 +284,9 @@ private fun AppScaffold(nav: NavHostController) {
                 // AI 狀態列：正在進行的 AI 工作、進度與暫停原因（沒有事情時不佔空間）
                 com.enwei.moneymanager.ui.components.AiStatusBar(nav) { r -> nav.openRoute(r) }
                 BottomTabs(tabShown) { route -> nav.openTab(route) }
+            } else if (!imeOpen) {
+                // 其他畫面（個股、設定…）也保留 AI 狀態列，看得到報告還在跑，不會以為被關掉
+                com.enwei.moneymanager.ui.components.AiStatusBar(nav, padNav = true) { r -> nav.openRoute(r) }
             }
         },
     ) { inner ->
@@ -293,8 +297,10 @@ private fun AppScaffold(nav: NavHostController) {
             exitTransition = { fadeOut(tween(80)) },
             popEnterTransition = { fadeIn(tween(120)) },
             popExitTransition = { fadeOut(tween(80)) },
-            modifier = Modifier.padding(bottom = if (showBar) inner.calculateBottomPadding() else 0.dp)
-                .consumeWindowInsets(WindowInsets.navigationBars.only(if (showBar) WindowInsetsSides.Bottom else WindowInsetsSides.Top))) {
+            modifier = Modifier.padding(bottom = inner.calculateBottomPadding())
+                .consumeWindowInsets(if (showBar) WindowInsets.navigationBars.only(WindowInsetsSides.Bottom) else WindowInsets.navigationBars.only(WindowInsetsSides.Top))
+                // 只有狀態列時：狀態列已含導覽列高度，內容不再重複留導覽列的空白
+                .then(if (!showBar) Modifier.consumeWindowInsets(PaddingValues(bottom = inner.calculateBottomPadding())) else Modifier)) {
             composable("txns") { TransactionsTab(nav, initialTab = if (startScreen == 1) 1 else 0) }
             composable("stats") { StatsTab(nav) }
             composable("accounts") { AccountsTab(nav, showBack = nav.previousBackStackEntry?.destination?.route.let { it != null && tabs.none { t -> t.route == it } }) }
