@@ -130,7 +130,8 @@ private fun Line(l: AiLine, onOpen: (String) -> Unit) {
             else Text("!", color = if (l.warn) warn else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             Spacer(Modifier.width(8.dp))
             Text(
-                l.text, Modifier.weight(1f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                // 暫停或錯誤時最多兩行，原因才看得到
+                l.text, Modifier.weight(1f), fontSize = 12.sp, maxLines = if (l.running) 1 else 2, overflow = TextOverflow.Ellipsis,
                 color = if (l.warn) warn else MaterialTheme.colorScheme.onSurface,
             )
             l.action?.let { (label, act) ->

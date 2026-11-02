@@ -421,8 +421,15 @@ suspend fun Repository.refreshNews(
     // 持股、觀察清單、報告推薦的個股都另外查新聞
     val watched = settings.value.watchlist
     val extra = (holdings.map { "${it.symbol} ${it.name.orEmpty()}".trim() } + watched + watch).distinct().take(25)
-    onStep("蒐集新聞…")
-    val added = ds.collect(extra)
+    // 接續上一輪（30 分鐘內剛蒐集過）：不重新蒐集，直接從還沒做完的地方繼續
+    val last = ds.load().lastCollect
+    val added = if (System.currentTimeMillis() - last < 30 * 60_000L) {
+        onStep("接續上一輪（沿用 ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(last))} 蒐集的新聞）…")
+        0
+    } else {
+        onStep("蒐集新聞…")
+        ds.collect(extra)
+    }
     com.enwei.moneymanager.net.InvestData.lastHeadlineError?.let(onStep)
     if (com.enwei.moneymanager.net.GroqAi.enabled) {
         val stop = { budget?.shouldStop() == true }

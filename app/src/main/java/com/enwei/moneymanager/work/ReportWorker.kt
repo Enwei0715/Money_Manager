@@ -169,8 +169,11 @@ object ReportJob {
                 val until = GroqAi.coolingUntil()?.takeIf { it > System.currentTimeMillis() }
                 val hm = until?.let { java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(it)) }
                 val progressed = cov2.digested > coverage.digested || cov2.pending < coverage.pending
-                val msg = "還有 ${cov2.pending} 則待標註、${cov2.recent - cov2.digested} 則待整理；" +
-                    (if (hm != null) "AI 額度暫停到 $hm，之後自動接續" else if (progressed) "接續中" else "AI 這一輪沒有進展（${GroqAi.lastError ?: "請稍後再試"}）")
+                // 進度用全部資料計算（不是只算這一輪），並寫出 AI 回覆的真正原因
+                val doneN = cov2.digested
+                val msg = "已整理 $doneN/${cov2.recent} 則（待標註 ${cov2.pending}、待整理 ${cov2.recent - cov2.digested}）；" +
+                    (if (hm != null) "AI 暫停到 $hm 後自動接續" else if (progressed) "接續中" else "AI 這一輪沒有進展") +
+                    (GroqAi.lastError?.let { "。原因：$it" } ?: "")
                 state.value = State(msg, start, running = false, refreshOnly = refreshOnly, background = !userInitiated, paused = until != null || progressed,
                     error = if (until == null && !progressed) msg else null)
                 if (until != null) resumeAt(context, until + 5_000L, refreshOnly, userInitiated)

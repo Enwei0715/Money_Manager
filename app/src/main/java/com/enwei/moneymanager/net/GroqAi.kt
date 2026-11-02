@@ -147,6 +147,25 @@ object GroqAi {
     /** 最近一次被限流時，伺服器建議等待的時間（Retry-After 標頭或 Gemini 的 retryDelay） */
     @Volatile private var retryAfterMs: Long? = null
 
+    /**
+     * 把 429 的回覆整理成看得懂的原因：哪個模型、哪一種上限（每分鐘／每日的請求數或 token 數）、多久後恢復。
+     * Groq 例："Rate limit reached for model `x` ... on tokens per minute (TPM): Limit 6000, Used 5800, Requested 900. Please try again in 7.5s"
+     */
+    private fun describeLimit(provider: String, model: String, body: String): String {
+        val kind = when {
+            Regex("tokens per day|TPD", RegexOption.IGNORE_CASE).containsMatchIn(body) -> "每日 token 上限"
+            Regex("requests per day|RPD", RegexOption.IGNORE_CASE).containsMatchIn(body) -> "每日請求次數上限"
+            Regex("tokens per minute|TPM", RegexOption.IGNORE_CASE).containsMatchIn(body) -> "每分鐘 token 上限"
+            Regex("requests per minute|RPM", RegexOption.IGNORE_CASE).containsMatchIn(body) -> "每分鐘請求次數上限"
+            body.contains("quota", true) || body.contains("RESOURCE_EXHAUSTED") -> "免費額度"
+            else -> "使用額度"
+        }
+        val limit = Regex("Limit\\s*(\\d+)").find(body)?.groupValues?.get(1)?.let { "，上限 $it" }.orEmpty()
+        val wait = Regex("try again in ((?:\\d+h)?(?:\\d+m)?[\\d.]+s)").find(body)?.groupValues?.get(1)?.let { "，約 $it 後恢復" }.orEmpty()
+        val daily = kind.startsWith("每日")
+        return "$provider「$model」達到$kind$limit（429）$wait" + if (daily && provider == "Groq") "；今天的額度用完了，可在 AI 設定加入 Gemini 金鑰分擔" else ""
+    }
+
     private fun parseRetryAfter(header: String?, body: String): Long? {
         header?.trim()?.toDoubleOrNull()?.let { return (it * 1000).toLong() }
         // Gemini：「"retryDelay": "31s"」；Groq 文字：「Please try again in 1m2.5s」
@@ -233,7 +252,7 @@ object GroqAi {
                         400 -> if (text.contains("API_KEY") || text.contains("API key")) "Gemini 金鑰無效" else "Gemini 請求錯誤：${text.take(140)}"
                         401, 403 -> "Gemini 金鑰無效或沒有權限（${resp.code}）"
                         404 -> "Gemini 模型「$model」無法使用（404）"
-                        429 -> "超過 Gemini 的免費額度（429），改用 Groq"
+                        429 -> describeLimit("Gemini", model, text) + "，改用 Groq"
                         else -> "Gemini HTTP ${resp.code}：${text.take(140)}"
                     }
                     return@use null
@@ -298,7 +317,7 @@ object GroqAi {
                     if (resp.code == 429 || resp.code == 503) retryAfterMs = parseRetryAfter(resp.header("Retry-After"), text)
                     lastError = when (resp.code) {
                         401 -> "API 金鑰無效（401）"
-                        429 -> "超過 Groq 的使用額度（429），稍後會自動恢復"
+                        429 -> describeLimit("Groq", model, text)
                         404 -> "模型「$model」無法使用（404）"
                         else -> "HTTP ${resp.code}：${text.take(160)}"
                     }
