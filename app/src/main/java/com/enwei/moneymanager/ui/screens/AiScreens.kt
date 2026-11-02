@@ -4,6 +4,8 @@ import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -63,7 +65,10 @@ fun AiSettingsScreen(nav: NavController) {
                         Text("需要至少一個金鑰", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                 }
             }
-            if (s.aiEnabled) {
+            var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+            if (s.aiEnabled) com.enwei.moneymanager.ui.components.SubTabs(listOf("金鑰與模型", "自動分工"), tab) { tab = it }
+            if (s.aiEnabled && tab == 1) RouteOverview()
+            if (s.aiEnabled && tab == 0) {
 
             // Groq
             ProviderCard(
@@ -83,6 +88,14 @@ fun AiSettingsScreen(nav: NavController) {
                 ModelField("輕量模型（新聞標註、錢包畫面）", s.geminiLiteModel) { v -> repo.settings.update { it.copy(geminiLiteModel = v) } }
             }
 
+            // NVIDIA NIM：不限每日次數，背景大量工作的主力
+            ProviderCard(
+                Provider.NVIDIA, "不限每日次數・每分鐘約 40 次・金鑰到 build.nvidia.com 申請",
+                s.nvidiaKey, { k -> repo.settings.update { it.copy(nvidiaKey = k.trim()) } },
+            ) {
+                ModelField("優先模型（空白＝依工作自動挑）", s.nvidiaModel) { v -> repo.settings.update { it.copy(nvidiaModel = v.trim()) } }
+            }
+
             // OpenRouter：免費模型（:free）當作額外備援
             ProviderCard(
                 Provider.OPENROUTER, "免費模型備援，金鑰到 openrouter.ai 申請",
@@ -96,18 +109,8 @@ fun AiSettingsScreen(nav: NavController) {
                 )
             }
 
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("模型自動分工", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "App 會依工作類型與資料量選擇 Groq、Gemini 或 OpenRouter，並在額度不足或模型無回應時改用其他可用模型。",
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
             Text(
-                "金鑰只存在這支手機、不放進備份。Gemini 免費方案可能會用送出的內容改進模型。",
+                "金鑰只存在這支手機、不放進備份",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             }
@@ -159,4 +162,56 @@ private fun ProviderCard(
 private fun ModelField(label: String, value: String, onChange: (String) -> Unit) {
     var v by remember(value) { mutableStateOf(value) }
     OutlinedTextField(v, { v = it; onChange(it.trim()) }, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+}
+
+
+/** 每項 AI 工作實際的模型順序（第一個是主力，後面依序備援；暫停中的模型淡色）。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun RouteOverview() {
+    val s by repo.settings.flow.collectAsStateWithLifecycle()
+    val now = System.currentTimeMillis()
+    // 大量資料的工作用長輸入的順序，其他用短輸入的順序
+    val longTasks = setOf(GroqAi.AiTask.NEWS_TAG, GroqAi.AiTask.DIGEST, GroqAi.AiTask.WALLET,
+        GroqAi.AiTask.REVIEW, GroqAi.AiTask.REPORT, GroqAi.AiTask.CHAT)
+    fun short(m: String) = m.removePrefix(GroqAi.NV).substringAfterLast('/').removeSuffix(":free")
+    fun color(p: Provider) = when (p) {
+        Provider.GROQ -> androidx.compose.ui.graphics.Color(0xFFF0605A)
+        Provider.GEMINI -> androidx.compose.ui.graphics.Color(0xFF3C82E6)
+        Provider.NVIDIA -> androidx.compose.ui.graphics.Color(0xFF76B900)
+        Provider.OPENROUTER -> androidx.compose.ui.graphics.Color(0xFF7E57C2)
+    }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Provider.entries.forEach { p ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.foundation.layout.Box(Modifier.padding(end = 4.dp).size(8.dp)
+                            .background(color(p), androidx.compose.foundation.shape.CircleShape))
+                        Text(p.label, fontSize = 12.sp)
+                    }
+                }
+            }
+            GroqAi.AiTask.entries.forEach { t ->
+                val rs = GroqAi.routes(t, if (t in longTasks) Int.MAX_VALUE else 0)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(t.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    if (rs.isEmpty()) Text("沒有可用的模型", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        rs.take(5).forEachIndexed { i, r ->
+                            val cooling = com.enwei.moneymanager.work.AiHealth.cooldownUntil(r.model) > now
+                            androidx.compose.material3.Surface(
+                                color = color(r.provider).copy(alpha = if (cooling) 0.06f else if (i == 0) 0.28f else 0.14f),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                            ) {
+                                Text(short(r.model), fontSize = 11.sp, maxLines = 1,
+                                    color = if (cooling) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

@@ -337,6 +337,10 @@ data class AppSettings(
     val openRouterKey: String = "",
     /** 優先使用的 OpenRouter 免費模型（空白＝自動挑） */
     val openRouterModel: String = "",
+    /** NVIDIA NIM 金鑰（nvapi-…）：免費、不限每日次數，作為背景大量工作的主力 */
+    val nvidiaKey: String = "",
+    /** 優先使用的 NVIDIA 模型（空白＝依工作自動挑） */
+    val nvidiaModel: String = "",
     val geminiModel: String = "gemini-flash-latest",
     val geminiLiteModel: String = "gemini-flash-lite-latest",
     /** 舊版 AI 手動分配欄位，保留備份相容；目前一律自動分工。 */
@@ -542,6 +546,8 @@ class SettingsStore(context: Context) {
         geminiKey = prefs.getString("geminiKey", "")!!,
         openRouterKey = prefs.getString("openRouterKey", "")!!,
         openRouterModel = prefs.getString("openRouterModel", "")!!,
+        nvidiaKey = prefs.getString("nvidiaKey", "")!!,
+        nvidiaModel = prefs.getString("nvidiaModel", "")!!,
         aiAutoRoute = prefs.getBoolean("aiAutoRoute", true),
         geminiModel = prefs.getString("geminiModel", "gemini-flash-latest")!!,
         geminiLiteModel = prefs.getString("geminiLiteModel", "gemini-flash-lite-latest")!!,
@@ -604,7 +610,7 @@ class SettingsStore(context: Context) {
     @Synchronized
     /** 匯出所有設定（完整備份用）；GitHub Token 屬於憑證，不放進備份檔。 */
     fun exportRaw(): Map<String, kotlinx.serialization.json.JsonElement> = prefs.all.filterKeys {
-        it !in setOf("githubToken", "groqKey", "geminiKey", "openRouterKey", "autoBackupUri", "lastAutoBackup", "lastAutoBackupError")
+        it !in setOf("githubToken", "groqKey", "geminiKey", "openRouterKey", "nvidiaKey", "autoBackupUri", "lastAutoBackup", "lastAutoBackupError")
     }.mapNotNull { (k, v) ->
         val e: kotlinx.serialization.json.JsonElement = when (v) {
             is Boolean -> kotlinx.serialization.json.buildJsonObject { put("t", "b"); put("v", v) }
@@ -627,6 +633,7 @@ class SettingsStore(context: Context) {
         val groq = prefs.getString("groqKey", "")
         val gemini = prefs.getString("geminiKey", "")
         val openRouter = prefs.getString("openRouterKey", "")
+        val nvidia = prefs.getString("nvidiaKey", "")
         val keepUri = prefs.getString("autoBackupUri", "")
         val ed = prefs.edit().clear()
         map.forEach { (k, e) ->
@@ -643,7 +650,7 @@ class SettingsStore(context: Context) {
                 "ss" -> (v as? kotlinx.serialization.json.JsonArray)?.let { arr -> ed.putStringSet(k, arr.map { (it as kotlinx.serialization.json.JsonPrimitive).content }.toSet()) }
             }
         }
-        ed.putString("githubToken", token).putString("groqKey", groq).putString("geminiKey", gemini).putString("openRouterKey", openRouter).putString("autoBackupUri", keepUri).commit()
+        ed.putString("githubToken", token).putString("groqKey", groq).putString("geminiKey", gemini).putString("openRouterKey", openRouter).putString("nvidiaKey", nvidia).putString("autoBackupUri", keepUri).commit()
         state.value = read()
     }
 
@@ -726,6 +733,8 @@ class SettingsStore(context: Context) {
             .putString("geminiKey", s.geminiKey)
             .putString("openRouterKey", s.openRouterKey)
             .putString("openRouterModel", s.openRouterModel)
+            .putString("nvidiaKey", s.nvidiaKey)
+            .putString("nvidiaModel", s.nvidiaModel)
             .putBoolean("aiAutoRoute", s.aiAutoRoute)
             .putString("geminiModel", s.geminiModel)
             .putString("geminiLiteModel", s.geminiLiteModel)
@@ -846,4 +855,4 @@ object HolidayCache {
 
 
 /** 至少填了一家 AI 的金鑰（Groq、Gemini 或 OpenRouter）。 */
-val AppSettings.hasAiKey: Boolean get() = groqKey.isNotBlank() || geminiKey.isNotBlank() || openRouterKey.isNotBlank()
+val AppSettings.hasAiKey: Boolean get() = groqKey.isNotBlank() || geminiKey.isNotBlank() || openRouterKey.isNotBlank() || nvidiaKey.isNotBlank()

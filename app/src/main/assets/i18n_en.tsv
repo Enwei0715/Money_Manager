@@ -2552,3 +2552,9 @@ AI 尚未設定	AI not set up
 成交折數	Trade discount
 月退後折數	Discount after rebate
 合併：保留現有資料　取代：清空後匯入（股票保留）	Merge: keep existing data  Replace: clear then import (stocks kept)
+金鑰與模型	Keys & models
+自動分工	Routing
+不限每日次數・每分鐘約 40 次・金鑰到 build.nvidia.com 申請	No daily cap, ~40 per minute; get a key at build.nvidia.com
+優先模型（空白＝依工作自動挑）	Preferred model (blank = pick by task)
+沒有可用的模型	No model available
+金鑰只存在這支手機、不放進備份	Keys stay on this phone and are not backed up
