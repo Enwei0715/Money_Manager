@@ -795,11 +795,15 @@ private fun CalendarView(
         ModalBottomSheet(onDismissRequest = { sheetDay = null }, containerColor = MaterialTheme.colorScheme.surface) {
             // 一列標題：日期（假日名稱）＋「備註」「記一筆」；信用卡日程與颱風假放成一排小標籤，留白少
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${day.year}/${day.monthValue}/${day.dayOfMonth}（${Recurrence.weekdayName(day.dayOfWeek)}）", fontSize = 16.sp)
-                com.enwei.moneymanager.core.TaiwanHolidays.label(day)?.let { Text("  $it", fontSize = 13.sp, color = SundayColor) }
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = { sheetDay = null; onMemo(Memo(0, day.toMillis(), "")) }) { Text("＋備註", fontSize = 13.sp) }
-                TextButton(onClick = { sheetDay = null; nav.navigate("txn/0?date=${day.toEpochDay()}") }) { Text("＋記一筆", fontSize = 13.sp) }
+                // 日期在上、假日名稱在下（名稱很長時不會把按鈕擠掉）
+                Column(Modifier.weight(1f)) {
+                    Text("${day.year}/${day.monthValue}/${day.dayOfMonth}（${Recurrence.weekdayName(day.dayOfWeek)}）", fontSize = 16.sp, maxLines = 1)
+                    com.enwei.moneymanager.core.TaiwanHolidays.label(day)?.let {
+                        Text(it, fontSize = 12.sp, color = SundayColor, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
+                }
+                TextButton(onClick = { sheetDay = null; onMemo(Memo(0, day.toMillis(), "")) }) { Text("＋備註", fontSize = 13.sp, maxLines = 1, softWrap = false) }
+                TextButton(onClick = { sheetDay = null; nav.navigate("txn/0?date=${day.toEpochDay()}") }) { Text("＋記一筆", fontSize = 13.sp, maxLines = 1, softWrap = false) }
             }
             val dayCardEvents = cardEvents[day].orEmpty()
             val weekday = day.dayOfWeek != DayOfWeek.SATURDAY && day.dayOfWeek != DayOfWeek.SUNDAY
