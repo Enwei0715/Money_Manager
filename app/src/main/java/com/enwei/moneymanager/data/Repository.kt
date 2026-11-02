@@ -854,7 +854,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     /** 沒網路時排隊的通知：恢復網路後重新判讀（結果放「待確認」並通知）。 */
     suspend fun retryOfflineNotifications() {
-        if (!com.enwei.moneymanager.net.GroqAi.enabled) return
+        if (!settings.value.featureNotif || !com.enwei.moneymanager.net.GroqAi.enabled) return
         if (com.enwei.moneymanager.work.AiHealth.networkProblem(background = false) != null) return
         val since = System.currentTimeMillis() - 48L * 3600 * 1000
         val queued = db.notificationLog().all().filter { it.result == "OFFLINE" && it.postedAt >= since }.sortedBy { it.postedAt }
@@ -931,7 +931,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             if (enabled) log.insert(logAs("PROMO"))
             return null
         }
-        val fill = NotificationParser.parseStockFill(title, text)
+        // 股票功能關閉：成交通知不建立持股
+        val fill = if (s.featureStocks) NotificationParser.parseStockFill(title, text) else null
         var parsed = if (fill != null) null else aiOverride ?: learned?.parse(title, text) ?: NotificationParser.parse(title, text)
         // 規則看不懂、但來自已啟用的銀行／支付 App：請 AI 判讀（結果一律放「待確認」）
         var aiParsed = aiOverride != null

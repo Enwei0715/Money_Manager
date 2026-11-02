@@ -68,6 +68,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         }
 
         suspend fun refreshQuotes(repo: Repository) {
+            // 股票功能關閉：不抓報價
+            if (!repo.settings.value.featureStocks) return
             // 持有過的股票＋觀察清單
             val symbols = (repo.allTrades().map { it.market to it.symbol.uppercase() } +
                 repo.settings.value.watchlist.map { com.enwei.moneymanager.core.marketOf(it) to it.uppercase() }).distinct()
@@ -199,7 +201,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         suspend fun refreshMarket(repo: Repository) {
             val fx = runCatching { refreshFx(repo) }
             val q = runCatching { refreshQuotes(repo) }
-            runCatching { refreshDividends(repo) }
+            if (repo.settings.value.featureStocks) runCatching { refreshDividends(repo) }
             runCatching { refreshHolidays(repo) }
             fx.getOrThrow(); q.getOrThrow()
         }

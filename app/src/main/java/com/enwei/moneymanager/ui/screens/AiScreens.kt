@@ -51,14 +51,18 @@ fun AiSettingsScreen(nav: NavController) {
             AiAllTasksProgress()
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SwitchRow("啟用 AI", "判讀通知、整理名稱與分類、檢討與股票分析", s.aiEnabled, s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()) { v ->
+                    // 設定像樹狀：上層「啟用 AI」關閉時，下面的設定全部隱藏也不生效
+                    SwitchRow("啟用 AI", "判讀通知、整理名稱與分類、檢討與股票分析", s.aiEnabled, true) { v ->
                         repo.settings.update { it.copy(aiEnabled = v) }
                     }
-                    SwitchRow("AI 自動整理", "自動合併重複記的同一筆；確認 AI 判讀的通知後自動學會格式", s.aiAutoTidy, s.aiEnabled) { v ->
+                    if (s.aiEnabled) SwitchRow("AI 自動整理", "自動合併重複記的同一筆；確認 AI 判讀的通知後自動學會格式", s.aiAutoTidy, true) { v ->
                         repo.settings.update { it.copy(aiAutoTidy = v) }
                     }
+                    if (s.aiEnabled && s.groqKey.isBlank() && s.geminiKey.isBlank())
+                        Text("請在下方填入至少一個金鑰，AI 才會開始運作。", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                 }
             }
+            if (s.aiEnabled) {
 
             // Groq
             ProviderCard(
@@ -92,6 +96,7 @@ fun AiSettingsScreen(nav: NavController) {
                 "金鑰只存在這支手機、不放進備份。Gemini 免費方案可能會用送出的內容改進模型。",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            }
         }
     }
 }
