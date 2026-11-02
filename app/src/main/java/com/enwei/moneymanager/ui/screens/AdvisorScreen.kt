@@ -182,35 +182,35 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     }
     val fmt = java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        // 標題列：報告時間與新聞數在左，歷史、分享、重新產生用圖示放右邊（一行）
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
                 Text(
                     r?.let {
                         val today = java.time.Instant.ofEpochMilli(it.createdAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate() == java.time.LocalDate.now()
                         (if (old) "歷史報告 · " else if (today) "今日報告 · " else "報告 · ") + fmt.format(java.util.Date(it.createdAt))
                     } ?: "還沒有報告",
-                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                 )
-                if (GroqAi.enabled && !old) OutlinedButton(enabled = job?.running != true && reportWork?.running != true, onClick = {
-                    com.enwei.moneymanager.work.ReportJob.startNow(ctx)
-                }) { Text(if (job?.running == true) "產生中…" else if (r == null) "產生報告" else "重新產生") }
+                Text(r?.let { "讀了 ${it.newsCount} 則新聞" } ?: "資料集 $recentCount 則新聞", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(
-                r?.let { "讀了 ${it.newsCount} 則新聞" } ?: "資料集 $recentCount 則新聞",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val count = store.history.size + if (store.report != null) 1 else 0
-                if (count > 0) TextButton(onClick = { showHistory = true }) { Text("報告歷史（$count）") }
-                if (old) TextButton(onClick = { viewing = null }) { Text("回到最新報告") }
-                // 分享報告（純文字，可以傳到 LINE 或存進筆記）
-                if (r != null) TextButton(onClick = {
-                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
-                        .putExtra(android.content.Intent.EXTRA_TEXT, reportText(r))
-                    ctx.startActivity(android.content.Intent.createChooser(send, null))
-                }) { Text("分享") }
+            val count = store.history.size + if (store.report != null) 1 else 0
+            if (count > 1) androidx.compose.material3.IconButton(onClick = { showHistory = true }) {
+                androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("$count", fontSize = 9.sp) } }) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.History, "報告歷史")
+                }
             }
+            if (r != null) androidx.compose.material3.IconButton(onClick = {
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(android.content.Intent.EXTRA_TEXT, reportText(r))
+                ctx.startActivity(android.content.Intent.createChooser(send, null))
+            }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Share, "分享") }
+            if (GroqAi.enabled && !old) androidx.compose.material3.IconButton(
+                enabled = job?.running != true && reportWork?.running != true,
+                onClick = { com.enwei.moneymanager.work.ReportJob.startNow(ctx) },
+            ) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Refresh, if (r == null) "產生報告" else "重新產生") }
         }
+        if (old) TextButton(onClick = { viewing = null }) { Text("回到最新報告") }
         // 背景執行中：實際步驟與耗時（離開畫面或 App 也會繼續）
         JobProgress(job, reportWork)
         if (!GroqAi.enabled) Row(verticalAlignment = Alignment.CenterVertically) {
@@ -559,8 +559,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     // 回到對話時停在上次看的位置，不會每次都被捲到最底
     // 位置用「畫面最上方那則訊息」記住（重開 App 也記得）：圖表、K 線晚一點載入改變高度也不會跑掉
     val chatPrefs = remember { MoneyApp.instance.getSharedPreferences("chat_scroll", android.content.Context.MODE_PRIVATE) }
-    val list = rememberLazyListState()
-    var restored by remember { mutableStateOf(false) }
+    val list = com.enwei.moneymanager.work.ChatJob.listState
     val latestChat by androidx.compose.runtime.rememberUpdatedState(store.chat)
     androidx.compose.runtime.DisposableEffect(Unit) {
         com.enwei.moneymanager.work.ChatJob.visible = true
@@ -572,8 +571,9 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
         }
     }
     // 上萬則新聞的整理在背景執行緒做，畫面不卡
-    val newsById by androidx.compose.runtime.produceState(emptyMap<String, com.enwei.moneymanager.data.NewsItem>(), System.identityHashCode(store)) {
+    val newsById by androidx.compose.runtime.produceState(com.enwei.moneymanager.work.ChatJob.newsCache, System.identityHashCode(store)) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { store.items.associateBy { it.id } }
+        com.enwei.moneymanager.work.ChatJob.newsCache = value
     }
     fun send(q: String) {
         if (q.isBlank() || busy) return
@@ -586,17 +586,21 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     LaunchedEffect(last) {
         if (last == null) return@LaunchedEffect
         val n = store.chat.size
-        if (!restored) {
-            restored = true
+        val job = com.enwei.moneymanager.work.ChatJob
+        // 同一次開 App：捲動狀態一直保留，只有出現新訊息才捲
+        if (job.restoredOnce) {
+            if (last != job.lastShown) { job.lastShown = last; list.animateScrollToItem(n) }
+            return@LaunchedEffect
+        }
+        run {
+            job.restoredOnce = true
+            job.lastShown = last
             // 第一次進來：沒有新訊息就回到上次看的那則；有新回覆就捲到新回覆的開頭
             val seen = chatPrefs.getLong("seen", -1)
             val idx = chatPrefs.getString("key", null)?.let { k -> store.chat.indexOfFirst { "c${it.time}${it.fromUser}" == k } } ?: -1
             if (last == seen && idx >= 0) list.scrollToItem(idx + 1, chatPrefs.getInt("offset", 0))
             else list.scrollToItem(n)
-            return@LaunchedEffect
         }
-        // 對話中出現新訊息：捲到那則的開頭（長回覆從頭讀）
-        list.animateScrollToItem(n)
     }
     val canDown by remember { androidx.compose.runtime.derivedStateOf { list.canScrollForward } }
     Column(Modifier.fillMaxSize().imePadding()) {
@@ -869,21 +873,20 @@ private fun JobProgress(
                 kotlinx.coroutines.delay(1000)
             }
         }
-        // 排程的每個步驟：做完 ✓、進行中 ●、還沒到 ○
-        PipelineSteps(step, refreshOnly = job?.refreshOnly == true)
-        Text(step, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-        if (done != null && total != null && total > 0) {
-            LinearProgressIndicator(progress = { (done.toFloat() / total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-        } else LinearProgressIndicator(Modifier.fillMaxWidth())
-        Text(
-            when {
-                startedAt > 0 -> "已執行 ${com.enwei.moneymanager.work.ReportJob.formatDuration(now - startedAt)}；離開畫面或 App 後仍會繼續。"
-                step == "等待其他 AI 工作完成…" -> "前面還有 AI 工作；完成後會自動接續。"
-                else -> "等待網路或背景排程。"
-            },
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        // 一張小卡：階段進度條＋一行目前步驟（批次、已執行時間）
+        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PipelineSteps(step, refreshOnly = job?.refreshOnly == true)
+                Text(
+                    listOfNotNull(
+                        step.removeSuffix("…"),
+                        if (done != null && total != null && total > 0 && step.contains("$done/").not()) "$done/$total" else null,
+                        if (startedAt > 0) "已執行 ${com.enwei.moneymanager.work.ReportJob.formatDuration(now - startedAt)}" else null,
+                    ).joinToString("・"),
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     } else {
         val error = job?.error
         error?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
@@ -1448,18 +1451,20 @@ private fun GuardRow(h: com.enwei.moneymanager.data.HoldingPlan, nav: NavControl
     // 預設只看重點（建議動作、多賺股數與停利價），點一下展開完整數字
     var open by rememberSaveable(h.symbol) { mutableStateOf(g?.triggered == true) }
     Column(Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // 第一行：名稱（不被擠成直排）＋展開；第二行：紀律動作標籤
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${h.symbol} ${h.name.orEmpty()}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            if (g != null) Surface(
-                color = if (g.triggered) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(4.dp),
-            ) {
-                Text(
-                    (if (g.triggered) g.action.label.substringBefore('：') + "：賣 ${g.sellShares.toLong()} 股" else g.action.label.substringBefore('，')),
-                    fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-            }
+            Text("${h.symbol} ${h.name.orEmpty()}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             com.enwei.moneymanager.ui.components.FoldToggle(open, modifier = Modifier.padding(start = 6.dp))
+        }
+        if (g != null) Surface(
+            color = if (g.triggered) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+            shape = RoundedCornerShape(4.dp),
+        ) {
+            Text(
+                (if (g.triggered) g.action.label.substringBefore('：') + "：賣 ${g.sellShares.toLong()} 股" else g.action.label.substringBefore('，')),
+                fontSize = 12.sp, maxLines = 2, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            )
         }
         if (gi == null || g == null) { Text("讀不到現價", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
         Text(
@@ -1894,12 +1899,12 @@ private fun ThemeBars(rows: List<Pair<com.enwei.moneymanager.data.TopicStat, Lis
 /** 今日報告裡 AI 對這檔的動作。 */
 @Composable
 private fun AiHoldLine(a: com.enwei.moneymanager.data.AdvisorHolding) {
-    Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(bottom = 4.dp)) {
+    // AI 動作在上、理由在下（不擠在同一行）
+    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
             Text("AI：${a.action}", fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
         }
-        Text(com.enwei.moneymanager.data.stripCites(a.reason), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp, top = 2.dp))
+        Text(com.enwei.moneymanager.data.stripCites(a.reason), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

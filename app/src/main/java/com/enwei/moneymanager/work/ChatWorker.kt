@@ -27,6 +27,14 @@ object ChatJob {
     var scrollOffset = 0
     var seenLast = -1L
 
+    /** 對話清單的捲動狀態放在這裡（不隨畫面消失）：切到其他分頁再回來，位置完全不變 */
+    val listState = androidx.compose.foundation.lazy.LazyListState()
+    /** 這次開 App 是否已從上次存的位置還原過、目前看到的最後一則訊息時間 */
+    var restoredOnce = false
+    var lastShown = 0L
+    /** 對話引用的新聞（id → 新聞），切回對話時先用這份，不必等重新整理（避免訊息高度改變而跳動） */
+    @Volatile var newsCache: Map<String, com.enwei.moneymanager.data.NewsItem> = emptyMap()
+
     /** 進行中的回覆（App 的 coroutine，不經過 WorkManager 排程，送出就立刻開始） */
     @Volatile private var current: kotlinx.coroutines.Job? = null
 
