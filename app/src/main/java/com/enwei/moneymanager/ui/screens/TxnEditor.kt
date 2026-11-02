@@ -384,20 +384,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     // 預算提醒：這個月還剩多少、記這筆之後剩多少（超過時紅色）
                     budget.forEach { u ->
                         val add = if (currency == lk.base) (amountMinor ?: 0) else lk.fx.convert(amountMinor ?: 0, currency)
-                        val after = u.left - add
-                        val pctAfter = ((u.used + add) * 100 / u.cap.coerceAtLeast(1)).toInt()
-                        val col = when { after < 0 -> MaterialTheme.colorScheme.error; pctAfter >= 80 -> Color(0xFFFFA000); else -> MaterialTheme.colorScheme.onSurfaceVariant }
-                        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 4.dp)) {
-                            Text(
-                                (if (u.name.endsWith("預算")) u.name else "${u.name} 預算") + "：本月剩 ${Money.withSymbol(u.left, lk.base)}" +
-                                    (if (add > 0) "，記這筆後" + (if (after >= 0) "剩 ${Money.withSymbol(after, lk.base)}" else "超出 ${Money.withSymbol(-after, lk.base)}") else "") +
-                                    "（$pctAfter%）",
-                                fontSize = 12.sp, color = col,
-                            )
-                            Box(Modifier.fillMaxWidth().padding(top = 2.dp).height(4.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(2.dp))) {
-                                Box(Modifier.fillMaxWidth((pctAfter / 100f).coerceIn(0f, 1f)).height(4.dp).background(if (after < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
-                            }
-                        }
+                        com.enwei.moneymanager.ui.components.BudgetMeter(
+                            if (u.name.endsWith("預算")) u.name else "${u.name} 預算", u.used, u.cap,
+                            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 6.dp),
+                            adding = add, compact = true)
                     }
                     FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
                         PlaceholderText(lk.account(accountId)?.name, "")

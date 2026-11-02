@@ -157,12 +157,14 @@ fun MoreScreen(nav: NavController) {
             ToolGrid(
                 shown,
                 shown.associate { t -> t.id to (parseSize(settings.toolSizes[t.id]) ?: if (t.id in settings.wideTools) 2 to 1 else 1 to 1) },
+                settings.toolPos.mapNotNull { (k, v) -> v.split(',').takeIf { it.size == 2 }?.let { a -> a[0].toIntOrNull()?.let { r -> a[1].toIntOrNull()?.let { c -> k to (r to c) } } } }.toMap(),
                 summary, editing,
                 // 股票助理、收支檢討這類其實是分頁的工具：切到那個分頁，不另外疊一層（底部分頁列不會消失）
                 onOpen = { t -> com.enwei.moneymanager.ui.openRouteFrom(nav, t.route) },
                 onLongPress = { editing = true },
-                onReorder = { ids -> setOrder(ids) },
-                onResize = { id, w, h -> repo.settings.update { st -> st.copy(toolSizes = st.toolSizes + (id to "${w}x$h")) } },
+                onMove = { pos -> repo.settings.update { st -> st.copy(toolPos = pos.mapValues { "${it.value.first},${it.value.second}" }) } },
+                onResize = { id, w, h, pos -> repo.settings.update { st -> st.copy(toolSizes = st.toolSizes + (id to "${w}x$h"),
+                    toolPos = pos.mapValues { "${it.value.first},${it.value.second}" }) } },
                 onRemove = { id -> setOrder(shown.map { it.id } - id) },
             )
             // 可加入的工具：編輯時才顯示

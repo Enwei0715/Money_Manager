@@ -231,58 +231,125 @@ private fun reportText(r: DailyReport): String = buildString {
     appendLine(); append("AI 分析僅供參考，不是投資建議。")
 }
 
+/**
+ * 把 AI 寫的長段落拆成條列重點：依句號、分號、換行切開；只有引用編號的片段併回前一句。
+ */
+internal fun splitPoints(text: String): List<String> {
+    val raw = text
+        .split(Regex("(?<=[。；;！!？?])|\\n+|(?<=\\s)[-•・]\\s*"))
+        .map { it.trim().trimStart('-', '•', '・', ' ') }.filter { it.isNotBlank() }
+    val out = mutableListOf<String>()
+    val onlyCite = Regex("^(\\s*[\\[［【]\\s*\\d{1,3}(?:\\s*[,，、]\\s*\\d{1,3})*\\s*[\\]］】])+[。；;]?$")
+    raw.forEach { p ->
+        if (out.isNotEmpty() && onlyCite.matches(p)) out[out.size - 1] = out.last() + p
+        else out += p
+    }
+    return out
+}
+
+/** 條列重點：每點前面一個小圓點；超過 [preview] 點時其餘收起來，點「展開」看全部（像新聞重點）。 */
 @Composable
-private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>, nav: NavController) {
-    Section("大盤") {
-        StageChip(r.stage.ifBlank { "趨勢" }, com.enwei.moneymanager.data.stripCites(r.trend))
-        // 加權指數 K 線：月線、季線，加上 AI 標出的支撐／壓力
-        if (r.outlook.isNotBlank()) Text("短期展望：${r.outlook}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-            color = when { r.outlook.contains("多") -> StockUp; r.outlook.contains("空") -> StockDown; else -> MaterialTheme.colorScheme.onSurfaceVariant })
-        com.enwei.moneymanager.ui.components.AnnotatedKLine("^TWII", r.levels.map { l ->
-            Triple("AI ${l.label}", l.price, if (l.label.contains("壓")) Color(0xFFAB47BC) else Color(0xFF26A69A))
-        })
-        if (r.summary.isNotBlank()) CitedText(r.summary, r.cites, newsById)
-    }
-    // 題材熱度：資料集裡報告提到的題材（則數與平均多空）
-    Section("資金追逐的題材") { ChatChartView(com.enwei.moneymanager.data.ChatChart("themes", r.themes), nav) }
-    if (r.picks.isNotEmpty()) {
-        Text("今天可以考慮（${r.picks.size} 檔）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        // 推薦個股走勢比較（前 5 檔）
-        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Box(Modifier.padding(12.dp)) { com.enwei.moneymanager.ui.components.CompareChart(r.picks.take(5).map { it.symbol }) }
-        }
-        // 推薦個股的月營收年增率比較
-        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Box(Modifier.padding(12.dp)) { com.enwei.moneymanager.ui.components.RevenueCompare(r.picks.map { it.symbol }) }
-        }
-        // 長線、短線分開列
-        r.picks.groupBy { it.style.ifBlank { "其他" } }.toSortedMap(compareBy { listOf("短線", "長線").indexOf(it).let { i -> if (i < 0) 9 else i } }).forEach { (style, list) ->
-            Text("$style（${list.size}）", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
-            list.forEach { PickCard(it, r.cites, newsById) { nav.navigate("stock/${it.symbol}") } }
-        }
-    }
-    if (r.keyNews.isNotEmpty()) Section("一定要看的新聞（${r.keyNews.size}）", collapsible = true) {
-        r.keyNews.forEach { k ->
-            newsById[k.id]?.let { n ->
-                NewsLine(n, num = r.cites.indexOf(k.id).takeIf { it >= 0 }?.plus(1))
-                if (k.why.isNotBlank()) Text("→ ${k.why}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+private fun PointList(
+    text: String, cites: List<String>, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>,
+    foldKey: String? = null, preview: Int = 3, fontSize: androidx.compose.ui.unit.TextUnit = 13.sp,
+) {
+    val points = remember(text) { splitPoints(text) }
+    if (points.isEmpty()) return
+    val fold = foldKey?.let { com.enwei.moneymanager.ui.components.rememberFold("report.$it", false) }
+    val canFold = fold != null && points.size > preview + 1
+    val shown = if (canFold && !fold!!.open) points.take(preview) else points
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        shown.forEach { p ->
+            Row {
+                Box(Modifier.padding(top = 7.dp, end = 8.dp).size(5.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)))
+                CitedText(p, cites, newsById, fontSize = fontSize, modifier = Modifier.weight(1f))
             }
         }
+        if (canFold) Row(Modifier.fillMaxWidth().clickable { fold!!.toggle() }, horizontalArrangement = Arrangement.End) {
+            com.enwei.moneymanager.ui.components.FoldToggle(fold!!.open, points.size - preview)
+        }
     }
-    if (r.holdings.isNotEmpty()) Section("持股動作（${r.holdings.size}）", collapsible = true) {
-        ChatChartView(com.enwei.moneymanager.data.ChatChart("holdings"), nav)
-        r.holdings.forEach { h ->
-            Row(Modifier.fillMaxWidth().clickable { nav.navigate("stock/${h.symbol}") }.padding(vertical = 2.dp)) {
-                Text(h.symbol, fontSize = 14.sp, modifier = Modifier.widthIn(min = 56.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(h.action + (h.stop?.let { "｜停損 ${"%.2f".format(it)}" } ?: ""), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    CitedText(h.reason, r.cites, newsById, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/** 報告區塊標題下的小標（例如「短線（2）」）。 */
+@Composable
+private fun SubHead(text: String) =
+    Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+
+@Composable
+private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>, nav: NavController) {
+    // ① 重點摘要：階段、展望、題材，摘要拆成條列（前三點，其餘可展開）
+    Section("重點摘要") {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
+                Text(r.stage.ifBlank { "趨勢" }, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+            }
+            if (r.outlook.isNotBlank()) {
+                val c = when { r.outlook.contains("多") -> StockUp; r.outlook.contains("空") -> StockDown; else -> MaterialTheme.colorScheme.onSurfaceVariant }
+                Surface(color = c.copy(alpha = 0.14f), shape = RoundedCornerShape(4.dp)) {
+                    Text("短期 ${r.outlook}", fontSize = 13.sp, color = c, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                 }
             }
         }
+        if (r.trend.isNotBlank()) Text(com.enwei.moneymanager.data.stripCites(r.trend), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (r.summary.isNotBlank()) PointList(r.summary, r.cites, newsById, foldKey = "summary")
     }
-    if (r.allocation.isNotBlank() || r.alloc.isNotEmpty()) Section("資金分配", collapsible = true) {
-        // 比例條＋圖例，文字只留一句
+    // ② 大盤 K 線與題材熱度
+    Section("大盤與題材") {
+        com.enwei.moneymanager.ui.components.AnnotatedKLine("^TWII", r.levels.map { l ->
+            Triple("AI ${l.label}", l.price, if (l.label.contains("壓")) Color(0xFFAB47BC) else Color(0xFF26A69A))
+        })
+        if (r.themes.isNotEmpty()) {
+            SubHead("資金追逐的題材")
+            ChatChartView(com.enwei.moneymanager.data.ChatChart("themes", r.themes), nav)
+        }
+    }
+    // ③ 今天可以考慮：先比較圖，再依長短線分組；每檔只顯示重點，點開看完整內容
+    if (r.picks.isNotEmpty()) Section("今天可以考慮（${r.picks.size} 檔）") {
+        SubHead("走勢比較")
+        com.enwei.moneymanager.ui.components.CompareChart(r.picks.take(5).map { it.symbol })
+        SubHead("月營收年增率")
+        com.enwei.moneymanager.ui.components.RevenueCompare(r.picks.map { it.symbol })
+        r.picks.groupBy { it.style.ifBlank { "其他" } }.toSortedMap(compareBy { listOf("短線", "長線").indexOf(it).let { i -> if (i < 0) 9 else i } }).forEach { (style, list) ->
+            SubHead("$style（${list.size}）")
+            list.forEach { PickCard(it, r.cites, newsById, foldKey = "pick.${it.symbol}") { nav.navigate("stock/${it.symbol}") } }
+        }
+    }
+    // ④ 持股動作：動作用色塊標示，理由條列
+    if (r.holdings.isNotEmpty()) Section("持股動作（${r.holdings.size}）") {
+        ChatChartView(com.enwei.moneymanager.data.ChatChart("holdings"), nav)
+        r.holdings.forEachIndexed { i, h ->
+            if (i > 0) androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Column(Modifier.fillMaxWidth().clickable { nav.navigate("stock/${h.symbol}") }.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(h.symbol, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    val c = when {
+                        Regex("賣|減|出場|停損").containsMatchIn(h.action) -> StockDown
+                        Regex("買|加|進場").containsMatchIn(h.action) -> StockUp
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Surface(color = c.copy(alpha = 0.14f), shape = RoundedCornerShape(4.dp)) {
+                        Text(h.action, fontSize = 12.sp, color = c, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                    }
+                }
+                h.stop?.let { Text("停損 ${"%.2f".format(it)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                PointList(h.reason, r.cites, newsById, foldKey = "hold.${h.symbol}", preview = 2, fontSize = 12.sp)
+            }
+        }
+    }
+    // ⑤ 一定要看的新聞
+    if (r.keyNews.isNotEmpty()) Section("一定要看的新聞（${r.keyNews.size}）") {
+        r.keyNews.forEachIndexed { i, k ->
+            newsById[k.id]?.let { n ->
+                if (i > 0) androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                NewsLine(n, num = r.cites.indexOf(k.id).takeIf { it >= 0 }?.plus(1))
+                if (k.why.isNotBlank()) Text("為什麼重要：${k.why}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+    // ⑥ 資金分配：比例條＋圖例，說明條列
+    if (r.allocation.isNotBlank() || r.alloc.isNotEmpty()) Section("資金分配") {
         if (r.alloc.isNotEmpty()) {
             val total = r.alloc.sumOf { it.pct }.takeIf { it > 0 } ?: 1.0
             val palette = listOf(Color(0xFF3C82E6), Color(0xFFF0605A), Color(0xFFFFA000), Color(0xFF2E9E57), Color(0xFF7E57C2), Color(0xFF9E9E9E))
@@ -298,9 +365,9 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
                 }
             }
         }
-        if (r.allocation.isNotBlank()) CitedText(r.allocation, r.cites, newsById)
+        if (r.allocation.isNotBlank()) PointList(r.allocation, r.cites, newsById, foldKey = "alloc")
     }
-    if (r.checklist.isNotEmpty() || r.warnings.isNotEmpty()) Section("下單前檢查", collapsible = true, initiallyOpen = false) {
+    if (r.checklist.isNotEmpty() || r.warnings.isNotEmpty()) Section("下單前檢查") {
         r.checklist.forEach { Text("☐ $it", fontSize = 13.sp) }
         r.warnings.forEach { Text("! $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
     }
@@ -370,13 +437,39 @@ private fun HistoryDialog(store: NewsStore, onOpen: (Long) -> Unit, onDismiss: (
 /** 推薦股票卡片：代號名稱、長短線、強弱、業務、理由、進出場；點進去看 K 線與資訊。 */
 @Composable
 fun PickCard(
-    p: StockPick, cites: List<String> = emptyList(), newsById: Map<String, com.enwei.moneymanager.data.NewsItem> = emptyMap(), onClick: () -> Unit,
+    p: StockPick, cites: List<String> = emptyList(), newsById: Map<String, com.enwei.moneymanager.data.NewsItem> = emptyMap(),
+    /** 報告裡用：收起時只顯示名稱、現價與第一點理由，點「展開」看 K 線、依據與進出場 */
+    foldKey: String? = null,
+    onClick: () -> Unit,
 ) {
+    val fold = foldKey?.let { com.enwei.moneymanager.ui.components.rememberFold("report.$it", false) }
+    if (fold != null && !fold.open) {
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.clickable { fold.toggle() }.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${p.symbol} ${p.name}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    p.price?.let { Text("%.2f".format(it), fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp)) }
+                    if (p.strength.isNotBlank()) Tag(p.strength, when {
+                        p.strength.contains("強") -> StockUp.copy(alpha = 0.18f)
+                        p.strength.contains("弱") -> StockDown.copy(alpha = 0.18f)
+                        else -> MaterialTheme.colorScheme.surfaceVariant
+                    })
+                    com.enwei.moneymanager.ui.components.FoldToggle(false, modifier = Modifier.padding(start = 6.dp))
+                }
+                splitPoints(p.reason).firstOrNull()?.let {
+                    CitedText(it, cites, newsById, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        return
+    }
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${p.symbol} ${p.name}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 if (p.style.isNotBlank()) Tag(p.style, MaterialTheme.colorScheme.secondaryContainer)
+                if (fold != null) com.enwei.moneymanager.ui.components.FoldToggle(true, modifier = Modifier.padding(start = 6.dp).clickable { fold.toggle() })
                 if (p.strength.isNotBlank()) Tag(
                     p.strength,
                     when {
@@ -405,9 +498,11 @@ fun PickCard(
                 )
             } else Text("新聞依據：資料集近 3 天沒有提到這檔", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
             if (p.business.isNotBlank()) Text(p.business, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (p.reason.isNotBlank()) CitedText(p.reason, cites, newsById)
-            if (p.entry.isNotBlank()) Text("進場：${p.entry}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (p.stop.isNotBlank()) Text("停損：${p.stop}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (p.reason.isNotBlank()) PointList(p.reason, cites, newsById)
+            if (p.entry.isNotBlank() || p.stop.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (p.entry.isNotBlank()) Text("進場：${p.entry}", fontSize = 12.sp, color = StockUp, modifier = Modifier.weight(1f))
+                if (p.stop.isNotBlank()) Text("停損：${p.stop}", fontSize = 12.sp, color = StockDown, modifier = Modifier.weight(1f))
+            }
             p.amount?.let { Text("建議投入約 ${Money.withSymbol(it * 100, "TWD")}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("看 K 線與資訊 ›", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))

@@ -64,28 +64,52 @@ fun parseSize(s: String?): Pair<Int, Int>? = s?.split('x')?.takeIf { it.size == 
 }
 
 /** 依順序把每一格放到第一個放得下的位置（由上到下、由左到右）。 */
-fun packTiles(ids: List<String>, size: (String) -> Pair<Int, Int>): Map<String, Placement> {
+fun packTiles(ids: List<String>, size: (String) -> Pair<Int, Int>): Map<String, Placement> = placeTiles(ids, size, emptyMap())
+
+/**
+ * 有存位置的格子固定放在原位（拖到哪就在哪，不會往左上靠）；
+ * 沒有位置、或原位已被佔用／超出邊界的，才放到第一個空位。
+ */
+fun placeTiles(ids: List<String>, size: (String) -> Pair<Int, Int>, pos: Map<String, Pair<Int, Int>>): Map<String, Placement> {
     val used = ArrayList<BooleanArray>()
     fun free(r: Int, c: Int, w: Int, h: Int): Boolean {
-        if (c + w > GRID_COLS) return false
+        if (r < 0 || c < 0 || c + w > GRID_COLS) return false
         for (rr in r until r + h) for (cc in c until c + w) if (used.getOrNull(rr)?.get(cc) == true) return false
         return true
+    }
+    fun take(r: Int, c: Int, w: Int, h: Int) {
+        while (used.size < r + h) used += BooleanArray(GRID_COLS)
+        for (rr in r until r + h) for (cc in c until c + w) used[rr][cc] = true
     }
     val out = LinkedHashMap<String, Placement>()
     ids.forEach { id ->
         val (w, h) = size(id)
+        val p = pos[id] ?: return@forEach
+        if (p.first < 60 && free(p.first, p.second, w, h)) { take(p.first, p.second, w, h); out[id] = Placement(p.first, p.second, w, h) }
+    }
+    ids.filter { it !in out }.forEach { id ->
+        val (w, h) = size(id)
         var r = 0
         while (true) {
             val c = (0..GRID_COLS - w).firstOrNull { free(r, it, w, h) }
-            if (c != null) {
-                while (used.size < r + h) used += BooleanArray(GRID_COLS)
-                for (rr in r until r + h) for (cc in c until c + w) used[rr][cc] = true
-                out[id] = Placement(r, c, w, h)
-                break
-            }
+            if (c != null) { take(r, c, w, h); out[id] = Placement(r, c, w, h); break }
             r++
         }
     }
+    return ids.mapNotNull { id -> out[id]?.let { id to it } }.toMap(LinkedHashMap())
+}
+
+/**
+ * 把 [id] 放到 (row, col)（大小 w×h）：其他格子維持原位，被壓到的格子挪到最近的空位。
+ * 回傳新的位置表。
+ */
+fun moveTile(place: Map<String, Placement>, id: String, row: Int, col: Int, w: Int, h: Int): Map<String, Pair<Int, Int>> {
+    val c = col.coerceIn(0, GRID_COLS - w)
+    val r = row.coerceAtLeast(0)
+    fun overlaps(p: Placement) = p.row < r + h && r < p.row + p.h && p.col < c + w && c < p.col + p.w
+    val out = LinkedHashMap<String, Pair<Int, Int>>()
+    out[id] = r to c
+    place.forEach { (o, p) -> if (o != id && !overlaps(p)) out[o] = p.row to p.col }
     return out
 }
 
@@ -96,13 +120,15 @@ fun packTiles(ids: List<String>, size: (String) -> Pair<Int, Int>): Map<String, 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ToolGrid(
-    tools: List<ToolItem>, sizes: Map<String, Pair<Int, Int>>, summary: Map<String, String>, editing: Boolean,
+    tools: List<ToolItem>, sizes: Map<String, Pair<Int, Int>>, positions: Map<String, Pair<Int, Int>>,
+    summary: Map<String, String>, editing: Boolean,
     onOpen: (ToolItem) -> Unit, onLongPress: () -> Unit,
-    onReorder: (List<String>) -> Unit, onResize: (String, Int, Int) -> Unit, onRemove: (String) -> Unit,
+    /** 新的位置表（拖動或改大小後）；[onResize] 同時給新的大小 */
+    onMove: (Map<String, Pair<Int, Int>>) -> Unit, onResize: (String, Int, Int, Map<String, Pair<Int, Int>>) -> Unit, onRemove: (String) -> Unit,
 ) {
     val ids = tools.map { it.id }
     fun sizeOf(id: String) = sizes[id] ?: (1 to 1)
-    val place = packTiles(ids, ::sizeOf)
+    val place = placeTiles(ids, ::sizeOf, positions)
     var selected by remember { mutableStateOf<String?>(null) }
     var dragId by remember { mutableStateOf<String?>(null) }
     var drag by remember { mutableStateOf(Offset.Zero) }
@@ -154,13 +180,10 @@ fun ToolGrid(
                                     onDragStart = { dragId = t.id; drag = Offset.Zero; selected = t.id },
                                     onDrag = { ch, d -> ch.consume(); drag += d },
                                     onDragEnd = {
-                                        val cx = p.col * (cellPx + gapPx) + drag.x + cellPx / 2
-                                        val cy = p.row * (rowPx + gapPx) + drag.y + rowPx / 2
-                                        val tc = (cx / (cellPx + gapPx)).toInt().coerceIn(0, GRID_COLS - 1)
-                                        val tr = (cy / (rowPx + gapPx)).toInt().coerceAtLeast(0)
-                                        val others = ids - t.id
-                                        val before = others.count { o -> place[o]?.let { it.row < tr || it.row == tr && it.col < tc } == true }
-                                        onReorder(others.toMutableList().apply { add(before.coerceIn(0, size), t.id) })
+                                        // 放開的位置：以方框左上角貼齊最近的格子，固定在那裡
+                                        val tc = ((p.col * (cellPx + gapPx) + drag.x) / (cellPx + gapPx)).roundToInt()
+                                        val tr = ((p.row * (rowPx + gapPx) + drag.y) / (rowPx + gapPx)).roundToInt()
+                                        onMove(moveTile(place, t.id, tr, tc, p.w, p.h))
                                         dragId = null; drag = Offset.Zero
                                     },
                                     onDragCancel = { dragId = null; drag = Offset.Zero },
@@ -191,7 +214,7 @@ fun ToolGrid(
                                     onDragEnd = {
                                         val nw = ((p.w * (cellPx + gapPx) + resize.x) / (cellPx + gapPx)).roundToInt().coerceIn(1, GRID_COLS)
                                         val nh = ((p.h * (rowPx + gapPx) + resize.y) / (rowPx + gapPx)).roundToInt().coerceIn(1, 2)
-                                        onResize(t.id, nw, nh)
+                                        onResize(t.id, nw, nh, moveTile(place, t.id, p.row, p.col, nw, nh))
                                         resizeId = null; resize = Offset.Zero
                                     },
                                     onDragCancel = { resizeId = null; resize = Offset.Zero },
@@ -211,12 +234,12 @@ fun ToolGrid(
             Text("「${tools.first { it.id == sel }.label}」的大小", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(1 to 1, 2 to 1, 3 to 1, 1 to 2, 2 to 2).forEach { (w, h) ->
-                    FilterChip(cw == w && ch == h, { onResize(sel, w, h) }, label = { Text("$w×$h") })
+                    FilterChip(cw == w && ch == h, { place[sel]?.let { p -> onResize(sel, w, h, moveTile(place, sel, p.row, p.col, w, h)) } }, label = { Text("$w×$h") })
                 }
             }
         }
     }
-    if (editing) Text("拖動方框移動位置，拖右下角的圓點改大小，點一下可以挑大小，✕ 移除。", fontSize = 12.sp,
+    if (editing) Text("拖動方框到任何空格，放開就固定在那裡；拖右下角的圓點改大小，點一下可以挑大小，✕ 移除。", fontSize = 12.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
 }
 

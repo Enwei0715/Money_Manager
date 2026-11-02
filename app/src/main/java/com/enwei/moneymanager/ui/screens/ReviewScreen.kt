@@ -29,6 +29,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -148,15 +149,29 @@ fun ReviewContent(
                             }
                         }
                     }
-                    Text(
-                        listOfNotNull(
-                            if (d.income > 0) "儲蓄率 ${"%.0f".format(d.savingsRate)}%" else null,
-                            "日均支出 ${m(d.dailyAvg)}",
-                            d.expenseChangePct?.let { "支出比上${d.span.label} ${"%+.0f".format(it)}%" },
-                            if (d.avgExpense > 0) "前三${d.span.label}平均 ${m(d.avgExpense)}" else null,
-                        ).joinToString(" · "),
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // 其餘指標：兩欄小格子，不再擠成一行
+                    val metrics = listOfNotNull(
+                        if (d.income > 0) Triple("儲蓄率", "${"%.0f".format(d.savingsRate)}%", if (d.savingsRate >= 0) IncomeColor else ExpenseColor) else null,
+                        Triple("日均支出", m(d.dailyAvg), null),
+                        d.expenseChangePct?.let { Triple("支出比上${d.span.label}", "${"%+.0f".format(it)}%", if (it <= 0) IncomeColor else ExpenseColor) },
+                        if (d.avgExpense > 0) Triple("前三${d.span.label}平均", m(d.avgExpense), null) else null,
                     )
+                    if (metrics.isNotEmpty()) {
+                        HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        metrics.chunked(2).forEach { row ->
+                            Row(Modifier.fillMaxWidth()) {
+                                row.forEach { (label, value, c) ->
+                                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = c ?: MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                                    }
+                                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -170,22 +185,30 @@ fun ReviewContent(
                     }
                     settings.savingsGoal?.let { g ->
                         val rate = if (d.income > 0) d.savingsRate else 0.0
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Row {
-                                Text("儲蓄率", fontSize = 13.sp, modifier = Modifier.weight(1f))
-                                Text("${"%.0f".format(rate)}%　目標 ${"%.0f".format(g)}%", fontSize = 13.sp,
-                                    color = if (rate >= g) IncomeColor else ExpenseColor)
+                        val ok = rate >= g
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("儲蓄率", fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                                Text("目標 ${"%.0f".format(g)}%  ", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${"%.0f".format(rate)}%", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (ok) IncomeColor else ExpenseColor)
                             }
-                            Box(Modifier.fillMaxWidth().height(8.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))) {
-                                Box(Modifier.fillMaxWidth((rate / g).toFloat().coerceIn(0f, 1f)).height(8.dp)
-                                    .background(if (rate >= g) IncomeColor else ExpenseColor, RoundedCornerShape(4.dp)))
+                            Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
+                                Box(Modifier.fillMaxWidth((rate / g).toFloat().coerceIn(0f, 1f)).height(6.dp)
+                                    .background(if (ok) IncomeColor else ExpenseColor, RoundedCornerShape(3.dp)))
                             }
+                            Text(if (ok) "已達成目標" else "還差 ${"%.0f".format(g - rate)} 個百分點", fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.End))
                         }
                     }
+                    val budgetRows = settings.budgets.entries.filter { (cid, _) -> cid == 0L || lk.category(cid)?.archived == false }
+                    if (settings.savingsGoal != null && budgetRows.isNotEmpty())
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     // 分類已刪除或封存的預算不顯示
-                    settings.budgets.entries.filter { (cid, _) -> cid == 0L || lk.category(cid)?.archived == false }.sortedBy { it.key }.forEach { (cid, budget) ->
+                    // 當月才顯示「每天約」：過去的月份已經結束
+                    val daysLeft = if (offset == 0 && !java.time.LocalDate.now().isAfter(d.end)) java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), d.end) + 1 else null
+                    budgetRows.sortedBy { it.key }.forEach { (cid, budget) ->
                         val used = if (cid == 0L) d.expense else d.categories.find { it.id == cid }?.amount ?: 0L
-                        BudgetBar(if (cid == 0L) "總預算" else lk.category(cid)?.name ?: "已刪除分類", used, budget)
+                        BudgetBar(if (cid == 0L) "總預算" else lk.category(cid)?.name ?: "已刪除分類", used, budget, daysLeft)
                     }
                 }
             }
