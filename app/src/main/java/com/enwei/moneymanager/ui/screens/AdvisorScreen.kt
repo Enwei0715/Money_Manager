@@ -529,7 +529,7 @@ fun PickCard(
         return
     }
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${p.symbol} ${p.name}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 if (p.style.isNotBlank()) Tag(p.style, MaterialTheme.colorScheme.secondaryContainer)
@@ -1096,7 +1096,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 // grid：市場大局（所有題材重點的彙整）
                 if (store.overview.isNotEmpty()) item {
                     Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("市場大局", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                                 Text(java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(store.overviewAt)),

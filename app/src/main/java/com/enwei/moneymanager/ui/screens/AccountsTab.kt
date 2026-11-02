@@ -226,7 +226,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     color = MaterialTheme.colorScheme.secondaryContainer, shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
                 ) {
-                    Column(Modifier.padding(14.dp)) {
+                    Column(Modifier.padding(16.dp)) {
                         Text("借貸提醒", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSecondaryContainer)
                         loanNotes.forEach { Text(it, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSecondaryContainer) }
                     }
@@ -239,7 +239,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     color = MaterialTheme.colorScheme.errorContainer, shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable { nav.navigate("acct/${w.from.id}") },
                 ) {
-                    Column(Modifier.padding(14.dp)) {
+                    Column(Modifier.padding(16.dp)) {
                         Text("「${w.from.name}」餘額不足，卡費可能扣款失敗", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onErrorContainer)
                         Text(

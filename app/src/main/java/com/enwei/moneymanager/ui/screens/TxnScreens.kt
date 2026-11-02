@@ -122,17 +122,19 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
             }
         },
     ) { pad ->
+        // 搜尋框、期間、篩選與合計會跟著捲動收起，結果清單可以用滿畫面
         Column(Modifier.padding(pad).fillMaxSize()) {
+        com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.weight(1f).fillMaxWidth(), header = { Column {
             Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                 androidx.compose.foundation.text.BasicTextField(
                     q, { q = it }, singleLine = true,
                     textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     decorationBox = { inner ->
                         Row(
-                            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background, RoundedCornerShape(14.dp))
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp)).padding(14.dp),
+                            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background, RoundedCornerShape(12.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(Icons.Outlined.Search, null)
@@ -222,12 +224,14 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             } else if (showList) SummaryBar(totalsOf(result, lk.fx), lk.base)
-            LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+        } }) {
+            LazyColumn(Modifier.fillMaxSize()) {
                 if (showList && result.isEmpty()) item { NoData("找不到符合的交易") }
                 result.groupBy { it.date.toLocalDate() }.toSortedMap(Comparator.reverseOrder()).forEach { (day, txns) ->
                     item(key = "s$day") { DayBlock(day, txns, lk, nav) }
                 }
             }
+        }
             // 圖表篩選套用中：底部顯示已選項目，可以「編輯」或清除
             if (chartOn) Row(
                 Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(start = 16.dp, end = 8.dp).navigationBarsPadding(),
@@ -346,7 +350,7 @@ private fun PendingCard(t: com.enwei.moneymanager.data.TxnEntity, lk: Lookups, n
 @Composable
 private fun PendingSection(title: String, action: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
     androidx.compose.material3.Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 action?.invoke()

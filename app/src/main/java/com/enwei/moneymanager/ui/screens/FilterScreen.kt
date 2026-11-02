@@ -140,6 +140,8 @@ fun ChartFilterPage(
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "關閉") }
         }
+        // 已選項目、金額與分頁會跟著清單捲動收起
+        com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = { Column {
         // 已選項目＋「篩選」按鈕
         Row(
             Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(start = 16.dp, end = 8.dp).height(44.dp),
@@ -170,6 +172,7 @@ fun ChartFilterPage(
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = gray)
             }
         } }
+        } }) {
         when (tab) {
             0, 1 -> {
                 val type = if (tab == 0) TxnType.INCOME else TxnType.EXPENSE
@@ -254,6 +257,7 @@ fun ChartFilterPage(
                     }
                 }
             }
+        }
         }
     }
 }

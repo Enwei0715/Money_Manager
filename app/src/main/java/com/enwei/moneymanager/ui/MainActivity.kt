@@ -288,7 +288,10 @@ private fun AppScaffold(nav: NavHostController) {
     androidx.compose.runtime.SideEffect { if (isTab && current != null && lastTab != current) lastTab = current }
     val showBar = !imeOpen && !editing
     // 換頁時底部分頁列一定出現
-    androidx.compose.runtime.LaunchedEffect(current) { com.enwei.moneymanager.ui.components.Chrome.bottomHidden = false }
+    androidx.compose.runtime.LaunchedEffect(current) {
+        com.enwei.moneymanager.ui.components.Chrome.bottomHidden = false
+        com.enwei.moneymanager.ui.components.Chrome.topHidden = false
+    }
     val barHidden = com.enwei.moneymanager.ui.components.Chrome.bottomHidden
     val tabShown = if (isTab) current else lastTab
     val startScreen = remember { MoneyApp.repo.settings.value.startScreen }

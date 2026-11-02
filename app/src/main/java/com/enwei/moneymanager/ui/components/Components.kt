@@ -29,6 +29,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,11 +54,22 @@ import java.time.ZoneOffset
 
 @Composable
 fun BackTopBar(title: String, onBack: () -> Unit, actions: @Composable () -> Unit = {}) = com.enwei.moneymanager.ui.ChromeScale {
-    TopAppBar(
-        title = { Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
-        actions = { actions() },
-    )
+    // 往下捲時標題列收起（只留狀態列高度），往上捲立刻出現；換頁時一定顯示
+    androidx.compose.foundation.layout.Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+        androidx.compose.foundation.layout.Spacer(Modifier.windowInsetsTopHeight(androidx.compose.foundation.layout.WindowInsets.statusBars))
+        androidx.compose.animation.AnimatedVisibility(
+            !Chrome.topHidden,
+            enter = androidx.compose.animation.expandVertically(expandFrom = Alignment.Bottom),
+            exit = androidx.compose.animation.shrinkVertically(shrinkTowards = Alignment.Bottom),
+        ) {
+            TopAppBar(
+                windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
+                title = { Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
+                actions = { actions() },
+            )
+        }
+    }
 }
 
 @Composable

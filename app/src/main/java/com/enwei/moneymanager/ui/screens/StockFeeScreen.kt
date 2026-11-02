@@ -118,7 +118,7 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
     val first = mine.minOfOrNull { it.date }
 
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(b.name, fontSize = AppText.body)

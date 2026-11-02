@@ -58,11 +58,14 @@ fun CollapsingTop(modifier: Modifier = Modifier, header: @Composable () -> Unit,
 /** 底部分頁列是否因為往下捲而收起（往上捲或換頁時出現）。 */
 object Chrome {
     var bottomHidden by mutableStateOf(false)
+    /** 次頁的標題列（BackTopBar）是否因往下捲而收起 */
+    var topHidden by mutableStateOf(false)
 
     /** 放在整個內容外層：只看捲動方向，不吃掉捲動量 */
     val watcher = object : NestedScrollConnection {
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-            if (consumed.y < -6f) bottomHidden = true else if (consumed.y > 6f) bottomHidden = false
+            if (consumed.y < -6f) { bottomHidden = true; topHidden = true }
+            else if (consumed.y > 6f) { bottomHidden = false; topHidden = false }
             return Offset.Zero
         }
     }

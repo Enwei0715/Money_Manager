@@ -230,7 +230,7 @@ fun ReviewContent(
 
             if (rt == 2 && d.expenses.isEmpty()) Text("這期沒有支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (rt == 2 && d.expenses.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     HabitCharts(d, ::m, lk)
                 }
             }

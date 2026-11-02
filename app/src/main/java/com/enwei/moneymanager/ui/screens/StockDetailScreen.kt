@@ -551,7 +551,10 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
 
 @Composable
 private fun InfoGrid(items: List<Pair<String, String>>) {
-    items.chunked(3).forEach { row ->
+    // 預設只顯示第一列（開盤、最高、最低），其餘點「更多」才展開，報價卡不會佔掉半個畫面
+    val fold = com.enwei.moneymanager.ui.components.rememberFold("stock.info", false)
+    val rows = items.chunked(3)
+    (if (fold.open) rows else rows.take(1)).forEach { row ->
         Row(Modifier.fillMaxWidth()) {
             row.forEach { (k, v) ->
                 Column(Modifier.weight(1f)) {
@@ -562,6 +565,8 @@ private fun InfoGrid(items: List<Pair<String, String>>) {
             repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
         }
     }
+    if (rows.size > 1) Text(if (fold.open) "收起" else "更多數據", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.clickable { fold.toggle() }.padding(vertical = 4.dp))
 }
 
 /** 一則新聞：多空色點＋標題、來源與時間。 */
