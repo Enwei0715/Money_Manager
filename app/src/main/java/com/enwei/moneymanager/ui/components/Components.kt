@@ -29,6 +29,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.rememberDatePickerState
@@ -56,7 +58,7 @@ import java.time.ZoneOffset
 fun BackTopBar(title: String, onBack: () -> Unit, actions: @Composable () -> Unit = {}) = com.enwei.moneymanager.ui.ChromeScale {
     // 往下捲時標題列收起（只留狀態列高度），往上捲立刻出現；換頁時一定顯示
     androidx.compose.foundation.layout.Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-        androidx.compose.foundation.layout.Spacer(Modifier.windowInsetsTopHeight(androidx.compose.foundation.layout.WindowInsets.statusBars))
+        androidx.compose.foundation.layout.Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
         androidx.compose.animation.AnimatedVisibility(
             !Chrome.topHidden,
             enter = androidx.compose.animation.expandVertically(expandFrom = Alignment.Bottom),
