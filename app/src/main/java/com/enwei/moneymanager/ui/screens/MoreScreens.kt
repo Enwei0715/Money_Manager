@@ -313,7 +313,7 @@ fun NotificationSettingsScreen(nav: NavController) {
     var simulationPreviews by remember { mutableStateOf<List<Pair<Boolean, String>>?>(null) }
     var teach by remember { mutableStateOf<TxnNotificationListener.ActiveNote?>(null) }
     // 三個分頁：紀錄（處理結果）、來源 App（監聽與帳戶）、進階（測試、教過的規則）
-    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+    var tab by com.enwei.moneymanager.ui.components.rememberTab("notif.tab")
     var logFilter by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
     // 交易已被刪除的紀錄要顯示成「已刪除」，可以重新記帳
     val txns by repo.transactions.collectAsStateWithLifecycle(emptyList())

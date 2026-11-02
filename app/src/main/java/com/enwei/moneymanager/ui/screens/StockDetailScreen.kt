@@ -157,7 +157,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
         }
     }
     val watched = symbol in settings.watchlist
-    var dtab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+    var dtab by com.enwei.moneymanager.ui.components.rememberTab("stock.tab")
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
         BackTopBar("$symbol ${name.orEmpty()}", { nav.popBackStack() }) {
             // ☆ 加入／移出觀察清單（沒持有也能在股票頁看報價）

@@ -230,9 +230,6 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                     askOnOff("自動完成", s.autocomplete, null) { v -> repo.settings.update { it.copy(autocomplete = v) } }
                 }
                 sec("期間與顯示")
-                cfg("起始畫面（每日／日曆）", if (s.startScreen == 1) "日曆" else "每日") {
-                    ask("起始畫面", listOf(0 to "每日", 1 to "日曆"), s.startScreen) { v -> repo.settings.update { it.copy(startScreen = v) } }
-                }
                 cfg("日曆標示", if (s.calendarDots) "顏色小點" else "文字") {
                     ask("日曆標示", listOf(false to "文字", true to "顏色小點"), s.calendarDots) { v -> repo.settings.update { it.copy(calendarDots = v) } }
                 }

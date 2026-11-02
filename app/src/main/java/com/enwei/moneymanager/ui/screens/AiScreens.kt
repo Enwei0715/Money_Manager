@@ -65,7 +65,7 @@ fun AiSettingsScreen(nav: NavController) {
                         Text("需要至少一個金鑰", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                 }
             }
-            var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+            var tab by com.enwei.moneymanager.ui.components.rememberTab("ai.tab")
             if (s.aiEnabled) com.enwei.moneymanager.ui.components.SubTabs(listOf("金鑰與模型", "自動分工"), tab) { tab = it }
             if (s.aiEnabled && tab == 1) RouteOverview()
             if (s.aiEnabled && tab == 0) {

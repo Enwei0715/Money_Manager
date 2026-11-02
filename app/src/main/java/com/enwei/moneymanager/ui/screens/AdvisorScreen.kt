@@ -112,7 +112,7 @@ fun AdvisorScreen(nav: NavController) {
  */
 @Composable
 fun AdvisorContent(nav: NavController) {
-    var tab by rememberSaveable { mutableStateOf(0) }
+    var tab by com.enwei.moneymanager.ui.components.rememberTab("advisor.tab")
     LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.advisorSub) {
         com.enwei.moneymanager.ui.TabRequest.advisorSub?.let { tab = it; com.enwei.moneymanager.ui.TabRequest.advisorSub = null }
     }
@@ -291,7 +291,7 @@ private fun SubHead(text: String) =
 @Composable
 private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>, nav: NavController) {
     // 分段：重點（摘要、大盤、資金、檢查）／個股／持股／新聞，每段一個畫面看得完
-    var rtab by rememberSaveable { mutableStateOf(0) }
+    var rtab by com.enwei.moneymanager.ui.components.rememberTab("advisor.report")
     com.enwei.moneymanager.ui.components.SubTabs(
         listOf("重點", "個股 ${r.picks.size}", "持股 ${r.holdings.size}", "新聞 ${r.keyNews.size}"), rtab) { rtab = it }
     if (rtab == 1 && r.picks.isEmpty()) Text("這份報告沒有推薦個股。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1321,7 +1321,7 @@ private fun PlanTab(nav: NavController) {
     LaunchedEffect(holdings, settings.investPlan.copy(guards = emptyMap()), settings.investPlan.guards.mapValues { it.value.copy(peak = null) }, settings.stockStyle) { snap = runCatching { repo.advisorSnapshot(fetch = true) }.getOrNull() }
     fun m(v: Long) = Money.withSymbol(v, "TWD")
     // 分成三段，每段一個畫面看得完：資金（大盤＋配置）、持股紀律、我的紀律（參數＋原則）
-    var sub by rememberSaveable { mutableStateOf(0) }
+    var sub by com.enwei.moneymanager.ui.components.rememberTab("advisor.plan")
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         com.enwei.moneymanager.ui.components.SubTabs(listOf("資金", "持股", "我的紀律"), sub) { sub = it }
         val s = snap

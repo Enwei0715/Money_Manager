@@ -177,7 +177,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     val lk = rememberLookups()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val accounts by repo.accounts.collectAsStateWithLifecycle(emptyList())
-    var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, 2)) }
+    var tab by com.enwei.moneymanager.ui.components.rememberTab("txns.tab", initialTab.coerceIn(0, 2))
     LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.txnsTab) {
         com.enwei.moneymanager.ui.TabRequest.txnsTab?.let { tab = it; com.enwei.moneymanager.ui.TabRequest.txnsTab = null }
     }

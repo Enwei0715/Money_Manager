@@ -122,7 +122,9 @@ private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {
 
 @Composable
 fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int = 0) {
-    var section by rememberSaveable { mutableStateOf(initialTab) }
+    var section by com.enwei.moneymanager.ui.components.rememberTab("accounts.section", initialTab)
+    // 從「助理」入口打開時直接到助理分頁
+    remember { if (initialTab != 0) section = initialTab }
     // 狀態列、通知要求切到某個區塊
     androidx.compose.runtime.LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.accountsSection) {
         com.enwei.moneymanager.ui.TabRequest.accountsSection?.let { section = it; com.enwei.moneymanager.ui.TabRequest.accountsSection = null }
@@ -415,7 +417,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val trades by repo.trades.collectAsStateWithLifecycle(emptyList())
     var month by rememberSaveable { mutableStateOf(Periods.monthOf(LocalDate.now(), repo.settings.value.monthStartDay)) }
-    var tab by rememberSaveable { mutableStateOf(0) }
+    var tab by com.enwei.moneymanager.ui.components.rememberTab("account.detail")
     var chart by rememberSaveable { mutableStateOf(false) }
     val b = balances.find { it.account.id == id }
     val acc = b?.account

@@ -106,7 +106,7 @@ fun ReviewContent(
         }
     } ?: ownOffset
     var data by remember { mutableStateOf<ReviewData?>(null) }
-    var reviewTab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+    var reviewTab by com.enwei.moneymanager.ui.components.rememberTab("review.tab")
     LaunchedEffect(span, offset, all) { data = repo.spendingReview(span, offset) }
     val base = lk.base
     fun m(v: Long) = Money.withSymbol(v, base)
