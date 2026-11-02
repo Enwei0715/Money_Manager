@@ -95,7 +95,7 @@ fun AiSettingsScreen(nav: NavController) {
             // NVIDIA NIM：不限每日次數，背景大量工作的主力
             ProviderCard(
                 Provider.NVIDIA, "不限每日次數・每分鐘約 40 次・金鑰到 build.nvidia.com 申請",
-                s.nvidiaKey, { k -> repo.settings.update { it.copy(nvidiaKey = k.trim()) } },
+                s.nvidiaKey, { k -> repo.settings.update { it.copy(nvidiaKey = k.trim()) }; com.enwei.moneymanager.work.AiHealth.clearCooldown { m -> m.startsWith(GroqAi.NV) } },
                 onPickModel = { m -> repo.settings.update { it.copy(nvidiaModel = m) } },
             ) {
                 ModelField("優先模型（空白＝依工作自動挑）", s.nvidiaModel) { v -> repo.settings.update { it.copy(nvidiaModel = v.trim()) } }
@@ -104,7 +104,7 @@ fun AiSettingsScreen(nav: NavController) {
             // OpenRouter：免費模型（:free）當作額外備援
             ProviderCard(
                 Provider.OPENROUTER, "免費模型備援，金鑰到 openrouter.ai 申請",
-                s.openRouterKey, { k -> repo.settings.update { it.copy(openRouterKey = k.trim()) } },
+                s.openRouterKey, { k -> repo.settings.update { it.copy(openRouterKey = k.trim()) }; com.enwei.moneymanager.work.AiHealth.clearCooldown { m -> m.endsWith(":free") } },
                 onPickModel = { m -> repo.settings.update { it.copy(openRouterModel = m) } },
             ) {
                 ModelField("優先模型（空白＝自動挑免費模型）", s.openRouterModel) { v -> repo.settings.update { it.copy(openRouterModel = v.trim()) } }

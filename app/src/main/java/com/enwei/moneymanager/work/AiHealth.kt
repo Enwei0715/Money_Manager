@@ -87,6 +87,13 @@ object AiHealth {
         publish { it }
     }
 
+    /** 解除符合條件的模型暫停（換金鑰、測試成功時，讓那家平台的模型馬上能用） */
+    fun clearCooldown(match: (String) -> Boolean) {
+        ensureLoaded()
+        cool.keys.filter(match).forEach { cool.remove(it) }
+        publish { it }
+    }
+
     /** 所有可用模型都在暫停時，最早恢復的時間；不是全部暫停時為 null。 */
     fun allCoolingUntil(models: List<String>): Long? {
         if (models.isEmpty()) return null

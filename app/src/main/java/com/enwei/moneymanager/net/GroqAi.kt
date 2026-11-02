@@ -6,6 +6,7 @@ import com.enwei.moneymanager.core.ParsedKind
 import com.enwei.moneymanager.core.ParsedTransaction
 import com.enwei.moneymanager.core.ParsedType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -364,9 +365,9 @@ object GroqAi {
                         if (resp.code == 429 || resp.code == 503) { retryAfterMs = parseRetryAfter(resp.header("Retry-After"), text); lastBody = text }
                         if ((resp.code == 400 || resp.code == 422) && jsonMode) { retryPlain = true; return@use null }
                         lastError = when (resp.code) {
-                            401, 403 -> "$name 金鑰無效或沒有權限（${resp.code}）"
+                            401, 403 -> "$name 拒絕（${resp.code}）：${serverMessage(text)}"
                             402 -> if (p == Provider.NVIDIA) "NVIDIA「$model」需要付費（402）" else "OpenRouter 帳戶餘額不足（402）：請確認用的是「:free」模型"
-                            404 -> "$name 模型「$model」無法使用（404）"
+                            404 -> "$name 模型「$model」無法使用（404）：${serverMessage(text)}"
                             429 -> if (p == Provider.OPENROUTER && (text.contains("per-day", true) || text.contains("per day", true)))
                                 "OpenRouter 免費模型今天的每日上限已用完（429），UTC 午夜（台灣早上 8 點）恢復"
                             else "$name「$model」每分鐘次數已滿（429）"
@@ -484,6 +485,30 @@ object GroqAi {
         }?.sortedBy { it.first }
     }
 
+    /** 測試用：送最小的請求（不用 JSON 模式、30 秒逾時），成功回傳 null，失敗回傳 HTTP 狀態與伺服器說明。 */
+    private fun probe(p: Provider, key: String, model: String): String? {
+        val url = if (p == Provider.NVIDIA) "https://integrate.api.nvidia.com/v1/chat/completions" else "https://openrouter.ai/api/v1/chat/completions"
+        val body = buildJsonObject {
+            put("model", model)
+            put("messages", buildJsonArray { add(buildJsonObject { put("role", "user"); put("content", "Reply with: ok") }) })
+            put("max_tokens", 16)
+        }.toString()
+        val req = Request.Builder().url(url).header("Authorization", "Bearer $key").header("Accept", "application/json")
+            .post(body.toRequestBody("application/json".toMediaType())).build()
+        return runCatching {
+            aiClient.newBuilder().callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build().newCall(req).execute().use { r ->
+                if (r.isSuccessful) null else "HTTP ${r.code} ${serverMessage(r.body?.string().orEmpty())}"
+            }
+        }.getOrElse { if (it is java.io.InterruptedIOException) "逾時（30 秒）" else it.message ?: it.javaClass.simpleName }
+    }
+
+    /** 伺服器錯誤回覆裡的說明（OpenAI 相容格式的 error.message 或 detail） */
+    private fun serverMessage(text: String): String = runCatching {
+        val o = Http.json.parseToJsonElement(text).jsonObject
+        ((o["error"] as? JsonObject)?.get("message") as? JsonPrimitive)?.contentOrNull
+            ?: (o["detail"] as? JsonPrimitive)?.contentOrNull ?: (o["error"] as? JsonPrimitive)?.contentOrNull
+    }.getOrNull()?.take(120) ?: text.take(120)
+
     /** 設定頁：分別測試兩家的連線。回傳 null 表示成功。 */
     suspend fun testProvider(p: Provider): String? = withContext(Dispatchers.IO) {
         val s = MoneyApp.repo.settings.value
@@ -496,30 +521,37 @@ object GroqAi {
             else {
                 OpenRouterModels.refresh(force = true)
                 // 依序試幾個免費模型，有一個回應就算成功
-                OpenRouterModels.pick(false, 3, s.openRouterModel).firstNotNullOfOrNull { m ->
-                    callCompat(Provider.OPENROUTER, s.openRouterKey.trim(), m, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 256)
+                val models = OpenRouterModels.pick(false, 3, s.openRouterModel)
+                val results = models.map { m -> m to probe(Provider.OPENROUTER, s.openRouterKey.trim(), m) }
+                val bad = results.filter { it.second != null }
+                results.filter { it.second == null }.forEach { (m, _) -> com.enwei.moneymanager.work.AiHealth.clearCooldown { it == m } }
+                return@withContext when {
+                    bad.isEmpty() -> null
+                    bad.size < results.size -> "部分可用：" + bad.joinToString("；") { "${it.first.substringAfterLast('/')} ${it.second}" }
+                    else -> results.joinToString("\n") { "${it.first.substringAfterLast('/')}：${it.second}" }
                 }
             }
             Provider.NVIDIA -> if (s.nvidiaKey.isBlank()) return@withContext "還沒填 NVIDIA 金鑰"
             else {
                 NvidiaModels.refresh(force = true)
-                // 逐一測試會用到的模型，回報每個的結果（有一個成功就算可用）
+                // 同時測試會用到的模型（每個最多 30 秒），測試不暫停模型；成功的模型解除暫停
                 val models = (NvidiaModels.pick(NvidiaModels.FAST, 2, s.nvidiaModel) + NvidiaModels.pick(NvidiaModels.HEAVY, 2)).distinct()
-                val reasons = HashMap<String, String>()
-                val results = models.map { m ->
-                    val ok = callCompat(Provider.NVIDIA, s.nvidiaKey.trim(), m, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 256, timeoutSec = 45) != null
-                    if (!ok) reasons[m] = lastError.orEmpty().removePrefix("NVIDIA").trim()
-                    m to ok
-                }
-                val bad = results.filter { !it.second }
-                models.filter { m -> results.any { it.first == m && !it.second } }.forEach { com.enwei.moneymanager.work.AiHealth.cooldown(NV + it, 24 * 3600_000L) }
-                if (results.any { it.second }) {
-                    if (bad.isNotEmpty()) lastError = null
-                    return@withContext if (bad.isEmpty()) null
-                    else "部分可用（無法使用的已暫停）：" + bad.joinToString("；") { "${it.first.substringAfterLast('/')} ${reasons[it.first].orEmpty()}" }
-                }
                 if (models.isEmpty()) return@withContext "找不到可用的對話模型（模型清單 ${NvidiaModels.available().size} 個）"
-                return@withContext models.joinToString("\n") { "${it.substringAfterLast('/')}：${reasons[it].orEmpty()}" }
+                val results = kotlinx.coroutines.coroutineScope {
+                    models.map { m ->
+                        async {
+                            val err = probe(Provider.NVIDIA, s.nvidiaKey.trim(), m)
+                            if (err == null) com.enwei.moneymanager.work.AiHealth.clearCooldown { it == NV + m }
+                            m to err
+                        }
+                    }.map { it.await() }
+                }
+                val bad = results.filter { it.second != null }
+                return@withContext when {
+                    bad.isEmpty() -> null
+                    bad.size < results.size -> "部分可用：" + bad.joinToString("；") { "${it.first.substringAfterLast('/')} ${it.second}" }
+                    else -> results.joinToString("\n") { "${it.first.substringAfterLast('/')}：${it.second}" }
+                }
             }
         }
         if (r != null) null else lastError ?: "沒有回應"
