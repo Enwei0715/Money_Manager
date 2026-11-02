@@ -207,7 +207,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 // K 線
                 LaunchedEffect(hourly, held.isNotEmpty(), settings.investPlan.disciplineOn, settings.investPlan.guardOn) {
                     if ((hourly || held.isNotEmpty() && settings.investPlan.disciplineOn && settings.investPlan.guardOn) && hourBars == null) {
-                        hourBars = InvestData.bars(symbol, "3mo", tw = market == Market.TW, interval = "60m")
+                        hourBars = InvestData.bars(symbol, "1y", tw = market == Market.TW, interval = "60m")
                     }
                 }
                 val kb = if (hourly) hourBars else b
@@ -253,8 +253,11 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         if (kb == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 40.dp))
                         if (kb != null) {
                             val total = kb.close.size
-                            val n = count.toInt().coerceIn(minOf(10, total), total)
-                            val from = (total - n - back.toInt()).coerceIn(0, total - n)
+                            // 最前面幾根算不出均線（最長的那條要 N 根才有值）：不顯示那段，避免均線斷掉、買賣點失真
+                            val warm = (listOfNotNull(mas.maxOrNull(), if (hourly) plan.hourSlow else 60).max() - 1).coerceIn(0, (total - 10).coerceAtLeast(0))
+                            val usable = total - warm
+                            val n = count.toInt().coerceIn(minOf(10, usable), usable)
+                            val from = (total - n - back.toInt()).coerceIn(warm, total - n)
                             // 點一下 K 棒看當天的開高低收與量
                             val sel = picked?.takeIf { it in from until from + n }
                             if (sel != null) {
@@ -287,8 +290,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                     Triple(v, when (nm) { "移動停損" -> Color(0xFFFF7043); "停損" -> Color(0xFF2E7D32); else -> Color(0xFFD81B60) }, nm)
                                 } else emptyList())
                             CandleChart(kb, from, n, showBB, mas.sorted(), signals = visibleSignals, labeledLevels = chartLevels,
-                                onZoom = { z -> count = (count / z).coerceIn(10f, total.toFloat()); back = back.coerceIn(0f, (total - count).coerceAtLeast(0f)) },
-                                onPan = { bars -> back = (back + bars).coerceIn(0f, (total - count).coerceAtLeast(0f)) },
+                                onZoom = { z -> count = (count / z).coerceIn(10f, usable.toFloat()); back = back.coerceIn(0f, (usable - count).coerceAtLeast(0f)) },
+                                onPan = { bars -> back = (back + bars).coerceIn(0f, (usable - count).coerceAtLeast(0f)) },
                                 selected = sel,
                                 onTap = { f -> val j = from + (f * n).toInt().coerceIn(0, n - 1); picked = if (picked == j) null else j },
                             )

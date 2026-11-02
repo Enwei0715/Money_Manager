@@ -140,7 +140,7 @@ suspend fun Repository.advisorSnapshot(fetch: Boolean = true): AdvisorSnapshot =
     val grouped = raw.groupBy { it.symbol }
     val barsJobs = if (fetch) grouped.keys.associateWith { sym -> async { BarCache.get(sym, "1y") } } else emptyMap()
     // 保本＋移動停利要看 60 分 K 的 20MA、50MA
-    val hourJobs = if (fetch && plan.disciplineOn && plan.guardOn) grouped.keys.associateWith { sym -> async { BarCache.get(sym, "1mo", "60m") } } else emptyMap()
+    val hourJobs = if (fetch && plan.disciplineOn && plan.guardOn) grouped.keys.associateWith { sym -> async { BarCache.get(sym, "3mo", "60m") } } else emptyMap()
     val allTrades = trades.first().filter { it.market == Market.TW }
     val indexJob = if (fetch) async { BarCache.get("^TWII", "1y") } else null
     val soxJob = if (fetch) async { BarCache.get("^SOX", "1y") } else null
