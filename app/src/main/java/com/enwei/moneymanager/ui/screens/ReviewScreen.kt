@@ -211,9 +211,13 @@ fun ReviewContent(
                     // 分類已刪除或封存的預算不顯示
                     // 當月才顯示「每天約」：過去的月份已經結束
                     val daysLeft = if (offset == 0 && !java.time.LocalDate.now().isAfter(d.end)) java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), d.end) + 1 else null
-                    budgetRows.sortedBy { it.key }.forEach { (cid, budget) ->
-                        val used = if (cid == 0L) d.expense else d.categories.find { it.id == cid }?.amount ?: 0L
-                        BudgetBar(if (cid == 0L) "總預算" else lk.category(cid)?.name ?: "已刪除分類", used, budget, daysLeft)
+                    // 總預算完整顯示（含每天約可花多少）；分類預算每個一行、依使用比例排序
+                    settings.budgets[0L]?.let { cap -> BudgetBar("總預算", d.expense, cap, daysLeft) }
+                    val cats = budgetRows.filter { it.key != 0L }.map { (cid, cap) ->
+                        Triple(lk.category(cid)?.name ?: "已刪除分類", d.categories.find { it.id == cid }?.amount ?: 0L, cap)
+                    }.sortedByDescending { (_, u, c) -> u.toDouble() / c.coerceAtLeast(1) }
+                    if (cats.isNotEmpty()) Column {
+                        cats.forEach { (n, u, c) -> com.enwei.moneymanager.ui.components.BudgetRowCompact(n, u, c, Modifier.fillMaxWidth()) }
                     }
                 }
             }

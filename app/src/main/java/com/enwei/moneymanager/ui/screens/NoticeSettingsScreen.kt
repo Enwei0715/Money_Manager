@@ -122,8 +122,6 @@ fun NoticeSettingsScreen(nav: NavController) {
                 tr("上層功能關閉而不顯示：") + hidden.joinToString("、") { tr(it.label) },
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp),
             )
-            Text("點通知會直接打開對應的畫面（交易、檢討、帳戶、個股、報告或更新頁）；打開後同一類已看過的通知會自動收起。",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
             Spacer(Modifier.height(24.dp))
         }
     }

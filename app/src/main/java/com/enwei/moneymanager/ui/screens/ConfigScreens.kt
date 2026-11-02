@@ -5,6 +5,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.CurrencyExchange
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.ShowChart
+import androidx.compose.material.icons.outlined.Sms
+import androidx.compose.material.icons.outlined.ToggleOn
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Search
@@ -114,19 +120,24 @@ private fun lockDelayLabel(sec: Int) = when (sec) {
 
 /** 設定：依用途分組管理帳戶、記帳、外觀、自動化、AI、安全與備份更新。 */
 /** 設定的大分類：首頁只列這幾張卡，點進去才看該類的設定，不必在一長頁裡找。 */
-private data class CfgGroup(val id: String, val title: String, val desc: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val sections: List<String>)
+private data class CfgGroup(
+    val id: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val sections: List<String>,
+    /** 只有一個頁面的分類：直接打開那一頁 */
+    val route: String? = null,
+    val visible: (com.enwei.moneymanager.data.AppSettings) -> Boolean = { true },
+)
 
 private val cfgGroups = listOf(
-    CfgGroup("ledger", "帳戶與記帳", "帳戶、分類、預算、輸入方式、週期交易", androidx.compose.material.icons.Icons.Outlined.AccountBalanceWallet,
-        listOf("帳戶", "分類與預算", "記帳")),
-    CfgGroup("display", "顯示與外觀", "主題、語言、日曆、期間、搜尋方式", androidx.compose.material.icons.Icons.Outlined.Palette,
-        listOf("外觀", "期間與顯示")),
-    CfgGroup("currency", "幣別與匯率", "主幣別、副幣別、即時匯率", androidx.compose.material.icons.Icons.Outlined.CurrencyExchange, listOf("幣別")),
-    CfgGroup("features", "功能與自動化", "通知自動記帳、AI、股票", androidx.compose.material.icons.Icons.Outlined.Tune,
-        listOf("功能開關", "自動記帳", "AI", "股票")),
-    CfgGroup("notify", "通知", "各類通知的開關與聲音", androidx.compose.material.icons.Icons.Outlined.Notifications, listOf("通知")),
-    CfgGroup("data", "安全與資料", "密碼鎖、備份與還原、App 更新", androidx.compose.material.icons.Icons.Outlined.Lock,
-        listOf("安全", "資料", "關於")),
+    CfgGroup("accounts", "帳戶與分類", androidx.compose.material.icons.Icons.Outlined.AccountBalanceWallet, listOf("帳戶", "分類與預算")),
+    CfgGroup("entry", "記帳", androidx.compose.material.icons.Icons.Outlined.EditNote, listOf("記帳", "期間", "幣別")),
+    CfgGroup("display", "顯示", androidx.compose.material.icons.Icons.Outlined.Palette, listOf("外觀", "期間與顯示", "列表")),
+    CfgGroup("features", "功能開關", androidx.compose.material.icons.Icons.Outlined.ToggleOn, listOf("功能開關")),
+    CfgGroup("autorecord", "自動記帳", androidx.compose.material.icons.Icons.Outlined.Sms, listOf("自動記帳"), route = "notif", visible = { it.featureNotif }),
+    CfgGroup("ai", "AI", androidx.compose.material.icons.Icons.Outlined.AutoAwesome, listOf("AI"), visible = { it.aiEnabled }),
+    CfgGroup("stocks", "股票", androidx.compose.material.icons.Icons.Outlined.ShowChart, listOf("股票"), visible = { it.featureStocks }),
+    CfgGroup("notify", "通知", androidx.compose.material.icons.Icons.Outlined.Notifications, listOf("通知"), route = "notices"),
+    CfgGroup("data", "安全與資料", androidx.compose.material.icons.Icons.Outlined.Lock, listOf("安全", "資料")),
+    CfgGroup("update", "App 更新", androidx.compose.material.icons.Icons.Outlined.SystemUpdate, listOf("關於"), route = "settings"),
 )
 
 @Composable
@@ -168,7 +179,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     androidx.compose.material3.OutlinedTextField(
                         query, { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("搜尋設定，例如：預算、語言、通知") },
+                        placeholder = { Text("搜尋設定") },
                         leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Search, null) },
                         trailingIcon = {
                             if (query.isNotEmpty()) androidx.compose.material3.IconButton(onClick = { query = "" }) {
@@ -177,15 +188,14 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                         },
                         shape = RoundedCornerShape(24.dp),
                     )
-                    if (!searching) cfgGroups.chunked(2).forEach { rowGroups ->
+                    if (!searching) cfgGroups.filter { it.visible(s) }.chunked(2).forEach { rowGroups ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             rowGroups.forEach { g ->
-                                androidx.compose.material3.Card(Modifier.weight(1f).height(118.dp).clickable { nav.navigate("config?g=${g.id}") }) {
-                                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                androidx.compose.material3.Card(Modifier.weight(1f).height(64.dp).clickable { nav.navigate(g.route ?: "config?g=${g.id}") }) {
+                                    Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                                         androidx.compose.material3.Icon(g.icon, null, tint = MaterialTheme.colorScheme.primary)
-                                        Text(g.title, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
-                                        Text(g.desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis)
+                                        Text(g.title, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp))
                                     }
                                 }
                             }
@@ -232,6 +242,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                         repo.settings.update { it.copy(filterStyle = v) }
                     }
                 }
+                sec("期間")
                 cfg("每月起始日", "每月 ${s.monthStartDay} 日") {
                     ask("每月起始日", (1..28).map { it to "每月 $it 日" }, s.monthStartDay, "例如發薪日是 5 號，設成 5 日就會以 5 號到下月 4 號為一個月。") { v ->
                         repo.settings.update { it.copy(monthStartDay = v) }
@@ -240,6 +251,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 cfg("每週起始日", if (s.weekStartDay == 7) "週日" else "週一") {
                     ask("每週起始日", listOf(7 to "週日", 1 to "週一"), s.weekStartDay) { v -> repo.settings.update { it.copy(weekStartDay = v) } }
                 }
+                sec("列表")
                 cfg("滑動切換", if (s.swipe == 1) "切換期間" else "無") {
                     ask("滑動切換", listOf(0 to "無", 1 to "切換期間"), s.swipe, "在交易頁左右滑動時要做什麼。") { v -> repo.settings.update { it.copy(swipe = v) } }
                 }
@@ -335,15 +347,10 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 sec("安全")
                 cfg("密碼鎖", onOff(s.passcodeOn)) { nav.navigate("passcode") }
                 sec("資料")
-                cfg("備份與還原（含 .mmbak）") { nav.navigate("backup") }
+                cfg("備份與還原") { nav.navigate("backup") }
 
                 sec("關於")
                 cfg("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.1.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
-                cfg("開啟時檢查新版本", onOff(s.notifyUpdates)) {
-                    askOnOff("開啟時檢查新版本", s.notifyUpdates, "開啟 App 時有新版本會跳出更新視窗（可略過這一版），背景也會通知。") { v ->
-                        repo.settings.update { it.copy(notifyUpdates = v, updateSkipped = 0) }
-                    }
-                }
                 Spacer(Modifier.height(32.dp))
             }
         }
@@ -434,6 +441,7 @@ private fun PasscodeSetupDialog(onDone: (String) -> Unit, onCancel: () -> Unit) 
 
 /** 每月預算：總預算與各支出分類。 */
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 fun BudgetScreen(nav: NavController) {
     val lk = rememberLookups()
     val s by repo.settings.flow.collectAsStateWithLifecycle()
@@ -452,75 +460,69 @@ fun BudgetScreen(nav: NavController) {
     var editGoal by remember { mutableStateOf(false) }
     val gray = MaterialTheme.colorScheme.onSurfaceVariant
 
-    // 一列：名稱＋已用／預算、進度條、剩餘與平均（和「檢討」頁的目標卡片同樣排法）；點一下修改
-    @Composable
-    fun BudgetLine(id: Long, name: String) {
-        val cap = s.budgets[id]
-        val u = used(id)
-        val avg = suggest[id]
-        Column(Modifier.fillMaxWidth().clickable { editing = id to name }.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(name, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                if (cap != null) Text("${Money.full(u ?: 0)} / ${Money.full(cap)}", fontSize = 14.sp)
-                else Text("未設定", fontSize = 13.sp, color = gray)
-            }
-            if (cap != null) {
-                val pct = (u ?: 0).toFloat() / cap.coerceAtLeast(1)
-                val col = when { pct >= 1f -> MaterialTheme.colorScheme.error; pct >= 0.8f -> Color(0xFFFFA000); else -> MaterialTheme.colorScheme.primary }
-                Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
-                    Box(Modifier.fillMaxWidth(pct.coerceIn(0f, 1f)).height(6.dp).background(col, RoundedCornerShape(3.dp)))
-                }
-                Row {
-                    val left = cap - (u ?: 0)
-                    Text(if (left >= 0) "剩餘 ${Money.full(left)}" else "超出 ${Money.full(-left)}", fontSize = 12.sp,
-                        color = if (left >= 0) gray else MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
-                    avg?.let { Text("近三月平均 ${Money.full(it)}", fontSize = 12.sp, color = gray) }
-                }
-            } else avg?.let { Text("近三月平均 ${Money.full(it)}", fontSize = 12.sp, color = gray) }
-        }
-    }
-
     val cats = lk.categories.filter { it.kind == TxnType.EXPENSE && !it.archived && it.parentId == null }
     val setCats = cats.filter { s.budgets.containsKey(it.id) }
+        .sortedByDescending { c -> (used(c.id) ?: 0L).toDouble() / (s.budgets[c.id] ?: 1L).coerceAtLeast(1) }
     val unsetCats = cats.filter { !s.budgets.containsKey(it.id) }.sortedByDescending { suggest[it.id] ?: 0L }
+    val today = java.time.LocalDate.now()
+    val daysLeft = month?.let { java.time.temporal.ChronoUnit.DAYS.between(today, it.end) + 1 }?.takeIf { it > 0 }
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("預算設定", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // ① 總預算＋儲蓄率目標（點一下修改）
             item {
-                Text("點一下修改。進度也會顯示在「交易 → 檢討」；AI 檢討建議的目標按「採用」會寫到這裡。", color = gray, fontSize = 12.sp,
-                    modifier = Modifier.padding(start = 4.dp, top = 8.dp))
-            }
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(vertical = 8.dp)) {
-                        // 儲蓄率目標
-                        Row(Modifier.fillMaxWidth().clickable { editGoal = true }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("儲蓄率目標", fontSize = 15.sp, modifier = Modifier.weight(1f))
-                            Text(s.savingsGoal?.let { "%.0f%%".format(it) } ?: "未設定", fontSize = 14.sp, color = if (s.savingsGoal == null) gray else MaterialTheme.colorScheme.onSurface)
+                Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        val total = s.budgets[0L]
+                        Box(Modifier.clickable { editing = 0L to "總預算" }) {
+                            if (total != null) com.enwei.moneymanager.ui.components.BudgetMeter("總預算", used(0L) ?: 0L, total, Modifier.fillMaxWidth(), daysLeft = daysLeft)
+                            else Row(Modifier.fillMaxWidth()) {
+                                Text("總預算", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                Text("未設定", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
-                        BudgetLine(0L, "總預算")
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        Row(Modifier.fillMaxWidth().clickable { editGoal = true }, verticalAlignment = Alignment.CenterVertically) {
+                            Text("儲蓄率目標", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                            Text(s.savingsGoal?.let { "%.0f%%".format(it) } ?: "未設定", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
             }
+            // ② 分類預算：每個一行（點一下修改）
             if (setCats.isNotEmpty()) item {
                 Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(vertical = 8.dp)) {
-                        Text("分類預算", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                        setCats.forEach { BudgetLine(it.id, it.name) }
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("分類預算", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text("合計 ${Money.format(setCats.sumOf { s.budgets[it.id] ?: 0L })}", fontSize = 12.sp, color = gray)
+                        }
+                        setCats.forEach { c ->
+                            com.enwei.moneymanager.ui.components.BudgetRowCompact(c.name, used(c.id) ?: 0L, s.budgets[c.id] ?: 0L, Modifier.fillMaxWidth()) {
+                                editing = c.id to c.name
+                            }
+                        }
                     }
                 }
             }
+            // ③ 還沒設定的分類：小標籤，點一下設定
             if (unsetCats.isNotEmpty()) item {
                 Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(vertical = 8.dp)) {
-                        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("還沒設定（${unsetCats.size}）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("新增分類預算", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                             if (suggest.isNotEmpty()) TextButton(onClick = {
                                 // 只填還沒設定、平均 500 元以上的分類
                                 unsetCats.forEach { c -> suggest[c.id]?.takeIf { it >= 50_000 }?.let { setCap(c.id, it) } }
                                 if (!s.budgets.containsKey(0L)) suggest[0L]?.let { setCap(0L, it) }
                             }) { Text("全部帶入平均", fontSize = 13.sp) }
                         }
-                        unsetCats.forEach { BudgetLine(it.id, it.name) }
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            unsetCats.forEach { c ->
+                                androidx.compose.material3.AssistChip(onClick = { editing = c.id to c.name }, label = {
+                                    Text("＋ " + c.name + (suggest[c.id]?.let { " ${Money.format(it)}" } ?: ""), fontSize = 12.sp)
+                                })
+                            }
+                        }
                     }
                 }
             }

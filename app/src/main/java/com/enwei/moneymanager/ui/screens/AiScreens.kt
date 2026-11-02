@@ -85,13 +85,13 @@ fun AiSettingsScreen(nav: NavController) {
 
             // OpenRouter：免費模型（:free）當作額外備援
             ProviderCard(
-                Provider.OPENROUTER, "免費模型（:free）很多，當作 Groq、Gemini 額度用完時的備援；金鑰到 openrouter.ai 申請",
+                Provider.OPENROUTER, "免費模型備援，金鑰到 openrouter.ai 申請",
                 s.openRouterKey, { k -> repo.settings.update { it.copy(openRouterKey = k.trim()) } },
             ) {
                 ModelField("優先模型（空白＝自動挑免費模型）", s.openRouterModel) { v -> repo.settings.update { it.copy(openRouterModel = v.trim()) } }
                 val n = remember(s.openRouterKey) { com.enwei.moneymanager.net.OpenRouterModels.cached().size }
                 Text(
-                    "目前可用的免費模型約 $n 個（每天自動更新清單）。免費模型每分鐘 20 次；每天 50 次，帳戶儲值過 10 美元後提高到每天 1,000 次，整個帳戶共用。用完時 App 會自動改用其他模型。",
+                    "免費模型 $n 個・每分鐘 20 次・每天 50 次（儲值 10 美元後 1,000 次）",
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

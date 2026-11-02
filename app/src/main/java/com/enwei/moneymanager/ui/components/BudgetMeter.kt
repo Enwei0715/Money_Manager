@@ -1,6 +1,7 @@
 package com.enwei.moneymanager.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -94,6 +95,30 @@ fun BudgetInline(name: String, used: Long, cap: Long, adding: Long, modifier: Mo
         Text(
             (if (adding > 0) "記後" else "") + if (left >= 0) "剩 ${Money.format(left)}" else "超出 ${Money.format(-left)}",
             fontSize = 12.sp, color = if (left < 0) ExpenseColor else muted, maxLines = 1,
+        )
+    }
+}
+
+/**
+ * 清單用的一行式分類預算：「飲食 ▬▬▬▬ 516 / 7,248」，很多分類時每個只佔一行。
+ * 超過 80% 橘色、超出紅色；[onClick] 不為 null 時可點（預算設定頁點一下修改）。
+ */
+@Composable
+fun BudgetRowCompact(name: String, used: Long, cap: Long, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    val ratio = if (cap > 0) used.toFloat() / cap else 0f
+    val col = budgetColor(ratio)
+    Row(
+        (if (onClick != null) modifier.clickable(onClick = onClick) else modifier).padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(name, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.32f))
+        Box(Modifier.weight(0.4f).height(5.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
+            Box(Modifier.fillMaxWidth(ratio.coerceIn(0f, 1f)).height(5.dp).background(col, RoundedCornerShape(3.dp)))
+        }
+        Text(
+            "${Money.format(used)} / ${Money.format(cap)}", fontSize = 12.sp, maxLines = 1,
+            color = if (ratio > 1f) ExpenseColor else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(0.38f),
         )
     }
 }
