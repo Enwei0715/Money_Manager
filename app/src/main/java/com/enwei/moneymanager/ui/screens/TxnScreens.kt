@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -366,7 +367,7 @@ private fun AiSuggestionSection(lk: Lookups) {
     LaunchedEffect(all, settings.aiSuggestions) { unknown = repo.unknownCount() }
     val open = settings.aiSuggestions.filter { !it.rejected }
     val byId = all.associateBy { it.id }
-    val aiOn = settings.aiEnabled && (settings.groqKey.isNotBlank() || settings.geminiKey.isNotBlank())
+    val aiOn = settings.aiEnabled && settings.hasAiKey
     if (!aiOn && open.isEmpty()) return
     // 沒有建議也沒有不明花費時不顯示整塊（避免只剩一行「自動整理完成」）
     if (open.isEmpty() && unknown == 0 && !unknownProgress.running && unknownProgress.error == null) return
@@ -412,7 +413,7 @@ private fun DuplicateSection(lk: Lookups) {
     val verdicts = settings.dupVerdicts
     val logFold = com.enwei.moneymanager.ui.components.rememberFold("pending.tidyLog", false)
     val showLog = logFold.open
-    val aiOn = settings.aiEnabled && (settings.groqKey.isNotBlank() || settings.geminiKey.isNotBlank())
+    val aiOn = settings.aiEnabled && settings.hasAiKey
     LaunchedEffect(all, settings.dupDismissed) { pairs = repo.findDuplicates() }
     // 打開待確認頁時，順便請 AI 整理還沒判斷過的重複
     LaunchedEffect(aiOn, settings.aiAutoTidy) {

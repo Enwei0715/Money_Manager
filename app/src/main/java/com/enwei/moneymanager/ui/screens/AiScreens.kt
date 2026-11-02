@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -58,7 +59,7 @@ fun AiSettingsScreen(nav: NavController) {
                     if (s.aiEnabled) SwitchRow("AI 自動整理", "自動合併重複記的同一筆；確認 AI 判讀的通知後自動學會格式", s.aiAutoTidy, true) { v ->
                         repo.settings.update { it.copy(aiAutoTidy = v) }
                     }
-                    if (s.aiEnabled && s.groqKey.isBlank() && s.geminiKey.isBlank())
+                    if (s.aiEnabled && !s.hasAiKey)
                         Text("請在下方填入至少一個金鑰，AI 才會開始運作。", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                 }
             }
@@ -82,11 +83,24 @@ fun AiSettingsScreen(nav: NavController) {
                 ModelField("輕量模型（新聞標註、錢包畫面）", s.geminiLiteModel) { v -> repo.settings.update { it.copy(geminiLiteModel = v) } }
             }
 
+            // OpenRouter：免費模型（:free）當作額外備援
+            ProviderCard(
+                Provider.OPENROUTER, "免費模型（:free）很多，當作 Groq、Gemini 額度用完時的備援；金鑰到 openrouter.ai 申請",
+                s.openRouterKey, { k -> repo.settings.update { it.copy(openRouterKey = k.trim()) } },
+            ) {
+                ModelField("優先模型（空白＝自動挑免費模型）", s.openRouterModel) { v -> repo.settings.update { it.copy(openRouterModel = v.trim()) } }
+                val n = remember(s.openRouterKey) { com.enwei.moneymanager.net.OpenRouterModels.cached().size }
+                Text(
+                    "目前可用的免費模型約 $n 個（每天自動更新清單）。免費模型每分鐘 20 次；每天 50 次，帳戶儲值過 10 美元後提高到每天 1,000 次，整個帳戶共用。用完時 App 會自動改用其他模型。",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("模型自動分工", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "App 會依工作類型與資料量選擇 Groq 或 Gemini，並在額度不足或模型無回應時改用其他可用模型。",
+                        "App 會依工作類型與資料量選擇 Groq、Gemini 或 OpenRouter，並在額度不足或模型無回應時改用其他可用模型。",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

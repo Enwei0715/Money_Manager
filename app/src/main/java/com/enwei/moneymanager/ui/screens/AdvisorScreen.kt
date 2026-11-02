@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Stop
@@ -897,7 +898,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
     val newsWork = com.enwei.moneymanager.ui.components.rememberAiWorkStatus("news")
     val chatWork = com.enwei.moneymanager.ui.components.rememberAiWorkStatus("advisor-chat")
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    val aiReady = settings.aiEnabled && (settings.groqKey.isNotBlank() || settings.geminiKey.isNotBlank())
+    val aiReady = settings.aiEnabled && settings.hasAiKey
     val holdings by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
     val mine = remember(holdings) { holdings.values.flatten().map { it.symbol }.toSet() }
     val ds = MoneyApp.news

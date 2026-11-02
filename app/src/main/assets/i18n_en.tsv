@@ -2522,3 +2522,5 @@ AI 檢討	AI review
 這份報告沒有推薦個股。	No stock picks in this report.
 這份報告沒有持股動作。	No holding actions in this report.
 這份報告沒有標出必看新聞。	No must-read news in this report.
+免費模型（:free）很多，當作 Groq、Gemini 額度用完時的備援；金鑰到 openrouter.ai 申請	Many free (:free) models, used as a backup when Groq or Gemini run out; get a key at openrouter.ai
+優先模型（空白＝自動挑免費模型）	Preferred model (blank = pick a free model automatically)

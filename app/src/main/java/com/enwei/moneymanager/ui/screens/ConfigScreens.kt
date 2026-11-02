@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.CurrencyExchange
@@ -290,7 +291,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 cfg("AI 功能", onOff(s.aiEnabled)) {
                     askOnOff("AI 功能", s.aiEnabled, "關閉後隱藏所有 AI 相關畫面與設定（今日報告、問 AI、新聞整理、AI 檢討、AI 中心），背景也不會呼叫 AI；規則辨識與手動記帳照常。") { v ->
                         repo.settings.update { it.copy(aiEnabled = v) }
-                        if (v && s.groqKey.isBlank() && s.geminiKey.isBlank()) nav.navigate("ai")
+                        if (v && !s.hasAiKey) nav.navigate("ai")
                     }
                 }
 
@@ -301,7 +302,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
 
                 if (s.aiEnabled) {
                 sec("AI")
-                cfg("AI 模型設定", if (s.groqKey.isNotBlank() || s.geminiKey.isNotBlank()) "已設定金鑰" else "需要設定金鑰") { nav.navigate("ai") }
+                cfg("AI 模型設定", if (s.hasAiKey) "已設定金鑰" else "需要設定金鑰") { nav.navigate("ai") }
                 // AI 說話的口吻：收支檢討、投資報告、股票助理都會照這個語氣
                 cfg("AI 語氣", com.enwei.moneymanager.net.GroqAi.AiTone.entries.getOrElse(s.aiTone) { com.enwei.moneymanager.net.GroqAi.AiTone.GENTLE }.label) {
                     ask(

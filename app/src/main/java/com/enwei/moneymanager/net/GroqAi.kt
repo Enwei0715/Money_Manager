@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.net
 
+import com.enwei.moneymanager.data.hasAiKey
 import com.enwei.moneymanager.MoneyApp
 import com.enwei.moneymanager.core.ParsedKind
 import com.enwei.moneymanager.core.ParsedTransaction
@@ -35,9 +36,9 @@ object GroqAi {
     private val nameCache = ConcurrentHashMap<String, Pair<String?, Long?>>()
 
     val enabled: Boolean
-        get() = MoneyApp.repo.settings.value.let { it.aiEnabled && (it.groqKey.isNotBlank() || it.geminiKey.isNotBlank()) }
+        get() = MoneyApp.repo.settings.value.let { it.aiEnabled && it.hasAiKey }
 
-    enum class Provider(val label: String) { GROQ("Groq"), GEMINI("Gemini") }
+    enum class Provider(val label: String) { GROQ("Groq"), GEMINI("Gemini"), OPENROUTER("OpenRouter") }
 
     /**
      * App 裡所有用到 AI 的工作與分配；大量輸入優先使用較大上下文模型。[lite] 為用較輕量的模型即可。
@@ -93,19 +94,28 @@ object GroqAi {
         val flash25 = Route(Provider.GEMINI, "gemini-2.5-flash", true)
         val heavy = task in HEAVY
         val fitsGroq = inputLen <= 5000
+        // OpenRouter 免費模型：當作額外的備援（大量資料只用上下文 ≥ 64k 的）
+        val or = if (s.openRouterKey.isBlank()) emptyList()
+            else OpenRouterModels.pick(big = heavy || !fitsGroq, n = 3, preferred = s.openRouterModel).map { Route(Provider.OPENROUTER, it, heavy) }
         val order = (when {
-            !heavy && fitsGroq -> listOf(g20, lite, g120, lite25, flash20)
-            !heavy -> listOf(lite, lite25, flash20, flash, g20)
-            fitsGroq -> listOf(g120, flash, flash25, lite, flash20, lite25, g20)
-            else -> listOf(flash, flash25, lite, flash20, lite25, g120)
+            !heavy && fitsGroq -> listOf(g20, lite, g120, lite25, flash20) + or
+            !heavy -> listOf(lite, lite25, flash20, flash) + or + g20
+            fitsGroq -> listOf(g120, flash, flash25, lite) + or + listOf(flash20, lite25, g20)
+            else -> listOf(flash, flash25, lite) + or + listOf(flash20, lite25, g120)
         }).distinctBy { it.model }
-        return order.filter { if (it.provider == Provider.GROQ) s.groqKey.isNotBlank() else s.geminiKey.isNotBlank() }
+        return order.filter {
+            when (it.provider) {
+                Provider.GROQ -> s.groqKey.isNotBlank()
+                Provider.GEMINI -> s.geminiKey.isNotBlank()
+                Provider.OPENROUTER -> s.openRouterKey.isNotBlank()
+            }
+        }
     }
 
     /** 這項工作會先送到 Gemini（可以一次送大量資料），用來決定要送完整資料還是精簡版。 */
     fun bigContext(task: AiTask): Boolean {
         val now = System.currentTimeMillis()
-        return routes(task, Int.MAX_VALUE).firstOrNull { com.enwei.moneymanager.work.AiHealth.cooldownUntil(it.model) <= now }?.provider == Provider.GEMINI
+        return routes(task, Int.MAX_VALUE).firstOrNull { com.enwei.moneymanager.work.AiHealth.cooldownUntil(it.model) <= now }?.provider.let { it == Provider.GEMINI || it == Provider.OPENROUTER }
     }
 
     private suspend fun chatJson(
@@ -119,6 +129,8 @@ object GroqAi {
         val system = if (com.enwei.moneymanager.ui.I18n.english && task.userText)
             system + " Write every human-readable text value in English (keep JSON keys, values chosen from given lists, stock codes and original names unchanged)."
         else system
+        // OpenRouter 的免費模型清單一天更新一次（免費模型會增減）
+        if (s.openRouterKey.isNotBlank()) runCatching { OpenRouterModels.refresh() }
         val all = routes(task, system.length + user.length)
         if (all.isEmpty()) return@withContext null
         val now = System.currentTimeMillis()
@@ -140,7 +152,8 @@ object GroqAi {
             if (w > 0) {
                 if (task == AiTask.CHAT && w > 8_000 && r != ready.last().first) continue
                 kotlinx.coroutines.delay(minOf(w, 65_000L))
-            } else if (task != AiTask.CHAT) com.enwei.moneymanager.work.AiHealth.pace(r.provider.name, if (gem) 1_000 else 800)
+            } else if (task != AiTask.CHAT) com.enwei.moneymanager.work.AiHealth.pace(r.provider.name,
+                when (r.provider) { Provider.GEMINI -> 1_000; Provider.OPENROUTER -> 3_100; Provider.GROQ -> 800 })
             quota.record(r.model, gem, estTokens)
             val out = when (r.provider) {
                 Provider.GEMINI -> callGemini(s.geminiKey.trim(), r.model, system, user,
@@ -148,12 +161,21 @@ object GroqAi {
                     maxOf(2048, maxTokens * 4).let { if (r.big) maxOf(it, 12_000) else it }, timeoutSec = if (r.big) 90 else 45)
                 // 不加全域鎖：鎖不能重複取得，外層若已持有就會永遠卡住；限流交給下面的暫停機制與各工作的批次間隔
                 Provider.GROQ -> groqJson(s, system, user, maxTokens, r.big || hard, cap, if (r.big) effort else "low", forceModel = r.model)
+                Provider.OPENROUTER -> callOpenRouter(s.openRouterKey.trim(), r.model, system, user, maxOf(1024, maxTokens * 3).coerceAtMost(8192),
+                    timeoutSec = if (r.big) 120 else 60)
             }
             if (out != null) return@withContext out
             // 額度用完或沒回應：這個模型先暫停，之後的呼叫直接用下一個
             val err = lastError.orEmpty()
             // 伺服器有說多久後再試（Retry-After）就照它，否則用預設時間；再加隨機間隔，暫停時間會保存到 App 重開後
-            if ("429" in err) lastBody?.let { quota.learnFrom429(r.model, r.provider == Provider.GEMINI, it) }
+            if ("429" in err && r.provider != Provider.OPENROUTER) lastBody?.let { quota.learnFrom429(r.model, r.provider == Provider.GEMINI, it) }
+            // OpenRouter 的免費每日上限是整個帳戶共用：用完時所有免費模型都暫停到 UTC 午夜
+            if (r.provider == Provider.OPENROUTER && "每日" in err) {
+                val untilMidnight = java.time.Duration.between(java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC),
+                    java.time.LocalDate.now(java.time.ZoneOffset.UTC).plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC)).toMillis()
+                all.filter { it.provider == Provider.OPENROUTER }.forEach { com.enwei.moneymanager.work.AiHealth.cooldown(it.model, untilMidnight) }
+                continue
+            }
             if ("404" in err) { com.enwei.moneymanager.work.AiHealth.cooldown(r.model, 24 * 3600_000L); continue }
             if ("429" in err || "額度" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
                 retryAfterMs?.coerceIn(5_000L, 3600_000L) ?: if (r.provider == Provider.GEMINI) 15 * 60_000L else 2 * 60_000L)
@@ -243,6 +265,72 @@ object GroqAi {
     /** AI 呼叫可能要讀大量資料，等久一點。 */
     private val aiClient by lazy { Http.client.newBuilder().readTimeout(150, java.util.concurrent.TimeUnit.SECONDS).build() }
 
+    /**
+     * OpenRouter（OpenAI 相容格式）。免費模型 id 以「:free」結尾；不支援 JSON 模式的模型自動改用一般模式重試。
+     * 免費限制：每分鐘 20 次；每天 50 次（帳戶儲值過 10 美元後為 1000 次），整個帳戶共用。
+     */
+    private fun callOpenRouter(key: String, model: String, system: String, user: String, maxOut: Int, timeoutSec: Long = 60): JsonObject? {
+        var jsonMode = true
+        repeat(2) {
+            val body = buildJsonObject {
+                put("model", model)
+                put("messages", buildJsonArray {
+                    add(buildJsonObject { put("role", "system"); put("content", system + " Reply with a single JSON object only.") })
+                    add(buildJsonObject { put("role", "user"); put("content", user) })
+                })
+                put("temperature", 0.2)
+                put("max_tokens", maxOut)
+                if (jsonMode) put("response_format", buildJsonObject { put("type", "json_object") })
+            }.toString()
+            val req = Request.Builder().url("https://openrouter.ai/api/v1/chat/completions")
+                .header("Authorization", "Bearer $key")
+                .header("HTTP-Referer", "https://github.com/" + com.enwei.moneymanager.BuildConfig.UPDATE_REPO)
+                .header("X-Title", "Ledgerly")
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            var retryPlain = false
+            val out = runCatching {
+                aiClient.newBuilder().callTimeout(timeoutSec, java.util.concurrent.TimeUnit.SECONDS).build().newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful) {
+                        if (resp.code == 429 || resp.code == 503) { retryAfterMs = parseRetryAfter(resp.header("Retry-After"), text); lastBody = text }
+                        if (resp.code == 400 && jsonMode && (text.contains("response_format", true) || text.contains("json", true))) { retryPlain = true; return@use null }
+                        lastError = when (resp.code) {
+                            401 -> "OpenRouter 金鑰無效（401）"
+                            402 -> "OpenRouter 帳戶餘額不足（402）：請確認用的是「:free」模型"
+                            404 -> "OpenRouter 模型「$model」無法使用（404）"
+                            429 -> if (text.contains("per-day", true) || text.contains("per day", true))
+                                "OpenRouter 免費模型今天的每日上限已用完（429），UTC 午夜（台灣早上 8 點）恢復"
+                            else "OpenRouter「$model」每分鐘次數已滿（429）"
+                            else -> "OpenRouter HTTP ${resp.code}：${text.take(140)}"
+                        }
+                        return@use null
+                    }
+                    val root = Http.json.parseToJsonElement(text).jsonObject
+                    // 有些上游錯誤會用 200 回 {"error": …}
+                    (root["error"] as? JsonObject)?.let { e ->
+                        lastError = "OpenRouter：" + ((e["message"] as? JsonPrimitive)?.contentOrNull ?: "上游錯誤").take(140)
+                        return@use null
+                    }
+                    val msg = ((root["choices"] as? kotlinx.serialization.json.JsonArray)?.firstOrNull() as? JsonObject)?.get("message") as? JsonObject
+                    val content = (msg?.get("content") as? JsonPrimitive)?.contentOrNull
+                    if (content.isNullOrBlank()) { lastError = "OpenRouter「$model」沒有回覆內容"; return@use null }
+                    val a = content.indexOf('{'); val b = content.lastIndexOf('}')
+                    if (a < 0 || b <= a) { if (jsonMode) retryPlain = true else lastError = "OpenRouter 回覆不是 JSON"; return@use null }
+                    lastError = null
+                    runCatching { Http.json.parseToJsonElement(content.substring(a, b + 1)).jsonObject }
+                        .getOrElse { lastError = "OpenRouter 回覆的 JSON 不完整"; null }
+                }
+            }.getOrElse {
+                lastError = if (it is java.io.InterruptedIOException) "OpenRouter 逾時（$timeoutSec 秒沒有回應）" else "OpenRouter：" + (it.message ?: it.javaClass.simpleName)
+                null
+            }
+            if (out != null) return out
+            if (retryPlain && jsonMode) jsonMode = false else return null
+        }
+        return null
+    }
+
     /** Google Gemini（generateContent，JSON 模式）。失敗回傳 null 並記下原因。 */
     private fun callGemini(key: String, model: String, system: String, user: String, maxOut: Int, timeoutSec: Long = 90): JsonObject? {
         val body = buildJsonObject {
@@ -306,6 +394,14 @@ object GroqAi {
             else groqJson(s, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 20, false, 6000, "low")
             Provider.GEMINI -> if (s.geminiKey.isBlank()) return@withContext "還沒填 Gemini 金鑰"
             else callGemini(s.geminiKey.trim(), s.geminiLiteModel.trim().ifBlank { "gemini-flash-lite-latest" }, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 256)
+            Provider.OPENROUTER -> if (s.openRouterKey.isBlank()) return@withContext "還沒填 OpenRouter 金鑰"
+            else {
+                OpenRouterModels.refresh(force = true)
+                // 依序試幾個免費模型，有一個回應就算成功
+                OpenRouterModels.pick(false, 3, s.openRouterModel).firstNotNullOfOrNull { m ->
+                    callOpenRouter(s.openRouterKey.trim(), m, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 256)
+                }
+            }
         }
         if (r != null) null else lastError ?: "沒有回應"
     }

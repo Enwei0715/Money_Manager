@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.data.hasAiKey
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,7 +25,7 @@ import com.enwei.moneymanager.ui.components.Text
 @Composable
 fun AiHubScreen(nav: NavController) {
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    val ready = settings.aiEnabled && (settings.groqKey.isNotBlank() || settings.geminiKey.isNotBlank())
+    val ready = settings.aiEnabled && settings.hasAiKey
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { BackTopBar("AI 中心", { nav.popBackStack() }) },
