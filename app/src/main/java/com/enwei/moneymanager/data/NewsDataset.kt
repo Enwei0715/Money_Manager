@@ -162,6 +162,9 @@ data class NewsStore(
     val historyKeepDays: Int = 30,
     /** 合併後的標準題材（標註新聞時優先沿用） */
     val themeCanon: List<String> = emptyList(),
+    /** grid：所有 block 重點彙整的市場大局（條列）與整理時間 */
+    val overview: List<String> = emptyList(),
+    val overviewAt: Long = 0,
 )
 
 /** 依保留天數刪掉太舊的報告。 */
@@ -218,6 +221,9 @@ data class NewsGrid(
     /** 未讀（待標註）的新聞則數 */
     val inbox: Int = 0,
     val blocks: List<BlockInfo> = emptyList(),
+    /** 市場大局（所有 block 重點的彙整） */
+    val overview: List<String> = emptyList(),
+    val overviewAt: Long = 0,
 )
 
 @Serializable
@@ -308,6 +314,7 @@ class NewsDataset(context: Context) {
                 history = g.history,
                 historyKeepDays = g.historyKeepDays,
                 themeCanon = g.themeCanon,
+                overview = g.overview, overviewAt = g.overviewAt,
             )
         }
         store.also { cache = it; _flow.value = it; _grid.value = progressOf(it) }
@@ -382,6 +389,7 @@ class NewsDataset(context: Context) {
         val grid = NewsGrid(
             lastCollect = s.lastCollect, report = s.report, history = s.history, business = s.business,
             historyKeepDays = s.historyKeepDays, inbox = inbox.size, themeCanon = s.themeCanon,
+            overview = s.overview, overviewAt = s.overviewAt,
             blocks = blocks.sortedWith(compareByDescending<NewsBlock> { it.day }.thenByDescending { it.threads }).map { b ->
                 val info = BlockInfo(b.key, "blocks/" + fileOf(b.key), b.status, b.threads, b.read)
                 val prev = prevInfo[b.key]
@@ -529,7 +537,9 @@ class NewsDataset(context: Context) {
         for (i in 0 until maxBatches) {
             // 每一批之前檢查時間預算與網路：停下時已完成的批次都已寫入，下一輪接續
             if (stop()) return done
-            val batch = takeNewsBatch(load().items.filter { !it.tagged }.sortedByDescending { it.tries }, maxChars)
+            // thread：可讀大量資料時每次 20 則（標題＋內文頭尾各 200 字），否則依字數限制
+            val todo = load().items.filter { !it.tagged }.sortedByDescending { it.tries }
+            val batch = if (big) takeNewsBatch(todo.take(20), 12_000) else takeNewsBatch(todo, maxChars)
             if (batch.isEmpty()) break
             onProgress(i, maxOf(total, i + 1))
             val ids = batch.map { it.id }.toHashSet()
@@ -605,50 +615,87 @@ class NewsDataset(context: Context) {
             }
             done += small.size
         }
+        // block：同一個題材近 3 天的新聞放同一塊（較少見的題材合成一塊），一次給 AI 全局整理；
+        // 只處理含有待整理區塊的題材，結果依新聞 id 寫回各「日期|題材」區塊（畫面與報告照舊讀取）
         val large = groups.filter { it.value.size >= 3 }
+        if (large.isEmpty()) return done
+        val needThemes = large.map { it.key.second }.toSet()
+        val byTheme = recent(st, 3).filter { it.tagged && it.theme in needThemes }.groupBy { it.theme }
+        val rare = byTheme.filterValues { it.size < 8 }
+        val blocks = ArrayList<Pair<String, List<NewsItem>>>()
+        byTheme.filterValues { it.size >= 8 }.entries.sortedByDescending { it.value.size }.forEach { (t, l) ->
+            chunkNews(l.sortedByDescending { it.epochSec }.take(400), if (big) 18_000 else 2_500).forEach { blocks += t to it }
+        }
+        if (rare.isNotEmpty()) chunkNews(rare.values.flatten().sortedBy { it.theme }, if (big) 18_000 else 2_500).forEach { blocks += "其他題材" to it }
+        val groupOf = recent(st, 3).filter { it.tagged }.groupBy { dayOf(it) to it.theme }
         var failures = 0
-        for ((i, e) in large.withIndex()) {
+        for ((bi, b) in blocks.withIndex()) {
             if (stop()) return done
-            // 連續 3 組都失敗（多半是額度用完）才停，單一組失敗跳過、下次再試
             if (failures >= 3) return done
-            val (k, list) = e
-            val sorted = list.sortedByDescending { it.importance }
-            val parts = chunkNews(sorted, maxChars)
-            if (calls + parts.size > maxCalls) continue
-            onProgress(i, large.size)
-            val got = ArrayList<DigestPoint>()
-            var ok = true
-            for ((pi, part) in parts.withIndex()) {
-                calls++
-                var result = GroqAi.digestTheme(k.second, k.first, part)
-                // 大模型都失敗（null）或漏掉一半以上：拆成小段重送，連可讀量小的模型也能接手；少數漏掉的直接用標題補成重點
-                if ((result == null || coverage(result, part) < 0.5) && big && part.sumOf { it.title.length + it.content.take(300).length } > 2_500) {
-                    val retryParts = chunkNews(part, 2_500)
-                    if (calls + retryParts.size > maxCalls) { ok = false; break }
-                    val retried = ArrayList<DigestPoint>()
-                    for (retryPart in retryParts) {
-                        val retryResult = GroqAi.digestTheme(k.second, k.first, retryPart)?.let { repair(it, retryPart) }
-                        calls++
-                        if (!covers(retryResult, retryPart)) { ok = false; break }
-                        retried += retryResult.orEmpty()
-                    }
-                    if (!ok) break
-                    result = mergePoints(retried)
+            if (calls >= maxCalls) return done
+            val (label, items) = b
+            onProgress(bi, blocks.size)
+            calls++
+            var pts = GroqAi.digestBlock(label, items, ::dayOf)
+            // 大模型都失敗或漏掉一半以上：拆成小段，讓可讀量小的模型也能接手
+            if ((pts == null || coverage(pts, items) < 0.5) && big && items.size > 8) {
+                val got = ArrayList<DigestPoint>()
+                var ok = true
+                for (part in chunkNews(items, 2_500)) {
+                    if (stop() || calls >= maxCalls) { ok = false; break }
+                    calls++
+                    val r = GroqAi.digestBlock(label, part, ::dayOf)
+                    if (r == null) { ok = false; break }
+                    got += repair(r, part)
+                    delay(3_000)
                 }
-                result = result?.let { repair(it, part) }
-                if (!covers(result, part)) { ok = false; break }
-                got += result.orEmpty()
-                if (pi < parts.lastIndex) delay(if (big) 5_000 else 12_000)
+                pts = if (ok) got else pts
             }
-            val merged = if (ok) mergePoints(got) else emptyList()
-            val covered = merged.flatMap { it.sourceIds }
-            if (!ok || covered.toSet() != sorted.map { it.id }.toSet() || covered.size != sorted.size) { failures++; continue }
+            if (pts == null) { failures++; continue }
             failures = 0
-            update { s -> s.copy(digests = keepRecent(store(k, list, merged, s))) }
-            done++
-            if (i < large.lastIndex) delay(if (big) 5_000 else 12_000)
+            val fixed = repair(pts, items)
+            // 寫回：每個「日期|題材」區塊取屬於它的新聞的重點
+            val touched = items.map { dayOf(it) to it.theme }.toSet()
+            update { s ->
+                var m = s.digests
+                touched.forEach { k ->
+                    val list = groupOf[k] ?: return@forEach
+                    val ids = list.map { it.id }.toSet()
+                    val own = fixed.mapNotNull { p -> p.sourceIds.filter { it in ids }.takeIf { it.isNotEmpty() }?.let { p.copy(sourceIds = it, count = it.size) } }
+                    val missing = list.filter { n -> own.none { n.id in it.sourceIds } }
+                        .map { DigestPoint(it.note.ifBlank { it.title }.take(80), it.symbols, it.sentiment, it.duplicateCount, listOf(it.id)) }
+                    m = store(k, list, mergePoints(own + missing), s.copy(digests = m))
+                }
+                s.copy(digests = keepRecent(m))
+            }
+            done += touched.size
+            if (bi < blocks.lastIndex) delay(if (big) 3_000 else 8_000)
         }
         return done
+    }
+
+    /**
+     * grid：把所有題材的重點彙整成市場大局（一次呼叫）。重點有更新、或上次整理超過 3 小時才重做。
+     */
+    suspend fun overview(force: Boolean = false): Boolean {
+        val st = load()
+        val newest = st.digests.values.maxOfOrNull { it.updatedAt } ?: return false
+        if (!force && st.overview.isNotEmpty() && st.overviewAt >= newest && System.currentTimeMillis() - st.overviewAt < 3 * 3600_000L) return false
+        val cutoff = java.time.LocalDate.now().minusDays(2).toString()
+        val text = buildString {
+            st.digests.values.filter { it.day >= cutoff }.groupBy { it.theme }
+                .entries.sortedByDescending { e -> e.value.sumOf { it.count } }.take(40).forEach { (theme, days) ->
+                    appendLine("【$theme】${days.sumOf { it.count }} 則")
+                    days.sortedByDescending { it.day }.forEach { d ->
+                        d.points.sortedByDescending { it.count }.take(6).forEach { p ->
+                            appendLine("- ${d.day.takeLast(5)} ${p.text}" + (if (p.symbols.isNotEmpty()) "｜${p.symbols.joinToString(",")}" else "") + "｜${p.sentiment}｜${p.count}則")
+                        }
+                    }
+                }
+        }.take(60_000)
+        val o = GroqAi.gridOverview(text) ?: return false
+        update { it.copy(overview = o, overviewAt = System.currentTimeMillis()) }
+        return true
     }
 
     /**

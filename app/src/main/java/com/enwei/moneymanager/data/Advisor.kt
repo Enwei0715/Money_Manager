@@ -315,6 +315,11 @@ private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: 
             val heads = recent.filter { t.key in it.symbols }.take(if (full) 3 else 1).joinToString(" / ") { it.title.take(if (full) 40 else 24) }
             appendLine("- ${t.key}｜${t.count}｜${"%+.1f".format(t.avgSentiment)}｜$heads")
         }
+        // grid：市場大局（所有題材重點的彙整）
+        if (st.overview.isNotEmpty()) {
+            appendLine("市場大局（新聞重點彙整）：")
+            st.overview.forEach { appendLine("- $it") }
+        }
         // 新聞重點庫：所有新聞依題材整理後的重點（同一事件只寫一次）
         val cutoff = LocalDate.now().minusDays(2).toString()
         val byTheme = st.digests.values.filter { it.day >= cutoff }.groupBy { it.theme }
@@ -439,7 +444,9 @@ suspend fun Repository.refreshNews(
         onStep("AI 合併題材分類…")
         runCatching { ds.consolidateThemes(stop) }
         // block：把每個區塊的全部新聞整理成重點文章，區塊就完整了
-        ds.digest(stop = stop) { i, n -> onDigest(i, n); onStep("整理新聞重點 ${i + 1}/$n…") }
+        ds.digest(stop = stop) { i, n -> onDigest(i, n); onStep("整理新聞重點 block ${i + 1}/$n…") }
+        // grid：所有題材的重點彙整成市場大局（一次呼叫）
+        if (!stop()) { onStep("整理市場大局…"); runCatching { ds.overview() } }
         budget?.stopReason?.let { onStep("暫停：$it") }
     }
     return added

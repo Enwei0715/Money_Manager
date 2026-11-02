@@ -1013,7 +1013,7 @@ object GroqAi {
         val user = items.mapIndexed { i, item ->
             buildString {
                 append("$i. [${item.contentLevel}] ${item.title}")
-                if (item.content.isNotBlank()) append("\n來源內容：${item.content.take(150)}")
+                if (item.content.isNotBlank()) append("\n來源內容：${headTail(item.content)}")
             }
         }.joinToString("\n\n")
         val r = chatJson(system, user, 25 * items.size + 200, task = AiTask.NEWS_TAG, quality = { o ->
@@ -1246,6 +1246,62 @@ object GroqAi {
             m.forEach { (k, v) -> (v as? JsonPrimitive)?.contentOrNull?.trim()?.take(12)?.takeIf { it.isNotBlank() }?.let { out[k.trim()] = it } }
         }
         return out
+    }
+
+    /** 內文太長時只取開頭 200 字與結尾 200 字（新聞的重點多在開頭，結論在結尾） */
+    fun headTail(text: String, n: Int = 200): String {
+        val t = text.replace(Regex("\\s+"), " ").trim()
+        return if (t.length <= n * 2 + 10) t else t.take(n) + " … " + t.takeLast(n)
+    }
+
+    /**
+     * block：同一個題材（或幾個較少見的題材合在一起）近幾天的所有新聞，一次整理成不重複的重點。
+     * 每則新聞都要歸到某個重點；回傳的 sourceIds 是新聞 id。
+     */
+    suspend fun digestBlock(label: String, items: List<com.enwei.moneymanager.data.NewsItem>, dayOf: (com.enwei.moneymanager.data.NewsItem) -> String): List<com.enwei.moneymanager.data.DigestPoint>? {
+        if (!enabled || items.isEmpty()) return emptyList()
+        val system = "你是台股新聞編輯。以下是「$label」近幾天的新聞（每筆有日期、題材、內容範圍與內容）。" +
+            "把所有新聞整理成不重複的事件重點（約每 3～8 則一點，同一事件不同日期的後續可合成一點並寫出最新進展）；" +
+            "每筆新聞的編號必須且只能歸入一個重點，不能漏掉。每點 50 字內、具體（公司、數字、事件），" +
+            "標出相關台股代號（確定的才填）與對相關個股的多空（-2～2）。內容只有標題時不可假設讀到正文。" +
+            "只回 JSON：{\"p\": [{\"t\": 重點, \"s\": [代號], \"m\": 數字, \"i\": [輸入編號]}]}"
+        val user = items.mapIndexed { i, item ->
+            buildString {
+                append("$i. [${dayOf(item).takeLast(5)}][${item.theme}][${item.contentLevel}] ${item.title}")
+                if (item.content.isNotBlank()) append("\n內容：${headTail(item.content)}")
+            }
+        }.joinToString("\n")
+        val r = chatJson(system, user, 30 * items.size + 400, task = AiTask.DIGEST, quality = { o ->
+            val got = (o["p"] as? kotlinx.serialization.json.JsonArray)?.flatMap { e ->
+                ((e as? JsonObject)?.get("i") as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toIntOrNull() }.orEmpty()
+            }?.filter { it in items.indices }?.toSet().orEmpty()
+            (got.size.toDouble() / items.size / 0.8).coerceAtMost(1.0)
+        }) ?: return null
+        val code = Regex("^[0-9]{4,6}[A-Z]?$")
+        return (r["p"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val t = o.str("t")?.take(80) ?: return@mapNotNull null
+            val ids = (o["i"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull {
+                (it as? JsonPrimitive)?.contentOrNull?.toIntOrNull()?.let { idx -> items.getOrNull(idx)?.id }
+            }?.distinct().orEmpty()
+            if (ids.isEmpty()) return@mapNotNull null
+            val syms = (o["s"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { s -> code.matches(s) } }.orEmpty()
+            com.enwei.moneymanager.data.DigestPoint(t, syms.distinct().take(5), o.str("m")?.toDoubleOrNull()?.toInt()?.coerceIn(-2, 2) ?: 0, ids.size, ids)
+        }
+    }
+
+    /**
+     * grid：所有 block 的重點彙整成大局（各題材現在在討論什麼、資金流向、主要風險），一次呼叫。
+     * 回傳條列（每點一行）；失敗時回傳 null。
+     */
+    suspend fun gridOverview(blocks: String): List<String>? {
+        if (!enabled || blocks.isBlank()) return null
+        val system = "你是台股市場分析師。以下是近幾天新聞依題材整理好的重點（題材、日期、重點、代號、多空、則數）。" +
+            "請寫出目前的市場大局：6～10 點，每點 60 字內，涵蓋大盤方向、最熱的題材與原因、資金流向、利多與利空、主要風險；" +
+            "要具體（題材名、公司、數字），只根據提供的內容。只回 JSON：{\"o\": [重點]}"
+        val r = chatJson(system, blocks, 1200, task = AiTask.REPORT) ?: return null
+        return (r["o"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.take(120)?.takeIf { t -> t.isNotEmpty() } }
+            ?.take(10)?.takeIf { it.isNotEmpty() }
     }
 
     suspend fun digestTheme(theme: String, day: String, items: List<com.enwei.moneymanager.data.NewsItem>): List<com.enwei.moneymanager.data.DigestPoint>? {

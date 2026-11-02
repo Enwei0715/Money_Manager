@@ -1053,6 +1053,24 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                     Text("還沒有新聞。按上方「立即更新」開始蒐集" + (if (!GroqAi.enabled) "（需要先設定 AI 金鑰）" else "") + "。",
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp))
                 }
+                // grid：市場大局（所有題材重點的彙整）
+                if (store.overview.isNotEmpty()) item {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("市場大局", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                Text(java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(store.overviewAt)),
+                                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            store.overview.forEach { p ->
+                                Row {
+                                    Box(Modifier.padding(top = 7.dp, end = 8.dp).size(5.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)))
+                                    Text(p, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
                 if (stats.important.isNotEmpty()) item {
                     Text("重點新聞", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
                 }
