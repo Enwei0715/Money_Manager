@@ -1327,6 +1327,9 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
     var guardOn by remember { mutableStateOf(p.guardOn) }
     var gTrail by remember { mutableStateOf(p.guardTrailPct.toString()) }
     var base by remember { mutableStateOf(p.baseShares.toLong().toString()) }
+    var aiNote by remember { mutableStateOf<String?>(null) }
+    var aiBusy by remember { mutableStateOf(false) }
+    val aiScope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("資金與持股建議") },
@@ -1345,6 +1348,26 @@ private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
                     })
                 }
                 if (disciplineOn) {
+                    // 讓 AI 讀「我的投資原則」換算成參數（原則沒提到的不改）
+                    if (p.rules.isNotEmpty() && GroqAi.enabled) OutlinedButton(enabled = !aiBusy, onClick = {
+                        aiBusy = true
+                        aiScope.launch {
+                            val r = runCatching { GroqAi.disciplineFromRules(p.rules) }.getOrNull()
+                            if (r == null) aiNote = "AI 沒有回應：${GroqAi.lastError ?: "請稍後再試"}"
+                            else {
+                                val (m, note) = r
+                                fun f(v: Double) = if (v % 1.0 == 0.0) v.toLong().toString() else v.toString()
+                                m["shortStopPct"]?.let { stop = f(it) }
+                                m["shortTrailPct"]?.let { trail = f(it) }
+                                m["longTrailPct"]?.let { longTrail = f(it) }
+                                m["takeProfitPct"]?.let { tp = f(it) }
+                                m["guardTrailPct"]?.let { gTrail = f(it) }
+                                aiNote = if (m.isEmpty()) "投資原則裡沒有找到可換算的數字" else "已依投資原則帶入 ${m.size} 項（按儲存才生效）：$note"
+                            }
+                            aiBusy = false
+                        }
+                    }) { Text(if (aiBusy) "AI 讀取中…" else "依我的投資原則帶入（AI）") }
+                    aiNote?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("保本＋移動停利", fontSize = 14.sp, modifier = Modifier.weight(1f))
                         Switch(guardOn, { guardOn = it })

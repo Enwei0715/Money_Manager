@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -103,7 +104,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
         divs = runCatching { com.enwei.moneymanager.net.QuoteService.fetchDividends(Market.TW, symbol) }.getOrDefault(emptyList())
     }
     val held = holdings.values.flatten().filter { it.market == Market.TW && it.symbol == symbol && it.shares > 0.0001 }
-    val name = held.firstNotNullOfOrNull { it.name } ?: bars?.name
+    // 名稱用股票清單的中文名稱（Yahoo 的是英文全名）
+    val name = held.firstNotNullOfOrNull { it.name } ?: com.enwei.moneymanager.net.TwData.nameOf(symbol) ?: bars?.name
     // K 線上的參考線：均價、停利價、減碼價、提醒的目標價與停損價
     val levels = buildList {
         // 近 60 日的高點（壓力）與低點（支撐）
@@ -182,6 +184,19 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                 }
                 val kb = if (hourly) hourBars else b
+                // 依紀律參數找出的買點、賣點（日 K）：長線用較寬的移動停損、分批停利門檻加倍；開啟保本＋移動停利時用它的回落 %
+                val style = settings.styleOf(symbol)
+                val plan = settings.investPlan
+                val sigParams = com.enwei.moneymanager.core.TradeSignals.Params(
+                    long = style == com.enwei.moneymanager.core.TradeStyle.LONG,
+                    stopPct = plan.shortStopPct,
+                    trailPct = if (plan.guardOn) plan.guardTrailPct else if (style == com.enwei.moneymanager.core.TradeStyle.LONG) plan.longTrailPct else plan.shortTrailPct,
+                    takeProfitPct = plan.takeProfitPct,
+                )
+                val signals = remember(System.identityHashCode(b), sigParams) {
+                    com.enwei.moneymanager.core.TradeSignals.scan(b.open, b.high, b.low, b.close, b.volume, sigParams)
+                }
+                var showSignals by remember { mutableStateOf(true) }
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -206,7 +221,11 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                     fontSize = 12.sp, color = if ((chg ?: 0.0) >= 0) StockUp else StockDown, modifier = Modifier.padding(top = 6.dp),
                                 )
                             }
-                            CandleChart(kb, from, n, showBB, mas.sorted(),
+                            val visibleSignals = if (hourly || !showSignals) emptyList() else signals.filter { it.index in from until from + n }
+                            sel?.let { j -> visibleSignals.firstOrNull { it.index == j } }?.let { sg ->
+                                Text((if (sg.buy) "買點：" else "賣點：") + sg.reason, fontSize = 12.sp, color = if (sg.buy) StockUp else StockDown)
+                            }
+                            CandleChart(kb, from, n, showBB, mas.sorted(), signals = visibleSignals,
                                 onZoom = { z -> count = (count / z).coerceIn(10f, total.toFloat()); back = back.coerceIn(0f, (total - count).coerceAtLeast(0f)) },
                                 onPan = { bars -> back = (back + bars).coerceIn(0f, (total - count).coerceAtLeast(0f)) },
                                 levels = levels.map { it.first to it.second }, selected = sel,
@@ -219,6 +238,23 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             fun d(i: Int) = java.time.LocalDate.ofEpochDay(kb.days[i]).let { "${it.monthValue}/${it.dayOfMonth}" }
                             Text("${d(from)} – ${d(from + n - 1)}", fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            // 紀律買賣點：圈出的 K 棒與理由（依「資金紀律」的參數）
+                            if (!hourly) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("紀律買賣點（${style.label}：停損 ${"%.0f".format(sigParams.stopPct)}%、移動停損 ${"%.0f".format(sigParams.trailPct)}%、停利 ${"%.0f".format(if (sigParams.long) sigParams.takeProfitPct * 2 else sigParams.takeProfitPct)}%）",
+                                        fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                    androidx.compose.material3.Switch(showSignals, { showSignals = it }, Modifier.scale(0.8f))
+                                }
+                                if (showSignals) {
+                                    if (visibleSignals.isEmpty()) Text("這段期間沒有符合紀律的買賣點", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    visibleSignals.takeLast(6).forEach { sg ->
+                                        Text("${if (sg.buy) "● 買" else "● 賣"} ${d(sg.index)}　${sg.reason}", fontSize = 12.sp,
+                                            color = if (sg.buy) StockUp else StockDown,
+                                            modifier = Modifier.clickable { picked = sg.index })
+                                    }
+                                    Text("參數在「助理 → 資金紀律」調整，也可以讓 AI 依你的投資原則帶入；僅供參考。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
                             if (back >= 1f) TextButton(onClick = { back = 0f }) { Text("回到最新") }
                             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 (if (hourly) listOf(20, 50) else listOf(5, 10, 20, 60, 72, 100, 200)).forEach { len ->
@@ -257,7 +293,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                 }
                 RevenueCard(symbol)
-                ProjectionCard(c)
+                ProjectionCard(b)
                 if (held.isNotEmpty() && settings.investPlan.disciplineOn) Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         val shares = held.sumOf { it.shares }
@@ -341,16 +377,31 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("這家公司做什麼", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    business?.let { Text(it, fontSize = 14.sp) }
-                        ?: if (GroqAi.enabled) OutlinedButton(onClick = {
-                            scope.launch {
-                                val d = GroqAi.describeCompany(symbol, name.orEmpty())
-                                if (!d.isNullOrBlank()) {
-                                    business = d
-                                    MoneyApp.news.update { it.copy(business = it.business + (symbol to d)) }
-                                }
-                            }
-                        }) { Text("請 AI 說明") } else Text("開啟 AI 後可以查看", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    var info by remember(symbol) { mutableStateOf(com.enwei.moneymanager.data.CompanyInfo.get(ctx, symbol)) }
+                    var busy by remember { mutableStateOf(false) }
+                    fun refresh() {
+                        if (busy || !GroqAi.enabled) return
+                        busy = true
+                        scope.launch {
+                            com.enwei.moneymanager.data.CompanyInfo.refresh(ctx, symbol, name.orEmpty(), news)?.let { info = it; business = it.text }
+                            busy = false
+                        }
+                    }
+                    // 超過 14 天自動重新整理（依最新的新聞與營收）
+                    LaunchedEffect(symbol, loading) {
+                        if (!loading && (info != null || business != null) && com.enwei.moneymanager.data.CompanyInfo.stale(info)) refresh()
+                    }
+                    val text = info?.text ?: business
+                    text?.let { Text(it, fontSize = 14.sp) }
+                    info?.recent?.takeIf { it.isNotBlank() }?.let { Text("近況：$it", fontSize = 13.sp) }
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if (info != null) Text(
+                        "AI 依 ${info!!.basis} 整理 · " + java.text.SimpleDateFormat("M/d", java.util.Locale.TAIWAN).format(java.util.Date(info!!.at)),
+                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (GroqAi.enabled) TextButton(onClick = { refresh() }, enabled = !busy) { Text(if (text == null) "請 AI 依新聞與營收說明" else "重新整理") }
+                    else if (text == null) Text("開啟 AI 後可以查看", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             // 相關新聞
@@ -432,6 +483,7 @@ private fun maColor(len: Int): Color = when (len) {
 private fun CandleChart(
     b: DailyBars, from: Int, n: Int, showBB: Boolean, mas: List<Int>, onZoom: (Float) -> Unit, onPan: (Float) -> Unit,
     levels: List<Pair<Double, Color>> = emptyList(), selected: Int? = null, onTap: (Float) -> Unit = {},
+    signals: List<com.enwei.moneymanager.core.TradeSignals.Signal> = emptyList(),
 ) {
     val bb = remember(System.identityHashCode(b)) { Technicals.bollinger(b.close) }
     // 月線、季線（畫交叉標記用）
@@ -521,6 +573,17 @@ private fun CandleChart(
                 drawPath(Path().apply { moveTo(cx, yy); lineTo(cx - s / 2, yy - s); lineTo(cx + s / 2, yy - s); close() }, down)
             }
         }
+        // 紀律買賣點：買點圈在 K 棒下方、賣點圈在上方
+        signals.forEach { sg ->
+            val i = sg.index - from
+            if (i !in 0 until n) return@forEach
+            val cx = i * cw + cw / 2
+            val col = if (sg.buy) up else down
+            val r = maxOf(cw * 0.9f, 9f).coerceAtMost(16f)
+            val cy = if (sg.buy) (y(b.low[sg.index]) + r + 4f).coerceAtMost(priceH - r) else (y(b.high[sg.index]) - r - 4f).coerceAtLeast(r)
+            drawCircle(col, radius = r, center = Offset(cx, cy), style = Stroke(2.5f))
+            drawCircle(col, radius = r * 0.35f, center = Offset(cx, cy))
+        }
         // 點選的 K 棒：直線標示
         selected?.takeIf { it in from until to }?.let { j ->
             val x = (j - from) * cw + cw / 2
@@ -544,8 +607,8 @@ private fun PriceAlertCard(symbol: String, price: Double, held: Boolean) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("價格提醒", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                com.enwei.moneymanager.ui.components.NumberField(target, { target = it; save() }, "目標價（漲到通知）", Modifier.weight(1f))
-                com.enwei.moneymanager.ui.components.NumberField(stop, { stop = it; save() }, "停損價（跌到通知）", Modifier.weight(1f))
+                com.enwei.moneymanager.ui.components.NumberField(target, { target = it; save() }, "目標價", Modifier.weight(1f))
+                com.enwei.moneymanager.ui.components.NumberField(stop, { stop = it; save() }, "停損價", Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedButton(onClick = { target = "%.2f".format(price * 1.1); save() }) { Text("+10%") }
@@ -777,56 +840,114 @@ private fun RevenueCard(symbol: String) {
  * 趨勢推估：用近 120 日收盤價的對數線性回歸算出趨勢，加上近期波動算出未來 20 個交易日的 1 個標準差區間。
  * 只是統計推估，不是預測或投資建議。
  */
+/**
+ * 趨勢推估：找出波段高低點畫壓力線與支撐線（通道、楔形、三角收斂…），往後延伸 20 個交易日；
+ * 統計扇形（近期趨勢＋波動）淡淡地放在後面。線型太亂畫不出趨勢線時，只用扇形。
+ */
 @Composable
-private fun ProjectionCard(close: List<Double>) {
+private fun ProjectionCard(b: DailyBars) {
+    val close = b.close
+    if (close.size < 40) return
+    val trend = remember(System.identityHashCode(b)) { com.enwei.moneymanager.core.TrendLines.find(b.high, b.low, close) }
     val hist = close.takeLast(120)
-    if (hist.size < 40) return
     val ys = hist.map { kotlin.math.ln(it) }
-    val n = ys.size
-    val xm = (n - 1) / 2.0
+    val nn = ys.size
+    val xm = (nn - 1) / 2.0
     val ym = ys.average()
     val slope = ys.indices.sumOf { (it - xm) * (ys[it] - ym) } / ys.indices.sumOf { (it - xm) * (it - xm) }
-    val rets = ys.zipWithNext { a, b -> b - a }.takeLast(60)
+    val rets = ys.zipWithNext { a, c -> c - a }.takeLast(60)
     val vol = kotlin.math.sqrt(rets.map { (it - rets.average()) * (it - rets.average()) }.average())
     val ahead = 20
-    val last = hist.last()
+    val last = close.last()
     val mid = (1..ahead).map { k -> last * kotlin.math.exp(slope * k) }
     val upB = (1..ahead).map { k -> last * kotlin.math.exp(slope * k + vol * kotlin.math.sqrt(k.toDouble())) }
     val loB = (1..ahead).map { k -> last * kotlin.math.exp(slope * k - vol * kotlin.math.sqrt(k.toDouble())) }
-    val show = hist.takeLast(60)
+    val total = close.size
+    val showFrom = (trend?.start?.minus(5) ?: (total - 60)).coerceIn(0, (total - 40).coerceAtLeast(0)).coerceAtLeast(total - 120)
+    val endIdx = (total - 1 + ahead).toDouble()
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("趨勢推估（未來 20 個交易日）", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            val trendPct = (kotlin.math.exp(slope * ahead) - 1) * 100
-            Text(
-                "依近 ${n} 日趨勢約 ${"%+.1f".format(trendPct)}%，區間 ${"%.2f".format(loB.last())}～${"%.2f".format(upB.last())}",
-                fontSize = 13.sp, color = if (trendPct >= 0) StockUp else StockDown,
-            )
-            val lineCol = MaterialTheme.colorScheme.onSurface
-            val bandCol = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+            if (trend != null) {
+                val col = when (trend.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface }
+                Text("${trend.pattern}：${trend.hint}" + (trend.breakout?.let { "；$it" } ?: ""), fontSize = 13.sp, color = col)
+                Text(
+                    "20 日後 壓力線約 ${"%.2f".format(trend.upper.at(endIdx))}、支撐線約 ${"%.2f".format(trend.lower.at(endIdx))}（目前 ${"%.2f".format(last)}）",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                val trendPct = (kotlin.math.exp(slope * ahead) - 1) * 100
+                Text("線型較亂，畫不出明確的趨勢線；依近 $nn 日趨勢約 ${"%+.1f".format(trendPct)}%，區間 ${"%.2f".format(loB.last())}～${"%.2f".format(upB.last())}",
+                    fontSize = 13.sp, color = if (trendPct >= 0) StockUp else StockDown)
+            }
+            val up = StockUp; val down = StockDown
+            val bandCol = MaterialTheme.colorScheme.primary.copy(alpha = if (trend != null) 0.08f else 0.18f)
             val midCol = MaterialTheme.colorScheme.primary
-            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(130.dp)) {
-                val all = show + upB + loB
+            val resCol = Color(0xFFAB47BC); val supCol = Color(0xFF26A69A)
+            val pivotCol = MaterialTheme.colorScheme.onSurfaceVariant
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(170.dp)) {
+                val n = total - showFrom
+                val slots = n + ahead
+                val w = size.width / slots
+                val lines = trend?.let { t -> listOf(t.upper.at(showFrom.toDouble()), t.upper.at(endIdx), t.lower.at(showFrom.toDouble()), t.lower.at(endIdx)) }.orEmpty()
+                val all = (showFrom until total).flatMap { listOf(b.high[it], b.low[it]) } + upB + loB + lines
                 val hi = all.max(); val lo = all.min(); val r = (hi - lo).takeIf { it > 0 } ?: 1.0
-                val total = show.size + ahead
-                val w = size.width / (total - 1)
                 fun y(v: Double) = ((hi - v) / r * size.height).toFloat()
-                // 區間
+                fun x(i: Double) = ((i - showFrom) * w + w / 2).toFloat()
+                // 統計扇形（後面）
                 val band = Path().apply {
-                    moveTo(w * (show.size - 1), y(last))
-                    upB.forEachIndexed { k, v -> lineTo(w * (show.size + k), y(v)) }
-                    for (k in loB.indices.reversed()) lineTo(w * (show.size + k), y(loB[k]))
-                    close()
+                    moveTo(x((total - 1).toDouble()), y(last))
+                    upB.forEachIndexed { k, v -> lineTo(x((total + k).toDouble()), y(v)) }
+                    for (k in loB.indices.reversed()) lineTo(x((total + k).toDouble()), y(loB[k]))
+                    this.close()
                 }
                 drawPath(band, bandCol)
-                // 歷史
-                for (i in 1 until show.size) drawLine(lineCol, Offset(w * (i - 1), y(show[i - 1])), Offset(w * i, y(show[i])), 2.5f)
-                // 推估中線（虛線）
+                // K 棒
+                for (i in showFrom until total) {
+                    val o = b.open[i]; val c = b.close[i]
+                    val colr = if (c >= o) up else down
+                    val cx = x(i.toDouble())
+                    drawLine(colr, Offset(cx, y(b.high[i])), Offset(cx, y(b.low[i])), 1f)
+                    val top = y(maxOf(o, c)); val bot = y(minOf(o, c))
+                    drawRect(colr, Offset(cx - w * 0.35f, top), Size(w * 0.7f, maxOf(1f, bot - top)))
+                }
                 val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
-                var px = w * (show.size - 1); var py = y(last)
-                mid.forEachIndexed { k, v -> val nx = w * (show.size + k); val ny = y(v); drawLine(midCol, Offset(px, py), Offset(nx, ny), 2.5f, pathEffect = dash); px = nx; py = ny }
+                if (trend != null) {
+                    // 壓力線、支撐線：實線畫到今天，往後延伸為虛線
+                    listOf(trend.upper to resCol, trend.lower to supCol).forEach { (ln, colr) ->
+                        val s0 = maxOf(trend.start, showFrom).toDouble(); val today = (total - 1).toDouble()
+                        drawLine(colr, Offset(x(s0), y(ln.at(s0))), Offset(x(today), y(ln.at(today))), 3f)
+                        drawLine(colr, Offset(x(today), y(ln.at(today))), Offset(x(endIdx), y(ln.at(endIdx))), 3f, pathEffect = dash)
+                    }
+                    // 波段高低點
+                    trend.pivots.filter { it.index >= showFrom }.forEach { p ->
+                        drawCircle(pivotCol, radius = 5f, center = Offset(x(p.index.toDouble()), y(p.price)), style = Stroke(2f))
+                    }
+                    // 型態的方向箭頭
+                    if (trend.bias != 0) {
+                        val sx = x((total - 1).toDouble()); val sy = y(last)
+                        val target = if (trend.bias > 0) trend.upper.at(endIdx) else trend.lower.at(endIdx)
+                        val ex = x(endIdx); val ey = y(target)
+                        val arrowCol = if (trend.bias > 0) up else down
+                        drawLine(arrowCol, Offset(sx, sy), Offset(ex, ey), 4f)
+                        val ang = kotlin.math.atan2((ey - sy).toDouble(), (ex - sx).toDouble())
+                        val len = 16.0
+                        listOf(2.6, -2.6).forEach { d ->
+                            drawLine(arrowCol, Offset(ex, ey), Offset((ex - len * kotlin.math.cos(ang + d / 6)).toFloat(), (ey - len * kotlin.math.sin(ang + d / 6)).toFloat()), 4f)
+                        }
+                    }
+                } else {
+                    var px = x((total - 1).toDouble()); var py = y(last)
+                    mid.forEachIndexed { k, v -> val nx = x((total + k).toDouble()); val ny = y(v); drawLine(midCol, Offset(px, py), Offset(nx, ny), 2.5f, pathEffect = dash); px = nx; py = ny }
+                }
             }
-            Text("統計推估（近期趨勢＋波動），不是預測或投資建議。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (trend != null) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("━ 壓力線", fontSize = 11.sp, color = resCol)
+                Text("━ 支撐線", fontSize = 11.sp, color = supCol)
+                Text("○ 波段高低點", fontSize = 11.sp, color = pivotCol)
+                Text("▒ 統計區間", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+            }
+            Text("依波段高低點畫線與統計波動推估，不是預測或投資建議。", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

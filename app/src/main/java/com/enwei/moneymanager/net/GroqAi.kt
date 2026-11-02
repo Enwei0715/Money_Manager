@@ -877,14 +877,42 @@ object GroqAi {
     /** 對話可以帶的資料量（字元）：Gemini 可讀大量資料，Groq 每分鐘 token 有限。 */
     fun chatContextLimit(): Int = if (bigContext(AiTask.CHAT)) 80_000 else 3500
 
+    /**
+     * 從使用者寫的投資原則讀出紀律參數（%）；原則沒提到的項目回 null，維持原設定。
+     * 回傳 key：shortStopPct、shortTrailPct、longTrailPct、takeProfitPct、guardTrailPct，以及 note（一句話說明怎麼對應）。
+     */
+    suspend fun disciplineFromRules(rules: List<String>): Pair<Map<String, Double>, String>? {
+        if (!enabled || rules.isEmpty()) return null
+        val r = chatJson(
+            "你是投資紀律設定助理。讀使用者的投資原則，換算成下列參數（百分比數字），原則沒有提到的填 null，不要自己編：" +
+                "shortStopPct 短線停損（跌破買進價幾 %）、shortTrailPct 短線移動停損（從高點回落幾 %）、longTrailPct 長線移動停損、" +
+                "takeProfitPct 分批停利門檻（獲利幾 % 先賣一部分）、guardTrailPct 保本＋移動停利的回落 %。" +
+                "note 用一句繁體中文說明每個參數來自哪條原則。只回 JSON：{\"shortStopPct\":數字或null,\"shortTrailPct\":…,\"longTrailPct\":…,\"takeProfitPct\":…,\"guardTrailPct\":…,\"note\":字串}",
+            rules.joinToString("\n").take(3000), 400, task = AiTask.COMPANY,
+        ) ?: return null
+        val keys = listOf("shortStopPct", "shortTrailPct", "longTrailPct", "takeProfitPct", "guardTrailPct")
+        val out = keys.mapNotNull { k -> (r[k] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.takeIf { it > 0 && it < 200 }?.let { k to it } }.toMap()
+        return out to r.str("note").orEmpty().take(200)
+    }
+
     /** 一句話說明這家公司在做什麼（股票資訊頁用，結果會快取）。 */
-    suspend fun describeCompany(symbol: String, name: String): String? {
+    suspend fun describeCompany(symbol: String, name: String): String? = describeCompany(symbol, name, "")?.first
+
+    /**
+     * 依資料整理公司說明：[data] 是 App 整理好的產業類別、近期新聞與月營收。
+     * 回傳（業務說明, 近況）；近況只根據資料，資料沒有就空白。
+     */
+    suspend fun describeCompany(symbol: String, name: String, data: String): Pair<String, String>? {
         if (!enabled) return null
         val r = chatJson(
-            "你是台股資料助理。用繁體中文 40 字內說明這家台灣上市櫃公司的主要業務、產品與所屬產業；不知道就回空字串。只回 JSON：{\"d\": 說明}",
-            "$symbol $name", 200, task = AiTask.COMPANY,
+            "你是台股資料助理。根據下面的資料（產業類別、近期新聞、月營收）用繁體中文說明這家台灣上市櫃公司：" +
+                "d＝主要業務、產品與所屬產業（50 字內）；recent＝近況（40 字內，只根據資料裡的新聞與營收，附具體數字；資料沒有就空字串）。" +
+                "不知道就回空字串，不要編造。只回 JSON：{\"d\": 說明, \"recent\": 近況}",
+            "$symbol $name\n$data".take(2500), 300, task = AiTask.COMPANY,
         ) ?: return null
-        return r.str("d")?.take(80)
+        val d = r.str("d")?.trim()?.take(100).orEmpty()
+        if (d.isEmpty()) return null
+        return d to r.str("recent")?.trim()?.take(80).orEmpty()
     }
 
     /**
