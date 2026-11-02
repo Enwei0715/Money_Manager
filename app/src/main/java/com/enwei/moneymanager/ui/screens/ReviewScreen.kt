@@ -206,8 +206,8 @@ fun ReviewContent(
                 }
             }
 
-            // ④ AI 檢討（固定格式）
-            Card(Modifier.fillMaxWidth()) {
+            // ④ AI 檢討（固定格式）：設定裡關掉 AI 就不顯示
+            if (settings.aiEnabled) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("AI 檢討與建議", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

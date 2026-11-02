@@ -124,6 +124,7 @@ fun MoreScreen(nav: NavController) {
     val off = buildSet {
         if (!settings.featureStocks) addAll(listOf("advisor", "stockfees"))
         if (!settings.featureNotif) add("notif")
+        if (!settings.aiEnabled) add("ai-hub")
     }
     val shown = ToolCatalog.shown(settings.toolOrder, settings.hiddenTools).filter { it.id !in off }
     val available = ToolCatalog.available(settings.toolOrder, settings.hiddenTools).filter { it.id !in off }

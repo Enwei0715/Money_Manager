@@ -110,6 +110,16 @@ fun AdvisorContent(nav: NavController) {
     LaunchedEffect(Unit) { runCatching { MoneyApp.news.load() } }
     val loadError by MoneyApp.news.loadError.collectAsStateWithLifecycle()
     val store = live ?: NewsStore()
+    // 設定裡關掉 AI：今日報告、問 AI、新聞整理都要 AI，只留「資金紀律」
+    val aiOn = repo.settings.flow.collectAsStateWithLifecycle().value.aiEnabled
+    if (!aiOn) {
+        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            Text("AI 功能已關閉：今日報告、問 AI 與新聞整理已隱藏（可在設定 → 功能開關開啟）", fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            PlanTab(nav)
+        }
+        return
+    }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
         TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {

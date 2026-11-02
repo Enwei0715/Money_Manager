@@ -494,8 +494,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             }
             // 價格提醒
             if (b != null) PriceAlertCard(symbol, b.close.last(), held.isNotEmpty())
-            // 公司業務
-            Card(Modifier.fillMaxWidth()) {
+            // 公司業務（AI 整理；設定裡關掉 AI 就不顯示）
+            if (settings.aiEnabled) Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("這家公司做什麼", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     val ctx = androidx.compose.ui.platform.LocalContext.current
