@@ -297,8 +297,6 @@ fun NotificationSettingsScreen(nav: NavController) {
     var filter by remember { mutableStateOf("") }
     var showAllApps by remember { mutableStateOf(false) }
     var allLog by remember { mutableStateOf(false) }
-    val testsFold = com.enwei.moneymanager.ui.components.rememberFold("notif.tests", false)
-    val showTests = testsFold.open
     var testText by remember { mutableStateOf("") }
     var testTitle by remember { mutableStateOf("") }
     var testPkg by remember { mutableStateOf<String?>(null) }
@@ -488,13 +486,9 @@ fun NotificationSettingsScreen(nav: NavController) {
             }
             if (tab == 2) {
             // 測試區（讀通知列、貼上通知）預設收起，需要時再展開
-            item {
-                Row(Modifier.fillMaxWidth().clickable { testsFold.toggle() }, verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) { SectionTitle("測試通知辨識") }
-                    com.enwei.moneymanager.ui.components.FoldToggle(showTests, modifier = Modifier.padding(end = 16.dp))
-                }
-            }
-            if (showTests) {
+            // 「進階」分頁本身就是收起來的地方，測試區直接展開
+            item { SectionTitle("測試通知辨識") }
+            run {
                 item {
                     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Button(onClick = { loadNotes() }) { Text(if (notes == null) "讀取目前通知" else "重新讀取") }
