@@ -80,7 +80,7 @@ object AiBackgroundWork {
             repo.settings.update {
                 it.copy(reviews = (it.reviews + (periodKey to review)).entries.toList().takeLast(40).associate { e -> e.key to e.value })
             }
-            flow.value = AiTaskProgress(running = false, step = "收支檢討已完成")
+            flow.value = AiTaskProgress(running = false, step = "收支分析已完成")
         } catch (e: CancellationException) {
             flow.value = AiTaskProgress(running = false)
             throw e

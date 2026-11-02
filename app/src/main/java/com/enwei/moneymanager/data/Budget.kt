@@ -84,7 +84,7 @@ suspend fun Repository.checkBudgetAlert(t: TxnEntity) {
                     listOfNotNull(
                         tr("這個月") + "：$text",
                         if (u.left > 0 && days > 0) tr("每天約") + " ${Money.withSymbol(u.left / days, cur)}（$days " + tr("天") + "）" else null,
-                        tr("點一下看這個月的收支檢討"),
+                        tr("點一下看這個月的收支分析"),
                     ))
                 break
             }

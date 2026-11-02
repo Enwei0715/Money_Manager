@@ -55,7 +55,7 @@ fun AiSettingsScreen(nav: NavController) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     // 設定像樹狀：上層「啟用 AI」關閉時，下面的設定全部隱藏也不生效
-                    SwitchRow("啟用 AI", "判讀通知、整理名稱與分類、檢討與股票分析", s.aiEnabled, true) { v ->
+                    SwitchRow("啟用 AI", "判讀通知、整理名稱與分類、收支與股票分析", s.aiEnabled, true) { v ->
                         repo.settings.update { it.copy(aiEnabled = v) }
                     }
                     if (s.aiEnabled) SwitchRow("AI 自動整理", "自動合併重複記的同一筆；確認 AI 判讀的通知後自動學會格式", s.aiAutoTidy, true) { v ->
@@ -84,7 +84,7 @@ fun AiSettingsScreen(nav: NavController) {
                 Provider.GEMINI, "適合讀取較大量的資料；金鑰到 aistudio.google.com 申請",
                 s.geminiKey, { k -> repo.settings.update { it.copy(geminiKey = k.trim()) } },
             ) {
-                ModelField("主要模型（報告、檢討、對話）", s.geminiModel) { v -> repo.settings.update { it.copy(geminiModel = v) } }
+                ModelField("主要模型（報告、分析、對話）", s.geminiModel) { v -> repo.settings.update { it.copy(geminiModel = v) } }
                 ModelField("輕量模型（新聞標註、錢包畫面）", s.geminiLiteModel) { v -> repo.settings.update { it.copy(geminiLiteModel = v) } }
             }
 
@@ -150,7 +150,7 @@ private fun ProviderCard(
                 Spacer(Modifier.weight(1f))
                 OutlinedButton(enabled = k.isNotBlank() && !testing, onClick = {
                     testing = true; result = null
-                    scope.launch { result = GroqAi.testProvider(p)?.let { "連線失敗：$it" } ?: "連線成功"; testing = false }
+                    scope.launch { result = GroqAi.testProvider(p)?.let { if (it.startsWith("部分可用")) it else "連線失敗：$it" } ?: "連線成功"; testing = false }
                 }) { Text(if (testing) "測試中…" else "測試連線") }
             }
             result?.let { Text(it, fontSize = 13.sp, color = if (it == "連線成功") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) }

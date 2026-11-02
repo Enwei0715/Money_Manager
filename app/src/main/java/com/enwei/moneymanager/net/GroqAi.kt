@@ -56,7 +56,7 @@ object GroqAi {
         NEWS_TAG("新聞標註", "每則新聞的相關個股、題材、多空、重要性", true),
         DIGEST("新聞重點整理", "把每天每個題材的所有新聞整理成重點", true),
         UNKNOWN("整理不明花費", "依習慣推測不明交易的分類", false),
-        REVIEW("收支檢討", "逐筆讀整期交易、分析與提問", false),
+        REVIEW("收支分析", "逐筆讀整期交易、分析與提問", false),
         REPORT("每日投資報告", "讀整個新聞資料集產生報告", false),
         CHAT("問 AI（股票）", "對話時讀資料集與你的狀況", false),
     }
@@ -433,9 +433,19 @@ object GroqAi {
             Provider.NVIDIA -> if (s.nvidiaKey.isBlank()) return@withContext "還沒填 NVIDIA 金鑰"
             else {
                 NvidiaModels.refresh(force = true)
-                NvidiaModels.pick(NvidiaModels.FAST, 3, s.nvidiaModel).firstNotNullOfOrNull { m ->
-                    callCompat(Provider.NVIDIA, s.nvidiaKey.trim(), m, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 256)
+                // 逐一測試會用到的模型，回報每個的結果（有一個成功就算可用）
+                val models = (NvidiaModels.pick(NvidiaModels.FAST, 2, s.nvidiaModel) + NvidiaModels.pick(NvidiaModels.HEAVY, 2)).distinct()
+                val results = models.map { m ->
+                    m to (callCompat(Provider.NVIDIA, s.nvidiaKey.trim(), m, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 256, timeoutSec = 45) != null)
                 }
+                val bad = results.filter { !it.second }
+                models.filter { m -> results.any { it.first == m && !it.second } }.forEach { com.enwei.moneymanager.work.AiHealth.cooldown(NV + it, 24 * 3600_000L) }
+                if (results.any { it.second }) {
+                    if (bad.isNotEmpty()) lastError = null
+                    return@withContext if (bad.isEmpty()) null
+                    else "部分可用（無法使用的已暫停）：" + bad.joinToString("、") { it.first.substringAfterLast('/') }
+                }
+                return@withContext (lastError ?: "沒有回應") + "（試了 " + models.joinToString("、") { it.substringAfterLast('/') } + "）"
             }
         }
         if (r != null) null else lastError ?: "沒有回應"

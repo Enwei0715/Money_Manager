@@ -49,7 +49,7 @@ fun AiHubScreen(nav: NavController) {
                 Box(Modifier.size(8.dp).background(if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape))
                 Text(if (ready) "AI 已啟用" else "AI 尚未設定", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 8.dp))
             }
-            HubCard("收支檢討", androidx.compose.material.icons.Icons.Outlined.Assessment) { nav.navigate("review") }
+            HubCard("收支分析", androidx.compose.material.icons.Icons.Outlined.Assessment) { nav.navigate("review") }
             if (settings.featureStocks) HubCard("股票助理", androidx.compose.material.icons.Icons.Outlined.ShowChart) { nav.navigate("advisor") }
             HubCard("待確認與 AI 建議", androidx.compose.material.icons.Icons.Outlined.Inbox) { nav.navigate("pending") }
             HubCard("AI 設定", androidx.compose.material.icons.Icons.Outlined.Settings) { nav.navigate("ai") }

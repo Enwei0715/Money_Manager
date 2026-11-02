@@ -15,32 +15,23 @@ import okhttp3.Request
  * 抓不到時直接用偏好清單（下架的模型會在 404 時自動跳過一天）。
  */
 object NvidiaModels {
-    /** 簡短的判讀、分類、命名（快、JSON 穩定） */
-    val FAST = listOf(
-        "meta/llama-3.3-70b-instruct",
-        "qwen/qwen3-next-80b-a3b-instruct",
-        "mistralai/mistral-small-3.1-24b-instruct-2503",
-        "google/gemma-3-27b-it",
-        "meta/llama-4-maverick-17b-128e-instruct",
-    )
+    /**
+     * 每類工作的偏好（依序）：用關鍵字比對實際提供的模型 id，NVIDIA 改版號或下架時自動對到還在的版本。
+     * 簡短判讀：快、JSON 穩定；大量資料：長上下文；推理整合：大模型。
+     */
+    val FAST = listOf("llama-3.3-70b-instruct", "qwen3-next-80b-a3b-instruct", "gemma-3-27b-it", "llama-4-maverick", "llama-3.1-70b-instruct", "phi-4")
+    val LONG = listOf("qwen3-next-80b-a3b-instruct", "llama-4-maverick", "deepseek-v3", "kimi-k2", "llama-3.3-70b-instruct", "llama-3.1-405b")
+    val HEAVY = listOf("deepseek-v3", "kimi-k2", "qwen3-235b", "gpt-oss-120b", "nemotron-super-49b", "llama-3.3-70b-instruct", "llama-3.1-405b")
 
-    /** 大量資料但工作簡單（新聞標註、重點整理、錢包畫面）：長上下文 */
-    val LONG = listOf(
-        "qwen/qwen3-next-80b-a3b-instruct",
-        "meta/llama-4-maverick-17b-128e-instruct",
-        "deepseek-ai/deepseek-v3.1",
-        "moonshotai/kimi-k2-instruct",
-        "meta/llama-3.3-70b-instruct",
-    )
-
-    /** 需要推理與整合（報告、檢討、對話、不明花費） */
-    val HEAVY = listOf(
-        "deepseek-ai/deepseek-v3.1",
-        "moonshotai/kimi-k2-instruct",
-        "qwen/qwen3-235b-a22b",
-        "openai/gpt-oss-120b",
-        "nvidia/llama-3.3-nemotron-super-49b-v1.5",
-        "meta/llama-3.3-70b-instruct",
+    /** 還沒抓到清單時用的 id（確定長期存在的） */
+    private val FALLBACK = mapOf(
+        "llama-3.3-70b-instruct" to "meta/llama-3.3-70b-instruct",
+        "llama-3.1-70b-instruct" to "meta/llama-3.1-70b-instruct",
+        "llama-3.1-405b" to "meta/llama-3.1-405b-instruct",
+        "deepseek-v3" to "deepseek-ai/deepseek-v3.1",
+        "kimi-k2" to "moonshotai/kimi-k2-instruct",
+        "qwen3-235b" to "qwen/qwen3-235b-a22b",
+        "gpt-oss-120b" to "openai/gpt-oss-120b",
     )
 
     private val prefs by lazy { MoneyApp.instance.getSharedPreferences("nvidia", Context.MODE_PRIVATE) }
@@ -51,7 +42,10 @@ object NvidiaModels {
     fun refresh(force: Boolean = false) {
         if (!force && System.currentTimeMillis() - prefs.getLong("at", 0) < 24 * 3600_000L) return
         val ids = runCatching {
-            Http.client.newCall(Request.Builder().url("https://integrate.api.nvidia.com/v1/models").build()).execute().use { r ->
+            val key = MoneyApp.repo.settings.value.nvidiaKey.trim()
+            val req = Request.Builder().url("https://integrate.api.nvidia.com/v1/models")
+                .apply { if (key.isNotBlank()) header("Authorization", "Bearer $key") }.build()
+            Http.client.newCall(req).execute().use { r ->
                 if (!r.isSuccessful) return@use null
                 (Http.json.parseToJsonElement(r.body?.string().orEmpty()).jsonObject["data"] as? JsonArray)
                     ?.mapNotNull { ((it as? JsonObject)?.get("id") as? JsonPrimitive)?.contentOrNull }?.toSet()
@@ -60,10 +54,16 @@ object NvidiaModels {
         if (!ids.isNullOrEmpty()) prefs.edit().putStringSet("ids", ids).putLong("at", System.currentTimeMillis()).apply()
     }
 
-    /** 依工作類型挑 [n] 個（[preferred] 為使用者指定的優先模型） */
-    fun pick(list: List<String>, n: Int, preferred: String = ""): List<String> {
-        val av = available()
-        val ok = list.filter { av.isEmpty() || it in av }.ifEmpty { list }
-        return (listOfNotNull(preferred.trim().takeIf { it.isNotBlank() }) + ok).distinct().take(n)
+    /** 依工作類型挑 [n] 個（[preferred] 為使用者指定的優先模型）；排除視覺、嵌入、安全審查等非對話模型 */
+    fun pick(prefs: List<String>, n: Int, preferred: String = ""): List<String> {
+        val av = available().filter { id ->
+            listOf("embed", "vision", "-vl", "guard", "reward", "rerank", "parse", "retriever", "safety", "clip", "ocr", "coder").none { id.contains(it, true) }
+        }
+        val found = prefs.mapNotNull { k ->
+            if (av.isEmpty()) FALLBACK[k]
+            // 同一個關鍵字有多個版本時取最新（字串排序最後的，例如 deepseek-v3.1 > deepseek-v3）
+            else av.filter { it.contains(k, true) }.maxOrNull()
+        }
+        return (listOfNotNull(preferred.trim().takeIf { it.isNotBlank() }) + found).distinct().take(n)
     }
 }

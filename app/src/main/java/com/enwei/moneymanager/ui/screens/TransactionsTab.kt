@@ -161,7 +161,7 @@ fun weekdayColor(d: DayOfWeek, default: Color): Color = when (d) {
 private fun inRange(d: LocalDate, r: Pair<LocalDate, LocalDate>) = !d.isBefore(r.first) && !d.isAfter(r.second)
 
 // 「每月」「總計」「備註」分頁已拿掉：備註改從「＋」新增（記一筆的類型選「備註」），預算移到「檢討」
-private val subTabs = listOf("每日", "日曆", "檢討")
+private val subTabs = listOf("每日", "日曆", "分析")
 private val NavyHighlight = Color(0xFF3F4570)
 
 /** 交易列表的多選：長按一筆開始選取，之後點一下切換；[enabled] 由交易頁的「每日」開啟。 */

@@ -46,7 +46,7 @@ object ToolCatalog {
         ToolItem("backup", "備份", "backup", L.Backup),
         ToolItem("ai-hub", "AI 中心", "ai-hub", L.Advisor),
         ToolItem("advisor", "股票助理", "advisor", L.Stocks),
-        ToolItem("review", "收支檢討", "review", L.Review),
+        ToolItem("review", "收支分析", "review", L.Review),
         ToolItem("budget", "預算", "budget", L.Review),
         ToolItem("totalstats", "資產走勢", "totalstats", L.Stocks),
         ToolItem("notif", "通知記帳", "notif", L.Notification),
