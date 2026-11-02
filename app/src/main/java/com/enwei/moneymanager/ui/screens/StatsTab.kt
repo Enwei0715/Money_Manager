@@ -263,7 +263,7 @@ fun PieChart(slices: List<Pair<String, Long>>) {
     // 動畫：每次資料改變都從 12 點鐘方向（0 度）順時針轉開到完整圓餅，轉完標籤再淡入
     val prog = remember(slices) { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(slices) { prog.animateTo(1f, androidx.compose.animation.core.tween(800, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
-    Canvas(Modifier.fillMaxWidth().height(320.dp).padding(vertical = 12.dp)) {
+    Canvas(Modifier.fillMaxWidth().height(if (slices.count { total > 0 && it.second * 100f / total >= 3f } > 7) 360.dp else 320.dp).padding(vertical = 12.dp)) {
         val r = minOf(size.width * 0.27f, size.height * 0.42f)
         val c = Offset(size.width / 2, size.height / 2)
         val topLeft = Offset(c.x - r, c.y - r)
@@ -292,20 +292,29 @@ fun PieChart(slices: List<Pair<String, Long>>) {
         // 標籤：兩行（名稱／百分比），沿著圓餅外圍的橢圓排列；同側依高度排序後上下推開，用平滑曲線連到扇形。
         class Label(val color: Color, val angle: Double, val layout: androidx.compose.ui.text.TextLayoutResult, val right: Boolean, var y: Float)
         val labels = mutableListOf<Label>()
+        // 小於 3% 的扇形太窄，標籤一定擠在一起：合成一個「其他」標籤（扇形照畫）
+        val bigCount = slices.count { it.second * 100f / total >= 3f }
+        val oneLine = bigCount > 8
+        fun add(text: String, pct: Float, mid: Double, color: Color) {
+            val layout = measurer.measure(
+                if (oneLine) "${com.enwei.moneymanager.ui.tr(text)} ${"%.1f".format(pct)}%" else "${com.enwei.moneymanager.ui.tr(text)}\n${"%.1f".format(pct)} %",
+                TextStyle(fontSize = AppText.secondary, color = labelColor, lineHeight = 16.sp),
+            )
+            labels += Label(color, mid, layout, cos(mid) >= 0, (c.y + r * 1.22f * sin(mid)).toFloat())
+        }
         start = -90f
+        var smallStart = Float.NaN; var smallSweep = 0f; var smallPct = 0f; var smallColor = labelColor
         slices.forEachIndexed { i, (name, v) ->
             val pct = v * 100f / total
-            val mid = Math.toRadians((start + sweeps[i] / 2).toDouble())
-            if (pct >= 1f && labels.size < 12) {
-                val layout = measurer.measure(
-                    "${com.enwei.moneymanager.ui.tr(name)}\n${"%.1f".format(pct)} %",
-                    TextStyle(fontSize = AppText.secondary, color = labelColor, lineHeight = 16.sp),
-                )
-                val ly = (c.y + r * 1.22f * sin(mid)).toFloat()
-                labels += Label(chartPalette[i % chartPalette.size], mid, layout, cos(mid) >= 0, ly)
+            if (pct >= 3f) add(name, pct, Math.toRadians((start + sweeps[i] / 2).toDouble()), chartPalette[i % chartPalette.size])
+            else {
+                if (smallStart.isNaN()) { smallStart = start; smallColor = chartPalette[i % chartPalette.size] }
+                smallSweep += sweeps[i]; smallPct += pct
             }
             start += sweeps[i]
         }
+        if (smallPct > 0f) add(if (slices.size - bigCount == 1) slices.last().first else "其他", smallPct,
+            Math.toRadians((smallStart + smallSweep / 2).toDouble()), smallColor)
         val ring = r * 1.28f
         listOf(true, false).forEach { side ->
             val list = labels.filter { it.right == side }.sortedBy { it.y }
