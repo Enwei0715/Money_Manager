@@ -1,5 +1,13 @@
 package com.enwei.moneymanager.ui.screens
 
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.CurrencyExchange
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable

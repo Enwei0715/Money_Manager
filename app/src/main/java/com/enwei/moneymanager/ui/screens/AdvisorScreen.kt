@@ -1,5 +1,14 @@
 package com.enwei.moneymanager.ui.screens
 
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.AddComment
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -280,8 +289,15 @@ private fun SubHead(text: String) =
 
 @Composable
 private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>, nav: NavController) {
+    // 分段：重點（摘要、大盤、資金、檢查）／個股／持股／新聞，每段一個畫面看得完
+    var rtab by rememberSaveable { mutableStateOf(0) }
+    com.enwei.moneymanager.ui.components.SubTabs(
+        listOf("重點", "個股 ${r.picks.size}", "持股 ${r.holdings.size}", "新聞 ${r.keyNews.size}"), rtab) { rtab = it }
+    if (rtab == 1 && r.picks.isEmpty()) Text("這份報告沒有推薦個股。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (rtab == 2 && r.holdings.isEmpty()) Text("這份報告沒有持股動作。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (rtab == 3 && r.keyNews.isEmpty()) Text("這份報告沒有標出必看新聞。", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     // ① 重點摘要：階段、展望、題材，摘要拆成條列（前三點，其餘可展開）
-    Section("重點摘要") {
+    if (rtab == 0) Section("重點摘要") {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
                 Text(r.stage.ifBlank { "趨勢" }, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
@@ -298,7 +314,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         if (r.summary.isNotBlank()) PointList(r.summary, r.cites, newsById, foldKey = "summary")
     }
     // ② 大盤 K 線與題材熱度
-    Section("大盤與題材") {
+    if (rtab == 0) Section("大盤與題材") {
         com.enwei.moneymanager.ui.components.AnnotatedKLine("^TWII", r.levels.map { l ->
             Triple("AI ${l.label}", l.price, if (l.label.contains("壓")) Color(0xFFAB47BC) else Color(0xFF26A69A))
         })
@@ -308,7 +324,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         }
     }
     // ③ 今天可以考慮：先比較圖，再依長短線分組；每檔只顯示重點，點開看完整內容
-    if (r.picks.isNotEmpty()) Section("今天可以考慮（${r.picks.size} 檔）") {
+    if (rtab == 1 && r.picks.isNotEmpty()) Section("今天可以考慮（${r.picks.size} 檔）") {
         SubHead("走勢比較")
         com.enwei.moneymanager.ui.components.CompareChart(r.picks.take(5).map { it.symbol })
         SubHead("月營收年增率")
@@ -319,7 +335,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         }
     }
     // ④ 持股動作：動作用色塊標示，理由條列
-    if (r.holdings.isNotEmpty()) Section("持股動作（${r.holdings.size}）") {
+    if (rtab == 2 && r.holdings.isNotEmpty()) Section("持股動作（${r.holdings.size}）") {
         ChatChartView(com.enwei.moneymanager.data.ChatChart("holdings"), nav)
         r.holdings.forEachIndexed { i, h ->
             if (i > 0) androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -341,7 +357,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         }
     }
     // ⑤ 一定要看的新聞
-    if (r.keyNews.isNotEmpty()) Section("一定要看的新聞（${r.keyNews.size}）") {
+    if (rtab == 3 && r.keyNews.isNotEmpty()) Section("一定要看的新聞（${r.keyNews.size}）") {
         r.keyNews.forEachIndexed { i, k ->
             newsById[k.id]?.let { n ->
                 if (i > 0) androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -351,7 +367,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         }
     }
     // ⑥ 資金分配：比例條＋圖例，說明條列
-    if (r.allocation.isNotBlank() || r.alloc.isNotEmpty()) Section("資金分配") {
+    if (rtab == 0 && (r.allocation.isNotBlank() || r.alloc.isNotEmpty())) Section("資金分配") {
         if (r.alloc.isNotEmpty()) {
             val total = r.alloc.sumOf { it.pct }.takeIf { it > 0 } ?: 1.0
             val palette = listOf(Color(0xFF3C82E6), Color(0xFFF0605A), Color(0xFFFFA000), Color(0xFF2E9E57), Color(0xFF7E57C2), Color(0xFF9E9E9E))
@@ -369,7 +385,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         }
         if (r.allocation.isNotBlank()) PointList(r.allocation, r.cites, newsById, foldKey = "alloc")
     }
-    if (r.checklist.isNotEmpty() || r.warnings.isNotEmpty()) Section("下單前檢查") {
+    if (rtab == 0 && (r.checklist.isNotEmpty() || r.warnings.isNotEmpty())) Section("下單前檢查") {
         r.checklist.forEach { Text("☐ $it", fontSize = 13.sp) }
         r.warnings.forEach { Text("! $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
     }
