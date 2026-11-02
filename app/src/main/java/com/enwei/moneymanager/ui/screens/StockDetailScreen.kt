@@ -97,7 +97,10 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     val trades by repo.trades.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     LaunchedEffect(symbol) {
-        bars = InvestData.bars(symbol, "2y", tw = market == Market.TW)
+        bars = InvestData.bars(symbol, "2y", tw = market == Market.TW)?.let { b0 ->
+            // 一打開就併入即時價（Yahoo 的日 K 可能延遲）
+            runCatching { com.enwei.moneymanager.net.QuoteService.live(market, symbol) }.getOrNull()?.let { b0.withLive(it) } ?: b0
+        }
         index = InvestData.bars(if (market == Market.TW) "^TWII" else "^GSPC", "1y")
         val st = MoneyApp.news.load()
         business = st.business[symbol]
@@ -131,6 +134,23 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
         }
     }
 
+    // 畫面開著時每 30 秒更新即時價，並併入今天的 K 棒（報價也存起來，持股與觀察清單同步）
+    var liveAt by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(symbol, loading) {
+        if (loading) return@LaunchedEffect
+        while (true) {
+            val l = runCatching { com.enwei.moneymanager.net.QuoteService.live(market, symbol) }.getOrNull()
+            if (l != null) {
+                bars = bars?.withLive(l)
+                liveAt = System.currentTimeMillis()
+                runCatching {
+                    repo.saveQuotes(listOf(com.enwei.moneymanager.data.QuoteEntity(com.enwei.moneymanager.data.quoteKey(market, symbol), l.price, l.prev,
+                        if (market == Market.TW) "TWD" else "USD", l.name, System.currentTimeMillis())))
+                }
+            }
+            kotlinx.coroutines.delay(30_000)
+        }
+    }
     val watched = symbol in settings.watchlist
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
         BackTopBar("$symbol ${name.orEmpty()}", { nav.popBackStack() }) {

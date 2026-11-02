@@ -15,6 +15,30 @@ data class DailyBars(
     val days: List<Long>, val close: List<Double>, val high: List<Double>, val name: String?,
     val open: List<Double> = close, val low: List<Double> = close, val volume: List<Double> = emptyList(),
 ) {
+    /** 把盤中即時的今天 K 棒併進來：同一天就更新收盤、最高、最低、量；新的一天就加一根。 */
+    fun withLive(l: QuoteService.LiveBar): DailyBars {
+        if (close.isEmpty()) return this
+        val lastDay = days.last()
+        return when {
+            l.day == lastDay -> {
+                val i = close.lastIndex
+                copy(
+                    close = close.dropLast(1) + l.price,
+                    high = high.dropLast(1) + maxOf(high[i], l.high ?: l.price, l.price),
+                    low = low.dropLast(1) + minOf(low[i], l.low ?: l.price, l.price),
+                    open = if (l.open != null) open.dropLast(1) + l.open else open,
+                    volume = if (l.volume != null && volume.size == close.size) volume.dropLast(1) + l.volume else volume,
+                )
+            }
+            l.day > lastDay -> copy(
+                days = days + l.day, close = close + l.price, high = high + maxOf(l.high ?: l.price, l.price),
+                low = low + minOf(l.low ?: l.price, l.price), open = open + (l.open ?: l.prev ?: l.price),
+                volume = if (volume.size == close.size) volume + (l.volume ?: 0.0) else volume,
+            )
+            else -> this
+        }
+    }
+
     /** [fromDay] 之後（含）的最高價 */
     fun peakSince(fromDay: Long): Double? = days.indices.filter { days[it] >= fromDay }.maxOfOrNull { high[it] }
 }
@@ -55,10 +79,10 @@ object InvestData {
         list.map { sym ->
             async {
                 runCatching {
-                    val root = Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(sym, "UTF-8")}?range=5d&interval=1d", quick = true)
+                    val root = Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(sym, "UTF-8")}?range=1d&interval=1m", quick = true)
                     val meta = (root.obj("chart").obj("result") as? JsonArray)?.firstOrNull().obj("meta")
                     val p = meta.num("regularMarketPrice") ?: return@runCatching null
-                    val prev = meta.num("chartPreviousClose") ?: meta.num("previousClose")
+                    val prev = meta.num("regularMarketPreviousClose") ?: meta.num("chartPreviousClose") ?: meta.num("previousClose")
                     val name = if (sym == "TWD=X") "美元兌台幣" else indexNames[sym] ?: sym
                     "$name ${"%,.2f".format(p)}" + (prev?.takeIf { it > 0 }?.let { " (%+.2f%%)".format((p / it - 1) * 100) } ?: "")
                 }.getOrNull()

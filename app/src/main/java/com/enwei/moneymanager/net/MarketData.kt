@@ -74,22 +74,78 @@ object QuoteService {
         return q.price > 0 && prev > 0 && kotlin.math.abs(q.price / prev - 1) <= 0.105
     }
 
+    /** 盤中即時的一根日 K（今天的開高低收量）。 */
+    data class LiveBar(
+        val price: Double, val open: Double?, val high: Double?, val low: Double?,
+        /** 今天累計成交量（股） */
+        val volume: Double?, val prev: Double?, val name: String?,
+        /** 台北時間的日期（epochDay） */
+        val day: Long,
+    )
+
+    private fun misNum(s: String?) = s?.trim()?.takeIf { it.isNotEmpty() && it != "-" }?.toDoubleOrNull()?.takeIf { it > 0 }
+
+    /** 證交所 MIS 即時資料（上市、上櫃同時查）；第一次或沒資料時先取 cookie 再查一次。 */
+    private suspend fun misRaw(symbols: List<String>): JsonArray? {
+        val channels = symbols.flatMap { listOf("tse_$it.tw", "otc_$it.tw") }.joinToString("|")
+        suspend fun once(): JsonArray? = runCatching {
+            val url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${URLEncoder.encode(channels, "UTF-8")}&json=1&delay=0&_=${System.currentTimeMillis()}"
+            Http.getJson(url, mapOf("Referer" to "https://mis.twse.com.tw/stock/index.jsp", "Cache-Control" to "no-cache"), quick = true).obj("msgArray") as? JsonArray
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+        return once() ?: run { Http.touch("https://mis.twse.com.tw/stock/index.jsp"); once() }
+    }
+
+    /**
+     * MIS 的最新價：z 是最新成交價，但盤中常是「-」（這 5 秒沒有成交），此時用 pz（上一筆成交價），
+     * 再沒有才用最佳買賣價的中間價；都沒有才用昨收。
+     */
+    private fun misPrice(e: kotlinx.serialization.json.JsonElement): Double? {
+        misNum(e.str("z"))?.let { return it }
+        misNum(e.str("pz"))?.let { return it }
+        val bid = misNum(e.str("b")?.split('_')?.firstOrNull())
+        val ask = misNum(e.str("a")?.split('_')?.firstOrNull())
+        if (bid != null && ask != null) return (bid + ask) / 2
+        return bid ?: ask ?: misNum(e.str("y"))
+    }
+
+    private fun misDay(e: kotlinx.serialization.json.JsonElement): Long =
+        e.str("d")?.let { runCatching { java.time.LocalDate.parse(it, java.time.format.DateTimeFormatter.BASIC_ISO_DATE).toEpochDay() }.getOrNull() }
+            ?: java.time.LocalDate.now(java.time.ZoneId.of("Asia/Taipei")).toEpochDay()
+
     /** 證交所即時報價（上市 tse、上櫃 otc 同時查詢）。 */
     private suspend fun fetchTwse(symbols: List<String>): List<QuoteEntity> {
-        val channels = symbols.flatMap { listOf("tse_$it.tw", "otc_$it.tw") }.joinToString("|")
-        val url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${URLEncoder.encode(channels, "UTF-8")}&json=1&delay=0"
-        val root = Http.getJson(url, mapOf("Referer" to "https://mis.twse.com.tw/stock/index.jsp"), quick = true)
-        val arr = root.obj("msgArray") as? JsonArray ?: return emptyList()
+        val arr = misRaw(symbols) ?: return emptyList()
         val now = System.currentTimeMillis()
         return arr.mapNotNull { e ->
             val code = e.str("c") ?: return@mapNotNull null
-            val prev = e.str("y")?.toDoubleOrNull()
-            // z 為最新成交價；盤中尚無成交時為 "-"，改用最佳買價或昨收
-            val last = e.str("z")?.toDoubleOrNull()
-                ?: e.str("b")?.split('_')?.firstOrNull()?.toDoubleOrNull()
-                ?: prev ?: return@mapNotNull null
-            QuoteEntity(quoteKey(Market.TW, code), last, prev, "TWD", e.str("n"), now)
+            val last = misPrice(e) ?: return@mapNotNull null
+            QuoteEntity(quoteKey(Market.TW, code), last, misNum(e.str("y")), "TWD", e.str("n"), now)
+        }.distinctBy { it.key }
+    }
+
+    /** 個股頁用：今天的即時日 K（台股用證交所 MIS，失敗或美股用 Yahoo）。 */
+    suspend fun live(market: Market, symbol: String): LiveBar? {
+        if (market == Market.TW) {
+            misRaw(listOf(symbol))?.firstOrNull { it.str("c") == symbol }?.let { e ->
+                val p = misPrice(e) ?: return@let null
+                return LiveBar(p, misNum(e.str("o")), misNum(e.str("h")), misNum(e.str("l")),
+                    misNum(e.str("v"))?.times(1000), misNum(e.str("y")), e.str("n"), misDay(e))
+            }
         }
+        val candidates = if (market == Market.TW) listOf("$symbol.TW", "$symbol.TWO") else listOf(symbol)
+        for (ys in candidates) {
+            val meta = runCatching {
+                val root = Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(ys, "UTF-8")}?range=1d&interval=1m", quick = true)
+                (root.obj("chart").obj("result") as? JsonArray)?.firstOrNull().obj("meta")
+            }.getOrNull() ?: continue
+            val p = meta.num("regularMarketPrice") ?: continue
+            val zone = java.time.ZoneId.of(if (market == Market.TW) "Asia/Taipei" else "America/New_York")
+            val day = meta.num("regularMarketTime")?.toLong()?.let { java.time.Instant.ofEpochSecond(it).atZone(zone).toLocalDate().toEpochDay() }
+                ?: java.time.LocalDate.now(zone).toEpochDay()
+            return LiveBar(p, null, meta.num("regularMarketDayHigh"), meta.num("regularMarketDayLow"), meta.num("regularMarketVolume"),
+                meta.num("regularMarketPreviousClose") ?: meta.num("chartPreviousClose") ?: meta.num("previousClose"), meta.str("shortName"), day)
+        }
+        return null
     }
 
     /**
@@ -148,14 +204,15 @@ object QuoteService {
     }
 
     private suspend fun fetchYahoo(yahooSymbol: String, market: Market, symbol: String): QuoteEntity? {
-        val root = Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(yahooSymbol, "UTF-8")}?range=5d&interval=1d", quick = true)
+        val root = Http.getJson("https://query1.finance.yahoo.com/v8/finance/chart/${URLEncoder.encode(yahooSymbol, "UTF-8")}?range=1d&interval=1m", quick = true)
         val result = (root.obj("chart").obj("result") as? JsonArray)?.firstOrNull() ?: return null
         val meta = result.obj("meta")
         val price = meta.num("regularMarketPrice") ?: return null
+        // 昨收：range=1d 時 chartPreviousClose 才是前一個交易日的收盤（range=5d 會變成 5 天前）
         return QuoteEntity(
             key = quoteKey(market, symbol),
             price = price,
-            previousClose = meta.num("previousClose") ?: meta.num("chartPreviousClose"),
+            previousClose = meta.num("regularMarketPreviousClose") ?: meta.num("chartPreviousClose") ?: meta.num("previousClose"),
             currency = meta.str("currency") ?: if (market == Market.TW) "TWD" else "USD",
             name = meta.str("shortName") ?: meta.str("longName"),
             updatedAt = System.currentTimeMillis(),

@@ -24,7 +24,24 @@ object Http {
     const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36"
 
     /** 報價用：整個請求最多 6 秒，來源卡住時很快改用備援來源。 */
-    val fast: OkHttpClient by lazy { client.newBuilder().callTimeout(6, TimeUnit.SECONDS).connectTimeout(4, TimeUnit.SECONDS).build() }
+    val fast: OkHttpClient by lazy {
+        client.newBuilder().callTimeout(6, TimeUnit.SECONDS).connectTimeout(4, TimeUnit.SECONDS).cookieJar(MemoryCookies).build()
+    }
+
+    /** 證交所即時報價需要先取得網站的 session cookie；只存在記憶體。 */
+    private object MemoryCookies : okhttp3.CookieJar {
+        private val store = java.util.concurrent.ConcurrentHashMap<String, List<okhttp3.Cookie>>()
+        override fun saveFromResponse(url: okhttp3.HttpUrl, cookies: List<okhttp3.Cookie>) {
+            store[url.host] = (store[url.host].orEmpty().filter { old -> cookies.none { it.name == old.name } } + cookies)
+        }
+        override fun loadForRequest(url: okhttp3.HttpUrl): List<okhttp3.Cookie> =
+            store[url.host].orEmpty().filter { it.expiresAt > System.currentTimeMillis() }
+    }
+
+    /** 只取網頁（為了拿 cookie），內容丟掉。 */
+    suspend fun touch(url: String) = withContext(Dispatchers.IO) {
+        runCatching { fast.newCall(Request.Builder().url(url).header("User-Agent", USER_AGENT).build()).execute().close() }
+    }
 
     suspend fun getJson(url: String, headers: Map<String, String> = emptyMap(), quick: Boolean = false): JsonElement = withContext(Dispatchers.IO) {
         val req = Request.Builder().url(url).header("User-Agent", USER_AGENT).apply {
