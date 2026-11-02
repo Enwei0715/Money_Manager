@@ -171,6 +171,8 @@ object GroqAi {
         val s = MoneyApp.repo.settings.value
         var best: JsonObject? = null
         var bestScore = -1.0
+        // 每家平台這次失敗的原因（全部失敗時一起列出，不只顯示最後一家）
+        val errs = LinkedHashMap<String, String>()
         // 回覆語言跟隨 App 介面語言（JSON 的鍵、清單裡指定的選項值、代號與商家原名不翻）
         val system = if (com.enwei.moneymanager.ui.I18n.english && task.userText)
             system + " Write every human-readable text value in English (keep JSON keys, values chosen from given lists, stock codes and original names unchanged)."
@@ -213,6 +215,7 @@ object GroqAi {
                 Provider.NVIDIA -> callCompat(Provider.NVIDIA, s.nvidiaKey.trim(), r.model.removePrefix(NV), system, user, maxOf(1024, maxTokens * 3).coerceAtMost(8192),
                     timeoutSec = if (r.big) 90 else 50)
             }
+            if (out == null) errs[r.provider.label] = (lastError ?: "沒有回應").take(80)
             val score = if (out != null && quality != null) runCatching { quality(out) }.getOrDefault(0.0) else 1.0
             ProviderLog.record(r.provider, r.model,
                 if (out == null) lastError ?: "沒有回應" else if (score < 1.0) "回覆不完整（${(score * 100).toInt()}%），換下一個模型" else null)
@@ -239,7 +242,10 @@ object GroqAi {
                 retryAfterMs?.coerceIn(5_000L, 3600_000L) ?: if (r.provider == Provider.GEMINI) 15 * 60_000L else 2 * 60_000L)
             else if ("逾時" in err || "timeout" in err.lowercase() || "503" in err || "404" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
                 retryAfterMs?.coerceIn(5_000L, 3600_000L) ?: 5 * 60_000L)
+            // 其他錯誤（金鑰、請求格式、伺服器錯誤）：這個模型先停 10 分鐘，下一份工作直接用別的；資料太長只是這份太大，不算模型壞掉
+            else if (err.isNotBlank() && "資料超過" !in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model, 10 * 60_000L)
         }
+        if (best == null && errs.isNotEmpty()) lastError = errs.entries.joinToString("；") { (p, e) -> if (e.startsWith(p)) e else "$p：$e" }
         best
     }
 
@@ -499,17 +505,21 @@ object GroqAi {
                 NvidiaModels.refresh(force = true)
                 // 逐一測試會用到的模型，回報每個的結果（有一個成功就算可用）
                 val models = (NvidiaModels.pick(NvidiaModels.FAST, 2, s.nvidiaModel) + NvidiaModels.pick(NvidiaModels.HEAVY, 2)).distinct()
+                val reasons = HashMap<String, String>()
                 val results = models.map { m ->
-                    m to (callCompat(Provider.NVIDIA, s.nvidiaKey.trim(), m, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 256, timeoutSec = 45) != null)
+                    val ok = callCompat(Provider.NVIDIA, s.nvidiaKey.trim(), m, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 256, timeoutSec = 45) != null
+                    if (!ok) reasons[m] = lastError.orEmpty().removePrefix("NVIDIA").trim()
+                    m to ok
                 }
                 val bad = results.filter { !it.second }
                 models.filter { m -> results.any { it.first == m && !it.second } }.forEach { com.enwei.moneymanager.work.AiHealth.cooldown(NV + it, 24 * 3600_000L) }
                 if (results.any { it.second }) {
                     if (bad.isNotEmpty()) lastError = null
                     return@withContext if (bad.isEmpty()) null
-                    else "部分可用（無法使用的已暫停）：" + bad.joinToString("、") { it.first.substringAfterLast('/') }
+                    else "部分可用（無法使用的已暫停）：" + bad.joinToString("；") { "${it.first.substringAfterLast('/')} ${reasons[it.first].orEmpty()}" }
                 }
-                return@withContext (lastError ?: "沒有回應") + "（試了 " + models.joinToString("、") { it.substringAfterLast('/') } + "）"
+                if (models.isEmpty()) return@withContext "找不到可用的對話模型（模型清單 ${NvidiaModels.available().size} 個）"
+                return@withContext models.joinToString("\n") { "${it.substringAfterLast('/')}：${reasons[it].orEmpty()}" }
             }
         }
         if (r != null) null else lastError ?: "沒有回應"

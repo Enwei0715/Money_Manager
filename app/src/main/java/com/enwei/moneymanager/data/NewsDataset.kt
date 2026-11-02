@@ -621,8 +621,8 @@ class NewsDataset(context: Context) {
             for ((pi, part) in parts.withIndex()) {
                 calls++
                 var result = GroqAi.digestTheme(k.second, k.first, part)
-                // 漏掉一半以上才拆小重送；少數漏掉的直接用標題補成重點
-                if (result != null && coverage(result, part) < 0.5 && big) {
+                // 大模型都失敗（null）或漏掉一半以上：拆成小段重送，連可讀量小的模型也能接手；少數漏掉的直接用標題補成重點
+                if ((result == null || coverage(result, part) < 0.5) && big && part.sumOf { it.title.length + it.content.take(300).length } > 2_500) {
                     val retryParts = chunkNews(part, 2_500)
                     if (calls + retryParts.size > maxCalls) { ok = false; break }
                     val retried = ArrayList<DigestPoint>()
