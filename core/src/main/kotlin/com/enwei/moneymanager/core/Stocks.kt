@@ -7,6 +7,9 @@ enum class StockSide { BUY, SELL, CASH_DIVIDEND, STOCK_DIVIDEND }
 
 enum class Market { TW, US }
 
+/** 代號判斷市場：數字開頭（2330、00878）是台股，英文字母開頭（AAPL、BRK-B）是美股。 */
+fun marketOf(symbol: String): Market = if (symbol.firstOrNull()?.isLetter() == true) Market.US else Market.TW
+
 data class TradeRecord(
     val symbol: String,
     val side: StockSide,

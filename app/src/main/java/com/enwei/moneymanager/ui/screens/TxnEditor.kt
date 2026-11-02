@@ -438,6 +438,20 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 original?.rawText?.let {
                     Text("原始內容：$it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    // 通知自動記帳記錯了（其實是促銷）：刪掉這筆並記住這類促銷，下次同一個 App 的同類通知就不記
+                    val o = original
+                    if (o != null && o.source == com.enwei.moneymanager.data.TxnSource.NOTIFICATION) {
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                        var learning by remember { mutableStateOf(false) }
+                        TextButton(enabled = !learning, onClick = {
+                            learning = true
+                            scope.launch {
+                                val phrases = repo.learnPromo(o)
+                                android.widget.Toast.makeText(ctx, if (phrases.size >= 2) "已刪除，之後含「${phrases.joinToString("、")}」的同類通知不記帳" else "已刪除這筆（關鍵詞不足，沒有記住）", android.widget.Toast.LENGTH_LONG).show()
+                                nav.popBackStack()
+                            }
+                        }, modifier = Modifier.padding(horizontal = 8.dp)) { Text(if (learning) "記住中…" else "這是促銷廣告，不該記帳") }
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider(thickness = 8.dp, color = MaterialTheme.colorScheme.background)

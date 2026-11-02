@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object TwData {
     @Serializable
-    data class StockInfo(val code: String, val name: String, val industry: String = "")
+    data class StockInfo(val code: String, val name: String, val industry: String = "", val us: Boolean = false)
 
     /** 一個月的營收（元）；[yoy]、[mom] 為年增率、月增率（%）。 */
     data class MonthRevenue(val year: Int, val month: Int, val revenue: Double, val yoy: Double?, val mom: Double?)
@@ -75,6 +75,23 @@ object TwData {
         return list.filter { it.code.startsWith(q, true) || it.name.contains(q, true) }
             .sortedWith(compareBy<StockInfo>({ it.code != q && it.name != q }, { !it.code.startsWith(q) && !it.name.startsWith(q) }, { it.code.length }, { it.code }))
             .take(limit)
+    }
+
+    /** 美股搜尋（Yahoo Finance）：代號或英文名稱，只列股票與 ETF。 */
+    suspend fun searchUs(query: String, limit: Int = 15): List<StockInfo> {
+        val q = query.trim()
+        if (q.isEmpty() || q.none { it.isLetter() && it.code < 128 }) return emptyList()
+        return runCatching {
+            val root = Http.getJson("https://query2.finance.yahoo.com/v1/finance/search?q=${java.net.URLEncoder.encode(q, "UTF-8")}&quotesCount=$limit&newsCount=0", quick = true)
+            (root.obj("quotes") as? JsonArray)?.mapNotNull { e ->
+                val sym = e.str("symbol") ?: return@mapNotNull null
+                val type = e.str("quoteType").orEmpty()
+                val exch = e.str("exchange").orEmpty()
+                // 只要美國交易所的股票、ETF（不含 .TW 等外國代號）
+                if (type !in setOf("EQUITY", "ETF") || sym.contains('.') || exch !in setOf("NMS", "NYQ", "NGM", "NCM", "ASE", "PCX", "BTS", "NAS", "NYS")) return@mapNotNull null
+                StockInfo(sym, e.str("shortname") ?: e.str("longname") ?: sym, if (type == "ETF") "美股 ETF" else "美股", us = true)
+            }.orEmpty()
+        }.getOrDefault(emptyList())
     }
 
     /** 已載入的股票清單（沒有時為空）。 */

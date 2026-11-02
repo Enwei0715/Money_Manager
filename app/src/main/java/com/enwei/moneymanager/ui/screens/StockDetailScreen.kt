@@ -73,6 +73,8 @@ import kotlinx.coroutines.launch
 /** 股票資訊：K 線（含均線、成交量）、基本數據、相對大盤強弱、公司業務、持股紀律與相關新聞。 */
 @Composable
 fun StockDetailScreen(nav: NavController, symbol: String) {
+    // 英文字母開頭的代號是美股（沒有月營收；大盤比較改用 S&P 500）
+    val market = com.enwei.moneymanager.core.marketOf(symbol)
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val holdings by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
     var bars by remember { mutableStateOf<DailyBars?>(null) }
@@ -95,15 +97,15 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     val trades by repo.trades.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     LaunchedEffect(symbol) {
-        bars = InvestData.bars(symbol, "2y")
-        index = InvestData.bars("^TWII", "1y")
+        bars = InvestData.bars(symbol, "2y", tw = market == Market.TW)
+        index = InvestData.bars(if (market == Market.TW) "^TWII" else "^GSPC", "1y")
         val st = MoneyApp.news.load()
         business = st.business[symbol]
         news = MoneyApp.news.about(st, symbol)
         loading = false
-        divs = runCatching { com.enwei.moneymanager.net.QuoteService.fetchDividends(Market.TW, symbol) }.getOrDefault(emptyList())
+        divs = runCatching { com.enwei.moneymanager.net.QuoteService.fetchDividends(market, symbol) }.getOrDefault(emptyList())
     }
-    val held = holdings.values.flatten().filter { it.market == Market.TW && it.symbol == symbol && it.shares > 0.0001 }
+    val held = holdings.values.flatten().filter { it.market == market && it.symbol == symbol && it.shares > 0.0001 }
     // 名稱用股票清單的中文名稱（Yahoo 的是英文全名）
     val name = held.firstNotNullOfOrNull { it.name } ?: com.enwei.moneymanager.net.TwData.nameOf(symbol) ?: bars?.name
     // K 線上的參考線：均價、停利價、減碼價、提醒的目標價與停損價
@@ -180,7 +182,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 // K 線
                 LaunchedEffect(hourly, held.isNotEmpty(), settings.investPlan.disciplineOn, settings.investPlan.guardOn) {
                     if ((hourly || held.isNotEmpty() && settings.investPlan.disciplineOn && settings.investPlan.guardOn) && hourBars == null) {
-                        hourBars = InvestData.bars(symbol, "3mo", interval = "60m")
+                        hourBars = InvestData.bars(symbol, "3mo", tw = market == Market.TW, interval = "60m")
                     }
                 }
                 val kb = if (hourly) hourBars else b
@@ -292,7 +294,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         )
                     }
                 }
-                RevenueCard(symbol)
+                if (market == Market.TW) RevenueCard(symbol)
                 ProjectionCard(b)
                 if (held.isNotEmpty() && settings.investPlan.disciplineOn) Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -316,7 +318,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         if (settings.investPlan.guardOn) {
                             // 保本＋移動停利（60 分 K 均線在「資金與紀律」頁一起看）
                             val gs = settings.investPlan.guards[symbol]
-                            val principal = gs?.principal ?: com.enwei.moneymanager.data.autoPrincipal(trades.filter { it.market == Market.TW && it.symbol.equals(symbol, true) })
+                            val principal = gs?.principal ?: com.enwei.moneymanager.data.autoPrincipal(trades.filter { it.market == market && it.symbol.equals(symbol, true) })
                             val hc = hourBars?.close
                             val g = com.enwei.moneymanager.core.ProfitGuard.advise(
                                 com.enwei.moneymanager.core.GuardInput(shares, last, principal, gs?.peak, gs?.takeProfit, gs?.reduceAt,
@@ -367,7 +369,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         }
                     }
                     if (divList.isNotEmpty()) TextButton(onClick = { allDivs = !allDivs }) { Text(if (allDivs) "收起明細" else "除權息明細（${minOf(divList.size, 20)} 次）") }
-                    val mine = trades.filter { it.market == Market.TW && it.symbol.equals(symbol, true) && it.side == com.enwei.moneymanager.core.StockSide.CASH_DIVIDEND }
+                    val mine = trades.filter { it.market == market && it.symbol.equals(symbol, true) && it.side == com.enwei.moneymanager.core.StockSide.CASH_DIVIDEND }
                     if (mine.isNotEmpty()) Text("我已領現金股利 ${"%,.0f".format(mine.sumOf { it.cashAmount })} 元（${mine.map { it.date }.distinct().size} 次）", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                 }
             }
@@ -414,7 +416,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { nav.navigate("trade/0?market=TW&symbol=$symbol") }) { Text("記一筆交易") }
+                Button(onClick = { nav.navigate("trade/0?market=${market.name}&symbol=$symbol") }) { Text("記一筆交易") }
                 if (held.isNotEmpty()) OutlinedButton(onClick = { nav.navigate("holding/TW/$symbol") }) { Text("持股明細") }
             }
             Spacer(Modifier.height(24.dp))

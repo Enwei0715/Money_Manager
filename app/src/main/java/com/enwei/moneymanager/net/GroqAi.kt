@@ -895,6 +895,18 @@ object GroqAi {
         return out to r.str("note").orEmpty().take(200)
     }
 
+    /** 從促銷通知擷取 3～5 個辨識同類促銷的關鍵詞（活動名稱、宣傳用語），不含金額、日期、卡號、人名。 */
+    suspend fun promoPhrases(text: String): List<String>? {
+        if (!enabled) return null
+        val r = chatJson(
+            "使用者說這則通知是促銷廣告、不是交易。請擷取 3～5 個能辨識「同一類促銷通知」的關鍵詞（活動名稱、宣傳用語，每個 2～10 字，要原文裡出現的字）；" +
+                "不要金額、數字、日期、卡號、人名或帳號。只回 JSON：{\"phrases\": [字串]}",
+            text.take(800), 200, task = AiTask.NOTIFY,
+        ) ?: return null
+        return (r["phrases"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }
+            ?.filter { p -> p.length in 2..12 && p.none { it.isDigit() } && text.contains(p) }?.distinct()?.take(5)
+    }
+
     /** 一句話說明這家公司在做什麼（股票資訊頁用，結果會快取）。 */
     suspend fun describeCompany(symbol: String, name: String): String? = describeCompany(symbol, name, "")?.first
 

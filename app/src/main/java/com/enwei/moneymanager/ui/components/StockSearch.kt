@@ -26,9 +26,9 @@ import androidx.compose.ui.unit.sp
 import com.enwei.moneymanager.net.TwData
 import kotlinx.coroutines.delay
 
-/** 股票搜尋：打代號或名稱（例如「台積」「2330」），點結果回傳代號。 */
+/** 股票搜尋：台股打代號或名稱（例如「台積」「2330」），美股打代號或英文名稱（例如「AAPL」「apple」），點結果回傳代號。 */
 @Composable
-fun StockSearch(onPick: (TwData.StockInfo) -> Unit, maxHeight: Dp = 360.dp, autoFocusHint: String = "輸入股票名稱或代號") {
+fun StockSearch(onPick: (TwData.StockInfo) -> Unit, maxHeight: Dp = 360.dp, autoFocusHint: String = "股票名稱或代號（台股、美股）") {
     val ctx = LocalContext.current
     var q by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<TwData.StockInfo>>(emptyList()) }
@@ -38,7 +38,10 @@ fun StockSearch(onPick: (TwData.StockInfo) -> Unit, maxHeight: Dp = 360.dp, auto
         if (q.isBlank()) { results = emptyList(); return@LaunchedEffect }
         delay(200)
         loading = true
-        results = runCatching { TwData.search(ctx, q) }.getOrDefault(emptyList())
+        val tw = runCatching { TwData.search(ctx, q) }.getOrDefault(emptyList())
+        // 有英文字母時也查美股（台股在前）
+        val us = if (q.any { it.isLetter() && it.code < 128 }) TwData.searchUs(q) else emptyList()
+        results = (tw + us).distinctBy { it.code }
         failed = results.isEmpty() && TwData.nameOf("2330") == null
         loading = false
     }
@@ -49,7 +52,7 @@ fun StockSearch(onPick: (TwData.StockInfo) -> Unit, maxHeight: Dp = 360.dp, auto
             Text(if (failed) "讀不到股票清單（需要網路）；也可以直接輸入完整代號" else "找不到符合的股票", fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
             // 直接輸入代號也能用
-            if (q.trim().uppercase().matches(Regex("[0-9]{4,6}[A-Z]?"))) Text("使用代號 ${q.trim().uppercase()} ›", fontSize = 14.sp,
+            if (q.trim().uppercase().matches(Regex("[0-9]{4,6}[A-Z]?|[A-Z][A-Z.\\-]{0,5}"))) Text("使用代號 ${q.trim().uppercase()} ›", fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable { onPick(TwData.StockInfo(q.trim().uppercase(), "")) }.padding(vertical = 10.dp))
         }

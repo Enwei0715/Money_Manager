@@ -119,7 +119,19 @@ object NotificationParser {
     // 真正交易通知的字眼：出現時不當成促銷
     private val doneWords = listOf("交易成功", "已扣款", "扣款成功", "付款成功", "支付成功", "已付款", "授權", "消費通知", "刷卡通知", "末四碼", "末4碼", "卡號", "交易序號", "訂單編號", "已入帳", "入帳通知")
 
-    /** 行銷推播（促銷活動、回饋宣傳）：不是已完成的交易，不記帳也不交給 AI。 */
+    /**
+     * 從促銷通知擷取可辨識同類促銷的關鍵詞（不含數字、金額、日期，避免保存個人資料）：
+     * 先取促銷字眼，再補幾段 3～12 字、沒有數字的短句。
+     */
+    fun promoPhrases(text: String, max: Int = 5): List<String> {
+        val t = clean(text)
+        val words = promoWords.filter { t.contains(it, ignoreCase = true) && it.length >= 2 && it.none { c -> c.isDigit() } && it !in setOf("→", "👉", "🎁", "🔥") }
+        val segs = t.split(Regex("[，,。！!？?、：:；;（）()【】\\[\\]「」『』→👉\\s]+"))
+            .map { it.trim() }.filter { it.length in 3..12 && it.none { c -> c.isDigit() } && !it.contains("NT", true) && !it.contains("$") }
+        return (words + segs).distinct().take(max)
+    }
+
+    /** 行銷推播（促銷活動、回饋宣傳）的規則判斷；實際記帳時仍會交給 AI 確認。 */
     fun isPromo(text: String): Boolean {
         val t = clean(text)
         val hits = promoWords.count { t.contains(it, ignoreCase = true) }
@@ -196,7 +208,7 @@ object NotificationParser {
         title: String?, text: String?, type: ParsedType, now: LocalDateTime = LocalDateTime.now(), kind: ParsedKind = ParsedKind.NORMAL,
     ): ParsedTransaction? {
         val full = clean(listOfNotNull(title, text).joinToString(" ").replace('\n', ' '))
-        if (full.isBlank() || shouldIgnore(full) || isPromo(full)) return null
+        if (full.isBlank() || shouldIgnore(full)) return null
         val (amount, currency) = findAmount(full) ?: return null
         if (amount <= 0) return null
         return ParsedTransaction(

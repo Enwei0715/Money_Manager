@@ -54,7 +54,7 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
             val held = snap.holdings.map { it.symbol }
             val symbols = (held + s.priceAlerts.keys).distinct()
             if (symbols.isEmpty()) return
-            val quotes = QuoteService.fetch(symbols.map { Market.TW to it })
+            val quotes = QuoteService.fetch(symbols.map { com.enwei.moneymanager.core.marketOf(it) to it })
             if (quotes.isNotEmpty()) repo.saveQuotes(quotes)
             val price = quotes.associate { it.key to it.price }
             val fired = s.alertsFired.toMutableMap()
@@ -66,7 +66,7 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 out += Triple(sym, title, text)
             }
             s.priceAlerts.forEach { (sym, a) ->
-                val p = price[quoteKey(Market.TW, sym)] ?: return@forEach
+                val p = price[quoteKey(com.enwei.moneymanager.core.marketOf(sym), sym)] ?: return@forEach
                 if (a.target != null && p >= a.target) fire(sym, "target", "$sym 達到目標價", "現價 ${"%.2f".format(p)}，已達你設定的目標 ${"%.2f".format(a.target)}。")
                 if (a.stop != null && p <= a.stop) fire(sym, "stop", "$sym 跌破停損價", "現價 ${"%.2f".format(p)}，已低於你設定的停損價 ${"%.2f".format(a.stop)}。")
             }

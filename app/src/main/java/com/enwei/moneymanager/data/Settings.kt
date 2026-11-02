@@ -163,6 +163,18 @@ val memoColors: List<Long> = listOf(
 @Serializable
 data class RebateRule(val discount: Double, val sinceEpochDay: Long, val payDay: Int = 15)
 
+/**
+ * 使用者教過的促銷通知：只保存來源 App 與幾個關鍵詞（不保存通知原文），之後同一 App 的通知含有大部分關鍵詞就略過。
+ */
+@Serializable
+data class PromoSig(val pkg: String, val phrases: List<String>, val at: Long = 0) {
+    fun matches(pkg: String, text: String): Boolean {
+        if (pkg != this.pkg || phrases.isEmpty()) return false
+        val hit = phrases.count { text.contains(it, ignoreCase = true) }
+        return hit >= maxOf(2, kotlin.math.ceil(phrases.size * 0.6).toInt()).coerceAtMost(phrases.size)
+    }
+}
+
 /** 使用者確認過的本機辨識偏好；title 欄位沿用舊備份結構，實際保存的是標題指紋。 */
 @Serializable
 data class LearnedSource(
@@ -276,6 +288,8 @@ data class AppSettings(
     /** 帳戶群組自訂名稱 */
     val accountGroupNames: Map<String, String> = emptyMap(),
     val learnedSources: List<LearnedSource> = emptyList(),
+    /** 教過的促銷通知（來源 App＋關鍵詞） */
+    val promoSigs: List<PromoSig> = emptyList(),
     /** 證券帳戶 id → 月退設定 */
     val brokerRebates: Map<Long, RebateRule> = emptyMap(),
     /** 使用者刪除過的自動除息（代號:除息日:批次），不再自動建立 */
@@ -402,6 +416,7 @@ class SettingsStore(context: Context) {
     private val longIntSerializer = MapSerializer(Long.serializer(), Int.serializer())
     private val longStrSerializer = MapSerializer(Long.serializer(), String.serializer())
     private val learnedSerializer = ListSerializer(LearnedSource.serializer())
+    private val promoSerializer = ListSerializer(PromoSig.serializer())
     private val aiSuggestionSerializer = ListSerializer(AiSuggestion.serializer())
     private val reviewSerializer = MapSerializer(String.serializer(), AiReview.serializer())
     private val loanSerializer = MapSerializer(Long.serializer(), LoanInfo.serializer())
@@ -551,6 +566,7 @@ class SettingsStore(context: Context) {
         dismissedDividends = prefs.getStringSet("dismissedDividends", emptySet())!!.toSet(),
         brokerRebates = runCatching { json.decodeFromString(rebateSerializer, prefs.getString("brokerRebates", "{}")!!) }.getOrDefault(emptyMap()),
         learnedSources = learned,
+        promoSigs = runCatching { json.decodeFromString(promoSerializer, prefs.getString("promoSigs", "[]")!!) }.getOrDefault(emptyList()),
         accountGroupNames = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("accountGroupNames", "{}")!!) }.getOrDefault(emptyMap()),
         )
     }
@@ -659,6 +675,7 @@ class SettingsStore(context: Context) {
             .putString("accountGroupOrder", s.accountGroupOrder.joinToString(","))
             .putString("accountGroupNames", json.encodeToString(strMapSerializer, s.accountGroupNames))
             .putString("learnedSources", json.encodeToString(learnedSerializer, s.learnedSources))
+            .putString("promoSigs", json.encodeToString(promoSerializer, s.promoSigs))
             .putString("brokerRebates", json.encodeToString(rebateSerializer, s.brokerRebates))
             .putStringSet("dismissedDividends", s.dismissedDividends)
             .putBoolean("seedCleaned", s.seedCleaned)

@@ -883,7 +883,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 return@mapIndexedNotNull null
             }
             val learned = s.learnedFor(notice.pkg, notice.title, notice.text)
-            if (NotificationParser.isPromo(listOfNotNull(notice.title, notice.text).joinToString("\n"))) return@mapIndexedNotNull null
+            if (s.promoSigs.any { it.matches(notice.pkg, listOfNotNull(notice.title, notice.text).joinToString("\n")) }) return@mapIndexedNotNull null
             if (learned?.parse(notice.title, notice.text) != null || NotificationParser.parse(notice.title, notice.text) != null) {
                 return@mapIndexedNotNull null
             }
@@ -926,8 +926,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         fun logAs(result: String, txnId: Long? = null) =
             NotificationLogEntity(packageName = pkg, title = title, text = text, postedAt = postedAt, result = result, txnId = txnId)
 
-        // 行銷推播（「最高享 23% 回饋」「最後機會」…）不是交易：直接略過，也不交給 AI（手動測試時不略過）
-        if (!force && NotificationParser.isPromo(listOfNotNull(title, text).joinToString("\n"))) {
+        // 教過的促銷通知（同一 App、含大部分關鍵詞）：直接略過，不交給 AI；教過「這是交易」的格式優先
+        if (!force && learned == null && s.promoSigs.any { it.matches(pkg, listOfNotNull(title, text).joinToString("\n")) }) {
             if (enabled) log.insert(logAs("PROMO"))
             return null
         }
@@ -942,7 +942,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         // 有沒有網路：沒網路時 AI 不能判讀，規則看不懂的先排隊，恢復網路後再判讀
         val online = com.enwei.moneymanager.work.AiHealth.networkProblem(background = false) == null
         if (fill == null && parsed == null) {
-            if (enabled) log.insert(logAs(if (!online && com.enwei.moneymanager.net.GroqAi.enabled && !isRedacted(text)) "OFFLINE" else "UNPARSED"))
+            // 看起來像促銷（規則判斷，AI 也沒當成交易）：記為「促銷」，可在通知紀錄點開教它這其實是交易
+            val promoLike = NotificationParser.isPromo(listOfNotNull(title, text).joinToString("\n"))
+            if (enabled) log.insert(logAs(when {
+                !online && com.enwei.moneymanager.net.GroqAi.enabled && !isRedacted(text) && !promoLike -> "OFFLINE"
+                promoLike -> "PROMO"
+                else -> "UNPARSED"
+            }))
             return null
         }
         if (!enabled) {
@@ -1834,6 +1840,23 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     /** 刪除整檔持股（這個代號的所有買賣與股利紀錄）；交割帳戶餘額會自動回復。 */
     suspend fun deleteHolding(market: Market, symbol: String) = db.stocks().deleteSymbol(market, symbol.uppercase())
     suspend fun saveQuotes(list: List<QuoteEntity>) = db.stocks().upsertQuotes(list)
+
+    /**
+     * 使用者說這筆是促銷、不該記帳：刪除交易，並記住「來源 App＋幾個關鍵詞」（AI 擷取，沒有 AI 時用規則），
+     * 不保存通知原文。回傳記住的關鍵詞。
+     */
+    suspend fun learnPromo(txn: TxnEntity): List<String> {
+        val raw = txn.rawText.orEmpty()
+        val pkg = db.notificationLog().byTxn(txn.id)?.packageName.orEmpty()
+        val ai = runCatching { com.enwei.moneymanager.net.GroqAi.promoPhrases(raw) }.getOrNull()
+        val phrases = (ai?.takeIf { it.size >= 2 } ?: NotificationParser.promoPhrases(raw)).take(5)
+        if (phrases.size >= 2) settings.update { st ->
+            st.copy(promoSigs = (st.promoSigs.filterNot { it.pkg == pkg && it.phrases.toSet() == phrases.toSet() } + PromoSig(pkg, phrases, System.currentTimeMillis())).takeLast(60))
+        }
+        db.notificationLog().setResultForTxn(txn.id, "PROMO")
+        deleteTxn(txn.id)
+        return phrases
+    }
     suspend fun allTrades() = db.stocks().allTrades()
     suspend fun saveFx(list: List<FxRateEntity>) = db.fx().upsertAll(list)
 

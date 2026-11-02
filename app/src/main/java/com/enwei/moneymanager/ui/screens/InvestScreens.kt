@@ -233,7 +233,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
         }
         items(settings.watchlist, key = { "w$it" }) { sym ->
-            val q = quotes.find { it.key == com.enwei.moneymanager.data.quoteKey(com.enwei.moneymanager.core.Market.TW, sym) }
+            val q = quotes.find { it.key == com.enwei.moneymanager.data.quoteKey(com.enwei.moneymanager.core.marketOf(sym), sym) }
             val pct = q?.previousClose?.takeIf { it > 0 }?.let { (q.price - it) / it * 100 }
             Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("stock/$sym") }) {
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {

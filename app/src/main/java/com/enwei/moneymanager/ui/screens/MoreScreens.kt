@@ -530,15 +530,26 @@ fun NotificationSettingsScreen(nav: NavController) {
                     )
                 }
             }
+            if (settings.promoSigs.isNotEmpty()) {
+                item { SectionTitle("教過的促銷通知（只存關鍵詞，點擊刪除）") }
+                items(settings.promoSigs.size, key = { "promo$it" }) { i ->
+                    val p = settings.promoSigs[i]
+                    ListItem(
+                        headlineContent = { Text("${labelOf[p.pkg] ?: p.pkg.ifBlank { "任何 App" }} · 促銷") },
+                        supportingContent = { Text(p.phrases.joinToString("、")) },
+                        modifier = Modifier.clickable { repo.settings.update { it.copy(promoSigs = it.promoSigs - p) } },
+                    )
+                }
+            }
             item { SectionTitle("最近處理紀錄") }
             items(log.take(if (allLog) 50 else 8), key = { "log${it.id}" }) { e ->
                 val label = when (e.result) {
-                    "RECORDED" -> "已記帳"; "STOCK" -> "股票成交"; "DUPLICATE" -> "重複略過"; "MERGED" -> "合併為轉帳"; "UNPARSED" -> "無法辨識"; "PROMO" -> "促銷廣告略過"; else -> "未啟用來源"
+                    "RECORDED" -> "已記帳"; "STOCK" -> "股票成交"; "DUPLICATE" -> "重複略過"; "MERGED" -> "合併為轉帳"; "UNPARSED" -> "無法辨識"; "PROMO" -> "促銷廣告略過（點一下可教它這是交易）"; "OFFLINE" -> "等網路後判讀"; else -> "未啟用來源"
                 }
                 ListItem(
                     overlineContent = { Text("${labelOf[e.packageName] ?: e.packageName} · ${timeFmt.format(Date(e.postedAt))} · $label") },
                     headlineContent = { Text(listOfNotNull(e.title, e.text).joinToString(" "), maxLines = 3, style = MaterialTheme.typography.bodySmall) },
-                    modifier = Modifier.clickable(enabled = (e.txnId != null && e.result == "RECORDED") || e.result == "UNPARSED" || e.result == "CANDIDATE") {
+                    modifier = Modifier.clickable(enabled = (e.txnId != null && e.result == "RECORDED") || e.result == "UNPARSED" || e.result == "CANDIDATE" || e.result == "PROMO") {
                         if (e.result == "RECORDED") nav.navigate("txn/${e.txnId}")
                         else teach = TxnNotificationListener.ActiveNote(e.packageName, e.title, e.text, e.postedAt)
                     },

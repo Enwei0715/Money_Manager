@@ -235,6 +235,12 @@ interface NotificationLogDao {
     @Query("SELECT * FROM notification_log")
     suspend fun all(): List<NotificationLogEntity>
 
+    @Query("SELECT * FROM notification_log WHERE txnId = :txnId ORDER BY postedAt DESC LIMIT 1")
+    suspend fun byTxn(txnId: Long): NotificationLogEntity?
+
+    @Query("UPDATE notification_log SET result = :result WHERE txnId = :txnId")
+    suspend fun setResultForTxn(txnId: Long, result: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(list: List<NotificationLogEntity>)
 
