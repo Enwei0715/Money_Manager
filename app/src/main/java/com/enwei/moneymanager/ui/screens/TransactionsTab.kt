@@ -440,6 +440,25 @@ private fun SummaryCell(label: String, value: String, color: Color, modifier: Mo
 
 // ---------------- 每日 ----------------
 
+/**
+ * 每日清單的捲動位置：從記帳、明細返回時停在原處；從其他分頁切回「交易」或換月份時回到最上面（最新的交易）。
+ */
+object TxnScroll {
+    val state = androidx.compose.foundation.lazy.LazyListState()
+    var lastRange: Pair<LocalDate, LocalDate>? = null
+    /** 由切換分頁設定：下次顯示時回到最上面 */
+    var toTop = true
+}
+
+@Composable
+private fun DailyViewAnchor(range: Pair<LocalDate, LocalDate>) {
+    LaunchedEffect(range) {
+        if (TxnScroll.toTop || TxnScroll.lastRange != range) TxnScroll.state.scrollToItem(0)
+        TxnScroll.toTop = false
+        TxnScroll.lastRange = range
+    }
+}
+
 @Composable
 private fun DailyView(
     list: List<TxnEntity>, lk: Lookups, nav: NavController, range: Pair<LocalDate, LocalDate>, carry: Long, recurring: List<RecurringEntity>,
@@ -459,7 +478,8 @@ private fun DailyView(
         val next = repo.nextOccurrence(r, today)
         if (inRange(next, range) && !next.isBefore(today)) Triple(r, next, if (r.type == TxnType.EXPENSE) -r.amount else r.amount) else null
     }.sortedBy { it.second }
-    LazyColumn(Modifier.fillMaxSize()) {
+    DailyViewAnchor(range)
+    LazyColumn(Modifier.fillMaxSize(), state = TxnScroll.state) {
         if (upcoming.isNotEmpty()) item {
             Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("recurring") }) {
                 upcoming.forEach { (r, d, signed) ->

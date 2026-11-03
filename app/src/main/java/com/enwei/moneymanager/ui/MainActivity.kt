@@ -260,6 +260,8 @@ private fun BottomTabs(current: String?, onSelect: (String) -> Unit) = ChromeSca
  * 其他分頁的狀態是存在起始頁底下的，還原會把剛離開的分頁（例如統計）又帶回來，看起來就像按了沒反應。
  */
 internal fun NavController.openTab(route: String) {
+    // 從其他分頁切回「交易」：清單回到最新的交易
+    if (route == "txns" && currentDestination?.route != "txns") com.enwei.moneymanager.ui.screens.TxnScroll.toTop = true
     val start = graph.findStartDestination()
     if (route == start.route) {
         if (!popBackStack(start.id, inclusive = false)) navigate(route) { launchSingleTop = true }
