@@ -288,6 +288,12 @@ private fun AppScaffold(nav: NavHostController) {
     val editing = current != null && EDITOR_PREFIXES.any { current.startsWith(it) }
     var lastTab by remember { mutableStateOf("txns") }
     androidx.compose.runtime.SideEffect { if (isTab && current != null && lastTab != current) lastTab = current }
+    // 從其他分頁（按分頁列或返回鍵）回到「交易」：每日清單回到最新的交易；從記帳、明細返回則保留位置
+    val prevRoute = remember { arrayOf<String?>(null) }
+    if (current != prevRoute[0]) {
+        if (current == "txns" && tabs.any { it.route == prevRoute[0] }) com.enwei.moneymanager.ui.screens.TxnScroll.toTop = true
+        prevRoute[0] = current
+    }
     val showBar = !imeOpen && !editing
     // 換頁時底部分頁列一定出現
     androidx.compose.runtime.LaunchedEffect(current) {

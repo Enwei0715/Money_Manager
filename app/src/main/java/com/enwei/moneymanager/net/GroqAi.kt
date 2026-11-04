@@ -233,6 +233,48 @@ object GroqAi {
         best
     }
 
+    /**
+     * 寬鬆解析 AI 回覆的 JSON：
+     * - 去掉 ```json 標記與前後的說明文字；
+     * - 回了一串物件「{…}, {…}」或陣列「[…]」而沒有外層：包回 {"p":[…], "r":[…], "o":[…], "items":[…]}（各工作讀自己的鍵）；
+     * - 後面多了文字或第二個物件：只取第一個完整的物件。
+     */
+    internal fun parseLoose(raw: String): JsonObject? {
+        val text = raw.replace("```json", "").replace("```", "").trim()
+        val a = text.indexOfFirst { it == '{' || it == '[' }
+        if (a < 0) return null
+        fun tryParse(t: String) = runCatching { Http.json.parseToJsonElement(t) }.getOrNull()
+        fun wrap(arr: kotlinx.serialization.json.JsonArray) = buildJsonObject {
+            put("p", arr); put("r", arr); put("o", arr); put("items", arr)
+        }
+        val end = maxOf(text.lastIndexOf('}'), text.lastIndexOf(']'))
+        if (end > a) {
+            when (val e = tryParse(text.substring(a, end + 1))) {
+                is JsonObject -> return e
+                is kotlinx.serialization.json.JsonArray -> return wrap(e)
+                else -> {}
+            }
+            // 一串物件沒有外層陣列
+            (tryParse("[" + text.substring(a, end + 1) + "]") as? kotlinx.serialization.json.JsonArray)?.let { arr ->
+                return if (arr.size == 1 && arr[0] is JsonObject) arr[0] as JsonObject else wrap(arr)
+            }
+        }
+        // 第一個完整（括號配對）的物件
+        if (text[a] == '{') {
+            var depth = 0; var inStr = false; var esc = false
+            for (i in a until text.length) {
+                val c = text[i]
+                if (inStr) { if (esc) esc = false else if (c == '\\') esc = true else if (c == '"') inStr = false; continue }
+                when (c) {
+                    '"' -> inStr = true
+                    '{' -> depth++
+                    '}' -> { depth--; if (depth == 0) return tryParse(text.substring(a, i + 1)) as? JsonObject }
+                }
+            }
+        }
+        return null
+    }
+
     /** 最近一次被限流時，伺服器建議等待的時間（Retry-After 標頭或 Gemini 的 retryDelay） */
     @Volatile private var retryAfterMs: Long? = null
 
@@ -367,11 +409,9 @@ object GroqAi {
                     val msg = ((root["choices"] as? kotlinx.serialization.json.JsonArray)?.firstOrNull() as? JsonObject)?.get("message") as? JsonObject
                     val content = (msg?.get("content") as? JsonPrimitive)?.contentOrNull
                     if (content.isNullOrBlank()) { lastError = "$name「$model」沒有回覆內容"; return@use null }
-                    val a = content.indexOf('{'); val b = content.lastIndexOf('}')
-                    if (a < 0 || b <= a) { if (jsonMode) retryPlain = true else lastError = "$name 回覆不是 JSON"; return@use null }
+                    if (content.indexOf('{') < 0) { if (jsonMode) retryPlain = true else lastError = "$name 回覆不是 JSON"; return@use null }
                     lastError = null
-                    runCatching { Http.json.parseToJsonElement(content.substring(a, b + 1)).jsonObject }
-                        .getOrElse { lastError = "$name 回覆的 JSON 不完整"; null }
+                    parseLoose(content) ?: run { lastError = "$name 回覆的 JSON 不完整"; null }
                 }
             }.getOrElse {
                 lastError = if (it is java.io.InterruptedIOException) "$name 逾時（$timeoutSec 秒沒有回應）" else "$name：" + (it.message ?: it.javaClass.simpleName)
@@ -427,10 +467,8 @@ object GroqAi {
                     if ((o["thought"] as? JsonPrimitive)?.contentOrNull == "true") null else (o["text"] as? JsonPrimitive)?.contentOrNull
                 }?.joinToString("")
                 if (content.isNullOrBlank()) { lastError = "Gemini 沒有回覆內容（可能被安全過濾或長度不足）"; return@use null }
-                val a = content.indexOf('{'); val b = content.lastIndexOf('}')
-                if (a < 0 || b <= a) { lastError = "Gemini 回覆不是 JSON"; return@use null }
                 lastError = null
-                Http.json.parseToJsonElement(content.substring(a, b + 1)).jsonObject
+                parseLoose(content) ?: run { lastError = "Gemini 回覆的 JSON 格式不完整"; null }
             }
         }.getOrElse {
             lastError = if (it is java.io.InterruptedIOException) "Gemini 逾時（$timeoutSec 秒沒有回應）" else "Gemini：" + (it.message ?: it.javaClass.simpleName)
@@ -578,10 +616,8 @@ object GroqAi {
                     ?.let { (it as? JsonPrimitive)?.contentOrNull }
                 if (content == null) { lastError = "模型沒有回覆內容（可能是回覆長度不足）"; return@use null to Fail.NONE }
                 // 只取第一個 { 到最後一個 } 之間，容許模型在 JSON 前後多說幾句
-                val a = content.indexOf('{'); val b = content.lastIndexOf('}')
-                if (a < 0 || b <= a) { lastError = "模型回覆不是 JSON"; return@use null to Fail.NONE }
                 lastError = null
-                Http.json.parseToJsonElement(content.substring(a, b + 1)).jsonObject to Fail.NONE
+                (parseLoose(content) ?: run { lastError = "模型回覆的 JSON 格式不完整"; null }) to Fail.NONE
             }
         }.getOrElse {
             lastError = if (it is java.io.InterruptedIOException) "Groq 逾時（沒有回應）" else "Groq：" + (it.message ?: it.javaClass.simpleName)

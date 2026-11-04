@@ -448,15 +448,26 @@ object TxnScroll {
     var lastRange: Pair<LocalDate, LocalDate>? = null
     /** 由切換分頁設定：下次顯示時回到最上面 */
     var toTop = true
+    /** 等內容載入完成後要回到最上面（使用者開始捲動就取消） */
+    var pendingTop = true
 }
 
+/**
+ * 回到最上面要等清單內容載入後再做：資料晚一點出現時，清單會把原本畫面最上方那筆固定住（看起來像停在中間），
+ * 所以內容每次變動都再捲一次到頂，直到使用者自己開始捲動為止。
+ */
 @Composable
-private fun DailyViewAnchor(range: Pair<LocalDate, LocalDate>) {
+private fun DailyViewAnchor(range: Pair<LocalDate, LocalDate>, contentKey: Int) {
     LaunchedEffect(range) {
-        if (TxnScroll.toTop || TxnScroll.lastRange != range) TxnScroll.state.scrollToItem(0)
+        if (TxnScroll.toTop || TxnScroll.lastRange != range) TxnScroll.pendingTop = true
         TxnScroll.toTop = false
         TxnScroll.lastRange = range
     }
+    LaunchedEffect(range, contentKey) {
+        if (TxnScroll.pendingTop) TxnScroll.state.scrollToItem(0)
+    }
+    val scrolling = TxnScroll.state.isScrollInProgress
+    LaunchedEffect(scrolling) { if (scrolling) TxnScroll.pendingTop = false }
 }
 
 @Composable
@@ -478,7 +489,7 @@ private fun DailyView(
         val next = repo.nextOccurrence(r, today)
         if (inRange(next, range) && !next.isBefore(today)) Triple(r, next, if (r.type == TxnType.EXPENSE) -r.amount else r.amount) else null
     }.sortedBy { it.second }
-    DailyViewAnchor(range)
+    DailyViewAnchor(range, allDays.size * 31 + list.size + upcoming.size * 7 + memos.size)
     LazyColumn(Modifier.fillMaxSize(), state = TxnScroll.state) {
         if (upcoming.isNotEmpty()) item {
             Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("recurring") }) {
