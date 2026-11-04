@@ -447,6 +447,8 @@ class NewsDataset(context: Context) {
         }
         const val KEEP_DAYS = 14
         const val MAX_ITEMS = 12000
+        /** 每天最多保留的新聞則數（依相關度排序） */
+        const val DAILY_CAP = 150
     }
 
     /** 以寬泛市場詞與個人持股／觀察標的蒐集新聞，不使用固定產業題材清單。 */
@@ -459,6 +461,7 @@ class NewsDataset(context: Context) {
         }
         val now = System.currentTimeMillis() / 1000
         var added = 0
+        runCatching { com.enwei.moneymanager.net.TwData.stockList(com.enwei.moneymanager.MoneyApp.instance) }
         update { st ->
             fun mergeCopies(copies: List<NewsItem>, duplicateCount: Int): NewsItem {
                 val best = copies.maxWithOrNull(compareBy<NewsItem> { it.content.length }.thenBy { it.epochSec })!!
@@ -490,7 +493,11 @@ class NewsDataset(context: Context) {
                     duplicateCount = h.duplicateCount.coerceAtLeast(1),
                 )
             }
-            fresh.forEach { incoming ->
+            // 1. 和投資無關的新聞（社會、娛樂、體育…）不收，不送 AI
+            val relevant = fresh.filter { NewsFilter.relevant(it.title, it.content) }
+            // 近 2 天的標題特徵，用來合併「同一事件、不同媒體寫法」的報導
+            val nearPool = existing.filter { now - it.epochSec <= 2 * 86_400L }.map { it to NewsFilter.grams(it.title) }.toMutableList()
+            relevant.forEach { incoming ->
                 val exact = contentFingerprint(incoming.title, incoming.content)
                 val titleOnly = titleFingerprint(incoming.title)
                 val index = existing.indexOfFirst { current ->
@@ -498,8 +505,24 @@ class NewsDataset(context: Context) {
                         (current.content.isBlank() || incoming.content.isBlank()) && titleFingerprint(current.title) == titleOnly
                 }
                 if (index < 0) {
-                    existing += incoming
-                    added++
+                    // 2. 標題很像、時間相近：視為同一事件，算進報導家數，不另外存一則
+                    val g = NewsFilter.grams(incoming.title)
+                    val near = nearPool.indexOfFirst { (n, ng) -> kotlin.math.abs(n.epochSec - incoming.epochSec) <= 36 * 3600L && NewsFilter.similar(g, ng) }
+                    if (near >= 0) {
+                        val n = nearPool[near].first
+                        // 已標註的不改（改了會讓整理好的重點重做）；未標註的累加報導家數
+                        if (!n.tagged) {
+                            val i = existing.indexOfFirst { it.id == n.id }
+                            if (i >= 0) {
+                                val upd = existing[i].copy(duplicateCount = existing[i].duplicateCount + incoming.duplicateCount.coerceAtLeast(1))
+                                existing[i] = upd; nearPool[near] = upd to nearPool[near].second
+                            }
+                        }
+                    } else {
+                        existing += incoming
+                        nearPool += incoming to g
+                        added++
+                    }
                 } else {
                     val current = existing[index]
                     val contentImproved = incoming.content.length > current.content.length
@@ -521,8 +544,19 @@ class NewsDataset(context: Context) {
                     )
                 }
             }
-            val keep = existing.filter { now - it.epochSec <= KEEP_DAYS * 86_400L }
+            // 3. 每天上限：超過的部分，從還沒標註、分數最低的開始捨棄（已標註的保留，避免重做整理）
+            val zone = java.time.ZoneId.of("Asia/Taipei")
+            val drop = HashSet<String>()
+            existing.groupBy { java.time.Instant.ofEpochSecond(it.epochSec).atZone(zone).toLocalDate() }.values.forEach { day ->
+                val over = day.size - DAILY_CAP
+                if (over > 0) day.filter { !it.tagged }.sortedBy { NewsFilter.score(it) }.take(over).forEach { drop += it.id }
+            }
+            // 4. 超過 3 天、重要度低的只留標題（不再參與整理，省空間）
+            val old3 = now - 3 * 86_400L
+            val keep = existing.filter { now - it.epochSec <= KEEP_DAYS * 86_400L && it.id !in drop }
+                .map { if (it.tagged && it.epochSec < old3 && it.importance <= 2 && it.content.isNotEmpty()) it.copy(content = "", contentLevel = "title") else it }
                 .sortedByDescending { it.epochSec }.take(MAX_ITEMS)
+            added = (added - drop.size).coerceAtLeast(0)
             st.copy(items = keep, lastCollect = if (InvestData.lastHeadlineError == null) System.currentTimeMillis() else st.lastCollect)
         }
         return added
@@ -912,4 +946,56 @@ fun NewsStore.openChat(id: Long): NewsStore {
     val rest = chatThreads.filter { it.id != id }
     val parked = if (chat.isEmpty()) rest else listOf(ChatThread(System.currentTimeMillis(), chatTitle(chat), chat)) + rest
     return copy(chat = t.msgs, chatThreads = parked.take(30))
+}
+
+/**
+ * 新聞篩選：收進資料集前先判斷和投資有沒有關、算相關度分數、找同一事件的相似標題。
+ * 都是本機規則，不花 AI 額度。
+ */
+object NewsFilter {
+    private val finance = listOf(
+        "股", "台股", "美股", "指數", "營收", "財報", "獲利", "EPS", "法人", "外資", "投信", "自營", "匯率", "央行", "利率", "降息", "升息",
+        "通膨", "經濟", "景氣", "出口", "訂單", "產能", "半導體", "晶片", "晶圓", "AI", "伺服器", "電動車", "金控", "銀行", "保險", "壽險",
+        "航運", "貨櫃", "油價", "原物料", "黃金", "債", "ETF", "上市", "上櫃", "市值", "併購", "投資", "關稅", "供應鏈", "法說", "除息",
+        "股利", "配息", "營運", "產業", "財經", "金融", "期貨", "選擇權", "Fed", "聯準會", "GDP", "PMI", "CPI", "漲停", "跌停", "大盤",
+        "成交", "庫存", "毛利", "資本支出", "擴產", "標案", "營建", "房市", "生技", "新藥", "鋼鐵", "塑化", "觀光", "零售", "電信",
+    )
+    private val noise = listOf(
+        "藝人", "明星", "演唱會", "綜藝", "戲劇", "電影", "網紅", "緋聞", "球賽", "棒球", "籃球", "職棒", "NBA", "MLB", "世界盃", "奧運",
+        "車禍", "命案", "詐騙集團", "地震", "天氣", "氣象", "星座", "運勢", "食譜", "美食", "旅遊景點", "寵物", "八卦", "選情",
+    )
+    private val trusted = listOf("經濟日報", "工商時報", "鉅亨", "MoneyDJ", "中央社", "財訊", "商業周刊", "今周刊", "自由財經", "Yahoo股市", "Yahoo奇摩股市", "數位時代", "科技新報", "Bloomberg", "Reuters", "路透")
+
+    /** 和投資有關：有財經詞或提到個股；有娛樂、體育、社會詞又沒有個股時不收。 */
+    fun relevant(title: String, content: String): Boolean {
+        val t = title + " " + content.take(200)
+        val hits = finance.count { t.contains(it, ignoreCase = true) }
+        val stock = com.enwei.moneymanager.net.TwData.codesIn(title, 1).isNotEmpty()
+        if (stock) return true
+        if (noise.any { title.contains(it, ignoreCase = true) }) return hits >= 2
+        return hits >= 1
+    }
+
+    /** 相關度：提到個股、財經詞多、多家報導、可信財經來源、有內文。 */
+    fun score(n: NewsItem): Double {
+        val t = n.title + " " + n.content.take(200)
+        return com.enwei.moneymanager.net.TwData.codesIn(n.title, 3).size * 3.0 +
+            minOf(4, finance.count { t.contains(it, ignoreCase = true) }) +
+            minOf(5, n.duplicateCount) * 1.5 +
+            (if (trusted.any { n.source.contains(it, ignoreCase = true) }) 2.0 else 0.0) +
+            (if (n.content.isNotBlank()) 1.0 else 0.0)
+    }
+
+    /** 標題的兩字組（去掉來源與標點），用來比較相似度。 */
+    fun grams(title: String): Set<String> {
+        val t = title.substringBeforeLast(" - ").replace(Regex("[\\s\\p{Punct}「」『』【】（）《》，。！？：；、｜…—]"), "").lowercase()
+        return if (t.length < 2) setOf(t) else (0 until t.length - 1).map { t.substring(it, it + 2) }.toSet()
+    }
+
+    /** 兩個標題的兩字組重疊比例夠高，視為同一事件。 */
+    fun similar(a: Set<String>, b: Set<String>): Boolean {
+        if (a.size < 6 || b.size < 6) return false
+        val inter = a.count { it in b }
+        return inter.toDouble() / (a.size + b.size - inter) >= 0.55
+    }
 }
