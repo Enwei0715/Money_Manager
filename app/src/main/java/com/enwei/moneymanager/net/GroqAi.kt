@@ -157,6 +157,7 @@ object GroqAi {
         var bestScore = -1.0
         // 每家平台這次失敗的原因（全部失敗時一起列出，不只顯示最後一家）
         val errs = LinkedHashMap<String, String>()
+        var skippedGroq = false
         // 回覆語言跟隨 App 介面語言（JSON 的鍵、清單裡指定的選項值、代號與商家原名不翻）
         val system = if (com.enwei.moneymanager.ui.I18n.english && task.userText)
             system + " Write every human-readable text value in English (keep JSON keys, values chosen from given lists, stock codes and original names unchanged)."
@@ -185,14 +186,18 @@ object GroqAi {
             } else if (task != AiTask.CHAT) com.enwei.moneymanager.work.AiHealth.pace(r.provider.name,
                 when (r.provider) { Provider.GEMINI -> 1_000; Provider.GROQ -> 800 })
             quota.record(r.qid, gem, estTokens)
+            // 資料越多，模型讀得越久：依輸入長度給時間（大模型最多 170 秒）
+            val geminiTimeout = if (r.big) 170L else (60L + (system.length + user.length) / 1000 * 2).coerceAtMost(150L)
             val out = when (r.provider) {
                 Provider.GEMINI -> callGemini(s.geminiKeys.getOrNull(r.key) ?: continue, r.model, system, user,
                     // Gemini 的思考也算在輸出長度裡：大模型多留空間
-                    maxOf(2048, maxTokens * 4).let { if (r.big) maxOf(it, 12_000) else it }, timeoutSec = if (r.big) 90 else 45)
+                    maxOf(2048, maxTokens * 4).let { if (r.big) maxOf(it, 12_000) else it }, timeoutSec = geminiTimeout)
                 // 不加全域鎖：鎖不能重複取得，外層若已持有就會永遠卡住；限流交給下面的暫停機制與各工作的批次間隔
                 Provider.GROQ -> groqJson(s, system, user, maxTokens, r.big || hard, cap, if (r.big) effort else "low", forceModel = r.model, key = s.groqKeys.getOrNull(r.key) ?: continue)
             }
-            if (out == null) errs[r.provider.label] = (lastError ?: "沒有回應").take(120)
+            // Groq 讀不下這麼多資料是預期中的（只是跳過），不算失敗、不記錄
+            if (out == null && r.provider == Provider.GROQ && lastError?.contains("資料超過") == true) { skippedGroq = true; continue }
+            if (out == null) errs.putIfAbsent("${r.provider.label}「${r.model.substringAfterLast('/')}」", (lastError ?: "沒有回應").substringAfter("」").trimStart('：', ' ').take(60))
             val score = if (out != null && quality != null) runCatching { quality(out) }.getOrDefault(0.0) else 1.0
             ProviderLog.record(r.provider, r.qid,
                 if (out == null) lastError ?: "沒有回應" else if (score < 1.0) "回覆不完整（${(score * 100).toInt()}%），換下一個模型" else null)
@@ -217,7 +222,9 @@ object GroqAi {
             // 其他錯誤（金鑰、請求格式、伺服器錯誤）：這個模型先停 10 分鐘，下一份工作直接用別的；資料太長只是這份太大，不算模型壞掉
             else if (err.isNotBlank() && "資料超過" !in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.qid, 10 * 60_000L)
         }
-        if (best == null && errs.isNotEmpty()) lastError = errs.entries.joinToString("；") { (p, e) -> if (e.startsWith(p)) e else "$p：$e" }
+        if (best == null && errs.isNotEmpty()) lastError = errs.entries.take(3).joinToString("；") { (p, e) -> "$p：$e" } +
+            (if (errs.size > 3) "；另 ${errs.size - 3} 個模型也失敗" else "")
+        else if (best == null && skippedGroq) lastError = "資料太多，Groq 讀不下；需要 Gemini 金鑰"
         best
     }
 
@@ -342,7 +349,7 @@ object GroqAi {
     }
 
     /** AI 呼叫可能要讀大量資料，等久一點。 */
-    private val aiClient by lazy { Http.client.newBuilder().readTimeout(150, java.util.concurrent.TimeUnit.SECONDS).build() }
+    private val aiClient by lazy { Http.client.newBuilder().readTimeout(180, java.util.concurrent.TimeUnit.SECONDS).build() }
 
     /** Google Gemini（generateContent，JSON 模式）。失敗回傳 null 並記下原因。 */
     private fun callGemini(key: String, model: String, system: String, user: String, maxOut: Int, timeoutSec: Long = 90): JsonObject? {
