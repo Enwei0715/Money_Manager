@@ -455,6 +455,8 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
 fun TradeEditScreen(
     nav: NavController, id: Long, initMarket: String?, initSymbol: String?, initBroker: Long? = null,
     initLot: Long? = null, initSide: String? = null,
+    /** 從「股票交易待確認」補上：帶入通知看得出的資料，儲存後移出待確認 */
+    initPending: Long? = null,
 ) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
@@ -492,6 +494,15 @@ fun TradeEditScreen(
     LaunchedEffect(id, lk.accounts) {
         if (original != null || lk.accounts.isEmpty()) return@LaunchedEffect
         if (id == 0L) {
+            repo.settings.value.pendingTrades.firstOrNull { it.id == initPending }?.let { p ->
+                symbol = p.symbol; name = p.name.orEmpty()
+                side = runCatching { StockSide.valueOf(p.side) }.getOrDefault(StockSide.BUY)
+                date = LocalDate.ofEpochDay(p.date)
+                p.shares?.let { qty = if (it % 1.0 == 0.0) "%.0f".format(it) else it.toString() }
+                p.price?.let { price = it.toString() }
+                p.brokerId?.let { brokerId = it }
+                note = "由成交通知補上"
+            }
             if (brokerId == null) brokerId = brokers.firstOrNull()?.id
             return@LaunchedEffect
         }
@@ -671,6 +682,7 @@ fun TradeEditScreen(
                         // 新的賣出：先依賣出前的持股調整保本紀律
                         if (original == null && t.side == StockSide.SELL && t.market == Market.TW) runCatching { repo.adjustGuardAfterSell(t.symbol, t.shares, t.price) }
                         repo.saveTrade(t)
+                        if (initPending != null) repo.settings.update { st -> st.copy(pendingTrades = st.pendingTrades.filter { it.id != initPending }) }
                         runCatching { SyncWorker.refreshDividends(repo, setOfNotNull(t.symbol.uppercase(), original?.symbol?.uppercase())) }
                         runCatching { SyncWorker.refreshQuotes(repo) }
                     }

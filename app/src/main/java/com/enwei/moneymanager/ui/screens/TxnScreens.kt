@@ -281,6 +281,7 @@ fun PendingScreen(nav: NavController) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
+    val pendingTrades = repo.settings.flow.collectAsStateWithLifecycle().value.pendingTrades
     Scaffold(topBar = {
         BackTopBar(if (pending.isEmpty()) "待確認" else "待確認（${pending.size}）", { nav.popBackStack() }) {
             if (pending.size > 1) TextButton(onClick = { scope.launch { repo.confirmAllPending() } }) {
@@ -294,7 +295,30 @@ fun PendingScreen(nav: NavController) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             // 待確認的交易放最上面，AI 建議與合併重複放在下面
-            if (pending.isEmpty()) item {
+            // 股票交易待確認：成交通知缺股數、價格或證券帳戶，補上後才記入持股
+            if (pendingTrades.isNotEmpty()) item {
+                PendingSection("股票交易待確認（${pendingTrades.size}）") {
+                    pendingTrades.sortedByDescending { it.date }.forEachIndexed { i, p ->
+                        if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        val sell = p.side == "SELL"
+                        val missing = listOfNotNull("股數".takeIf { p.shares == null }, "價格".takeIf { p.price == null }, "證券帳戶".takeIf { p.brokerId == null })
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text((if (sell) "賣出 " else "買進 ") + "${p.symbol} ${p.name.orEmpty()}", fontSize = AppText.body, fontWeight = FontWeight.SemiBold,
+                                    color = if (sell) com.enwei.moneymanager.ui.StockDown else com.enwei.moneymanager.ui.StockUp)
+                                Text(java.time.LocalDate.ofEpochDay(p.date).let { "${it.monthValue}/${it.dayOfMonth}" } +
+                                    (if (missing.isNotEmpty()) "・缺" + missing.joinToString("、") else ""),
+                                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            TextButton(onClick = {
+                                repo.settings.update { st -> st.copy(pendingTrades = st.pendingTrades.filter { it.id != p.id }) }
+                            }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
+                            Button(onClick = { nav.navigate("trade/0?market=TW&symbol=${p.symbol}&side=${p.side}&pending=${p.id}") }) { Text("補上") }
+                        }
+                    }
+                }
+            }
+            if (pending.isEmpty() && pendingTrades.isEmpty()) item {
                 Column(Modifier.fillMaxWidth().padding(vertical = 36.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = androidx.compose.foundation.shape.CircleShape) {

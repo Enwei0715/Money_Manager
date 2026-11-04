@@ -412,7 +412,7 @@ private fun AppScaffold(nav: NavHostController) {
                 RecurringEditScreen(nav, e.arguments!!.getLong("id"))
             }
             composable(
-                "trade/{id}?market={market}&symbol={symbol}&broker={broker}&lot={lot}&side={side}",
+                "trade/{id}?market={market}&symbol={symbol}&broker={broker}&lot={lot}&side={side}&pending={pending}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.LongType },
                     navArgument("market") { type = NavType.StringType; nullable = true; defaultValue = null },
@@ -420,10 +420,12 @@ private fun AppScaffold(nav: NavHostController) {
                     navArgument("broker") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("lot") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("side") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("pending") { type = NavType.LongType; defaultValue = 0L },
                 ),
             ) { e ->
                 TradeEditScreen(nav, e.arguments!!.getLong("id"), e.arguments?.getString("market"), e.arguments?.getString("symbol"),
-                    e.arguments!!.getLong("broker").takeIf { it > 0 }, e.arguments!!.getLong("lot").takeIf { it > 0 }, e.arguments?.getString("side"))
+                    e.arguments!!.getLong("broker").takeIf { it > 0 }, e.arguments!!.getLong("lot").takeIf { it > 0 }, e.arguments?.getString("side"),
+                    e.arguments!!.getLong("pending").takeIf { it > 0 })
             }
             composable("holding/{market}/{symbol}") { e ->
                 HoldingScreen(nav, e.arguments!!.getString("market")!!, e.arguments!!.getString("symbol")!!)

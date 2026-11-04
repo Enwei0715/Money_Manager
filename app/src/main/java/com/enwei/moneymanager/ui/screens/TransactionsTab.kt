@@ -264,8 +264,9 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     }
                 },
                 actions = {
-                    if (pending.isNotEmpty()) IconButton(onClick = { nav.navigate("pending") }) {
-                        BadgedBox(badge = { Badge { Text("${pending.size}") } }) { Icon(Icons.Filled.NotificationsActive, "待確認") }
+                    val pendingCount = pending.size + settings.pendingTrades.size
+                    if (pendingCount > 0) IconButton(onClick = { nav.navigate("pending") }) {
+                        BadgedBox(badge = { Badge { Text("$pendingCount") } }) { Icon(Icons.Filled.NotificationsActive, "待確認") }
                     }
                     IconButton(onClick = { nav.navigate("search?month=$month") }) { Icon(Icons.Outlined.Search, "搜尋") }
                 },

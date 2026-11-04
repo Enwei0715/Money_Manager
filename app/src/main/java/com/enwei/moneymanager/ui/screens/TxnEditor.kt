@@ -320,6 +320,14 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                             .clickable { memoNew = true },
                         contentAlignment = Alignment.Center,
                     ) { Text("備註", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    // 股票交易：換到股票交易編輯（買進、賣出、股利），不另外找入口
+                    if (original == null && settings.featureStocks) Box(
+                        Modifier.weight(1f).height(40.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(6.dp))
+                            .clickable { nav.popBackStack(); nav.navigate("trade/0") },
+                        contentAlignment = Alignment.Center,
+                    ) { Text("股票", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 FormRow("日期", color, active = false, onClick = { panel = Panel.NONE; showDate = true }, trailing = {
                     Column(

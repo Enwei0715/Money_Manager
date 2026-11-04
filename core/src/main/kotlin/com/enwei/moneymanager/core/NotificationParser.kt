@@ -32,6 +32,16 @@ data class ParsedStockFill(
     val at: java.time.LocalDateTime? = null,
 )
 
+/** 只看得出「哪一檔、買或賣」的成交通知（沒寫股數或價格）：放待確認，讓使用者補上 */
+data class PartialStockFill(
+    val side: StockSide,
+    val symbol: String,
+    val name: String?,
+    val shares: Double?,
+    val price: Double?,
+    val at: java.time.LocalDateTime? = null,
+)
+
 /**
  * 解析銀行、信用卡、電子支付、券商推播通知。
  * 規則採關鍵字＋正規表示式，不依賴特定 App，因此新的銀行通知多半也能辨識。
@@ -289,6 +299,40 @@ object NotificationParser {
     private val sharesLabelRegex = Regex("(?:成交數量|成交股數|成交數|成交量)\\s*[:：]?\\s*([0-9][0-9,]*)\\s*(張)?")
     private val fillTimeRegex = Regex("(20[0-9]{2})[/-]([0-9]{1,2})[/-]([0-9]{1,2})\\s*([0-9]{1,2}):([0-9]{2})(?::([0-9]{2}))?")
     private val priceRegex = Regex("(?:成交價|成交均價|均價|價格|單價|@)\\s*[:：]?\\s*(?:NT\\$|\\$)?\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)")
+
+    /**
+     * 成交通知沒有寫股數或價格（例如「【2344 華邦電】台股委託買入成交通知 … 成交囉！」）：
+     * 只要看得出代號與買賣方向就回傳，股數、價格有寫才帶入。完整的通知請用 [parseStockFill]。
+     */
+    fun parseStockFillPartial(title: String?, text: String?): PartialStockFill? {
+        val full = clean(listOfNotNull(title, text).joinToString(" ").replace('\n', ' '))
+        if (!full.contains("成交")) return null
+        if (full.contains("未成交") || full.contains("委託失敗") || full.contains("刪單")) return null
+        if (parseStockFill(title, text) != null) return null
+        val sideToken = sideRegex.find(full)?.value ?: return null
+        val side = if (sideToken.contains("賣")) StockSide.SELL else StockSide.BUY
+        val at = fillTimeRegex.findAll(full).firstNotNullOfOrNull { m ->
+            val g = m.groupValues
+            runCatching { java.time.LocalDateTime.of(g[1].toInt(), g[2].toInt(), g[3].toInt(), g[4].toInt(), g[5].toInt(), g[6].ifEmpty { "0" }.toInt()) }.getOrNull()
+        }
+        val sharesMatch = sharesLabelRegex.find(full) ?: sharesRegex.find(full)
+        val shares = sharesMatch?.let { m -> m.groupValues[1].replace(",", "").toDoubleOrNull()?.let { if (m.groupValues[2] == "張") it * 1000 else it } }
+        val price = priceRegex.find(full)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
+        bracketRegex.find(full)?.let { m ->
+            val name = m.groupValues[2].trim().takeIf { it.any { ch -> ch in '一'..'龥' } }
+            return PartialStockFill(side, m.groupValues[1], name, shares, price, at)
+        }
+        // 沒有括號：找不是日期、時間、帳號一部分的 4～6 碼代號
+        val noTime = fillTimeRegex.replace(full, " ")
+        val symMatch = symbolRegex.findAll(noTime).firstOrNull { m ->
+            val v = m.groupValues[1]
+            val before = noTime.getOrNull(m.range.first - 1)
+            val after = noTime.getOrNull(m.range.first + v.length)
+            before !in listOf('/', '-', ':', '*', '.') && after !in listOf('/', '-', ':', '*', '.')
+        } ?: return null
+        val name = symMatch.groupValues[2].takeIf { it.isNotBlank() && it.any { ch -> ch in '一'..'龥' } }
+        return PartialStockFill(side, symMatch.groupValues[1], name, shares, price, at)
+    }
 
     /** 券商「成交回報」通知 → 股票交易。 */
     fun parseStockFill(title: String?, text: String?): ParsedStockFill? {

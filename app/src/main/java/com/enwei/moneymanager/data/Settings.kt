@@ -176,6 +176,22 @@ data class RebateRule(val discount: Double, val sinceEpochDay: Long, val payDay:
 /**
  * 使用者教過的促銷通知：只保存來源 App 與幾個關鍵詞（不保存通知原文），之後同一 App 的通知含有大部分關鍵詞就略過。
  */
+/** 待確認的股票交易：成交通知看得出代號與買賣，但缺股數、價格或交割帳戶，等使用者補上 */
+@Serializable
+data class PendingTrade(
+    val id: Long,
+    val symbol: String,
+    val name: String? = null,
+    /** BUY／SELL */
+    val side: String,
+    val shares: Double? = null,
+    val price: Double? = null,
+    /** epochDay */
+    val date: Long,
+    val brokerId: Long? = null,
+    val raw: String = "",
+)
+
 @Serializable
 data class PromoSig(val pkg: String, val phrases: List<String>, val at: Long = 0) {
     fun matches(pkg: String, text: String): Boolean {
@@ -306,6 +322,8 @@ data class AppSettings(
     val learnedSources: List<LearnedSource> = emptyList(),
     /** 教過的促銷通知（來源 App＋關鍵詞） */
     val promoSigs: List<PromoSig> = emptyList(),
+    /** 待確認的股票交易（成交通知缺資料） */
+    val pendingTrades: List<PendingTrade> = emptyList(),
     /** 證券帳戶 id → 月退設定 */
     val brokerRebates: Map<Long, RebateRule> = emptyMap(),
     /** 使用者刪除過的自動除息（代號:除息日:批次），不再自動建立 */
@@ -440,6 +458,7 @@ class SettingsStore(context: Context) {
     private val longStrSerializer = MapSerializer(Long.serializer(), String.serializer())
     private val learnedSerializer = ListSerializer(LearnedSource.serializer())
     private val promoSerializer = ListSerializer(PromoSig.serializer())
+    private val pendingTradeSerializer = ListSerializer(PendingTrade.serializer())
     private val aiSuggestionSerializer = ListSerializer(AiSuggestion.serializer())
     private val reviewSerializer = MapSerializer(String.serializer(), AiReview.serializer())
     private val loanSerializer = MapSerializer(Long.serializer(), LoanInfo.serializer())
@@ -597,6 +616,7 @@ class SettingsStore(context: Context) {
         brokerRebates = runCatching { json.decodeFromString(rebateSerializer, prefs.getString("brokerRebates", "{}")!!) }.getOrDefault(emptyMap()),
         learnedSources = learned,
         promoSigs = runCatching { json.decodeFromString(promoSerializer, prefs.getString("promoSigs", "[]")!!) }.getOrDefault(emptyList()),
+        pendingTrades = runCatching { json.decodeFromString(pendingTradeSerializer, prefs.getString("pendingTrades", "[]")!!) }.getOrDefault(emptyList()),
         accountGroupNames = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("accountGroupNames", "{}")!!) }.getOrDefault(emptyMap()),
         )
     }
@@ -710,6 +730,7 @@ class SettingsStore(context: Context) {
             .putString("accountGroupNames", json.encodeToString(strMapSerializer, s.accountGroupNames))
             .putString("learnedSources", json.encodeToString(learnedSerializer, s.learnedSources))
             .putString("promoSigs", json.encodeToString(promoSerializer, s.promoSigs))
+            .putString("pendingTrades", json.encodeToString(pendingTradeSerializer, s.pendingTrades))
             .putString("brokerRebates", json.encodeToString(rebateSerializer, s.brokerRebates))
             .putStringSet("dismissedDividends", s.dismissedDividends)
             .putBoolean("seedCleaned", s.seedCleaned)

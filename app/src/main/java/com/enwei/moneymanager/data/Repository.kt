@@ -933,6 +933,21 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
         // 股票功能關閉：成交通知不建立持股
         val fill = if (s.featureStocks) NotificationParser.parseStockFill(title, text) else null
+        // 成交通知只看得出代號與買賣（沒寫股數、價格）：放到待確認的股票交易，讓使用者補上
+        if (fill == null && s.featureStocks) NotificationParser.parseStockFillPartial(title, text)?.let { pf ->
+            val broker = fillBroker(pkg, title, text, bankSrc)
+            val day = pf.at?.toLocalDate()?.takeIf { kotlin.math.abs(it.toEpochDay() - postedAt.toLocalDate().toEpochDay()) <= 7 } ?: postedAt.toLocalDate()
+            val stamp = pf.at?.toString() ?: "${postedAt / 60_000}"
+            val pid = ("${pf.symbol}:${pf.side}:$stamp").hashCode().toLong() and 0x7fffffffL
+            if (settings.value.pendingTrades.any { it.id == pid }) { log.insert(logAs("DUPLICATE")); return null }
+            settings.update { st ->
+                st.copy(pendingTrades = (st.pendingTrades + PendingTrade(pid, pf.symbol, pf.name, pf.side.name, pf.shares, pf.price, day.toEpochDay(),
+                    broker?.id, listOfNotNull(title, text).joinToString("\n").take(400))).takeLast(50))
+            }
+            log.insert(logAs("STOCK_PENDING"))
+            val missing = listOfNotNull("股數".takeIf { pf.shares == null }, "價格".takeIf { pf.price == null }, "證券帳戶".takeIf { broker == null })
+            return IngestResult("PENDING", null, "${if (pf.side == StockSide.SELL) "賣出" else "買進"} ${pf.symbol} ${pf.name.orEmpty()}：缺${missing.joinToString("、")}，到待確認補上", pending = true)
+        }
         var parsed = if (fill != null) null else aiOverride ?: learned?.parse(title, text) ?: NotificationParser.parse(title, text)
         // 規則看不懂、但來自已啟用的銀行／支付 App：請 AI 判讀（結果一律放「待確認」）
         var aiParsed = aiOverride != null

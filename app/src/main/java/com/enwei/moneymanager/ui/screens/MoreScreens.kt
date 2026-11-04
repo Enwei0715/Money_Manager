@@ -620,6 +620,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         e.result == "RECORDED" -> "已記帳" to MaterialTheme.colorScheme.primary
                         e.result == "MERGED" -> "合併為轉帳" to MaterialTheme.colorScheme.primary
                         e.result == "STOCK" -> "股票成交" to MaterialTheme.colorScheme.primary
+                        e.result == "STOCK_PENDING" -> "股票待確認" to Color(0xFFFFA000)
                         e.result == "DUPLICATE" -> "重複略過" to MaterialTheme.colorScheme.onSurfaceVariant
                         e.result == "PROMO" -> "促銷略過" to MaterialTheme.colorScheme.onSurfaceVariant
                         e.result == "UNPARSED" -> "無法辨識" to MaterialTheme.colorScheme.error
@@ -634,6 +635,12 @@ fun NotificationSettingsScreen(nav: NavController) {
                                     val r = repo.ingestNotification(e.packageName, e.title, e.text, e.postedAt, force = true)
                                     testMsg = r?.let { "已重新記帳：${it.message}" } ?: "沒有記下（看不出是交易）"
                                 }
+                                // 先前看不懂、現在認得出是成交通知（只是缺股數或價格）：直接重新判讀，放進股票交易待確認
+                                e.result == "UNPARSED" && com.enwei.moneymanager.core.NotificationParser.parseStockFillPartial(e.title, e.text) != null -> testScope.launch {
+                                    val r = repo.ingestNotification(e.packageName, e.title, e.text, e.postedAt, force = true)
+                                    testMsg = r?.message ?: "已在待確認"
+                                }
+                                e.result == "STOCK_PENDING" -> nav.navigate("pending")
                                 e.result in setOf("UNPARSED", "CANDIDATE", "PROMO") -> teach = TxnNotificationListener.ActiveNote(e.packageName, e.title, e.text, e.postedAt)
                             }
                         }) {
@@ -647,6 +654,8 @@ fun NotificationSettingsScreen(nav: NavController) {
                             Text(listOfNotNull(e.title, e.text).joinToString(" "), fontSize = AppText.secondary, maxLines = 2,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             if (gone) Text("點一下重新記帳", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
+                            else if (e.result == "UNPARSED" && com.enwei.moneymanager.core.NotificationParser.parseStockFillPartial(e.title, e.text) != null)
+                                Text("點一下放到股票交易待確認", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
                             else if (e.result in setOf("UNPARSED", "CANDIDATE", "PROMO")) Text("點一下教它這是交易", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
                         }
                     }

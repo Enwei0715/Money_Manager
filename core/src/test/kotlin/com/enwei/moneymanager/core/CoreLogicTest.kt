@@ -588,3 +588,22 @@ class TyphoonExtraTest {
         TaiwanHolidays.setExtra(emptyMap())
     }
 }
+
+class PartialFillTest {
+    @Test fun brokerFillWithoutQuantity() {
+        // 大戶投的成交通知只寫代號與買賣，沒寫股數與價格：放股票交易待確認
+        val t = "【2344 華邦電】台股委託買入成交通知 您委託買入的台股已於 2026/11/04 10:34:30 成交嘍！"
+        assertEquals(null, NotificationParser.parseStockFill(null, t))
+        val p = NotificationParser.parseStockFillPartial(null, t)
+        assertEquals("2344", p?.symbol)
+        assertEquals("華邦電", p?.name)
+        assertEquals(StockSide.BUY, p?.side)
+        assertEquals(null, p?.shares)
+        assertEquals(java.time.LocalDateTime.of(2026, 11, 4, 10, 34, 30), p?.at)
+        // 完整的成交通知不走待確認
+        assertEquals(null, NotificationParser.parseStockFillPartial(null, "買進 2330 台積電 2張 成交價 1000 2026/10/28 13:01"))
+        // 不是成交（維護公告、未成交）
+        assertEquals(null, NotificationParser.parseStockFillPartial(null, "電子平台部分功能暫停服務通知 2026/11/3(二)20:00~20:40進行系統維護作業"))
+        assertEquals(null, NotificationParser.parseStockFillPartial(null, "【2344 華邦電】委託買入 未成交"))
+    }
+}
