@@ -1042,7 +1042,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             // 其實是已排程的信用卡自動扣繳（銀行實際扣款日晚一兩天）：併入那筆、改成實際扣款日，不重複記支出
             if (t.type == TxnType.EXPENSE) db.txns().get(id)?.let { absorbIntoAutopay(it) }?.let { ap ->
                 log.insert(logAs("MERGED", ap.id))
-                return IngestResult("RECORDED", ap.id, "卡費扣繳 $amountText：${lookupName(ap.toAccountId)}（已有自動扣繳，改為實際扣款日）")
+                return IngestResult("RECORDED", ap.id, "卡費扣繳 ${Money.format(ap.amount, ap.currency)}：${lookupName(ap.toAccountId)}（已有自動扣繳，改為實際扣款日）")
             }
             log.insert(logAs(result, id))
             log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
