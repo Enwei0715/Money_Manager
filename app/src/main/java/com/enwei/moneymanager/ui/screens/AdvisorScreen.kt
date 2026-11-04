@@ -1896,7 +1896,7 @@ private fun NewsScheduleInfo() {
         if (health.failures > 0 && !health.paused(now)) add("最近連續失敗 ${health.failures} 次：${health.pauseReason ?: "沒有回應"}")
     }
     val usage = run {
-        val models = GroqAi.AiTask.entries.flatMap { t -> GroqAi.routes(t, 0) + GroqAi.routes(t, Int.MAX_VALUE) }.map { it.model to (it.provider == GroqAi.Provider.GEMINI) }
+        val models = GroqAi.AiTask.entries.flatMap { t -> GroqAi.routes(t, 0) + GroqAi.routes(t, Int.MAX_VALUE) }.map { it.qid to (it.provider == GroqAi.Provider.GEMINI) }
         com.enwei.moneymanager.work.AiQuota.todaySummary(models)
     }
     val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()

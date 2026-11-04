@@ -351,10 +351,10 @@ data class AppSettings(
     val groqKey: String = "",
     /** Google Gemini（AI Studio）金鑰：讀大量資料的工作用 */
     val geminiKey: String = "",
-    /** OpenRouter 金鑰（免費模型 :free 當作額外的備援） */
-    val openRouterKey: String = "",
-    /** 優先使用的 OpenRouter 免費模型（空白＝自動挑） */
-    val openRouterModel: String = "",
+    /** 額外的 Groq 金鑰（一行一個）：第一把額度用完時輪流使用 */
+    val groqKeysExtra: String = "",
+    /** 額外的 Gemini 金鑰（一行一個） */
+    val geminiKeysExtra: String = "",
     val geminiModel: String = "gemini-flash-latest",
     val geminiLiteModel: String = "gemini-flash-lite-latest",
     /** 舊版 AI 手動分配欄位，保留備份相容；目前一律自動分工。 */
@@ -559,8 +559,8 @@ class SettingsStore(context: Context) {
         typhoonDays = prefs.getString("typhoonDays", "")!!,
         groqKey = prefs.getString("groqKey", "")!!,
         geminiKey = prefs.getString("geminiKey", "")!!,
-        openRouterKey = prefs.getString("openRouterKey", "")!!,
-        openRouterModel = prefs.getString("openRouterModel", "")!!,
+        groqKeysExtra = prefs.getString("groqKeysExtra", "")!!,
+        geminiKeysExtra = prefs.getString("geminiKeysExtra", "")!!,
         aiAutoRoute = prefs.getBoolean("aiAutoRoute", true),
         geminiModel = prefs.getString("geminiModel", "gemini-flash-latest")!!,
         geminiLiteModel = prefs.getString("geminiLiteModel", "gemini-flash-lite-latest")!!,
@@ -624,7 +624,7 @@ class SettingsStore(context: Context) {
     @Synchronized
     /** 匯出所有設定（完整備份用）；GitHub Token 屬於憑證，不放進備份檔。 */
     fun exportRaw(): Map<String, kotlinx.serialization.json.JsonElement> = prefs.all.filterKeys {
-        it !in setOf("githubToken", "groqKey", "geminiKey", "openRouterKey", "nvidiaKey", "autoBackupUri", "lastAutoBackup", "lastAutoBackupError")
+        it !in setOf("githubToken", "groqKey", "geminiKey", "groqKeysExtra", "geminiKeysExtra", "openRouterKey", "nvidiaKey", "autoBackupUri", "lastAutoBackup", "lastAutoBackupError")
     }.mapNotNull { (k, v) ->
         val e: kotlinx.serialization.json.JsonElement = when (v) {
             is Boolean -> kotlinx.serialization.json.buildJsonObject { put("t", "b"); put("v", v) }
@@ -646,7 +646,8 @@ class SettingsStore(context: Context) {
         val token = prefs.getString("githubToken", "")
         val groq = prefs.getString("groqKey", "")
         val gemini = prefs.getString("geminiKey", "")
-        val openRouter = prefs.getString("openRouterKey", "")
+        val groqX = prefs.getString("groqKeysExtra", "")
+        val geminiX = prefs.getString("geminiKeysExtra", "")
         val keepUri = prefs.getString("autoBackupUri", "")
         val ed = prefs.edit().clear()
         map.forEach { (k, e) ->
@@ -663,7 +664,7 @@ class SettingsStore(context: Context) {
                 "ss" -> (v as? kotlinx.serialization.json.JsonArray)?.let { arr -> ed.putStringSet(k, arr.map { (it as kotlinx.serialization.json.JsonPrimitive).content }.toSet()) }
             }
         }
-        ed.putString("githubToken", token).putString("groqKey", groq).putString("geminiKey", gemini).putString("openRouterKey", openRouter).putString("autoBackupUri", keepUri).commit()
+        ed.putString("githubToken", token).putString("groqKey", groq).putString("geminiKey", gemini).putString("groqKeysExtra", groqX).putString("geminiKeysExtra", geminiX).putString("autoBackupUri", keepUri).commit()
         state.value = read()
     }
 
@@ -745,9 +746,9 @@ class SettingsStore(context: Context) {
             .putString("typhoonDays", s.typhoonDays)
             .putString("groqKey", s.groqKey)
             .putString("geminiKey", s.geminiKey)
-            .putString("openRouterKey", s.openRouterKey)
-            .putString("openRouterModel", s.openRouterModel)
-            .remove("nvidiaKey").remove("nvidiaModel")
+            .putString("groqKeysExtra", s.groqKeysExtra)
+            .putString("geminiKeysExtra", s.geminiKeysExtra)
+            .remove("nvidiaKey").remove("nvidiaModel").remove("openRouterKey").remove("openRouterModel")
             .putBoolean("aiAutoRoute", s.aiAutoRoute)
             .putString("geminiModel", s.geminiModel)
             .putString("geminiLiteModel", s.geminiLiteModel)
@@ -867,5 +868,10 @@ object HolidayCache {
 }
 
 
-/** 至少填了一家 AI 的金鑰（Groq、Gemini 或 OpenRouter）。 */
-val AppSettings.hasAiKey: Boolean get() = groqKey.isNotBlank() || geminiKey.isNotBlank() || openRouterKey.isNotBlank()
+/** 至少填了一把 AI 金鑰（Groq 或 Gemini）。 */
+val AppSettings.hasAiKey: Boolean get() = groqKeys.isNotEmpty() || geminiKeys.isNotEmpty()
+
+/** 所有 Groq 金鑰（主要＋額外，去掉空白與重複）。 */
+val AppSettings.groqKeys: List<String> get() = (listOf(groqKey) + groqKeysExtra.lines()).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+/** 所有 Gemini 金鑰。 */
+val AppSettings.geminiKeys: List<String> get() = (listOf(geminiKey) + geminiKeysExtra.lines()).map { it.trim() }.filter { it.isNotEmpty() }.distinct()

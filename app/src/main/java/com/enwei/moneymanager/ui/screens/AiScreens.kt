@@ -3,6 +3,9 @@ package com.enwei.moneymanager.ui.screens
 import com.enwei.moneymanager.ui.AppText
 
 import com.enwei.moneymanager.data.hasAiKey
+import com.enwei.moneymanager.data.groqKeys
+import com.enwei.moneymanager.data.geminiKeys
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -77,7 +80,7 @@ fun AiSettingsScreen(nav: NavController) {
             // Groq
             ProviderCard(
                 Provider.GROQ, "速度快，適合頻繁的小工作",
-                s.groqKey, { k -> repo.settings.update { it.copy(groqKey = k.trim()) } },
+                s.groqKeys, { ks -> repo.settings.update { it.copy(groqKey = ks.firstOrNull().orEmpty(), groqKeysExtra = ks.drop(1).joinToString("\n")) } },
                 onPickModel = { m -> repo.settings.update { it.copy(aiModel = m) } },
             ) {
                 ModelField("一般模型", s.aiModel) { v -> repo.settings.update { it.copy(aiModel = v) } }
@@ -87,29 +90,15 @@ fun AiSettingsScreen(nav: NavController) {
             // Gemini
             ProviderCard(
                 Provider.GEMINI, "適合讀取較大量的資料；金鑰到 aistudio.google.com 申請",
-                s.geminiKey, { k -> repo.settings.update { it.copy(geminiKey = k.trim()) } },
+                s.geminiKeys, { ks -> repo.settings.update { it.copy(geminiKey = ks.firstOrNull().orEmpty(), geminiKeysExtra = ks.drop(1).joinToString("\n")) } },
                 onPickModel = { m -> repo.settings.update { it.copy(geminiModel = m) } },
             ) {
                 ModelField("主要模型（報告、分析、對話）", s.geminiModel) { v -> repo.settings.update { it.copy(geminiModel = v) } }
                 ModelField("輕量模型（新聞標註、錢包畫面）", s.geminiLiteModel) { v -> repo.settings.update { it.copy(geminiLiteModel = v) } }
             }
 
-            // OpenRouter：免費模型（:free）當作額外備援
-            ProviderCard(
-                Provider.OPENROUTER, "免費模型備援，金鑰到 openrouter.ai 申請",
-                s.openRouterKey, { k -> repo.settings.update { it.copy(openRouterKey = k.trim()) }; com.enwei.moneymanager.work.AiHealth.clearCooldown { m -> m.endsWith(":free") } },
-                onPickModel = { m -> repo.settings.update { it.copy(openRouterModel = m) } },
-            ) {
-                ModelField("優先模型（空白＝自動挑免費模型）", s.openRouterModel) { v -> repo.settings.update { it.copy(openRouterModel = v.trim()) } }
-                val n = remember(s.openRouterKey) { com.enwei.moneymanager.net.OpenRouterModels.cached().size }
-                Text(
-                    "免費模型 $n 個・每分鐘 20 次・每天 50 次（儲值 10 美元後 1,000 次）",
-                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
             Text(
-                "金鑰只存在這支手機、不放進備份",
+                "可填多把金鑰：一把的額度用完，自動換下一把。金鑰只存在這支手機、不放進備份",
                 fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             }
@@ -130,24 +119,37 @@ private fun SwitchRow(title: String, desc: String, on: Boolean, enabled: Boolean
 
 @Composable
 private fun ProviderCard(
-    p: Provider, desc: String, key: String, onKey: (String) -> Unit,
+    p: Provider, desc: String, keys: List<String>, onKeys: (List<String>) -> Unit,
     /** 在「可用模型」清單點選時，設成這家的優先模型 */
     onPickModel: ((String) -> Unit)? = null,
     models: @Composable () -> Unit,
 ) {
     var showModels by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    var k by remember { mutableStateOf(key) }
+    // 編輯中的金鑰清單（空白欄位先保留在畫面上，存檔時去掉）
+    var ks by remember { mutableStateOf(keys.ifEmpty { listOf("") }) }
+    fun save(list: List<String>) { ks = list; onKeys(list.map { it.trim() }.filter { it.isNotEmpty() }) }
+    val k = ks.firstOrNull { it.isNotBlank() }.orEmpty()
+    val key = k
     var result by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(p.label, fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             Text(desc, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(
-                k, { k = it; onKey(it) }, label = { Text("${p.label} API 金鑰") }, singleLine = true,
-                visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(),
-            )
+            ks.forEachIndexed { i, v ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        v, { nv -> save(ks.toMutableList().also { it[i] = nv }) },
+                        label = { Text(if (ks.size > 1) "${p.label} 金鑰 ${i + 1}" else "${p.label} API 金鑰") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(), modifier = Modifier.weight(1f),
+                    )
+                    if (ks.size > 1) androidx.compose.material3.IconButton(onClick = { save(ks.filterIndexed { j, _ -> j != i }) }) {
+                        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Close, "移除這把金鑰", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            if (ks.last().isNotBlank()) TextButton(onClick = { ks = ks + "" }) { Text("＋ 新增金鑰") }
             models()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (onPickModel != null) TextButton(enabled = k.isNotBlank(), onClick = { showModels = true }) { Text("可用模型") }
@@ -191,7 +193,6 @@ private fun RouteOverview() {
     fun color(p: Provider) = when (p) {
         Provider.GROQ -> androidx.compose.ui.graphics.Color(0xFFF0605A)
         Provider.GEMINI -> androidx.compose.ui.graphics.Color(0xFF3C82E6)
-        Provider.OPENROUTER -> androidx.compose.ui.graphics.Color(0xFF7E57C2)
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -210,13 +211,13 @@ private fun RouteOverview() {
                     Text(t.label, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold)
                     if (rs.isEmpty()) Text("沒有可用的模型", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error)
                     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        rs.take(5).forEachIndexed { i, r ->
-                            val cooling = com.enwei.moneymanager.work.AiHealth.cooldownUntil(r.model) > now
+                        rs.take(8).forEachIndexed { i, r ->
+                            val cooling = com.enwei.moneymanager.work.AiHealth.cooldownUntil(r.qid) > now
                             androidx.compose.material3.Surface(
                                 color = color(r.provider).copy(alpha = if (cooling) 0.06f else if (i == 0) 0.28f else 0.14f),
                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
                             ) {
-                                Text(short(r.model), fontSize = AppText.label, maxLines = 1,
+                                Text(short(r.model) + (if (r.key > 0) " #${r.key + 1}" else ""), fontSize = AppText.label, maxLines = 1,
                                     color = if (cooling) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                             }

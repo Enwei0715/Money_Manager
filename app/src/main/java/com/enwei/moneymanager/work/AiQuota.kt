@@ -25,8 +25,6 @@ object AiQuota {
             m.contains("flash") -> Limits(5, 250_000, 20)
             else -> Limits(5, 250_000, 20)
         } else when {
-            // OpenRouter 免費模型：每分鐘 20 次；每日上限是帳戶共用，被拒時整批暫停到 UTC 午夜
-            m.endsWith(":free") -> Limits(20, 1_000_000, 1000)
             m.contains("qwen3-32b") -> Limits(60, 6_000, 1_000, 500_000)
             m.contains("llama-4-scout") -> Limits(30, 30_000, 1_000, 500_000)
             m.contains("kimi-k2") -> Limits(60, 10_000, 1_000, 300_000)
