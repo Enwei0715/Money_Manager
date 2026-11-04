@@ -499,6 +499,7 @@ private fun HistoryDialog(store: NewsStore, onOpen: (Long) -> Unit, onDismiss: (
 }
 
 /** 推薦股票卡片：代號名稱、長短線、強弱、業務、理由、進出場；點進去看 K 線與資訊。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun PickCard(
     p: StockPick, cites: List<String> = emptyList(), newsById: Map<String, com.enwei.moneymanager.data.NewsItem> = emptyMap(),
@@ -521,6 +522,10 @@ fun PickCard(
                     })
                     com.enwei.moneymanager.ui.components.FoldToggle(false, modifier = Modifier.padding(start = 6.dp))
                 }
+                (listOf(p.industry).filter { it.isNotBlank() } + p.basis).takeIf { it.isNotEmpty() }?.let {
+                    Text(it.joinToString(" · "), fontSize = AppText.label, color = MaterialTheme.colorScheme.primary, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
                 splitPoints(p.reason).firstOrNull()?.let {
                     CitedText(it, cites, newsById, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -532,6 +537,7 @@ fun PickCard(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${p.symbol} ${p.name}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                if (p.industry.isNotBlank()) Tag(p.industry, MaterialTheme.colorScheme.tertiaryContainer)
                 if (p.style.isNotBlank()) Tag(p.style, MaterialTheme.colorScheme.secondaryContainer)
                 if (fold != null) com.enwei.moneymanager.ui.components.FoldToggle(true, modifier = Modifier.padding(start = 6.dp).clickable { fold.toggle() })
                 if (p.strength.isNotBlank()) Tag(
@@ -545,6 +551,18 @@ fun PickCard(
             }
             p.price?.let { Text("現價 ${"%.2f".format(it)}", fontSize = AppText.secondary) }
                 ?: Text("代號未確認，請自行查證", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error)
+            // 量價與營收依據（App 自己算的數字）
+            if (p.basis.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(vertical = 2.dp),
+            ) {
+                p.basis.forEach { b ->
+                    val neg = b.contains("弱於") || b.contains("跌破") || Regex("[-−]\\d").containsMatchIn(b)
+                    Surface(color = (if (neg) StockDown else StockUp).copy(alpha = 0.10f), shape = RoundedCornerShape(4.dp)) {
+                        Text(b, fontSize = AppText.label, color = if (neg) StockDown else StockUp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    }
+                }
+            }
             // 近期 K 線：一眼看出走勢，不必點進去
             com.enwei.moneymanager.ui.components.MiniKLine(p.symbol)
             com.enwei.moneymanager.ui.components.RevenueLine(p.symbol)

@@ -82,6 +82,10 @@ data class StockPick(
     /** 建議投入金額（元） */
     val amount: Long? = null,
     val price: Double? = null,
+    /** 產業（依上市櫃產業分類） */
+    val industry: String = "",
+    /** App 用量價與營收算出的依據標籤（20 日漲幅、相對大盤、均線、量比、營收） */
+    val basis: List<String> = emptyList(),
 )
 
 /** 重點新聞：新聞 id 與 AI 說明為什麼重要。 */

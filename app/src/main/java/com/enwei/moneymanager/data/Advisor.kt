@@ -487,14 +487,60 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
             "- $sym｜${last.year}/${last.month}｜${last.yoy?.let { "%+.1f%%".format(it) } ?: "?"}｜${avg3?.let { "%+.1f%%".format(it) } ?: "?"}"
         }
     }.getOrDefault("")
+    // 全市場量價：各產業強弱與強勢候選（不只看新聞熱度，避免每天只推同一批科技股）
+    onStep("掃描全市場產業強弱…")
+    runCatching { com.enwei.moneymanager.net.TwData.stockList(com.enwei.moneymanager.MoneyApp.instance) }
+    val scan = com.enwei.moneymanager.net.MarketScan
+    val board = runCatching { scan.board() }.getOrDefault(emptyList())
+    val boardBy = board.associateBy { it.code }
+    val sectors = scan.sectors(board)
+    val indexR20 = runCatching { BarCache.get("^TWII", "1y")?.close?.let { scan.ret(it, 20) } }.getOrNull()
+    val newsSyms = ds.symbols(st).take(if (big) 20 else 12).map { it.key }
+    val cands = scan.candidates(board, sectors, perSector = if (big) 3 else 2)
+    val strength = runCatching { scan.strength((cands.map { it.code } + newsSyms).distinct().take(40), indexR20) }.getOrDefault(emptyMap())
+    fun industryOf(c: String) = scan.shortIndustry(boardBy[c]?.industry ?: com.enwei.moneymanager.net.TwData.cached().firstOrNull { it.code == c }?.industry.orEmpty())
+    val scanText = buildString {
+        if (sectors.isNotEmpty()) {
+            appendLine("今日產業強弱（產業｜成交值加權漲跌｜上漲家數比例｜成交值億）：")
+            (sectors.take(8) + sectors.filter { it.name.contains("金融") } + sectors.takeLast(3)).distinct().forEach {
+                appendLine("- ${it.name}｜${"%+.2f%%".format(it.pct)}｜${"%.0f%%".format(it.upRatio * 100)}｜${"%.0f".format(it.value / 1e8)}")
+            }
+        }
+        if (strength.isNotEmpty()) {
+            appendLine("量價強勢候選（代號 名稱｜產業｜今日｜5日｜20日｜相對大盤20日｜均線｜量比｜距60日高）：")
+            strength.values.sortedByDescending { it.rs20 ?: it.ret20 }.forEach { s ->
+                val name = boardBy[s.code]?.name ?: com.enwei.moneymanager.net.TwData.nameOf(s.code).orEmpty()
+                appendLine(scan.line(boardBy[s.code], s, name, industryOf(s.code)))
+            }
+        }
+        // 近幾份報告推過的個股：避免每天推同一批
+        val past = (listOfNotNull(st.report) + st.history).filter { it.day < LocalDate.now().toEpochDay() }.distinctBy { it.day }.take(5)
+        val seen = past.flatMap { it.picks.map { p -> p.symbol } }.groupingBy { it }.eachCount()
+        if (seen.isNotEmpty()) appendLine("近 ${past.size} 份報告已推薦（代號×次數）：" + seen.entries.sortedByDescending { it.value }.joinToString("、") { "${it.key}×${it.value}" })
+    }
     onStep("AI 分析資料集（${ds.recent(st, 3).size} 則新聞）…")
-    val r = com.enwei.moneymanager.net.GroqAi.dailyReport(situation(snap) + "\n" + digest + "\n" + revText) ?: return null
+    val r = com.enwei.moneymanager.net.GroqAi.dailyReport(situation(snap) + "\n" + digest + "\n" + revText + "\n" + scanText) ?: return null
     onStep("確認推薦的代號與價格…")
     val quotes = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(r.picks.map { Market.TW to it.symbol }) }
         .getOrDefault(emptyList()).associateBy { it.key }
-    val picks = r.picks.map { p ->
+    // 同一產業最多 2 檔（AI 偶爾還是會全挑同一類）
+    val perInd = HashMap<String, Int>()
+    val capped = r.picks.filter { p ->
+        val k = industryOf(p.symbol).ifBlank { return@filter true }
+        val n = perInd.merge(k, 1) { a, b -> a + b } ?: 1
+        n <= 2 || r.picks.size <= 5
+    }
+    val missing = capped.filter { it.symbol !in strength }.map { it.symbol }
+    val strength2 = strength + runCatching { scan.strength(missing, indexR20) }.getOrDefault(emptyMap())
+    val yoy = runCatching {
+        coroutineScope {
+            capped.map { p -> async { p.symbol to com.enwei.moneymanager.net.TwData.monthRevenue(p.symbol, 15).lastOrNull()?.yoy } }.awaitAll()
+        }.toMap()
+    }.getOrDefault(emptyMap())
+    val picks = capped.map { p ->
         val q = quotes[quoteKey(Market.TW, p.symbol)]
-        p.copy(price = q?.price, name = p.name.ifBlank { q?.name.orEmpty() })
+        p.copy(price = q?.price, name = p.name.ifBlank { q?.name.orEmpty() }, industry = industryOf(p.symbol),
+            basis = scan.basis(strength2[p.symbol], yoy[p.symbol]))
     }
     val keyNews = r.keyNews.mapNotNull { k -> k.id.toIntOrNull()?.let { imp.getOrNull(it) }?.let { KeyNews(it.id, k.why) } }
     // 報告文字裡的新聞編號換成報告自己的 [1][2]…，重點新聞也編進同一組編號
