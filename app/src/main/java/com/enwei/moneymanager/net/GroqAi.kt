@@ -197,7 +197,7 @@ object GroqAi {
                 Provider.OPENROUTER -> callCompat(Provider.OPENROUTER, s.openRouterKey.trim(), r.model, system, user, maxOf(1024, maxTokens * 3).coerceAtMost(8192),
                     timeoutSec = if (r.big) 90 else 50)
             }
-            if (out == null) errs[r.provider.label] = (lastError ?: "沒有回應").take(80)
+            if (out == null) errs[r.provider.label] = (lastError ?: "沒有回應").take(120)
             val score = if (out != null && quality != null) runCatching { quality(out) }.getOrDefault(0.0) else 1.0
             ProviderLog.record(r.provider, r.model,
                 if (out == null) lastError ?: "沒有回應" else if (score < 1.0) "回覆不完整（${(score * 100).toInt()}%），換下一個模型" else null)
@@ -222,6 +222,8 @@ object GroqAi {
             // 這個模型不提供或拒絕使用：OpenRouter 記進黑名單，之後自動挑別的
             if (("403" in err || "404" in err) && r.provider == Provider.OPENROUTER) OpenRouterModels.ban(r.model)
             if ("404" in err || "402" in err || "403" in err) { com.enwei.moneymanager.work.AiHealth.cooldown(r.model, 24 * 3600_000L); continue }
+            // OpenRouter 上游拒絕請求格式：這個免費模型先停 6 小時，改用別的免費模型
+            if (r.provider == Provider.OPENROUTER && "（400）" in err) { com.enwei.moneymanager.work.AiHealth.cooldown(r.model, 6 * 3600_000L); continue }
             if ("429" in err || "額度" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
                 retryAfterMs?.coerceIn(5_000L, 3600_000L) ?: if (r.provider == Provider.GEMINI) 15 * 60_000L else 2 * 60_000L)
             else if ("逾時" in err || "timeout" in err.lowercase() || "503" in err || "404" in err) com.enwei.moneymanager.work.AiHealth.cooldown(r.model,
@@ -396,7 +398,7 @@ object GroqAi {
                             429 -> if (p == Provider.OPENROUTER && (text.contains("per-day", true) || text.contains("per day", true)))
                                 "OpenRouter 免費模型今天的每日上限已用完（429），UTC 午夜（台灣早上 8 點）恢復"
                             else "$name「$model」每分鐘次數已滿（429）"
-                            else -> "$name HTTP ${resp.code}：${text.take(140)}"
+                            else -> friendlyHttp(name, model, resp.code, text)
                         }
                         return@use null
                     }
@@ -451,11 +453,11 @@ object GroqAi {
                 if (!resp.isSuccessful) {
                     if (resp.code == 429 || resp.code == 503) { retryAfterMs = parseRetryAfter(resp.header("Retry-After"), text); lastBody = text }
                     lastError = when (resp.code) {
-                        400 -> if (text.contains("API_KEY") || text.contains("API key")) "Gemini 金鑰無效" else "Gemini 請求錯誤：${text.take(140)}"
+                        400 -> if (text.contains("API_KEY") || text.contains("API key")) "Gemini 金鑰無效" else friendlyHttp("Gemini", model, 400, text)
                         401, 403 -> "Gemini 金鑰無效或沒有權限（${resp.code}）"
                         404 -> "Gemini 模型「$model」無法使用（404）"
                         429 -> describeLimit("Gemini", model, text) + "，改用 Groq"
-                        else -> "Gemini HTTP ${resp.code}：${text.take(140)}"
+                        else -> friendlyHttp("Gemini", model, resp.code, text)
                     }
                     return@use null
                 }
@@ -523,6 +525,17 @@ object GroqAi {
     }
 
     /** 伺服器錯誤回覆裡的說明（OpenAI 相容格式的 error.message 或 detail） */
+    /** HTTP 錯誤轉成看得懂的一句話（不顯示原始 JSON）。 */
+    private fun friendlyHttp(name: String, model: String, code: Int, text: String): String = when (code) {
+        503 -> "$name「$model」目前使用人數過多、伺服器忙碌（503），不是你的額度用完；已換其他模型，稍後會自動再試"
+        500, 502, 504 -> "$name「$model」伺服器暫時出錯（$code），已換其他模型"
+        400 -> if (name == "OpenRouter") {
+            val provider = Regex("\"provider_name\"\\s*:\\s*\"([^\"]+)\"").find(text)?.groupValues?.get(1)
+            "OpenRouter「$model」的上游供應商" + (provider?.let { "（$it）" } ?: "") + "拒絕這次請求（400）：通常是這個免費模型不支援目前的請求格式或內容太長，不是金鑰問題；已換下一個模型"
+        } else "$name 請求格式錯誤（400）：${serverMessage(text)}"
+        else -> "$name HTTP $code：${serverMessage(text)}"
+    }
+
     private fun serverMessage(text: String): String = runCatching {
         val o = Http.json.parseToJsonElement(text).jsonObject
         ((o["error"] as? JsonObject)?.get("message") as? JsonPrimitive)?.contentOrNull
