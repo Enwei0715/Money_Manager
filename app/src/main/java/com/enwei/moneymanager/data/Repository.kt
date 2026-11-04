@@ -1039,6 +1039,11 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         suspend fun insert(t: TxnEntity, result: String, message: String): IngestResult? {
             val id = db.txns().insert(t)
             if (id <= 0) { log.insert(logAs("DUPLICATE")); return null }
+            // 其實是已排程的信用卡自動扣繳（銀行實際扣款日晚一兩天）：併入那筆、改成實際扣款日，不重複記支出
+            if (t.type == TxnType.EXPENSE) db.txns().get(id)?.let { absorbIntoAutopay(it) }?.let { ap ->
+                log.insert(logAs("MERGED", ap.id))
+                return IngestResult("RECORDED", ap.id, "卡費扣繳 $amountText：${lookupName(ap.toAccountId)}（已有自動扣繳，改為實際扣款日）")
+            }
             log.insert(logAs(result, id))
             log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
             return IngestResult("RECORDED", id, message, pending = t.status == TxnStatus.PENDING)
@@ -1141,7 +1146,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                     db.txns().all().firstOrNull {
                         it.source == TxnSource.AUTOPAY && it.toAccountId == card.id && kotlin.math.abs(it.date - occurred) <= window5d
                     }?.let { ap ->
-                        db.txns().upsert(ap.copy(amount = p.amountMinor, date = occurred, accountId = account?.id ?: ap.accountId, rawText = raw))
+                        val actual = java.time.Instant.ofEpochMilli(occurred).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                        db.txns().upsert(ap.copy(amount = p.amountMinor, date = occurred, accountId = account?.id ?: ap.accountId, rawText = raw,
+                            note = listOfNotNull(ap.note?.substringBefore(" · 實際扣款"), "實際扣款 $actual").joinToString(" · ")))
                         log.insert(logAs("MERGED", ap.id))
                         return IngestResult("RECORDED", ap.id, "卡費扣繳 $amountText：${card.name}（已校正金額）")
                     }
@@ -1526,7 +1533,51 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             }
             db.accounts().upsert(card.copy(autopayLastRun = today.toEpochDay()))
         }
+        runCatching { reconcileAutopay() }
         return created
+    }
+
+    /**
+     * 信用卡自動扣繳與銀行扣款通知對帳：排程的扣繳日和銀行實際扣款日不同（例如晚一天）時，
+     * 通知會被記成另一筆支出。這裡把前後 6 天內、同扣款帳戶、金額最接近（相同，或相差 5% 內且通知提到卡費）的支出
+     * 併入自動扣繳那筆：金額、日期改成實際扣款，刪掉重複的支出。回傳併入後的自動扣繳。
+     */
+    suspend fun absorbIntoAutopay(t: TxnEntity, all: List<TxnEntity>? = null): TxnEntity? {
+        if (t.type != TxnType.EXPENSE || t.source == TxnSource.AUTOPAY || t.source == TxnSource.MANUAL || t.source == TxnSource.RECURRING) return null
+        val window = 6L * 86_400_000
+        val text = listOfNotNull(t.merchant, t.note, t.rawText).joinToString(" ")
+        val cards = db.accounts().all().filter { it.type == AccountType.CREDIT_CARD }.associateBy { it.id }
+        val ap = (all ?: db.txns().all()).filter {
+            it.source == TxnSource.AUTOPAY && it.id != t.id && it.note?.contains("實際扣款") != true &&
+                (t.accountId == null || it.accountId == t.accountId) && kotlin.math.abs(it.date - t.date) <= window && it.currency == t.currency
+        }.filter { a ->
+            val card = a.toAccountId?.let { cards[it] }
+            val hint = listOf("卡費", "信用卡", "繳款", "扣繳", "自扣", "代繳").any { text.contains(it) } ||
+                (card != null && card.name.take(2).length == 2 && text.contains(card.name.take(2)))
+            // 金額相同：通知沒提到卡費時只認前後 3 天；金額略有差異（排程估的和實扣不同）：要提到卡費
+            if (a.amount == t.amount) hint || kotlin.math.abs(a.date - t.date) <= 3L * 86_400_000
+            else hint && kotlin.math.abs(a.amount - t.amount) <= a.amount * 0.05
+        }.minByOrNull { kotlin.math.abs(it.amount - t.amount) * 10 + kotlin.math.abs(it.date - t.date) / 86_400_000 } ?: return null
+        val actual = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        val updated = ap.copy(
+            amount = t.amount, date = t.date, accountId = t.accountId ?: ap.accountId,
+            note = listOfNotNull(ap.note, "實際扣款 $actual").joinToString(" · "),
+            rawText = listOfNotNull(ap.rawText, t.rawText).joinToString("\n—\n").ifBlank { null },
+        )
+        db.txns().upsert(updated)
+        db.txns().delete(t.id)
+        return updated
+    }
+
+    /** 掃描近 60 天已記下的重複卡費支出（先前版本留下的），併入對應的自動扣繳。 */
+    suspend fun reconcileAutopay(): Int {
+        val since = System.currentTimeMillis() - 60L * 86_400_000
+        var all = db.txns().all()
+        var n = 0
+        all.filter { it.type == TxnType.EXPENSE && it.date >= since && it.source != TxnSource.AUTOPAY }.forEach { t ->
+            if (absorbIntoAutopay(t, all) != null) { n++; all = db.txns().all() }
+        }
+        return n
     }
 
     private suspend fun currentFx(): FxConverter =
