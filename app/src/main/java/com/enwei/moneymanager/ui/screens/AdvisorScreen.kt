@@ -440,14 +440,30 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
 /** 報告歷史：點一份查看、逐份刪除、刪除全部舊報告，以及自動刪除的保留天數。 */
 @Composable
 private fun HistoryDialog(store: NewsStore, onOpen: (Long) -> Unit, onDismiss: () -> Unit) {
-    val scope = rememberCoroutineScope()
     val fmt = java.text.SimpleDateFormat("yyyy/M/d HH:mm", java.util.Locale.TAIWAN)
-    val all = listOfNotNull(store.report) + store.history
+    // 按下刪除立即從清單消失；實際寫檔放在 App 層級執行，關掉對話框或資料集正在更新時也不會被取消
+    var gone by remember { mutableStateOf(emptySet<Long>()) }
+    val all = (listOfNotNull(store.report) + store.history).filter { it.createdAt !in gone }
+    val history = store.history.filter { it.createdAt !in gone }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     var confirmAll by remember { mutableStateOf(false) }
-    fun delete(c: Long) = scope.launch {
-        MoneyApp.news.update { st ->
-            if (st.report?.createdAt == c) st.copy(report = st.history.firstOrNull(), history = st.history.drop(1))
-            else st.copy(history = st.history.filter { it.createdAt != c })
+    fun delete(c: Long) {
+        gone = gone + c
+        MoneyApp.instance.appScope.launch {
+            MoneyApp.news.update { st ->
+                if (st.report?.createdAt == c) st.copy(report = st.history.firstOrNull(), history = st.history.drop(1))
+                else st.copy(history = st.history.filter { it.createdAt != c })
+            }
+        }
+    }
+    fun deleteOld() {
+        val ids = history.map { it.createdAt }
+        gone = gone + ids
+        MoneyApp.instance.appScope.launch {
+            MoneyApp.news.update { st -> st.copy(history = st.history.filter { it.createdAt !in ids }) }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("已刪除 ${ids.size} 份舊報告"), android.widget.Toast.LENGTH_SHORT).show()
+            }
         }
     }
     AlertDialog(
@@ -459,7 +475,7 @@ private fun HistoryDialog(store: NewsStore, onOpen: (Long) -> Unit, onDismiss: (
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(7 to "7 天後", 30 to "30 天後", 90 to "90 天後", 0 to "不刪除").forEach { (d, l) ->
                         FilterChip(store.historyKeepDays == d, {
-                            scope.launch { MoneyApp.news.update { it.copy(historyKeepDays = d).prunedHistory() } }
+                            MoneyApp.instance.appScope.launch { MoneyApp.news.update { it.copy(historyKeepDays = d).prunedHistory() } }
                         }, label = { Text(l, fontSize = AppText.caption) })
                     }
                 }
@@ -486,14 +502,14 @@ private fun HistoryDialog(store: NewsStore, onOpen: (Long) -> Unit, onDismiss: (
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
         dismissButton = {
-            if (store.history.isNotEmpty()) TextButton(onClick = { confirmAll = true }) { Text("刪除舊報告", color = MaterialTheme.colorScheme.error) }
+            if (history.isNotEmpty()) TextButton(onClick = { confirmAll = true }) { Text("刪除舊報告", color = MaterialTheme.colorScheme.error) }
         },
     )
     if (confirmAll) AlertDialog(
         onDismissRequest = { confirmAll = false },
         title = { Text("刪除全部舊報告？") },
-        text = { Text("會刪除 ${store.history.size} 份過去的報告，保留最新一份。") },
-        confirmButton = { TextButton(onClick = { scope.launch { MoneyApp.news.update { it.copy(history = emptyList()) } }; confirmAll = false }) { Text("刪除") } },
+        text = { Text("會刪除 ${history.size} 份過去的報告，保留最新一份。") },
+        confirmButton = { TextButton(onClick = { confirmAll = false; deleteOld() }) { Text("刪除") } },
         dismissButton = { TextButton(onClick = { confirmAll = false }) { Text("取消") } },
     )
 }
