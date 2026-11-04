@@ -100,6 +100,35 @@ object TwData {
     /** 代號 → 名稱（清單已載入時才有）。 */
     fun nameOf(code: String): String? = stocks?.firstOrNull { it.code == code }?.name
 
+    /** 兩個字的股票名稱裡，常當一般詞彙出現的（不當成提到這檔股票）。 */
+    private val generic = setOf("台灣", "中華", "全球", "國際", "世界", "亞洲", "中國", "美國", "日本", "第一", "開發", "合作", "聯合", "大眾", "新興", "華夏", "光明", "永續", "未來", "大量")
+    /** 金控常見簡稱：「中信銀」「國泰人壽」「富邦證」都算「中信金」「國泰金」「富邦金」。 */
+    private val finSuffix = listOf("銀", "金控", "人壽", "證", "產險", "投信")
+
+    /**
+     * 從文字找出提到的台股代號：直接寫代號、完整名稱，或金控簡稱；依文字中出現的先後排序。
+     * 新聞標註與 AI 回覆都用這個，讓「中信銀奪獎」也能連到 2891 中信金。
+     */
+    fun codesIn(text: String, max: Int = 8): List<String> {
+        if (text.isBlank()) return emptyList()
+        val list = stocks.orEmpty().filter { !it.us && it.code.matches(Regex("[1-9][0-9]{3}")) }
+        val hits = HashMap<String, Int>()
+        Regex("(?<![0-9])([1-9][0-9]{3})(?![0-9])").findAll(text).forEach { m ->
+            if (list.any { it.code == m.value }) hits.putIfAbsent(m.value, m.range.first)
+        }
+        for (st in list) {
+            val n = st.name
+            if (n.length < 2) continue
+            var at = if (n.length >= 3 || n !in generic) text.indexOf(n) else -1
+            if (at < 0 && n.length == 3 && n.endsWith("金") && n.take(2) !in generic) {
+                at = finSuffix.map { text.indexOf(n.take(2) + it) }.filter { it >= 0 }.minOrNull() ?: -1
+            }
+            if (at >= 0) hits.putIfAbsent(st.code, at)
+        }
+        // 名稱互相包含時（「台積」與「台積電」）留下較長的
+        return hits.entries.sortedBy { it.value }.map { it.key }.distinct().take(max)
+    }
+
     /** 近 [months] 個月的月營收（舊到新），含年增率與月增率。 */
     suspend fun monthRevenue(code: String, months: Int = 25): List<MonthRevenue> {
         revenueCache[code]?.takeIf { System.currentTimeMillis() - it.first < 12 * 3600_000L }?.let { return it.second }

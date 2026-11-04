@@ -534,6 +534,18 @@ class NewsDataset(context: Context) {
      */
     suspend fun tag(stop: () -> Boolean = { false }, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
         var done = 0
+        // 股票名稱清單：標題裡寫了公司名稱（或金控簡稱）也連到代號
+        runCatching { com.enwei.moneymanager.net.TwData.stockList(com.enwei.moneymanager.MoneyApp.instance) }
+        // 已標註的新聞補上標題裡提到、但 AI 沒標到的代號（只改有變動的）
+        if (com.enwei.moneymanager.net.TwData.cached().isNotEmpty()) update { st ->
+            var changed = false
+            val items = st.items.map { n ->
+                if (!n.tagged) return@map n
+                val add = com.enwei.moneymanager.net.TwData.codesIn(n.title, 4).filter { it !in n.symbols }
+                if (add.isEmpty()) n else { changed = true; n.copy(symbols = n.symbols + add) }
+            }
+            if (changed) st.copy(items = items) else st
+        }
         // 依模型把每批限制在可完整送出的字符數；未回覆的新聞維持待辦，稍後重試。
         val big = GroqAi.bigContext(GroqAi.AiTask.NEWS_TAG)
         val maxChars = if (big) 18_000 else 2_500
@@ -570,7 +582,7 @@ class NewsDataset(context: Context) {
             }
             update { st ->
                 st.copy(items = st.items.map { n ->
-                    completeTags[n.id]?.let { t -> n.copy(tagged = true, symbols = t.symbols, theme = t.theme, sentiment = t.sentiment, importance = t.importance, note = t.note) }
+                    completeTags[n.id]?.let { t -> n.copy(tagged = true, symbols = (t.symbols + com.enwei.moneymanager.net.TwData.codesIn(n.title, 4)).distinct(), theme = t.theme, sentiment = t.sentiment, importance = t.importance, note = t.note) }
                         ?: if (n.id in ids) n.copy(tries = n.tries + 1) else n
                 })
             }

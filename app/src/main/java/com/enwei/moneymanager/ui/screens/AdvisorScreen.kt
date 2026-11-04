@@ -1256,37 +1256,44 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
         }
         // 資料集詳情與設定（自動更新開關、更新、刪除、排程狀態）
         if (infoOpen) androidx.compose.material3.ModalBottomSheet(onDismissRequest = { infoOpen = false }, containerColor = MaterialTheme.colorScheme.surface) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("新聞自動更新與每日報告", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("新聞資料集", fontSize = AppText.title, fontWeight = FontWeight.SemiBold)
+                // 自動更新：開關＋頻率
+                Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(12.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("自動更新與每日報告", fontSize = AppText.body, modifier = Modifier.weight(1f))
+                            Switch(checked = settings.advisorDaily, onCheckedChange = { enabled -> repo.settings.update { it.copy(advisorDaily = enabled) } }, enabled = aiReady)
+                        }
+                        if (!aiReady) TextButton(onClick = { infoOpen = false; nav.navigate("ai") }) { Text("前往 AI 設定 ›", fontSize = AppText.caption) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 4.dp)) {
+                            listOf(1, 3, 6).forEach { h ->
+                                FilterChip(settings.newsIntervalHours == h, {
+                                    repo.settings.update { it.copy(newsIntervalHours = h) }
+                                    com.enwei.moneymanager.work.NewsWorker.schedule(ctx, replace = true)
+                                }, label = { Text("每 $h 小時", fontSize = AppText.caption, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center) },
+                                    modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
-                    Switch(checked = settings.advisorDaily, onCheckedChange = { enabled -> repo.settings.update { it.copy(advisorDaily = enabled) } }, enabled = aiReady)
                 }
-                if (!aiReady) TextButton(onClick = { infoOpen = false; nav.navigate("ai") }) { Text("需先啟用 AI 並設定金鑰：前往 AI 設定 ›", fontSize = AppText.caption) }
-                // 背景蒐集新聞與整理題材的頻率
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("自動更新頻率", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
-                    listOf(1, 3, 6).forEach { h ->
-                        FilterChip(settings.newsIntervalHours == h, {
-                            repo.settings.update { it.copy(newsIntervalHours = h) }
-                            com.enwei.moneymanager.work.NewsWorker.schedule(ctx, replace = true)
-                        }, label = { Text("每 $h 小時", fontSize = AppText.caption) })
-                    }
-                }
-                androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Text("共 ${store.items.size} 則（近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天），已標註 ${stats.tagged} 則", fontSize = AppText.body)
-                stats.coverage?.let { c ->
-                    val pct = if (c.recent > 0) c.digested * 100 / c.recent else 0
-                    Text("近 3 天 ${c.recent} 則，已整理進重點 ${c.digested} 則（$pct%）" + (if (c.pending > 0) "；待標註 ${c.pending} 則" else ""),
-                        fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                // 資料量：三格數字
                 val grid by com.enwei.moneymanager.MoneyApp.news.grid.collectAsStateWithLifecycle()
-                if (grid.blocks > 0) Text(
-                    "近 3 天 ${grid.blocks} 個區塊（日期×題材），完整 ${grid.complete} 個" + (if (grid.unread > 0) "；待讀 ${grid.unread} 則" else "") +
-                        (if (grid.done) "；資料集完整" else ""),
-                    fontSize = AppText.caption, color = if (grid.done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                val pct = stats.coverage?.let { c -> if (c.recent > 0) c.digested * 100 / c.recent else 0 }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    @Composable fun tile(value: String, label: String, sub: String, done: Boolean = false) {
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f)) {
+                            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                                Text(value, fontSize = AppText.title, fontWeight = FontWeight.SemiBold, color = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                                Text(label, fontSize = AppText.caption, maxLines = 1)
+                                Text(sub, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            }
+                        }
+                    }
+                    tile("${store.items.size}", "則新聞", "近 ${com.enwei.moneymanager.data.NewsDataset.KEEP_DAYS} 天 · 標註 ${stats.tagged}")
+                    tile(pct?.let { "$it%" } ?: "–", "近 3 天整理", stats.coverage?.let { "${it.digested}/${it.recent} 則" } ?: "", pct == 100)
+                    tile("${grid.complete}/${grid.blocks}", "完整區塊", if (grid.unread > 0) "待讀 ${grid.unread} 則" else "日期×題材", grid.done)
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         enabled = GroqAi.enabled && job?.running != true && reportWork?.running != true,
@@ -1298,7 +1305,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                             newsWork?.running != true && chatWork?.running != true,
                         onClick = { clearDatabaseError = null; confirmClearDatabase = true },
                         modifier = Modifier.weight(1f),
-                    ) { Text("刪除資料庫") }
+                    ) { Text("刪除資料庫", color = MaterialTheme.colorScheme.error) }
                 }
                 JobProgress(job, reportWork)
                 com.enwei.moneymanager.ui.components.AiWorkProgress(newsWork, Modifier.fillMaxWidth())
@@ -1887,9 +1894,10 @@ private fun NewsScheduleInfo() {
         }
         GroqAi.coolingUntil()?.takeIf { it > now }?.let { add("AI 額度暫停到 ${hm.format(java.util.Date(it))}") }
         if (health.failures > 0 && !health.paused(now)) add("最近連續失敗 ${health.failures} 次：${health.pauseReason ?: "沒有回應"}")
-        // 今天各模型用了多少（App 自己記的次數，和 Groq／Google AI Studio 後台的數字大致相同）
+    }
+    val usage = run {
         val models = GroqAi.AiTask.entries.flatMap { t -> GroqAi.routes(t, 0) + GroqAi.routes(t, Int.MAX_VALUE) }.map { it.model to (it.provider == GroqAi.Provider.GEMINI) }
-        com.enwei.moneymanager.work.AiQuota.todaySummary(models).takeIf { it.isNotEmpty() }?.let { add("今日 AI 用量：" + it.joinToString("；")) }
+        com.enwei.moneymanager.work.AiQuota.todaySummary(models)
     }
     val job by com.enwei.moneymanager.work.ReportJob.state.collectAsStateWithLifecycle()
     val chatJob by com.enwei.moneymanager.work.ChatJob.state.collectAsStateWithLifecycle()
@@ -1903,19 +1911,27 @@ private fun NewsScheduleInfo() {
             } else if (now - c.startedAt < 6 * 3600_000L) Text("上一次對話（${hm.format(java.util.Date(c.startedAt))}）：${c.error ?: c.step.ifBlank { "已回覆" }}", fontSize = AppText.caption,
                 color = if (c.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        // 目前的排程程序（執行中時顯示步驟與進度；結束後顯示上一輪的結果）
+        // 執行中的進度已在上方顯示；這裡只留上一輪的結果
         job?.let { j ->
-            if (j.running) {
-                Text("目前程序", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
-                PipelineSteps(j.step, refreshOnly = j.refreshOnly)
-                Text(j.step + (if (j.done != null && j.total != null) "（${j.done}/${j.total}）" else "") +
-                    (j.etaAt?.takeIf { it > now }?.let { " · 約剩 ${com.enwei.moneymanager.work.ReportJob.formatDuration(it - now)}" } ?: ""),
-                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
-            } else Text("上一輪（${hm.format(java.util.Date(j.startedAt))} 開始）：${j.error ?: j.step}", fontSize = AppText.caption,
+            if (!j.running) Text("上一輪（${hm.format(java.util.Date(j.startedAt))}）：${j.error ?: j.step}", fontSize = AppText.caption,
                 color = if (j.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
         }
         lines.forEach { Text(it, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (health.paused(now)) TextButton(onClick = { com.enwei.moneymanager.work.AiHealth.resume() }) { Text("恢復背景更新") }
+        // 今日 AI 用量：預設收起，展開後每個模型一行
+        if (usage.isNotEmpty()) {
+            var open by remember { mutableStateOf(false) }
+            Row(Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("今日 AI 用量（${usage.size} 個模型）", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                com.enwei.moneymanager.ui.components.FoldToggle(open)
+            }
+            if (open) usage.forEach { u ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+                    Text(u.substringBefore("："), fontSize = AppText.label, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(u.substringAfter("：").removePrefix("今天 "), fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        }
     }
 }
 

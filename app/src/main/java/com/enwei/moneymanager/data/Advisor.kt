@@ -671,17 +671,33 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
     if (listOf("走勢", "比較", "強弱").any { question.contains(it) } && charts.none { it.kind == "compare" } && targets.size >= 2)
         charts += com.enwei.moneymanager.data.ChatChart("compare", targets.take(5))
     // AI 沒有附卡片、又不是問大盤時：用相關新聞裡、且回覆有提到的個股做卡片，理由放新聞重點
-    val cards2 = if (cardsOk.isNotEmpty() || related0.isEmpty() || marketQ) cardsOk else {
-        val top = related0.take(6).flatMap { n -> n.symbols.map { it to n } }.groupBy({ it.first }, { it.second })
-            .entries.filter { (sym, _) -> mentionedIn(sym, com.enwei.moneymanager.net.TwData.nameOf(sym)) }
-            .sortedByDescending { it.value.size }.take(3)
-        val q2 = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(top.map { Market.TW to it.key }) }.getOrDefault(emptyList()).associateBy { it.key }
-        top.mapNotNull { (sym, ns) ->
+    // 回覆文字裡直接提到的個股（含簡稱，例如「中信銀」→ 2891 中信金）
+    val replyText = text + "\n" + points.joinToString("\n")
+    val textCodes = com.enwei.moneymanager.net.TwData.codesIn(replyText, 6)
+    val cards2 = if (cardsOk.isNotEmpty() || (related0.isEmpty() && textCodes.isEmpty()) || (marketQ && textCodes.isEmpty())) cardsOk else {
+        // 相關新聞的代號（AI 標的＋標題裡的名稱），且回覆有提到；再補上回覆提到、但新聞沒標到的
+        val bySym = related0.take(10).flatMap { n -> (n.symbols + com.enwei.moneymanager.net.TwData.codesIn(n.title, 4)).distinct().map { it to n } }
+            .groupBy({ it.first }, { it.second })
+        val order = (textCodes + bySym.entries.filter { (sym, _) -> mentionedIn(sym, com.enwei.moneymanager.net.TwData.nameOf(sym)) }
+            .sortedByDescending { it.value.size }.map { it.key }).distinct().take(4)
+        val q2 = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(order.map { Market.TW to it }) }.getOrDefault(emptyList()).associateBy { it.key }
+        order.mapNotNull { sym ->
             val q = q2[quoteKey(Market.TW, sym)] ?: return@mapNotNull null
-            val n = ns.first()
-            StockPick(sym, name = com.enwei.moneymanager.net.TwData.nameOf(sym) ?: q.name.orEmpty(), price = q.price,
-                strength = when { n.sentiment > 0 -> "強勢"; n.sentiment < 0 -> "弱勢"; else -> "中性" }, reason = n.note.ifBlank { n.title }.take(60))
+            val name = com.enwei.moneymanager.net.TwData.nameOf(sym) ?: q.name.orEmpty()
+            val n = bySym[sym]?.firstOrNull()
+            // 理由：相關新聞的重點；沒有就用回覆裡提到這檔的那一句
+            val sentence = replyText.split(Regex("[。；\n]")).firstOrNull { it.contains(sym) || (name.length >= 2 && it.contains(name.take(2))) }?.trim().orEmpty()
+            StockPick(sym, name = name, price = q.price,
+                strength = when { n == null -> ""; n.sentiment > 0 -> "強勢"; n.sentiment < 0 -> "弱勢"; else -> "中性" },
+                reason = (n?.let { it.note.ifBlank { it.title } } ?: sentence).take(60))
         }
+    }
+    // 有個股卡片時，走勢比較也放進這幾檔（不要只畫大盤），文字、卡片、圖表對得上
+    if (cards2.isNotEmpty()) {
+        val i = charts.indexOfFirst { it.kind == "compare" }
+        val syms = cards2.map { it.symbol }.take(3)
+        if (i >= 0 && charts[i].items.none { !it.startsWith("^") }) charts[i] = charts[i].copy(items = (charts[i].items.take(1) + syms).distinct().take(5))
+        else if (i < 0 && syms.size >= 1) charts += com.enwei.moneymanager.data.ChatChart("compare", (listOf("^TWII") + syms).distinct())
     }
     // 讀過全文的新聞一定附在回覆下方
     related0.filter { it.id in bodies }.forEach { if (it.id !in ids) ids += it.id }
