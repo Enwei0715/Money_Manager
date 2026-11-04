@@ -616,7 +616,7 @@ class NewsDataset(context: Context) {
             }
             update { st ->
                 st.copy(items = st.items.map { n ->
-                    completeTags[n.id]?.let { t -> n.copy(tagged = true, symbols = (t.symbols + com.enwei.moneymanager.net.TwData.codesIn(n.title, 4)).distinct(), theme = t.theme, sentiment = t.sentiment, importance = t.importance, note = t.note) }
+                    completeTags[n.id]?.let { t -> n.copy(tagged = true, symbols = (t.symbols + com.enwei.moneymanager.net.TwData.codesIn(n.title, 4)).distinct(), theme = NewsFilter.themeName(t.theme), sentiment = t.sentiment, importance = t.importance, note = t.note) }
                         ?: if (n.id in ids) n.copy(tries = n.tries + 1) else n
                 })
             }
@@ -755,6 +755,13 @@ class NewsDataset(context: Context) {
      * 改寫新聞的題材並刪掉被合併掉的舊重點（下一步重新整理）。回傳合併掉的題材數。
      */
     suspend fun consolidateThemes(stop: () -> Boolean = { false }): Int {
+        // 先在本機統一寫法（「AI 伺服器」「AI伺服器」「ai伺服器」是同一個題材），不用 AI
+        update { s ->
+            if (s.items.none { it.theme != NewsFilter.themeName(it.theme) } && s.themeCanon.none { it != NewsFilter.themeName(it) }) return@update s
+            val items = s.items.map { n -> NewsFilter.themeName(n.theme).let { t -> if (t != n.theme) n.copy(theme = t) else n } }
+            val alive = items.filter { it.tagged }.map { "${it.day()}|${it.theme}" }.toSet()
+            s.copy(items = items, digests = s.digests.filterKeys { it in alive }, themeCanon = s.themeCanon.map { NewsFilter.themeName(it) }.distinct())
+        }
         val st = load()
         val since = recentSince(7)
         val counts = st.items.filter { it.tagged && it.epochSec >= since && it.theme.isNotBlank() }.groupingBy { it.theme }.eachCount()
@@ -763,7 +770,7 @@ class NewsDataset(context: Context) {
         val todo = counts.entries.filter { it.key !in canonical }.sortedByDescending { it.value }.map { it.key to it.value }
         // 還沒有標準題材時：題材超過 20 個才合併；之後每次有新的題材名稱都對應到標準題材
         if (todo.isEmpty() || canonical.isEmpty() && counts.size <= 20) return 0
-        val map = GroqAi.mergeThemes(todo, canonical) ?: return 0
+        val map = (GroqAi.mergeThemes(todo, canonical) ?: return 0).mapValues { NewsFilter.themeName(it.value) }
         val changed = map.filter { (k, v) -> k != v }
         update { s ->
             val items = s.items.map { n -> map[n.theme]?.let { t -> if (t != n.theme) n.copy(theme = t) else n } ?: n }
@@ -820,7 +827,7 @@ class NewsDataset(context: Context) {
     }
 
     /** 近 [days] 天的題材統計（依則數排序）。 */
-    fun themes(st: NewsStore, days: Int = 3): List<TopicStat> = recent(st, days).filter { it.theme.isNotBlank() }
+    fun themes(st: NewsStore, days: Int = 3): List<TopicStat> = recent(st, days).filter { it.theme.isNotBlank() }.map { it.copy(theme = NewsFilter.themeName(it.theme)) }
         .groupBy { it.theme }.map { (k, l) -> TopicStat(k, l.size, l.map { it.sentiment }.average(), l.count { it.importance >= 4 }) }
         .sortedByDescending { it.count }
 
@@ -829,7 +836,7 @@ class NewsDataset(context: Context) {
      * 回傳題材統計與最常一起出現的個股代號。
      */
     fun investableThemes(st: NewsStore, days: Int = 3): List<Pair<TopicStat, List<String>>> =
-        recent(st, days).filter { it.theme.isNotBlank() && !MACRO.containsMatchIn(it.theme) }.groupBy { it.theme }
+        recent(st, days).filter { it.theme.isNotBlank() && !MACRO.containsMatchIn(it.theme) }.groupBy { NewsFilter.themeName(it.theme) }
             .filter { (_, l) -> l.count { it.symbols.isNotEmpty() } * 10 >= l.size * 4 }
             .map { (k, l) ->
                 TopicStat(k, l.size, l.map { it.sentiment }.average(), l.count { it.importance >= 4 }) to
@@ -953,6 +960,15 @@ fun NewsStore.openChat(id: Long): NewsStore {
  * 都是本機規則，不花 AI 額度。
  */
 object NewsFilter {
+    /** 題材名稱統一寫法：去掉空白、全形英數轉半形、英文大寫（「Ai 伺服器」→「AI伺服器」）。 */
+    fun themeName(t: String): String = buildString {
+        for (c in t.trim()) {
+            val h = if (c in '\uFF01'..'\uFF5E') (c - 0xFEE0) else c
+            if (h.isWhitespace() || h == '\u3000') continue
+            append(if (h in 'a'..'z') h.uppercaseChar() else h)
+        }
+    }
+
     private val finance = listOf(
         "股", "台股", "美股", "指數", "營收", "財報", "獲利", "EPS", "法人", "外資", "投信", "自營", "匯率", "央行", "利率", "降息", "升息",
         "通膨", "經濟", "景氣", "出口", "訂單", "產能", "半導體", "晶片", "晶圓", "AI", "伺服器", "電動車", "金控", "銀行", "保險", "壽險",
