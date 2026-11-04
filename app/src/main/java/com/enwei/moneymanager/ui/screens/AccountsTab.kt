@@ -436,9 +436,19 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
     val current = b?.balance ?: 0
     // 本帳戶的全部明細（一般交易＋股票交易），所有數字都由這份資料計算
     val ledger = remember(all, trades, id, lk.fx, cur) { ledgerFor(id, cur, all, trades, lk.fx) }
+    // 信用卡依每期帳單計算：上次結帳日隔天 ~ 這次結帳日（「11 月帳單」= 10/18 ~ 11/17）
+    val sDay = acc?.takeIf { it.type == AccountType.CREDIT_CARD }?.statementDay
+    fun stmt(m: YearMonth) = m.atDay(minOf(sDay ?: 1, m.lengthOfMonth()))
+    fun period(m: YearMonth): Pair<LocalDate, LocalDate> =
+        if (sDay != null) stmt(m.minusMonths(1)).plusDays(1) to stmt(m) else Periods.month(m, settings.monthStartDay)
+    val thisPeriod = if (sDay != null) YearMonth.now().let { if (LocalDate.now().isAfter(stmt(it))) it.plusMonths(1) else it }
+        else Periods.monthOf(LocalDate.now(), settings.monthStartDay)
+    // 第一次打開信用卡：停在目前這一期（帳戶資料載入後才知道結帳日）
+    var cardInit by rememberSaveable(id) { mutableStateOf(false) }
+    LaunchedEffect(sDay) { if (sDay != null && !cardInit) { cardInit = true; month = thisPeriod } }
 
     val (start, end) = when (tab) {
-        0 -> Periods.month(month, settings.monthStartDay)
+        0 -> period(month)
         1 -> LocalDate.of(month.year, 1, 1) to LocalDate.of(month.year, 12, 31)
         else -> (ledger.minOfOrNull { it.date.toLocalDate() } ?: LocalDate.now()) to LocalDate.now().plusYears(1)
     }
@@ -463,7 +473,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 actions = {
                     if (tab != 2) {
                         IconButton(onClick = { month = if (tab == 0) month.minusMonths(1) else month.minusYears(1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
-                        Text(if (tab == 0) "${month.year}年${month.monthValue}月" else "${month.year}年")
+                        Text(if (tab == 0) "${month.year}年${month.monthValue}月" + (if (sDay != null) "帳單" else "") else "${month.year}年")
                         IconButton(onClick = { month = if (tab == 0) month.plusMonths(1) else month.plusYears(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                     }
                 },
@@ -558,7 +568,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
             if (chart) {
                 item {
                     val months = (5 downTo 0).map { month.minusMonths(it.toLong()) }
-                    val ranges = months.map { Periods.month(it, settings.monthStartDay) }
+                    val ranges = months.map { period(it) }
                     val cashEnds = ranges.map { balanceAt(current, it.second.plusDays(1).toMillis(LocalTime.MIDNIGHT), ledger) }
                     // 證券帳戶：折線＝現金＋當時的持股市值（月底收盤價），買股票不會看起來像資產歸零
                     val isBroker = acc?.type == AccountType.BROKERAGE
@@ -620,9 +630,9 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                     }
                 }
                 1 -> {
-                    val months = (12 downTo 1).map { YearMonth.of(month.year, it) }.filter { !it.isAfter(YearMonth.now()) }
+                    val months = (12 downTo 1).map { YearMonth.of(month.year, it) }.filter { !it.isAfter(thisPeriod) }
                     items(months, key = { "m$it" }) { m ->
-                        val r = Periods.month(m, settings.monthStartDay)
+                        val r = period(m)
                         val list = entriesIn(r.first, r.second)
                         PeriodRow("${m.monthValue}月", "${r.first.monthValue}/${r.first.dayOfMonth} ~ ${r.second.monthValue}/${r.second.dayOfMonth}",
                             list.sumOf { maxOf(0, it.delta) }, -list.sumOf { minOf(0, it.delta) },
