@@ -469,10 +469,10 @@ fun NotificationSettingsScreen(nav: NavController) {
                 ListItem(
                     headlineContent = { Text(a.label) },
                     supportingContent = {
-                        if (on) {
+                        if (on) Row(verticalAlignment = Alignment.CenterVertically) {
                             // 這個 App 的通知記到哪個帳戶（信用卡會優先用末四碼對應）
                             var menu by remember { mutableStateOf(false) }
-                            Box {
+                            Box(Modifier.weight(1f, fill = false)) {
                                 Text(
                                     "記入：" + (settings.notifAccountMap[a.pkg]?.let { lk.account(it)?.name } ?: "依卡號／預設帳戶") + " ▾",
                                     color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
@@ -488,6 +488,13 @@ fun NotificationSettingsScreen(nav: NavController) {
                                         })
                                     }
                                 }
+                            }
+                            // 股票來源：只有勾了的 App，成交通知才會建立股票交易
+                            if (settings.featureStocks) {
+                                val stock = a.pkg in settings.stockPackages
+                                androidx.compose.material3.FilterChip(stock, {
+                                    repo.settings.update { it.copy(stockPackages = if (stock) it.stockPackages - a.pkg else it.stockPackages + a.pkg) }
+                                }, label = { Text("股票成交", fontSize = AppText.caption) }, modifier = Modifier.padding(start = 8.dp).height(28.dp))
                             }
                         } else Text(a.pkg, style = MaterialTheme.typography.labelSmall)
                     },
@@ -623,6 +630,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         e.result == "STOCK" -> "股票成交" to MaterialTheme.colorScheme.primary
                         e.result == "STOCK_PENDING" -> "股票待確認" to Color(0xFFFFA000)
                         e.result == "DUPLICATE" -> "重複略過" to MaterialTheme.colorScheme.onSurfaceVariant
+                        e.result == "SETTLE" -> "交割款（不記帳）" to MaterialTheme.colorScheme.onSurfaceVariant
                         e.result == "PROMO" -> "促銷略過" to MaterialTheme.colorScheme.onSurfaceVariant
                         e.result == "UNPARSED" -> "無法辨識" to MaterialTheme.colorScheme.error
                         e.result == "OFFLINE" -> "等網路後判讀" to Color(0xFFFFA000)

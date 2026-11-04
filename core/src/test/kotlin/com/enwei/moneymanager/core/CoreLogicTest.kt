@@ -605,5 +605,7 @@ class PartialFillTest {
         // 不是成交（維護公告、未成交）
         assertEquals(null, NotificationParser.parseStockFillPartial(null, "電子平台部分功能暫停服務通知 2026/11/3(二)20:00~20:40進行系統維護作業"))
         assertEquals(null, NotificationParser.parseStockFillPartial(null, "【2344 華邦電】委託買入 未成交"))
+        // 新聞標題有「買」「成交」但不是成交回報
+        assertEquals(null, NotificationParser.parseStockFillPartial("ETtoday財經雲", "愈跌愈買！00406A刷史上新低 爆百萬張成交量"))
     }
 }

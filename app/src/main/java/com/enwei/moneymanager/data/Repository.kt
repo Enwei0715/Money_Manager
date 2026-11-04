@@ -842,6 +842,32 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             ?: brokers.firstOrNull()
     }
 
+    /** 交割款通知的金額（元）：「交割」加上扣款／入帳金額；不是交割款回傳 null。 */
+    private fun settlementOf(title: String?, text: String?): Long? {
+        val all = listOfNotNull(title, text).joinToString(" ")
+        if (!all.contains("交割")) return null
+        return Regex("([0-9][0-9,]{0,12})\\s*元").findAll(all).mapNotNull { it.groupValues[1].replace(",", "").toLongOrNull() }.firstOrNull { it > 0 }
+            ?: Regex("(?:NT\\$|\\$)\\s*([0-9][0-9,]{0,12})").find(all)?.groupValues?.get(1)?.replace(",", "")?.toLongOrNull()
+    }
+
+    /** 近 7 天某一天的股票交易淨額（買進成本－賣出所得）和交割款相符（差 0.3% 或 5 元內）。 */
+    private suspend fun matchesStockSettlement(amount: Long, postedAt: Long): Boolean {
+        val day = java.time.Instant.ofEpochMilli(postedAt).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+        val trades = db.stocks().allTrades().filter { it.market == Market.TW && day - it.date in -1..7 }
+        return trades.groupBy { it.date }.values.any { l ->
+            val net = l.sumOf { t ->
+                val gross = t.shares * t.price
+                when (t.side) {
+                    StockSide.BUY -> gross + t.fee
+                    StockSide.SELL -> -(gross - t.fee - t.tax)
+                    else -> 0.0
+                }
+            }
+            val v = kotlin.math.abs(net)
+            v > 0 && kotlin.math.abs(v - amount) <= maxOf(5.0, amount * 0.003)
+        }
+    }
+
     /** Email 形式的成交通知：內文的帳號前綴對得到你的證券帳戶才處理（其他 Email 不記帳）。 */
     private suspend fun isBrokerFillMail(title: String?, text: String?): Boolean {
         if (NotificationParser.parseStockFill(title, text) == null) return false
@@ -932,9 +958,21 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             return null
         }
         // 股票功能關閉：成交通知不建立持股
-        val fill = if (s.featureStocks) NotificationParser.parseStockFill(title, text) else null
-        // 成交通知只看得出代號與買賣（沒寫股數、價格）：放到待確認的股票交易，讓使用者補上
-        if (fill == null && s.featureStocks) NotificationParser.parseStockFillPartial(title, text)?.let { pf ->
+        // 股票成交只認「股票來源 App」（證券、銀行 App）與券商成交 Email：新聞、Google 推播裡的「買」「成交」不會被當成交易
+        // 還沒設定股票來源時，已啟用的來源 App 傳來完整的成交通知（代號、股數、價格都有）就自動加進股票來源
+        val stockSource = fillMail || pkg in s.stockPackages || (s.stockPackages.isEmpty() && bankSrc != null && enabled)
+        val fill0 = if (s.featureStocks && (stockSource || enabled)) NotificationParser.parseStockFill(title, text) else null
+        val fill = fill0?.takeIf { stockSource || s.stockPackages.isEmpty() }
+        if (fill != null && !stockSource && pkg != GMAIL_PACKAGE) settings.update { it.copy(stockPackages = it.stockPackages + pkg) }
+        // 交割款通知（提醒將扣款、或實際扣款）：金額對得到已記的股票交易就不另外記帳
+        if (fill == null && s.featureStocks && (enabled || stockSource)) settlementOf(title, text)?.let { amt ->
+            val matched = matchesStockSettlement(amt, postedAt)
+            log.insert(logAs(if (matched) "DUPLICATE" else "SETTLE"))
+            return IngestResult(if (matched) "DUPLICATE" else "SETTLE", null,
+                if (matched) "股票交割款 $amt 元：已由股票交易記錄，不重複記帳" else "股票交割款 $amt 元：找不到對應的股票交易，請到股票補記", pending = false)
+        }
+        // 成交通知只看得出代號與買賣（沒寫股數、價格）：放到待確認的股票交易，讓使用者補上（只認股票來源 App）
+        if (fill == null && s.featureStocks && stockSource) NotificationParser.parseStockFillPartial(title, text)?.let { pf ->
             val broker = fillBroker(pkg, title, text, bankSrc)
             val day = pf.at?.toLocalDate()?.takeIf { kotlin.math.abs(it.toEpochDay() - postedAt.toLocalDate().toEpochDay()) <= 7 } ?: postedAt.toLocalDate()
             val stamp = pf.at?.toString() ?: "${postedAt / 60_000}"
@@ -1553,6 +1591,11 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             db.accounts().upsert(card.copy(autopayLastRun = today.toEpochDay()))
         }
         runCatching { reconcileAutopay() }
+        // 舊版把新聞標題當成股票成交放進待確認：用新規則重新檢查，不像成交回報的移除
+        settings.update { st ->
+            val keep = st.pendingTrades.filter { NotificationParser.parseStockFillPartial(it.raw, null) != null }
+            if (keep.size == st.pendingTrades.size) st else st.copy(pendingTrades = keep)
+        }
         return created
     }
 

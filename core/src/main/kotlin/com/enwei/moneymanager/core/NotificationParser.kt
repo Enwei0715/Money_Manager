@@ -308,6 +308,9 @@ object NotificationParser {
         val full = clean(listOfNotNull(title, text).joinToString(" ").replace('\n', ' '))
         if (!full.contains("成交")) return null
         if (full.contains("未成交") || full.contains("委託失敗") || full.contains("刪單")) return null
+        // 要像券商的成交回報（委託、成交通知、已成交…）；新聞標題的「成交量」「愈跌愈買」不算
+        if (listOf("委託", "成交通知", "成交回報", "已成交", "成交嘍", "成交囉", "成交了", "成交確認").none { full.contains(it) }) return null
+        if (listOf("成交量", "成交值", "成交金額創", "史上", "新低", "新高", "暴量", "爆量").any { full.contains(it) }) return null
         if (parseStockFill(title, text) != null) return null
         val sideToken = sideRegex.find(full)?.value ?: return null
         val side = if (sideToken.contains("賣")) StockSide.SELL else StockSide.BUY
