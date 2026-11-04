@@ -346,6 +346,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 cfg("備份與還原") { nav.navigate("backup") }
 
                 sec("關於")
+                cfg("新手導覽") { com.enwei.moneymanager.ui.components.Onboarding.show.value = true }
                 cfg("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.1.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
                 Spacer(Modifier.height(32.dp))
             }

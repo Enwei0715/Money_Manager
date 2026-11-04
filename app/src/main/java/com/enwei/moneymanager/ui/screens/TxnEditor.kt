@@ -254,7 +254,15 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             ))
         }
         scope.launch {
-            repo.saveTxn(t)
+            val newId = repo.saveTxn(t)
+            // 新記的支出、時間在 30 分鐘內：記下目前位置，之後在這裡付款時可推測店家
+            if (original == null && t.type == TxnType.EXPENSE && settings.locationHints && !t.merchant.isNullOrBlank() &&
+                kotlin.math.abs(System.currentTimeMillis() - t.date) <= 30 * 60_000L) {
+                val appCtx = com.enwei.moneymanager.MoneyApp.instance
+                com.enwei.moneymanager.MoneyApp.instance.appScope.launch {
+                    com.enwei.moneymanager.data.PlaceHints.current(appCtx)?.let { com.enwei.moneymanager.data.PlaceHints.record(appCtx, newId, it) }
+                }
+            }
             // 轉帳手續費另記一筆支出
             if (type == TxnType.TRANSFER && feeMinor != null) repo.saveTxn(
                 TxnEntity(

@@ -506,6 +506,10 @@ fun NotificationSettingsScreen(nav: NavController) {
             if (tab == 2) {
             // 測試區（讀通知列、貼上通知）預設收起，需要時再展開
             // 「進階」分頁本身就是收起來的地方，測試區直接展開
+            if (settings.locationHints) {
+                item { SectionTitle("地點測試") }
+                item { LocationTest() }
+            }
             item { SectionTitle("測試通知辨識") }
             run {
                 item {
@@ -1189,5 +1193,41 @@ private fun LocationHintRow(on: Boolean) {
             Text("位置權限請改成「一律允許」，App 沒開著時才讀得到位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
             TextButton(onClick = { openAppSettings() }) { Text("前往設定") }
         }
+    }
+}
+
+
+/** 地點測試：權限、目前位置、這裡的過去紀錄與附近店家，以及上一次讀通知時的推測結果。 */
+@Composable
+private fun LocationTest() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var running by remember { mutableStateOf(false) }
+    var lines by remember { mutableStateOf<List<Pair<String, Boolean>>>(emptyList()) }
+    val ph = com.enwei.moneymanager.data.PlaceHints
+    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("已記下 ${ph.sampleCount(ctx)} 個付款地點", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (ph.lastResult.isNotBlank()) Text("上次讀通知：${ph.lastResult}", fontSize = AppText.caption)
+        Button(enabled = !running, onClick = {
+            running = true; lines = emptyList()
+            scope.launch {
+                val out = ArrayList<Pair<String, Boolean>>()
+                out += "定位權限：" + (if (ph.hasPermission(ctx)) "已允許" else "未允許") to ph.hasPermission(ctx)
+                out += "背景位置：" + (if (ph.hasBackground(ctx)) "一律允許" else "未設為一律允許（App 沒開著時讀不到）") to ph.hasBackground(ctx)
+                val loc = runCatching { ph.current(ctx) }.getOrNull()
+                if (loc == null) out += "目前位置：拿不到（請開啟定位）" to false
+                else {
+                    val age = (System.currentTimeMillis() - loc.time) / 1000
+                    out += "目前位置：${"%.5f".format(loc.latitude)}, ${"%.5f".format(loc.longitude)}（誤差約 ${loc.accuracy.toInt()} 公尺，${age} 秒前）" to true
+                    val g = ph.fromHistory(ctx, loc, repo.transactions.first())
+                    out += (g?.let { "過去紀錄：常在這裡記「${it.merchant}」" } ?: "過去紀錄：這附近還沒有") to (g != null)
+                    val near = ph.nearbyPlace(loc)
+                    out += (near?.let { "附近店家（OpenStreetMap）：${it}" } ?: "附近店家：40 公尺內查不到") to (near != null)
+                }
+                lines = out; running = false
+            }
+        }) { Text(if (running) "測試中…" else "測試目前位置") }
+        lines.forEach { (t, ok) -> Text((if (ok) "✓ " else "✗ ") + t, fontSize = AppText.secondary,
+            color = if (ok) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error) }
     }
 }

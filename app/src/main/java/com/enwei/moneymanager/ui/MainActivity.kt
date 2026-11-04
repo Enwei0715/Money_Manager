@@ -151,6 +151,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                         pendingRoute.value = null
                     }
                     AppScaffold(nav)
+                    // 第一次開啟：新手導覽
+                    com.enwei.moneymanager.ui.components.Onboarding.Host { r -> runCatching { nav.navigate(r) } }
                     // 開啟 App 時檢查新版，有的話跳出更新視窗（可略過這版）
                     com.enwei.moneymanager.ui.screens.UpdatePrompt()
                     CrashReportDialog()

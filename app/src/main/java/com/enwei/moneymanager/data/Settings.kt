@@ -368,6 +368,8 @@ data class AppSettings(
     val geminiUsageTokens: Long = 0,
     /** AI 智慧辨識：規則判斷不出來時用 AI 判讀通知、命名商家、挑分類 */
     val aiEnabled: Boolean = false,
+    /** 已看過新手導覽 */
+    val onboarded: Boolean = false,
     val aiModel: String = "openai/gpt-oss-20b",
     /** 較難推估（整理不明花費）用的大模型 */
     val aiModelHard: String = "openai/gpt-oss-120b",
@@ -574,6 +576,7 @@ class SettingsStore(context: Context) {
         geminiUsageRequests = prefs.getInt("geminiUsageRequests", 0),
         geminiUsageTokens = prefs.getLong("geminiUsageTokens", 0),
         aiEnabled = prefs.getBoolean("aiEnabled", false),
+        onboarded = prefs.getBoolean("onboarded", false),
         // llama-3.1-8b-instant 已停止提供給免費方案，舊設定自動換成新的預設模型
         aiModel = prefs.getString("aiModel", "openai/gpt-oss-20b")!!.let { if (it == "llama-3.1-8b-instant") "openai/gpt-oss-20b" else it },
         fundingWarnKey = prefs.getString("fundingWarnKey", "")!!,
@@ -764,6 +767,7 @@ class SettingsStore(context: Context) {
             .putInt("geminiUsageRequests", s.geminiUsageRequests)
             .putLong("geminiUsageTokens", s.geminiUsageTokens)
             .putBoolean("aiEnabled", s.aiEnabled)
+            .putBoolean("onboarded", s.onboarded)
             .putString("aiModel", s.aiModel)
             .putString("fundingWarnKey", s.fundingWarnKey)
             .putString("aiModelHard", s.aiModelHard)

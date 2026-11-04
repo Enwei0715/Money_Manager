@@ -31,6 +31,14 @@ object PlaceHints {
 
     @Volatile private var cache: List<Sample>? = null
 
+    /** 上一次讀通知時推測的結果或沒推測的原因（地點測試顯示用）。 */
+    @Volatile var lastResult: String = ""
+        private set
+    fun note(msg: String) { lastResult = java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date()) + "　" + msg }
+
+    /** 已記下的位置筆數。 */
+    fun sampleCount(ctx: Context): Int = load(ctx).size
+
     private fun load(ctx: Context): List<Sample> = cache ?: runCatching {
         json.decodeFromString(ListSerializer(Sample.serializer()), file(ctx).readText())
     }.getOrDefault(emptyList()).also { cache = it }

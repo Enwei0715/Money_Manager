@@ -1248,19 +1248,27 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
         // 依位置推測店家：剛跳出的付款通知、店家沒寫（或只寫支付工具名稱）或分類不明時，用過去在這個地點記過的店家，沒有就查附近的店
         val fresh = kotlin.math.abs(System.currentTimeMillis() - postedAt) <= 10 * 60_000L
+        val appCtx = com.enwei.moneymanager.MoneyApp.instance
         val here = if (s.locationHints && fresh && p.kind == ParsedKind.NORMAL && type == TxnType.EXPENSE)
-            runCatching { PlaceHints.current(com.enwei.moneymanager.MoneyApp.instance) }.getOrNull() else null
+            runCatching { PlaceHints.current(appCtx) }.getOrNull() else null
+        if (s.locationHints && p.kind == ParsedKind.NORMAL && type == TxnType.EXPENSE) when {
+            !fresh -> PlaceHints.note("${merchant ?: amountText}：通知不是剛跳出的，不用位置")
+            !PlaceHints.hasPermission(appCtx) -> PlaceHints.note("沒有定位權限")
+            !PlaceHints.hasBackground(appCtx) && here == null -> PlaceHints.note("位置權限不是「一律允許」，App 在背景時拿不到位置")
+            here == null -> PlaceHints.note("${merchant ?: amountText}：拿不到目前位置（定位關閉或訊號不足）")
+        }
         if (here != null) {
             val weak = merchant.isNullOrBlank() || CategoryGuesser.isGenericMerchant(merchant) || weakMerchant(merchant)
             if (weak || categoryId == null) {
-                val g = PlaceHints.fromHistory(com.enwei.moneymanager.MoneyApp.instance, here, db.txns().all())
+                val g = PlaceHints.fromHistory(appCtx, here, db.txns().all())
                     ?: if (weak) PlaceHints.nearbyPlace(here)?.let { PlaceHints.Guess(it, null, false) } else null
                 if (g != null) {
                     if (weak) merchant = g.merchant
                     if (categoryId == null) categoryId = g.categoryId ?: suggestCategory(g.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId
                     aiNote += if (g.fromHistory) "（依位置：常在這裡記「${g.merchant}」）" else "（依位置推測：附近的「${g.merchant}」）"
-                }
-            }
+                    PlaceHints.note("$amountText → 「${g.merchant}」" + if (g.fromHistory) "（過去紀錄）" else "（附近店家）")
+                } else PlaceHints.note("$amountText：附近沒有過去紀錄，也查不到 40 公尺內的店家（已記下位置，改好店家後下次就會用）")
+            } else PlaceHints.note("${merchant}：通知已有店家與分類，不需要推測（已記下位置）")
         }
         // 不確定的一律放「待確認」：分類填不出來、單邊的轉入／轉出（可能是自己帳戶間的轉帳，不一定是真正的收支）、
         // 內容像促銷但被判成交易
