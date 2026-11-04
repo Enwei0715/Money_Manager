@@ -50,6 +50,10 @@ data class ReviewData(
     val catNames: Map<Long, String> = emptyMap(),
     /** 去年同期支出（月、季才有） */
     val lastYearExpense: Long? = null,
+    /** 這一期還在進行中：和過去比只比到同樣的天數（例如 11/1～11/4 比 10/1～10/4） */
+    val partial: Boolean = false,
+    /** 判定為固定支出的交易 id（週期交易、固定類分類、每月都有且金額相近的店家） */
+    val fixedIds: Set<Long> = emptySet(),
 ) {
     val net: Long get() = income - expense
     val savingsRate: Double get() = if (income > 0) net * 100.0 / income else 0.0
@@ -211,9 +215,14 @@ private suspend fun Repository.spendingReviewImpl(span: ReviewSpan, offset: Int)
     fun rootOf(id: Long?): CategoryEntity? = id?.let { cats[it] }?.let { c -> c.parentId?.let { cats[it] } ?: c }
 
     val cur = txns.filter { inRange(it, range) }
-    val prevRange = reviewPeriod(span, offset - 1, s.monthStartDay).first
+    // 進行中的這一期：過去各期只取同樣的天數，才不會「本月才過 4 天 vs 上月整月」
+    val today = LocalDate.now()
+    val partial = !today.isAfter(range.second) && !today.isBefore(range.first)
+    val elapsed = ChronoUnit.DAYS.between(range.first, today)
+    fun cut(r: Pair<LocalDate, LocalDate>) = if (partial) r.first to minOf(r.second, r.first.plusDays(elapsed)) else r
+    val prevRange = cut(reviewPeriod(span, offset - 1, s.monthStartDay).first)
     val prev = txns.filter { inRange(it, prevRange) }
-    val earlier = (1..3).map { reviewPeriod(span, offset - it, s.monthStartDay).first }
+    val earlier = (1..3).map { cut(reviewPeriod(span, offset - it, s.monthStartDay).first) }
     val avg = earlier.map { r -> txns.filter { it.type == TxnType.EXPENSE && inRange(it, r) }.sumOf(::amt) }.let { l -> if (l.any { it > 0 }) l.sum() / l.count { it > 0 } else 0 }
 
     val exp = cur.filter { it.type == TxnType.EXPENSE }
@@ -240,6 +249,21 @@ private suspend fun Repository.spendingReviewImpl(span: ReviewSpan, offset: Int)
             Frequency.DAILY -> v * 30 / r.interval.coerceAtLeast(1)
         }
     }
+    // 固定支出：週期交易、固定類分類，或前 3 個月裡至少 2 個月都有、金額相近（±20%）的同一店家
+    val fixedWords = listOf("訂閱", "房租", "租金", "電信", "電話", "網路", "保險", "保費", "水電", "水費", "電費", "瓦斯", "學費", "貸款", "房貸", "管理費", "會費", "月費")
+    fun isFixedCat(t: TxnEntity) = listOfNotNull(cats[t.categoryId ?: -1]?.name, rootOf(t.categoryId)?.name).any { n -> fixedWords.any { n.contains(it) } }
+    fun mkey(t: TxnEntity) = t.merchant?.trim()?.lowercase()?.takeIf { it.length >= 2 }
+    val monthsOf = run {
+        val start = range.first
+        (1..3).map { k -> Periods.month(Periods.monthOf(start, s.monthStartDay).minusMonths(k.toLong()), s.monthStartDay) }
+    }
+    val pastByMerchant = monthsOf.map { r -> txns.filter { it.type == TxnType.EXPENSE && inRange(it, r) }.groupBy { mkey(it) }.mapValues { (_, l) -> l.sumOf(::amt) } }
+    fun isRegular(t: TxnEntity): Boolean {
+        val k = mkey(t) ?: return false
+        val v = amt(t).toDouble()
+        return pastByMerchant.count { m -> m[k]?.let { p -> kotlin.math.abs(p - v) <= v * 0.2 } == true } >= 2
+    }
+    val fixedIds = exp.filter { it.recurringId != null || isFixedCat(it) || isRegular(it) }.map { it.id }.toSet()
     val unknown = exp.filter { it.categoryId == null || cats[it.categoryId]?.name == "不明" }
     val weekend = exp.filter { day(it).dayOfWeek in setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY) }.sumOf(::amt)
     // 進行中的這一期只算到今天
@@ -254,7 +278,8 @@ private suspend fun Repository.spendingReviewImpl(span: ReviewSpan, offset: Int)
         weekendShare = if (expense > 0) weekend * 100.0 / expense else 0.0, txnCount = cur.size,
         expenses = exp.sortedBy { it.date },
         catNames = cats.mapValues { (_, c) -> c.parentId?.let { cats[it]?.name + "／" }.orEmpty() + c.name },
-        lastYearExpense = if (span == ReviewSpan.YEAR) null else reviewPeriod(span, offset - 12 / span.months, s.monthStartDay).first.let { r ->
+        partial = partial, fixedIds = fixedIds,
+        lastYearExpense = if (span == ReviewSpan.YEAR) null else cut(reviewPeriod(span, offset - 12 / span.months, s.monthStartDay).first).let { r ->
             txns.filter { it.type == TxnType.EXPENSE && inRange(it, r) }.sumOf(::amt).takeIf { it > 0 }
         },
     )

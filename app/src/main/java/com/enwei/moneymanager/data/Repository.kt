@@ -1208,6 +1208,22 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 if (categoryId == null && cat != null) { categoryId = cat; aiNote += "（分類由 AI 推測）" }
             }
         }
+        // 依位置推測店家：剛跳出的付款通知、店家沒寫（或只寫支付工具名稱）或分類不明時，用過去在這個地點記過的店家，沒有就查附近的店
+        val fresh = kotlin.math.abs(System.currentTimeMillis() - postedAt) <= 10 * 60_000L
+        val here = if (s.locationHints && fresh && p.kind == ParsedKind.NORMAL && type == TxnType.EXPENSE)
+            runCatching { PlaceHints.current(com.enwei.moneymanager.MoneyApp.instance) }.getOrNull() else null
+        if (here != null) {
+            val weak = merchant.isNullOrBlank() || CategoryGuesser.isGenericMerchant(merchant) || weakMerchant(merchant)
+            if (weak || categoryId == null) {
+                val g = PlaceHints.fromHistory(com.enwei.moneymanager.MoneyApp.instance, here, db.txns().all())
+                    ?: if (weak) PlaceHints.nearbyPlace(here)?.let { PlaceHints.Guess(it, null, false) } else null
+                if (g != null) {
+                    if (weak) merchant = g.merchant
+                    if (categoryId == null) categoryId = g.categoryId ?: suggestCategory(g.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId
+                    aiNote += if (g.fromHistory) "（依位置：常在這裡記「${g.merchant}」）" else "（依位置推測：附近的「${g.merchant}」）"
+                }
+            }
+        }
         // 不確定的一律放「待確認」：分類填不出來、單邊的轉入／轉出（可能是自己帳戶間的轉帳，不一定是真正的收支）、
         // 內容像促銷但被判成交易
         val unsure = when {
@@ -1218,10 +1234,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
         val finalStatus = if (status == TxnStatus.CONFIRMED && unsure != null) TxnStatus.PENDING else status
         if (finalStatus != status) aiNote += "$unsure，放待確認"
-        return insert(
+        val result = insert(
             base.copy(type = type, merchant = merchant, rawText = if (aiParsed) "$tagged\n$AI_TAG" else tagged, categoryId = categoryId, status = finalStatus),
             "RECORDED", "${type.label} $amountText ${merchant.orEmpty()}$aiNote",
         )
+        // 記下這筆的位置：之後在同一地點付款就能推測店家
+        if (here != null && result?.txnId != null) runCatching { PlaceHints.record(com.enwei.moneymanager.MoneyApp.instance, result.txnId, here) }
+        return result
     }
 
     /** 商家名稱看起來是代碼：有星號、底線，或幾乎全是大寫英數。 */

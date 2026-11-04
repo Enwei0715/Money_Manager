@@ -429,6 +429,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         "無法對應卡號時記入的帳戶", lk.accounts.filter { !it.archived }, lk.account(settings.defaultAccountId),
                         { it.name }, { a -> repo.settings.update { it.copy(defaultAccountId = a.id) } },
                     )
+                    LocationHintRow(settings.locationHints)
                 }
             }
             if (candidates.isNotEmpty()) {
@@ -1137,6 +1138,48 @@ private fun PlayUpdateScreen(nav: NavController) {
                 runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$id"))) }
                     .onFailure { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=$id"))) }
             }) { Text("在 Google Play 查看") }
+        }
+    }
+}
+
+
+/**
+ * 「依位置推測店家」開關：開啟時先要定位權限，再請使用者把位置權限設成「一律允許」
+ * （讀通知時 App 多半不在前景，沒有背景權限就拿不到位置）。
+ */
+@Composable
+private fun LocationHintRow(on: Boolean) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    var tick by remember { mutableStateOf(0) }
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) tick++ }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
+    val fg = remember(tick) { com.enwei.moneymanager.data.PlaceHints.hasPermission(ctx) }
+    val bg = remember(tick) { com.enwei.moneymanager.data.PlaceHints.hasBackground(ctx) }
+    fun openAppSettings() = ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        android.net.Uri.fromParts("package", ctx.packageName, null)))
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { r ->
+        tick++
+        if (r.values.any { it }) repo.settings.update { it.copy(locationHints = true) }
+    }
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("依位置推測店家", fontSize = AppText.body)
+                Text("通知沒寫店家時，用付款當下的位置與過去紀錄補上", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            androidx.compose.material3.Switch(on && fg, { v ->
+                if (!v) repo.settings.update { it.copy(locationHints = false) }
+                else if (fg) repo.settings.update { it.copy(locationHints = true) }
+                else ask.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
+            })
+        }
+        if (on && fg && !bg) Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("位置權限請改成「一律允許」，App 沒開著時才讀得到位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+            TextButton(onClick = { openAppSettings() }) { Text("前往設定") }
         }
     }
 }

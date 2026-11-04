@@ -546,9 +546,10 @@ private fun ChangeCards(d: ReviewData, m: (Long) -> String, lk: Lookups, necessi
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("支出和過去比", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            if (d.partial) Text("本${d.span.label}進行中：都只比到第 ${d.days} 天", fontSize = AppText.caption, color = muted)
             listOfNotNull(
-                ("上${d.span.label}" to d.prevExpense).takeIf { d.prevExpense > 0 },
-                ("前三${d.span.label}平均" to d.avgExpense).takeIf { d.avgExpense > 0 },
+                ("上${d.span.label}" + (if (d.partial) "同期" else "") to d.prevExpense).takeIf { d.prevExpense > 0 },
+                ("前三${d.span.label}" + (if (d.partial) "同期" else "") + "平均" to d.avgExpense).takeIf { d.avgExpense > 0 },
                 d.lastYearExpense?.takeIf { it > 0 }?.let { "去年同期" to it },
             ).forEach { (label, v) ->
                 val diff = d.expense - v
@@ -567,7 +568,7 @@ private fun ChangeCards(d: ReviewData, m: (Long) -> String, lk: Lookups, necessi
     val changes = d.categories.map { it to (it.amount - it.prev) }.filter { it.second != 0L }.sortedByDescending { kotlin.math.abs(it.second) }.take(6)
     if (changes.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("變化最大的分類（和上${d.span.label}比）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            Text("變化最大的分類（和上${d.span.label}${if (d.partial) "同期" else ""}比）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             changes.forEach { (c, diff) ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(c.name, fontSize = AppText.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -582,7 +583,7 @@ private fun ChangeCards(d: ReviewData, m: (Long) -> String, lk: Lookups, necessi
     val zoneTotals = remember(d, necessity) {
         fun v(t: com.enwei.moneymanager.data.TxnEntity) = lk.fx.convert(t.amount, t.currency)
         val total = d.expenses.sumOf(::v).coerceAtLeast(1)
-        val fixed = d.expenses.filter { it.recurringId != null }.sumOf(::v)
+        val fixed = d.expenses.filter { it.id in d.fixedIds }.sumOf(::v)
         val nec = com.enwei.moneymanager.data.Necessity.entries.associateWith { n -> d.expenses.filter { necessity[it.id] == n.name }.sumOf(::v) }
         val top3 = d.expenses.map(::v).sortedDescending().take(3).sum()
         listOf(total, fixed, top3) to nec

@@ -2616,3 +2616,6 @@ AI 建議	AI advice
 帳單	Statement
 ＋ 新增金鑰	+ Add key
 移除這把金鑰	Remove this key
+依位置推測店家	Guess store by location
+通知沒寫店家時，用付款當下的位置與過去紀錄補上	When a notification has no store name, fill it from your location and past records
+前往設定	Open settings

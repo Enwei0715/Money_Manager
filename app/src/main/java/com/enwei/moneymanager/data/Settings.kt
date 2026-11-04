@@ -400,6 +400,8 @@ data class AppSettings(
     val stockAlertsOn: Boolean = true,
     /** 功能開關：不用的功能可以整個關掉（關掉後畫面、背景工作與通知都不出現） */
     val featureNotif: Boolean = true,
+    /** 讀到付款通知時用手機位置推測店家（預設關閉） */
+    val locationHints: Boolean = false,
     val featureStocks: Boolean = true,
     /** 已通知過的提醒（「代號:種類」→ 日期 epochDay），同一天不重複 */
     val alertsFired: Map<String, Long> = emptyMap(),
@@ -589,6 +591,7 @@ class SettingsStore(context: Context) {
         cashByDenom = prefs.getBoolean("cashByDenom", true),
         stockAlertsOn = prefs.getBoolean("stockAlertsOn", true),
         featureNotif = prefs.getBoolean("featureNotif", true),
+        locationHints = prefs.getBoolean("locationHints", false),
         featureStocks = prefs.getBoolean("featureStocks", true),
         alertsFired = runCatching { json.decodeFromString(MapSerializer(String.serializer(), Long.serializer()), prefs.getString("alertsFired", "{}")!!) }.getOrDefault(emptyMap()),
         notifyUpdates = prefs.getBoolean("notifyUpdates", true),
@@ -777,6 +780,7 @@ class SettingsStore(context: Context) {
             .putBoolean("cashByDenom", s.cashByDenom)
             .putBoolean("stockAlertsOn", s.stockAlertsOn)
             .putBoolean("featureNotif", s.featureNotif)
+            .putBoolean("locationHints", s.locationHints)
             .putBoolean("featureStocks", s.featureStocks)
             .putString("alertsFired", json.encodeToString(MapSerializer(String.serializer(), Long.serializer()), s.alertsFired))
             .putBoolean("notifyUpdates", s.notifyUpdates)
