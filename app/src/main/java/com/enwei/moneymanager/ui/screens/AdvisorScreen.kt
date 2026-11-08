@@ -571,7 +571,10 @@ fun PickCard(
             }
             // ① 依據：App 算的標籤與五大面向分數
             if (p.basis.isNotEmpty() || p.scores.size == 5) {
-                section("依據")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { section("依據") }
+                    com.enwei.moneymanager.ui.components.HelpIcon("分數怎麼算", com.enwei.moneymanager.ui.components.HelpText.SCORES)
+                }
                 if (p.basis.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     p.basis.forEach { b ->
                         val neg = b.contains("弱於") || b.contains("跌破") || b.contains("連賣") || Regex("[-−]\\d").containsMatchIn(b)
@@ -581,7 +584,7 @@ fun PickCard(
                     }
                 }
                 if (p.scores.size == 5) Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                    listOf("趨勢", "籌碼", "基本", "消息", "風險").zip(p.scores).forEach { (l, v) ->
+                    listOf("趨勢", "籌碼", "基本", "消息", "穩定").zip(p.scores).forEach { (l, v) ->
                         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("$v", fontSize = AppText.body, fontWeight = FontWeight.SemiBold, color = if (v >= 65) StockUp else if (v <= 35) StockDown else MaterialTheme.colorScheme.onSurface)
                             Text(l, fontSize = AppText.label, color = muted)
@@ -591,7 +594,10 @@ fun PickCard(
             }
             // ② 時光機
             if (p.simTarget != null && p.simStop != null) {
-                section("時光機 · 未來 20 個交易日")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { section("時光機 · 未來 20 個交易日") }
+                    com.enwei.moneymanager.ui.components.HelpIcon("時光機是什麼", com.enwei.moneymanager.ui.components.HelpText.SIM)
+                }
                 SimBar(p.simTarget, p.simStop, p.simNone ?: 0, p.simExpR, p.targetPrice, p.stopPrice)
             }
             // ③ 走勢：近期 K 線、營收、新聞熱度

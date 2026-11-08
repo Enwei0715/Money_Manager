@@ -135,7 +135,9 @@ object Themes {
         val n = androidx.compose.ui.text.font.FontWeight.Normal
         val m = androidx.compose.ui.text.font.FontWeight.Medium
         val b = androidx.compose.ui.text.font.FontWeight.Bold
-        listOf(null, gf("Noto Sans TC", n, m, b), gf("Noto Serif TC", n, m, b), gf("LXGW WenKai TC", n, b))
+        val sb = androidx.compose.ui.text.font.FontWeight.SemiBold
+        // 不載入 Bold：粗體會落到 SemiBold，粗細差距小、版面比較整齊
+        listOf(null, gf("Noto Sans TC", n, m, sb), gf("Noto Serif TC", n, m, sb), gf("LXGW WenKai TC", n, b))
     }
     fun family(i: Int): androidx.compose.ui.text.font.FontFamily? = families.getOrNull(i)
     /** 圓角：0 圓潤、1 細緻、2 直角 */
@@ -238,9 +240,9 @@ private val AppTypography = androidx.compose.material3.Typography().let { t ->
         titleSmall = t.titleSmall.sized(14, 20),
         bodyLarge = t.bodyLarge.sized(14, 20),
         bodyMedium = t.bodyMedium.sized(13, 18),
-        bodySmall = t.bodySmall.sized(12, 16),
+        bodySmall = t.bodySmall.sized(13, 17),
         labelLarge = t.labelLarge.sized(13, 18),
-        labelMedium = t.labelMedium.sized(12, 16),
+        labelMedium = t.labelMedium.sized(13, 17),
         labelSmall = t.labelSmall.sized(11, 14),
     )
 }
@@ -255,9 +257,9 @@ object AppText {
     val title = androidx.compose.ui.unit.TextUnit(18f, androidx.compose.ui.unit.TextUnitType.Sp)
     val section = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp)
     val body = androidx.compose.ui.unit.TextUnit(14f, androidx.compose.ui.unit.TextUnitType.Sp)
-    val secondary = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp)
-    val caption = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp)
-    val label = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp)
+    val secondary = androidx.compose.ui.unit.TextUnit(13.5f, androidx.compose.ui.unit.TextUnitType.Sp)
+    val caption = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp)
+    val label = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp)
     val badge = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp)
 }
 

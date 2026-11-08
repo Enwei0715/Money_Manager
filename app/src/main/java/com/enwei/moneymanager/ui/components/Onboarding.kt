@@ -86,9 +86,10 @@ object Onboarding {
         val settings by MoneyApp.repo.settings.flow.collectAsStateWithLifecycle()
         androidx.compose.runtime.LaunchedEffect(settings.onboarded) { if (!settings.onboarded) show.value = true }
         if (!show.value) return
-        fun finish() {
+        fun finish(tour: Boolean = false) {
             show.value = false
             MoneyApp.repo.settings.update { it.copy(onboarded = true) }
+            if (tour) Coach.start()
         }
         Dialog(onDismissRequest = { finish() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
             val pager = rememberPagerState { pages.size }
@@ -140,9 +141,9 @@ object Onboarding {
                         if (pager.currentPage > 0) OutlinedButton(onClick = { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } },
                             modifier = Modifier.height(48.dp)) { Text("上一步") }
                         Button(onClick = {
-                            if (pager.currentPage < pages.size - 1) scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } else finish()
+                            if (pager.currentPage < pages.size - 1) scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } else finish(tour = true)
                         }, modifier = Modifier.weight(1f).height(48.dp)) {
-                            Text(if (pager.currentPage < pages.size - 1) "下一步（${pager.currentPage + 1}/${pages.size}）" else "開始使用", fontSize = AppText.section)
+                            Text(if (pager.currentPage < pages.size - 1) "下一步（${pager.currentPage + 1}/${pages.size}）" else "帶我逛一圈", fontSize = AppText.section)
                         }
                     }
                 }

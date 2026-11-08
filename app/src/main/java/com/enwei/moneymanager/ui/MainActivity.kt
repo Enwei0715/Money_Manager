@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui
 
+import com.enwei.moneymanager.ui.components.coachTarget
 import android.Manifest
 import android.content.Intent
 import android.os.Build
@@ -154,6 +155,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     AppScaffold(nav)
                     // 第一次開啟：新手導覽
                     com.enwei.moneymanager.ui.components.Onboarding.Host { r -> runCatching { nav.navigate(r) } }
+                    // 聚光燈導覽（新手導覽最後一步之後開始）
+                    com.enwei.moneymanager.ui.components.CoachOverlay { r -> runCatching { nav.openRoute(r) } }
                     // 開啟 App 時檢查新版，有的話跳出更新視窗（可略過這版）
                     com.enwei.moneymanager.ui.screens.UpdatePrompt()
                     CrashReportDialog()
@@ -244,7 +247,7 @@ private fun BottomTabs(current: String?, onSelect: (String) -> Unit) = ChromeSca
                 val sel = current == t.route
                 val color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 Column(
-                    Modifier.weight(1f).height(56.dp).clickable(
+                    Modifier.weight(1f).height(56.dp).coachTarget("tab.${t.route}").clickable(
                         interactionSource = remember { MutableInteractionSource() }, indication = null,
                     ) { onSelect(t.route) },
                     horizontalAlignment = Alignment.CenterHorizontally,

@@ -424,22 +424,24 @@ private fun AccountLine(
 }
 
 @Composable
-private fun CreditCardMetric(label: String, value: String, color: Color, modifier: Modifier) {
+private fun CreditCardMetric(label: String, value: String, color: Color, modifier: Modifier, small: Boolean = false) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        Text(value, color = color, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Text(value, color = color, fontSize = if (small) AppText.secondary else AppText.body, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
     }
 }
 
 @Composable
 private fun CreditCardMetrics(metrics: List<Triple<String, String, Color>>) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val columns = if (maxWidth < 340.dp) 2 else 3
+        // 一律排成一列三欄（不再把第三項擠到下一行）；窄螢幕時金額字小一級
+        val columns = if (maxWidth < 240.dp) 2 else metrics.size.coerceAtMost(3)
+        val small = maxWidth < 360.dp
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             metrics.chunked(columns).forEach { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     row.forEach { (label, value, color) ->
-                        CreditCardMetric(label, value, color, Modifier.weight(1f))
+                        CreditCardMetric(label, value, color, Modifier.weight(1f), small)
                     }
                     repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }

@@ -165,8 +165,17 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     }
     val watched = symbol in settings.watchlist
     var dtab by com.enwei.moneymanager.ui.components.rememberTab("stock.tab")
+    var alertOpen by remember { mutableStateOf(false) }
+    val alertSet = settings.priceAlerts[symbol]?.let { it.target != null || it.stop != null } == true
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
         BackTopBar("$symbol ${name.orEmpty()}", { nav.popBackStack() }) {
+            // 🔔 價格提醒：放在右上角，任何分頁都按得到；已設定時亮起
+            androidx.compose.material3.IconButton(onClick = { alertOpen = true }) {
+                androidx.compose.material3.Icon(
+                    if (alertSet) androidx.compose.material.icons.Icons.Filled.NotificationsActive else androidx.compose.material.icons.Icons.Outlined.NotificationAdd,
+                    "價格提醒", tint = if (alertSet) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             // ☆ 加入／移出觀察清單（沒持有也能在股票頁看報價）
             androidx.compose.material3.IconButton(onClick = {
                 repo.settings.update { it.copy(watchlist = if (watched) it.watchlist - symbol else (it.watchlist + symbol).distinct()) }
@@ -181,6 +190,16 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (alertOpen) androidx.compose.ui.window.Dialog(onDismissRequest = { alertOpen = false }) {
+                androidx.compose.material3.Surface(shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), color = MaterialTheme.colorScheme.surface) {
+                    Column {
+                        PriceAlertCard(symbol, bars?.close?.lastOrNull() ?: 0.0, held.isNotEmpty())
+                        Row(Modifier.fillMaxWidth().padding(end = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { alertOpen = false }) { Text("完成") }
+                        }
+                    }
+                }
+            }
             val b = bars
             if (!loading && b == null) Text("讀不到這檔股票的價格資料（代號可能不正確）", color = MaterialTheme.colorScheme.error)
             if (b != null) {
@@ -395,7 +414,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             run {
                                 var allSig by remember { mutableStateOf(false) }
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
-                                    Text(stt?.verdict ?: (if (hourly) "保本＋移動停利：60 分 K ${plan.hourFast}MA／${plan.hourSlow}MA" else "紀律買賣點"), fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+                                    Text(stt?.verdict ?: (if (hourly) "移動停利 ${plan.hourFast}／${plan.hourSlow}MA" else "紀律買賣點"), fontSize = AppText.secondary, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f),
+                                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                         color = when (stt?.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface })
                                     androidx.compose.material3.Switch(showSignals, { showSignals = it }, Modifier.scale(0.75f))
                                 }
@@ -540,8 +560,6 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     if (mine.isNotEmpty()) Text("我已領現金股利 ${"%,.0f".format(mine.sumOf { it.cashAmount })} 元（${mine.map { it.date }.distinct().size} 次）", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary)
                 }
             }
-            // 價格提醒
-            if (dtab == 2 && b != null) PriceAlertCard(symbol, b.close.last(), held.isNotEmpty())
             // 公司業務（AI 整理；設定裡關掉 AI 就不顯示）
             if (dtab == 2 && settings.aiEnabled) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -672,6 +690,7 @@ private fun CandleChart(
     val up = StockUp
     val down = StockDown
     val grid = MaterialTheme.colorScheme.outlineVariant
+    val labelBg = MaterialTheme.colorScheme.surface
     val zoom by androidx.compose.runtime.rememberUpdatedState(onZoom)
     val pan by androidx.compose.runtime.rememberUpdatedState(onPan)
     val nNow by androidx.compose.runtime.rememberUpdatedState(n)
@@ -772,7 +791,7 @@ private fun CandleChart(
         }
         // 均線圖例（左上）：MA20 3805　MA60 3823…，顏色和線一樣
         run {
-            val lp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f; isFakeBoldText = true }
+            val lp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f }
             var lx = 4f
             maSeries.toSortedMap().forEach { (len, v) ->
                 val cur = v.getOrNull(to - 1) ?: return@forEach
@@ -800,24 +819,29 @@ private fun CandleChart(
             }
         }
         // 紀律買賣點：小圓章「買／賣」標在 K 棒下方／上方；只有最新一個與點選的那根才寫出理由，畫面不擠
-        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 24f; isFakeBoldText = true }
-        val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f; isFakeBoldText = true; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER }
+        // 圓章與標籤用一般字重（粗體在小圓裡會糊成一團）；標籤底下墊一塊底色，不會和 K 棒疊在一起
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 26f }
+        val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER }
         val latest = signals.maxByOrNull { it.index }?.index
         signals.forEach { sg ->
             val i = sg.index - from
             if (i !in 0 until n) return@forEach
             val cx = i * cw + cw / 2
             val col = if (sg.buy) up else down
-            val r = 11f
+            val r = 13f
             val cy = if (sg.buy) (y(b.low[sg.index]) + r + 4f).coerceAtMost(priceH - r) else (y(b.high[sg.index]) - r - 4f).coerceAtLeast(r + 28f)
             drawCircle(col, radius = r, center = Offset(cx, cy))
-            drawContext.canvas.nativeCanvas.drawText(if (sg.buy) "買" else "賣", cx, cy + 7f, badge)
+            drawContext.canvas.nativeCanvas.drawText(if (sg.buy) "買" else "賣", cx, cy + 8f, badge)
             if (sg.index == latest || sg.index == selected) {
                 val label = sg.tag.ifBlank { if (sg.buy) "買" else "賣" }
                 paint.color = android.graphics.Color.argb(255, (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt())
                 val tw = paint.measureText(label)
                 val tx = (cx - tw / 2).coerceIn(0f, size.width - tw)
-                val ty = if (sg.buy) (cy + r + 24f).coerceAtMost(priceH) else (cy - r - 6f).coerceAtLeast(46f)
+                val ty = if (sg.buy) (cy + r + 26f).coerceAtMost(priceH - 4f) else (cy - r - 8f).coerceAtLeast(46f)
+                drawRoundRect(labelBg.copy(alpha = 0.92f), Offset(tx - 6f, ty - 24f), androidx.compose.ui.geometry.Size(tw + 12f, 32f),
+                    androidx.compose.ui.geometry.CornerRadius(6f, 6f))
+                drawRoundRect(col, Offset(tx - 6f, ty - 24f), androidx.compose.ui.geometry.Size(tw + 12f, 32f),
+                    androidx.compose.ui.geometry.CornerRadius(6f, 6f), style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f))
                 drawContext.canvas.nativeCanvas.drawText(label, tx, ty, paint)
             }
         }
@@ -843,13 +867,15 @@ private fun PriceAlertCard(symbol: String, price: Double, held: Boolean) {
     com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("價格提醒", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            Text("盤中每 15 分鐘檢查一次，到價時通知" + (if (price > 0) "；目前 ${"%.2f".format(price)}" else ""), fontSize = AppText.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.enwei.moneymanager.ui.components.NumberField(target, { target = it; save() }, "目標價", Modifier.weight(1f))
                 com.enwei.moneymanager.ui.components.NumberField(stop, { stop = it; save() }, "停損價", Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(onClick = { target = "%.2f".format(price * 1.1); save() }) { Text("+10%") }
-                OutlinedButton(onClick = { stop = "%.2f".format(price * 0.92); save() }) { Text("−8%") }
+                OutlinedButton(enabled = price > 0, onClick = { target = "%.2f".format(price * 1.1); save() }) { Text("目標 +10%") }
+                OutlinedButton(enabled = price > 0, onClick = { stop = "%.2f".format(price * 0.92); save() }) { Text("停損 −8%") }
             }
         }
     }
@@ -1117,12 +1143,31 @@ private fun ProjectionCard(b: DailyBars) {
     val mid = (1..ahead).map { k -> last * kotlin.math.exp(slope * k) }
     val upB = (1..ahead).map { k -> last * kotlin.math.exp(slope * k + vol * kotlin.math.sqrt(k.toDouble())) }
     val loB = (1..ahead).map { k -> last * kotlin.math.exp(slope * k - vol * kotlin.math.sqrt(k.toDouble())) }
+    // 情境模擬：用近半年真實的日漲跌，5 日一塊重新抽樣，走出 200 條可能的路；取 10%／50%／90% 當悲觀／基準／樂觀
+    val sim = remember(System.identityHashCode(b)) {
+        val r = close.takeLast(127).zipWithNext { a, c -> kotlin.math.ln(c / a) }
+        val rnd = java.util.Random(close.size.toLong() * 31 + (last * 100).toLong())
+        val paths = List(200) {
+            val out = DoubleArray(ahead); var v = last; var k = 0
+            while (k < ahead) {
+                val st = rnd.nextInt((r.size - 5).coerceAtLeast(1))
+                for (j in 0 until 5) { if (k >= ahead) break; v *= kotlin.math.exp(r[(st + j).coerceAtMost(r.lastIndex)]); out[k++] = v }
+            }
+            out
+        }
+        fun pct(q: Double) = (0 until ahead).map { k -> paths.map { it[k] }.sorted().let { xs -> xs[((xs.size - 1) * q).toInt()] } }
+        Triple(paths, listOf(pct(0.1), pct(0.5), pct(0.9)), paths.count { it.last() > last } * 100 / paths.size)
+    }
+    val (simPaths, simQ, upProb) = sim
     val total = close.size
     val showFrom = (trend?.start?.minus(5) ?: (total - 60)).coerceIn(0, (total - 40).coerceAtLeast(0)).coerceAtLeast(total - 120)
     val endIdx = (total - 1 + ahead).toDouble()
     com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("趨勢推估（未來 20 個交易日）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("趨勢推估（未來 20 個交易日）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                com.enwei.moneymanager.ui.components.HelpIcon("趨勢推估怎麼看", com.enwei.moneymanager.ui.components.HelpText.PROJECTION)
+            }
             if (trend != null) {
                 val col = when (trend.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface }
                 Text("${trend.pattern}：${trend.hint}" + (trend.breakout?.let { "；$it" } ?: ""), fontSize = AppText.secondary, color = col)
@@ -1132,8 +1177,8 @@ private fun ProjectionCard(b: DailyBars) {
                 )
             } else {
                 val trendPct = (kotlin.math.exp(slope * ahead) - 1) * 100
-                Text("線型較亂，畫不出明確的趨勢線；依近 $nn 日趨勢約 ${"%+.1f".format(trendPct)}%，區間 ${"%.2f".format(loB.last())}～${"%.2f".format(upB.last())}",
-                    fontSize = AppText.secondary, color = if (trendPct >= 0) StockUp else StockDown)
+                Text("線型較亂，畫不出明確的趨勢線，改看下方的情境模擬（近 $nn 日趨勢約 ${"%+.1f".format(trendPct)}%）",
+                    fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             val up = StockUp; val down = StockDown
             val bandCol = MaterialTheme.colorScheme.primary.copy(alpha = if (trend != null) 0.08f else 0.18f)
@@ -1145,18 +1190,22 @@ private fun ProjectionCard(b: DailyBars) {
                 val slots = n + ahead
                 val w = size.width / slots
                 val lines = trend?.let { t -> listOf(t.upper.at(showFrom.toDouble()), t.upper.at(endIdx), t.lower.at(showFrom.toDouble()), t.lower.at(endIdx)) }.orEmpty()
-                val all = (showFrom until total).flatMap { listOf(b.high[it], b.low[it]) } + upB + loB + lines
+                val all = (showFrom until total).flatMap { listOf(b.high[it], b.low[it]) } + simQ[0] + simQ[2] + lines
                 val hi = all.max(); val lo = all.min(); val r = (hi - lo).takeIf { it > 0 } ?: 1.0
                 fun y(v: Double) = ((hi - v) / r * size.height).toFloat()
                 fun x(i: Double) = ((i - showFrom) * w + w / 2).toFloat()
-                // 統計扇形（後面）
-                val band = Path().apply {
-                    moveTo(x((total - 1).toDouble()), y(last))
-                    upB.forEachIndexed { k, v -> lineTo(x((total + k).toDouble()), y(v)) }
-                    for (k in loB.indices.reversed()) lineTo(x((total + k).toDouble()), y(loB[k]))
-                    this.close()
+                // 情境模擬：200 條淡淡的可能走勢（超出畫面的部分截掉）
+                clipRect {
+                    simPaths.forEach { pth ->
+                        var px = x((total - 1).toDouble()); var py = y(last)
+                        pth.forEachIndexed { k, v -> val nx = x((total + k).toDouble()); val ny = y(v); drawLine(midCol.copy(alpha = 0.06f), Offset(px, py), Offset(nx, ny), 1.2f); px = nx; py = ny }
+                    }
+                    // 悲觀／基準／樂觀三條線
+                    listOf(simQ[0] to down, simQ[1] to midCol, simQ[2] to up).forEach { (q, colr) ->
+                        var px = x((total - 1).toDouble()); var py = y(last)
+                        q.forEachIndexed { k, v -> val nx = x((total + k).toDouble()); val ny = y(v); drawLine(colr, Offset(px, py), Offset(nx, ny), 2.5f); px = nx; py = ny }
+                    }
                 }
-                drawPath(band, bandCol)
                 // K 棒
                 for (i in showFrom until total) {
                     val o = b.open[i]; val c = b.close[i]
@@ -1191,18 +1240,25 @@ private fun ProjectionCard(b: DailyBars) {
                             drawLine(arrowCol, Offset(ex, ey), Offset((ex - len * kotlin.math.cos(ang + d / 6)).toFloat(), (ey - len * kotlin.math.sin(ang + d / 6)).toFloat()), 4f)
                         }
                     }
-                } else {
-                    var px = x((total - 1).toDouble()); var py = y(last)
-                    mid.forEachIndexed { k, v -> val nx = x((total + k).toDouble()); val ny = y(v); drawLine(midCol, Offset(px, py), Offset(nx, ny), 2.5f, pathEffect = dash); px = nx; py = ny }
                 }
             }
             if (trend != null) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("━ 壓力線", fontSize = AppText.label, color = resCol)
                 Text("━ 支撐線", fontSize = AppText.label, color = supCol)
                 Text("○ 波段高低點", fontSize = AppText.label, color = pivotCol)
-                Text("▒ 統計區間", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
             }
-            Text("僅供參考", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // 三種情境的 20 日後價格
+            androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(Modifier.fillMaxWidth()) {
+                listOf(Triple("悲觀", simQ[0].last(), down), Triple("基準", simQ[1].last(), midCol), Triple("樂觀", simQ[2].last(), up)).forEach { (l, v, colr) ->
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(l, fontSize = AppText.caption, color = colr)
+                        Text("%.2f".format(v), fontSize = AppText.body)
+                        Text("%+.1f%%".format((v / last - 1) * 100), fontSize = AppText.caption, color = if (v >= last) StockUp else StockDown)
+                    }
+                }
+            }
+            Text("20 天後收高的機率約 $upProb%（200 次模擬）・統計推估，僅供參考", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

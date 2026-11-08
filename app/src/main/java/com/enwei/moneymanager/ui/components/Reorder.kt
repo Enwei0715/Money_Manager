@@ -118,11 +118,12 @@ fun ManageRow(
                 onDelete != null -> Box(
                     Modifier.size(40.dp).clickable(onClick = onDelete), contentAlignment = Alignment.Center,
                 ) {
-                    Box(Modifier.size(22.dp).background(MaterialTheme.colorScheme.error, CircleShape), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(22.dp).background(Color(0xFFE5484D), CircleShape), contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.Remove, "刪除", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                 }
-                leading != null -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { leading() }
+                leading != null && com.enwei.moneymanager.ui.AppearancePrefs.icons -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { leading() }
+                leading != null -> Spacer(Modifier.width(4.dp))
                 else -> Spacer(Modifier.width(40.dp))
             }
             Spacer(Modifier.width(8.dp))

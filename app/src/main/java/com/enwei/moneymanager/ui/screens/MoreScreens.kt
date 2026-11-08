@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.coachTarget
 import com.enwei.moneymanager.ui.components.listRow
 import com.enwei.moneymanager.ui.AppText
 
@@ -112,6 +113,7 @@ import com.enwei.moneymanager.ui.components.SectionTitle
 import com.enwei.moneymanager.work.SyncWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
@@ -148,8 +150,10 @@ fun MoreScreen(nav: NavController) {
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 title = { Text("工具") },
                 actions = {
+                    // 測試用：重播新手導覽（之後會拿掉）
+                    TextButton(onClick = { com.enwei.moneymanager.ui.components.Onboarding.show.value = true }) { Text("導覽測試") }
                     TextButton(onClick = { editing = !editing }) { Text(if (editing) "完成" else "編輯") }
-                    IconButton(onClick = { nav.navigate("config") }) { Icon(Icons.Outlined.Settings, "設定") }
+                    IconButton(onClick = { nav.navigate("config") }, modifier = Modifier.coachTarget("more.settings")) { Icon(Icons.Outlined.Settings, "設定") }
                 },
             )
         },
@@ -1212,20 +1216,29 @@ private fun LocationTest() {
         Button(enabled = !running, onClick = {
             running = true; lines = emptyList()
             scope.launch {
-                val out = ArrayList<Pair<String, Boolean>>()
-                out += "定位權限：" + (if (ph.hasPermission(ctx)) "已允許" else "未允許") to ph.hasPermission(ctx)
-                out += "背景位置：" + (if (ph.hasBackground(ctx)) "一律允許" else "未設為一律允許（App 沒開著時讀不到）") to ph.hasBackground(ctx)
-                val loc = runCatching { ph.current(ctx) }.getOrNull()
-                if (loc == null) out += "目前位置：拿不到（請開啟定位）" to false
-                else {
-                    val age = (System.currentTimeMillis() - loc.time) / 1000
-                    out += "目前位置：${"%.5f".format(loc.latitude)}, ${"%.5f".format(loc.longitude)}（誤差約 ${loc.accuracy.toInt()} 公尺，${age} 秒前）" to true
-                    val g = ph.fromHistory(ctx, loc, repo.transactions.first())
-                    out += (g?.let { "過去紀錄：常在這裡記「${it.merchant}」" } ?: "過去紀錄：這附近還沒有") to (g != null)
-                    val near = ph.nearbyPlace(loc)
-                    out += (near?.let { "附近店家（OpenStreetMap）：${it.name}" + (it.kind?.let { k -> "（$k）" } ?: "") } ?: "附近店家：50 公尺內查不到") to (near != null)
-                }
-                lines = out; running = false
+                // 一步一步顯示結果；每一步都有時間上限，不會卡在「測試中」
+                fun add(t: String, ok: Boolean) { lines = lines + (t to ok) }
+                try {
+                    add("定位權限：" + (if (ph.hasPermission(ctx)) "已允許" else "未允許"), ph.hasPermission(ctx))
+                    add("背景位置：" + (if (ph.hasBackground(ctx)) "一律允許" else "未設為一律允許（App 沒開著時讀不到）"), ph.hasBackground(ctx))
+                    val locJob = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).async { runCatching { ph.current(ctx) }.getOrNull() }
+                    val loc = kotlinx.coroutines.withTimeoutOrNull(10_000) { locJob.await() }
+                    if (loc == null) add("目前位置：10 秒內拿不到（請確認手機的定位已開啟，或到室外再試）", false)
+                    else {
+                        val age = (System.currentTimeMillis() - loc.time) / 1000
+                        add("目前位置：${"%.5f".format(loc.latitude)}, ${"%.5f".format(loc.longitude)}（誤差約 ${loc.accuracy.toInt()} 公尺，${age} 秒前）", true)
+                        val g = ph.fromHistory(ctx, loc, repo.transactions.first())
+                        add(g?.let { "過去紀錄：常在這裡記「${it.merchant}」" } ?: "過去紀錄：這附近還沒有", g != null)
+                        add("查附近店家中…（OpenStreetMap，最多 15 秒）", true)
+                        // 在獨立的工作裡查，逾時就不等（網路卡住也不會拖住畫面）
+                        val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).async { runCatching { ph.nearbyPlace(loc) }.getOrNull() }
+                        val near = kotlinx.coroutines.withTimeoutOrNull(15_000) { job.await() }
+                        lines = lines.dropLast(1)
+                        add(near?.let { "附近店家（OpenStreetMap）：${it.name}" + (it.kind?.let { k -> "（$k）" } ?: "") } ?: "附近店家：50 公尺內查不到，或地圖服務太慢", near != null)
+                    }
+                } catch (e: Exception) {
+                    add("測試失敗：${e.message ?: e.javaClass.simpleName}", false)
+                } finally { running = false }
             }
         }) { Text(if (running) "測試中…" else "測試目前位置") }
         lines.forEach { (t, ok) -> Text((if (ok) "✓ " else "✗ ") + t, fontSize = AppText.secondary,

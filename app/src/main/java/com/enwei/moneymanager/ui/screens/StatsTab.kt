@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.coachTarget
 import com.enwei.moneymanager.ui.AppText
 
 import androidx.compose.foundation.Canvas
@@ -163,7 +164,7 @@ fun StatsTab(nav: NavController) {
                 }
             },
             actions = {
-                IconButton(onClick = { nav.navigate("spendmap") }) { Icon(androidx.compose.material.icons.Icons.Outlined.Map, "支出地圖") }
+                IconButton(onClick = { nav.navigate("spendmap") }, modifier = Modifier.coachTarget("stats.map")) { Icon(androidx.compose.material.icons.Icons.Outlined.Map, "支出地圖") }
                 Box(Modifier.padding(end = 8.dp)) {
                     Row(
                         Modifier.border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(8.dp)).clickable { menu = true }

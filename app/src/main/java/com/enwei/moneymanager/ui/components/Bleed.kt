@@ -25,16 +25,25 @@ fun Modifier.bleedBlock(bg: Color, top: Boolean = true, bottom: Boolean = true, 
     val line = MaterialTheme.colorScheme.outlineVariant
     val max = with(LocalDensity.current) { 28.dp.toPx() }
     val ext = remember { mutableStateOf(0f to 0f) }
+    // 並排的小區塊（不延伸）改畫四邊細框，看得出是一格
+    val boxed = remember { mutableStateOf(false) }
     return this
         .onPlaced { c ->
             val rootW = c.findRootCoordinates().size.width.toFloat()
             val l = c.positionInRoot().x
             val r = rootW - l - c.size.width
-            ext.value = if (l in 0f..max && r in -1f..max) l to r.coerceAtLeast(0f) else 0f to 0f
+            val wide = l in 0f..max && r in -1f..max
+            ext.value = if (wide) l to r.coerceAtLeast(0f) else 0f to 0f
+            boxed.value = !wide
         }
         .drawBehind {
             val (l, r) = ext.value
             val w = 0.6.dp.toPx()
+            if (boxed.value && top && bottom) {
+                drawRect(bg)
+                drawRect(line, style = androidx.compose.ui.graphics.drawscope.Stroke(w * 1.4f))
+                return@drawBehind
+            }
             drawRect(bg, Offset(-l, 0f), Size(size.width + l + r, size.height))
             if (top) drawLine(line, Offset(-l, 0f), Offset(size.width + r, 0f), w)
             if (bottom) drawLine(line, Offset(if (lineInset > 0.dp) lineInset.toPx() else -l, size.height - w), Offset(size.width + r, size.height - w), w)

@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.coachTarget
 import com.enwei.moneymanager.ui.AppText
 
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -268,7 +269,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     if (pendingCount > 0) IconButton(onClick = { nav.navigate("pending") }) {
                         BadgedBox(badge = { Badge { Text("$pendingCount") } }) { Icon(Icons.Filled.NotificationsActive, "待確認") }
                     }
-                    IconButton(onClick = { nav.navigate("search?month=$month") }) { Icon(Icons.Outlined.Search, "搜尋") }
+                    IconButton(onClick = { nav.navigate("search?month=$month") }, modifier = Modifier.coachTarget("txns.search")) { Icon(Icons.Outlined.Search, "搜尋") }
                 },
             ) }
         },
@@ -276,7 +277,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // 日曆不放＋按鈕（會擋住日期格）：改成長按日期記帳
                 if (tab == 0) FloatingActionButton(
-                    onClick = { nav.navigate("txn/0") }, shape = CircleShape, modifier = Modifier.size(64.dp),
+                    onClick = { nav.navigate("txn/0") }, shape = CircleShape, modifier = Modifier.size(64.dp).coachTarget("fab.add"),
                     containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White,
                 ) { Icon(Icons.Filled.Add, "記一筆", modifier = Modifier.size(32.dp)) }
             }
@@ -310,7 +311,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     }
                 }
             } }
-            if (tab < 2) SummaryBar(totals, lk.base)
+            if (tab < 2) androidx.compose.foundation.layout.Box(Modifier.coachTarget("txns.summary")) { SummaryBar(totals, lk.base) }
             // 每日：這個月的總預算進度（有設定總預算、看的是這個月時）
             val budget = settings.budgets[0L]
             if (tab == 0 && budget != null && month == Periods.monthOf(LocalDate.now(), startDay)) {
@@ -660,7 +661,7 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
         }
         Column(Modifier.weight(1f)) {
             if (title != null) Text(title, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(accountText, color = gray, fontSize = if (title != null) AppText.body else AppText.section, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(accountText, color = gray, fontSize = if (title != null) AppText.secondary else AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = AppText.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))

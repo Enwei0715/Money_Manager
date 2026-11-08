@@ -71,6 +71,18 @@ fun AppearanceScreen(nav: NavController) {
                         else -> LayoutPreview(s.showDescription)
                     }
                 }
+                // 快速套用：不想一項項調的人，選一組就好；之後還能在下面微調
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("快速套用", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    presets.forEach { (name, apply) ->
+                        val on = apply(s) == s
+                        Surface(
+                            color = if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.weight(1f).border(1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
+                                .clickable { repo.settings.update { apply(it) } },
+                        ) { Text(name, fontSize = AppText.secondary, maxLines = 1, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(vertical = 7.dp)) }
+                    }
+                }
                 com.enwei.moneymanager.ui.components.SubTabs(listOf("色彩", "文字", "版面"), tab) { tab = it }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -150,7 +162,7 @@ fun AppearanceScreen(nav: NavController) {
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 TextButton(onClick = {
-                    repo.settings.update { it.copy(themePreset = "coral", themeMode = 0, fontChoice = 0, textScale = 1.1f, uiScale = 1f, cornerStyle = 0,
+                    repo.settings.update { it.copy(themePreset = "coral", themeMode = 0, fontChoice = 2, textScale = 1.1f, uiScale = 1f, cornerStyle = 0,
                         tabularNums = true, colorSetB = false, cardStyle = false, rowStyle = 0) }
                 }) { Text("全部恢復預設") }
                 Spacer(Modifier.height(24.dp))
@@ -158,6 +170,13 @@ fun AppearanceScreen(nav: NavController) {
         }
     }
 }
+
+/** 推薦組合：一次設定字體、大小、區塊、圖示、圓角（顏色不動）。 */
+private val presets: List<Pair<String, (com.enwei.moneymanager.data.AppSettings) -> com.enwei.moneymanager.data.AppSettings>> = listOf(
+    "簡潔" to { it.copy(fontChoice = 2, textScale = 1.1f, cardStyle = false, rowStyle = 1, cornerStyle = 2, tabularNums = true) },
+    "清晰" to { it.copy(fontChoice = 1, textScale = 1.2f, cardStyle = false, rowStyle = 0, cornerStyle = 1, tabularNums = true) },
+    "卡片" to { it.copy(fontChoice = 0, textScale = 1.1f, cardStyle = true, rowStyle = 0, cornerStyle = 0, tabularNums = true) },
+)
 
 @Composable
 private fun SwitchRow(title: String, sub: String, on: Boolean, onChange: (Boolean) -> Unit) {

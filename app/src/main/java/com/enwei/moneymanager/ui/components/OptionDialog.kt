@@ -34,6 +34,8 @@ fun <T> OptionDialog(
     selected: T?,
     description: String? = null,
     onDismiss: () -> Unit,
+    /** 每個選項底下的小預覽（選了會長怎樣） */
+    preview: (@Composable (T) -> Unit)? = null,
     onPick: (T) -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -59,6 +61,9 @@ fun <T> OptionDialog(
                                 color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                             if (sel) Icon(Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.primary)
                         }
+                        if (preview != null) androidx.compose.foundation.layout.Box(
+                            Modifier.fillMaxWidth().clickable { onPick(v); onDismiss() }.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                        ) { preview(v) }
                         if (i < options.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }

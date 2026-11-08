@@ -290,7 +290,7 @@ data class AppSettings(
     val uiScale: Float = 1f,
     /** 外觀：主題色組、字體、字體大小、圓角、數字等寬 */
     val themePreset: String = "coral",
-    val fontChoice: Int = 0,
+    val fontChoice: Int = 2,
     val textScale: Float = 1.1f,
     val cornerStyle: Int = 0,
     val tabularNums: Boolean = true,
@@ -550,7 +550,7 @@ class SettingsStore(context: Context) {
         themeMode = prefs.getInt("themeMode", 0),
         uiScale = prefs.getFloat("uiScale2", 1f),
         themePreset = prefs.getString("themePreset", "coral")!!,
-        fontChoice = prefs.getInt("fontChoice", 0),
+        fontChoice = prefs.getInt("fontChoice", 2),
         textScale = if (prefs.contains("textScale2")) prefs.getFloat("textScale2", 1.1f)
             // 舊版的「大」(1.1) 變成新的「標準」：舊值往上對應一格
             else prefs.getFloat("textScale", 1f).let { if (it < 0.95f) 1.0f else if (it < 1.05f) 1.1f else it },

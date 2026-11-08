@@ -86,9 +86,9 @@ fun DisciplineChart(symbol: String, modifier: Modifier = Modifier) {
                 }
             }
             // 和個股頁一樣：小圓章「買／賣」，只有最新一個寫出理由
-            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f; isFakeBoldText = true }
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f }
             val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                textSize = 18f; isFakeBoldText = true; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER
+                textSize = 18f; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER
             }
             val shownSig = signals.filter { it.index >= from }
             val latest = shownSig.maxByOrNull { it.index }?.index

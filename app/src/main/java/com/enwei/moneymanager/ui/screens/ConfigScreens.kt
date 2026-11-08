@@ -112,9 +112,54 @@ private fun ConfigRow(title: String, value: String? = null, sub: String? = null,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp))
         Text("›", color = MaterialTheme.colorScheme.outline, fontSize = AppText.title, modifier = Modifier.padding(start = 8.dp))
     }
+    androidx.compose.material3.HorizontalDivider(Modifier.background(MaterialTheme.colorScheme.surface).padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
 }
 
-private data class Choice<T>(val title: String, val options: List<Pair<T, String>>, val selected: T?, val description: String?, val onPick: (T) -> Unit)
+private data class Choice<T>(val title: String, val options: List<Pair<T, String>>, val selected: T?, val description: String?, val onPick: (T) -> Unit,
+    val preview: (@Composable (T) -> Unit)? = null)
+
+/** 設定選項的小預覽：用簡化的樣子示範選了會長怎樣。 */
+@Composable
+private fun PreviewFrame(content: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(6.dp)
+    Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background, shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).padding(10.dp)) { content() }
+}
+
+@Composable
+private fun CalendarMarkPreview(dots: Boolean) = PreviewFrame {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(Triple(7, 2095L, 376L), Triple(8, 0L, 216L), Triple(9, 0L, 0L)).forEach { (d, inc, exp) ->
+            Column(Modifier.weight(1f).border(0.6.dp, MaterialTheme.colorScheme.outlineVariant).padding(4.dp)) {
+                Text("$d", fontSize = AppText.caption)
+                if (dots) Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    if (inc > 0) Box(Modifier.size(6.dp).background(com.enwei.moneymanager.ui.IncomeColor, CircleShape))
+                    if (exp > 0) Box(Modifier.size(6.dp).background(com.enwei.moneymanager.ui.ExpenseColor, CircleShape))
+                } else {
+                    if (inc > 0) Text("$inc", fontSize = AppText.badge, color = com.enwei.moneymanager.ui.IncomeColor)
+                    if (exp > 0) Text("$exp", fontSize = AppText.badge, color = com.enwei.moneymanager.ui.ExpenseColor)
+                }
+                if (inc == 0L && exp == 0L) Spacer(Modifier.height(12.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterStylePreview(fields: Boolean) = PreviewFrame {
+    if (!fields) Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(40.dp).border(7.dp, MaterialTheme.colorScheme.primary, CircleShape))
+        Column(Modifier.padding(start = 12.dp)) {
+            listOf("☑ 飲食 42%", "☑ 交通 18%", "☐ 購物 9%").forEach { Text(it, fontSize = AppText.caption) }
+        }
+    } else Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("分類 ▾", "帳戶 ▾", "期間 ▾").forEach {
+            Text(it, fontSize = AppText.caption, modifier = Modifier.weight(1f).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp)).padding(6.dp))
+        }
+    }
+}
+
+@Composable
+private fun TextLinePreview(text: String) = PreviewFrame { Text(text, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 
 private fun lockDelayLabel(sec: Int) = when (sec) {
     0 -> "立即"
@@ -168,8 +213,9 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
     var choice by remember { mutableStateOf<Choice<Any>?>(null) }
 
     @Suppress("UNCHECKED_CAST")
-    fun <T> ask(title: String, options: List<Pair<T, String>>, selected: T?, description: String? = null, onPick: (T) -> Unit) {
-        choice = Choice(title, options, selected, description, onPick) as Choice<Any>
+    fun <T> ask(title: String, options: List<Pair<T, String>>, selected: T?, description: String? = null,
+        preview: (@Composable (T) -> Unit)? = null, onPick: (T) -> Unit) {
+        choice = Choice(title, options, selected, description, onPick, preview) as Choice<Any>
     }
     fun onOff(b: Boolean) = if (b) "ON" else "OFF"
     fun askOnOff(title: String, value: Boolean, description: String?, onPick: (Boolean) -> Unit) =
@@ -208,7 +254,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                                             contentAlignment = Alignment.Center,
                                         ) { androidx.compose.material3.Icon(g.icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp)) }
                                         Column(Modifier.padding(start = 10.dp)) {
-                                            Text(g.title, fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(g.title, fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             Text(desc, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
                                     }
@@ -233,7 +279,8 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
 
                 sec("記帳")
                 cfg("輸入順序", if (s.inputFromCategory) "從分類" else "從金額") {
-                    ask("輸入順序", listOf(false to "從金額", true to "從分類"), s.inputFromCategory) { v ->
+                    ask("輸入順序", listOf(false to "從金額", true to "從分類"), s.inputFromCategory,
+                        preview = { v -> TextLinePreview(if (v) "按＋ → 先選分類 → 再輸入金額" else "按＋ → 先輸入金額 → 再選分類") }) { v ->
                         repo.settings.update { it.copy(inputFromCategory = v) }
                     }
                 }
@@ -246,10 +293,10 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 }
                 sec("期間與顯示")
                 cfg("日曆標示", if (s.calendarDots) "顏色小點" else "文字") {
-                    ask("日曆標示", listOf(false to "文字", true to "顏色小點"), s.calendarDots) { v -> repo.settings.update { it.copy(calendarDots = v) } }
+                    ask("日曆標示", listOf(false to "文字", true to "顏色小點"), s.calendarDots, preview = { v -> CalendarMarkPreview(v) }) { v -> repo.settings.update { it.copy(calendarDots = v) } }
                 }
                 cfg("搜尋的篩選方式", if (s.filterStyle == 0) "圖表勾選" else "欄位篩選") {
-                    ask("搜尋的篩選方式", listOf(0 to "圖表勾選", 1 to "欄位篩選"), s.filterStyle) { v ->
+                    ask("搜尋的篩選方式", listOf(0 to "圖表勾選", 1 to "欄位篩選"), s.filterStyle, preview = { v -> FilterStylePreview(v == 1) }) { v ->
                         repo.settings.update { it.copy(filterStyle = v) }
                     }
                 }
@@ -264,7 +311,8 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 }
                 sec("列表")
                 cfg("滑動切換", if (s.swipe == 1) "切換期間" else "無") {
-                    ask("滑動切換", listOf(0 to "無", 1 to "切換期間"), s.swipe) { v -> repo.settings.update { it.copy(swipe = v) } }
+                    ask("滑動切換", listOf(0 to "無", 1 to "切換期間"), s.swipe,
+                        preview = { v -> TextLinePreview(if (v == 1) "在交易列表左右滑動 → 切到上個月／下個月" else "左右滑動不做任何事，只能按標題的箭頭換月") }) { v -> repo.settings.update { it.copy(swipe = v) } }
                 }
 
                 sec("幣別")
@@ -351,7 +399,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
     }
 
     choice?.let { c ->
-        OptionDialog(c.title, c.options, c.selected, c.description, onDismiss = { choice = null }) { c.onPick(it) }
+        OptionDialog(c.title, c.options, c.selected, c.description, onDismiss = { choice = null }, preview = c.preview) { c.onPick(it) }
     }
 }
 

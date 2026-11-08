@@ -37,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,6 +77,8 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
     var kind by rememberSaveable { mutableStateOf(initialKind) }
     var editing by remember { mutableStateOf<CategoryEntity?>(null) }
     var deleting by remember { mutableStateOf<CategoryEntity?>(null) }
+    var picked by remember(kind) { mutableStateOf(emptySet<String>()) }
+    var confirmRules by remember { mutableStateOf(false) }
     val roots = cats.filter { it.kind == kind && it.parentId == null }.sortedWith(compareBy({ it.sortOrder }, { it.id }))
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
@@ -91,7 +94,7 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
                 val subs = cats.filter { it.parentId == c.id }.sortedBy { it.sortOrder }
                 ManageRow(
                     title = c.name + (if (subs.isNotEmpty()) " (${subs.size})" else "") + if (c.archived) "（隱藏）" else "",
-                    subtitle = subs.joinToString(", ").takeIf { it.isNotBlank() },
+                    subtitle = subs.joinToString("、") { it.name }.takeIf { it.isNotBlank() },
                     handle = handle, dimmed = c.archived,
                     onDelete = { deleting = c }, onEdit = { editing = c },
                     onClick = { nav.navigate("subcats/${c.id}") },
@@ -99,12 +102,25 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
             }
             val myRules = rules.filter { r -> lk.category(r.categoryId)?.kind == kind }
             if (myRules.isNotEmpty()) {
-                SectionTitle("已學習的商家分類（點擊刪除）", Modifier.padding(top = 16.dp))
+                // 已學習的商家：點一下勾選（可多選），按「刪除」再確認一次才刪
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("已學習的商家分類", fontSize = com.enwei.moneymanager.ui.AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    if (picked.isNotEmpty()) {
+                        androidx.compose.material3.TextButton(onClick = { picked = emptySet() }) { Text("取消") }
+                        androidx.compose.material3.TextButton(onClick = { confirmRules = true }) { Text("刪除 ${picked.size} 個", color = Color(0xFFE5484D)) }
+                    } else androidx.compose.material3.TextButton(onClick = { picked = myRules.map { it.keyword }.toSet() }) { Text("全選") }
+                }
+                Text("點一下勾選，可以一次刪除多個；刪除後同一家店不會再自動帶出這個分類", fontSize = com.enwei.moneymanager.ui.AppText.label,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 6.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 myRules.forEach { r ->
+                    val on = r.keyword in picked
                     Row(
-                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-                            .clickable { scope.launch { repo.deleteRule(r.keyword) } }.padding(horizontal = 16.dp, vertical = 12.dp),
+                        Modifier.fillMaxWidth().background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
+                            .clickable { picked = if (on) picked - r.keyword else picked + r.keyword }.padding(start = 8.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        androidx.compose.material3.Checkbox(on, { picked = if (on) picked - r.keyword else picked + r.keyword })
                         Text(r.keyword, Modifier.weight(1f))
                         Text(lk.catLabel(r.categoryId) ?: "?", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -116,6 +132,19 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
     }
     editing?.let { c -> CategoryEditDialog(c, roots, onDismiss = { editing = null }) }
     deleting?.let { c -> DeleteCategoryDialog(c, cats.count { it.parentId == c.id }) { deleting = null } }
+    if (confirmRules) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { confirmRules = false },
+        title = { Text("刪除 ${picked.size} 個已學習的商家？") },
+        text = { Text(picked.take(6).joinToString("、") + if (picked.size > 6) "…" else "") },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                val keys = picked
+                scope.launch { keys.forEach { repo.deleteRule(it) } }
+                picked = emptySet(); confirmRules = false
+            }) { Text("刪除", color = Color(0xFFE5484D)) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmRules = false }) { Text("取消") } },
+    )
 }
 
 /** 某個大分類底下的子分類清單。 */
