@@ -43,6 +43,44 @@ object PlaceHints {
         runCatching { prefs.edit().putString("last", line).apply() }
     }
 
+    /** 所有記下的付款位置（支出地圖用）。 */
+    fun samples(ctx: Context): List<Sample> = load(ctx)
+
+    /** 用店名找到的位置（店名 → 緯度、經度；查不到存 null，之後不再查）。 */
+    private val geoPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("merchant_geo", Context.MODE_PRIVATE) }
+    fun merchantGeo(): Map<String, Pair<Double, Double>?> = geoPrefs.all.mapNotNull { (k, v) ->
+        val s = v as? String ?: return@mapNotNull null
+        k to s.split(',').takeIf { it.size == 2 }?.let { (a, b) -> a.toDoubleOrNull()?.let { la -> b.toDoubleOrNull()?.let { lo -> la to lo } } }
+    }.toMap()
+
+    /**
+     * 用 OpenStreetMap 依店名找位置（在 [center] 附近約 15 公里內），每秒最多查一次；
+     * 回傳這次找到幾家。查不到的記下來不再重查。
+     */
+    suspend fun geocodeMerchants(names: List<String>, center: Pair<Double, Double>, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int = withContext(Dispatchers.IO) {
+        var found = 0
+        val (la, lo) = center
+        val box = "${lo - 0.15},${la + 0.15},${lo + 0.15},${la - 0.15}"
+        names.forEachIndexed { i, n ->
+            onProgress(i, names.size)
+            if (geoPrefs.contains(n)) return@forEachIndexed
+            val hit = runCatching {
+                val url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&bounded=1&accept-language=zh-TW&viewbox=$box&q=" + java.net.URLEncoder.encode(n, "UTF-8")
+                val arr = com.enwei.moneymanager.net.Http.getJson(url, mapOf("User-Agent" to UA)) as? kotlinx.serialization.json.JsonArray
+                (arr?.firstOrNull() as? kotlinx.serialization.json.JsonObject)?.let { o ->
+                    val a = (o["lat"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                    val b = (o["lon"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                    if (a != null && b != null) a to b else null
+                }
+            }.getOrNull()
+            geoPrefs.edit().putString(n, hit?.let { "${it.first},${it.second}" } ?: "").apply()
+            if (hit != null) found++
+            kotlinx.coroutines.delay(1100)
+        }
+        onProgress(names.size, names.size)
+        found
+    }
+
     /** 已記下的位置筆數。 */
     fun sampleCount(ctx: Context): Int = load(ctx).size
 

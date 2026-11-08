@@ -585,7 +585,7 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
     val ids = ArrayList<String>()
     fun rn(t: String) = renumberCites(t, imp, ids)
     val trend = rn(r.trend); val summary = rn(r.summary); val allocation = rn(r.allocation)
-    val picks2 = picks.map { it.copy(reason = rn(it.reason)) }
+    val picks2 = picks.map { it.copy(reason = rn(it.reason.replace("[n]", "").trim())) }
     val holdings2 = r.holdings.map { it.copy(reason = rn(it.reason)) }
     keyNews.forEach { if (it.id !in ids) ids += it.id }
     val report = r.copy(trend = trend, summary = summary, allocation = allocation, picks = picks2, holdings = holdings2, cites = ids, keyNews = keyNews, createdAt = System.currentTimeMillis(), day = LocalDate.now().toEpochDay(), newsCount = ds.recent(st, 3).size,

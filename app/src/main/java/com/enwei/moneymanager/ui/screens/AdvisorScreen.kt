@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.InputChip
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -525,106 +526,113 @@ private fun HistoryDialog(store: NewsStore, onOpen: (Long) -> Unit, onDismiss: (
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun PickCard(
-    p: StockPick, cites: List<String> = emptyList(), newsById: Map<String, com.enwei.moneymanager.data.NewsItem> = emptyMap(),
-    /** 報告裡用：收起時只顯示名稱、現價與第一點理由，點「展開」看 K 線、依據與進出場 */
+    p0: StockPick, cites: List<String> = emptyList(), newsById: Map<String, com.enwei.moneymanager.data.NewsItem> = emptyMap(),
+    /** 報告裡用：收起時只顯示標題列、依據與第一點理由；展開後依段落（依據、時光機、走勢、理由、操作）以分隔線分開 */
     foldKey: String? = null,
     onClick: () -> Unit,
 ) {
+    // AI 偶爾把「[n]」原樣寫進理由：拿掉
+    val p = p0.copy(reason = p0.reason.replace("[n]", "").replace("［n］", "").trim())
     val fold = foldKey?.let { com.enwei.moneymanager.ui.components.rememberFold("report.$it", false) }
-    if (fold != null && !fold.open) {
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.clickable { fold.toggle() }.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+    val open = fold?.open ?: true
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val strengthColor = when { p.strength.contains("強") -> StockUp; p.strength.contains("弱") -> StockDown; else -> muted }
+    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            // 標題列：收起、展開都一樣，右邊的箭頭固定在同一個位置
+            Row(Modifier.fillMaxWidth().clickable(enabled = fold != null) { fold?.toggle() }, verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
                     Text("${p.symbol} ${p.name}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    p.price?.let { Text("%.2f".format(it), fontSize = AppText.secondary, modifier = Modifier.padding(start = 6.dp)) }
-                    p.score?.let { ScoreBadge(it) }
-                    if (p.strength.isNotBlank()) Tag(p.strength, when {
-                        p.strength.contains("強") -> StockUp.copy(alpha = 0.18f)
-                        p.strength.contains("弱") -> StockDown.copy(alpha = 0.18f)
-                        else -> MaterialTheme.colorScheme.surfaceVariant
-                    })
-                    com.enwei.moneymanager.ui.components.FoldToggle(false, modifier = Modifier.padding(start = 6.dp))
-                }
-                (listOf(p.industry).filter { it.isNotBlank() } + p.basis).takeIf { it.isNotEmpty() }?.let {
-                    Text(it.joinToString(" · "), fontSize = AppText.label, color = MaterialTheme.colorScheme.primary, maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(
+                        listOfNotNull(p.price?.let { "%.2f".format(it) } ?: "代號未確認", p.industry.ifBlank { null }, p.style.ifBlank { null },
+                            p.strength.ifBlank { null }).joinToString(" · "),
+                        fontSize = AppText.caption, color = muted, maxLines = 1,
+                    )
                 }
-                splitPoints(p.reason).firstOrNull()?.let {
-                    CitedText(it, cites, newsById, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-        return
-    }
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${p.symbol} ${p.name}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                if (p.industry.isNotBlank()) Tag(p.industry, MaterialTheme.colorScheme.tertiaryContainer)
-                if (p.style.isNotBlank()) Tag(p.style, MaterialTheme.colorScheme.secondaryContainer)
-                if (fold != null) com.enwei.moneymanager.ui.components.FoldToggle(true, modifier = Modifier.padding(start = 6.dp).clickable { fold.toggle() })
-                if (p.strength.isNotBlank()) Tag(
-                    p.strength,
-                    when {
-                        p.strength.contains("強") -> StockUp.copy(alpha = 0.18f)
-                        p.strength.contains("弱") -> StockDown.copy(alpha = 0.18f)
-                        else -> MaterialTheme.colorScheme.surfaceVariant
-                    },
+                p.score?.let { ScoreBadge(it) }
+                if (fold != null) Icon(
+                    if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, if (open) "收合" else "展開",
+                    tint = muted, modifier = Modifier.padding(start = 6.dp).size(22.dp),
                 )
             }
-            p.price?.let { Text("現價 ${"%.2f".format(it)}", fontSize = AppText.secondary) }
-                ?: Text("代號未確認，請自行查證", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error)
-            // 量價與營收依據（App 自己算的數字）
-            if (p.basis.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.padding(vertical = 2.dp),
-            ) {
-                p.basis.forEach { b ->
-                    val neg = b.contains("弱於") || b.contains("跌破") || Regex("[-−]\\d").containsMatchIn(b)
-                    Surface(color = (if (neg) StockDown else StockUp).copy(alpha = 0.10f), shape = RoundedCornerShape(4.dp)) {
-                        Text(b, fontSize = AppText.label, color = if (neg) StockDown else StockUp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+            if (!open) {
+                if (p.basis.isNotEmpty()) Text(p.basis.joinToString(" · "), fontSize = AppText.label, color = strengthColor.takeIf { it != muted } ?: MaterialTheme.colorScheme.primary,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+                splitPoints(p.reason).firstOrNull()?.let {
+                    CitedText(it, cites, newsById, fontSize = AppText.caption, color = muted)
+                }
+                return@Column
+            }
+            @Composable fun section(title: String) {
+                HorizontalDivider(Modifier.padding(top = 10.dp, bottom = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                Text(title, fontSize = AppText.label, color = muted, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
+            }
+            // ① 依據：App 算的標籤與五大面向分數
+            if (p.basis.isNotEmpty() || p.scores.size == 5) {
+                section("依據")
+                if (p.basis.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    p.basis.forEach { b ->
+                        val neg = b.contains("弱於") || b.contains("跌破") || b.contains("連賣") || Regex("[-−]\\d").containsMatchIn(b)
+                        Surface(color = (if (neg) StockDown else StockUp).copy(alpha = 0.10f), shape = RoundedCornerShape(4.dp)) {
+                            Text(b, fontSize = AppText.label, color = if (neg) StockDown else StockUp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                        }
+                    }
+                }
+                if (p.scores.size == 5) Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    listOf("趨勢", "籌碼", "基本", "消息", "風險").zip(p.scores).forEach { (l, v) ->
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$v", fontSize = AppText.body, fontWeight = FontWeight.SemiBold, color = if (v >= 65) StockUp else if (v <= 35) StockDown else MaterialTheme.colorScheme.onSurface)
+                            Text(l, fontSize = AppText.label, color = muted)
+                        }
                     }
                 }
             }
-            // 綜合分數與五大面向、時光機模擬
-            if (p.score != null && p.scores.size == 5) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ScoreBadge(p.score)
-                listOf("趨勢", "籌碼", "基本", "消息", "風險").zip(p.scores).forEach { (l, v) ->
-                    Text("$l $v", fontSize = AppText.label, color = if (v >= 65) StockUp else if (v <= 35) StockDown else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+            // ② 時光機
+            if (p.simTarget != null && p.simStop != null) {
+                section("時光機 · 未來 20 個交易日")
+                SimBar(p.simTarget, p.simStop, p.simNone ?: 0, p.simExpR, p.targetPrice, p.stopPrice)
             }
-            if (p.simTarget != null && p.simStop != null) SimBar(p.simTarget, p.simStop, p.simNone ?: 0, p.simExpR, p.targetPrice, p.stopPrice)
-            // 近期 K 線：一眼看出走勢，不必點進去
+            // ③ 走勢：近期 K 線、營收、新聞熱度
+            section("走勢")
             com.enwei.moneymanager.ui.components.MiniKLine(p.symbol)
             com.enwei.moneymanager.ui.components.RevenueLine(p.symbol)
-            // 新聞依據：資料集近 3 天有幾則新聞提到這檔、平均多空
             val store by MoneyApp.news.flow.collectAsStateWithLifecycle()
             val ev = remember(System.identityHashCode(store), p.symbol) {
                 store?.let { st -> MoneyApp.news.recent(st, 3).filter { p.symbol in it.symbols } }.orEmpty()
             }
             if (ev.isNotEmpty()) {
                 val avg = ev.map { it.sentiment }.average()
-                Text(
-                    "新聞依據：近 3 天 ${ev.size} 則提到 · " + (if (avg > 0.2) "偏多" else if (avg < -0.2) "偏空" else "中性") +
-                        " · " + ev.groupingBy { it.theme }.eachCount().entries.sortedByDescending { it.value }.take(2).joinToString("、") { it.key },
-                    fontSize = AppText.label, color = if (avg > 0.2) StockUp else if (avg < -0.2) StockDown else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else Text("新聞依據：資料集近 3 天沒有提到這檔", fontSize = AppText.label, color = MaterialTheme.colorScheme.error)
-            if (p.business.isNotBlank()) Text(p.business, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (p.reason.isNotBlank()) PointList(p.reason, cites, newsById)
-            if (p.entry.isNotBlank() || p.stop.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (p.entry.isNotBlank()) Text("進場：${p.entry}", fontSize = AppText.caption, color = StockUp, modifier = Modifier.weight(1f))
-                if (p.stop.isNotBlank()) Text("停損：${p.stop}", fontSize = AppText.caption, color = StockDown, modifier = Modifier.weight(1f))
+                Text("新聞：近 3 天 ${ev.size} 則・" + (if (avg > 0.2) "偏多" else if (avg < -0.2) "偏空" else "中性"),
+                    fontSize = AppText.label, color = if (avg > 0.2) StockUp else if (avg < -0.2) StockDown else muted)
             }
-            p.amount?.let { Text("建議投入約 ${Money.withSymbol(it * 100, "TWD")}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("看 K 線與資訊 ›", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+            // ④ 理由
+            if (p.business.isNotBlank() || p.reason.isNotBlank()) {
+                section("理由")
+                if (p.business.isNotBlank()) Text(p.business, fontSize = AppText.caption, color = muted)
+                if (p.reason.isNotBlank()) PointList(p.reason, cites, newsById)
+            }
+            // ⑤ 操作：進場、停損、金額，與按鈕
+            section("操作")
+            if (p.entry.isNotBlank() || p.stop.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("進場", fontSize = AppText.label, color = muted)
+                    Text(p.entry.ifBlank { "—" }, fontSize = AppText.caption, color = StockUp)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("停損", fontSize = AppText.label, color = muted)
+                    Text(p.stop.ifBlank { "—" }, fontSize = AppText.caption, color = StockDown)
+                }
+            }
+            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(p.amount?.let { "建議投入約 ${Money.withSymbol(it * 100, "TWD")}" }.orEmpty(), fontSize = AppText.caption,
+                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
                 val settings by repo.settings.flow.collectAsStateWithLifecycle()
                 val inList = p.symbol in settings.watchlist
                 TextButton(onClick = {
                     repo.settings.update { it.copy(watchlist = if (inList) it.watchlist - p.symbol else (it.watchlist + p.symbol).distinct()) }
-                }) { Text(if (inList) "★ 觀察中" else "☆ 加入觀察", fontSize = AppText.caption) }
+                }) { Text(if (inList) "★ 觀察中" else "☆ 觀察", fontSize = AppText.caption) }
+                TextButton(onClick = onClick) { Text("K 線 ›", fontSize = AppText.caption) }
             }
         }
     }
@@ -643,18 +651,25 @@ private fun ScoreBadge(score: Int) {
 @Composable
 private fun SimBar(target: Int, stop: Int, none: Int, expR: Double?, targetPrice: Double?, stopPrice: Double?) {
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text("時光機（重播過去一年走勢 3,000 次，未來 20 個交易日）", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))) {
             if (target > 0) Box(Modifier.weight(target.toFloat()).fillMaxHeight().background(StockUp))
             if (none > 0) Box(Modifier.weight(none.toFloat()).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
             if (stop > 0) Box(Modifier.weight(stop.toFloat()).fillMaxHeight().background(StockDown))
         }
         Row {
-            Text("先到目標 $target%" + (targetPrice?.let { "（${"%.1f".format(it)}）" } ?: ""), fontSize = AppText.label, color = StockUp, modifier = Modifier.weight(1f))
-            Text("都沒到 $none%", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("　先到停損 $stop%" + (stopPrice?.let { "（${"%.1f".format(it)}）" } ?: ""), fontSize = AppText.label, color = StockDown)
+            Column(Modifier.weight(1f)) {
+                Text("先到目標 $target%", fontSize = AppText.label, color = StockUp)
+                targetPrice?.let { Text("%.1f".format(it), fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("都沒到 $none%", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                expR?.let { Text("期望 ${"%+.2f".format(it)}R", fontSize = AppText.label, color = if (it > 0) StockUp else StockDown) }
+            }
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                Text("先到停損 $stop%", fontSize = AppText.label, color = StockDown)
+                stopPrice?.let { Text("%.1f".format(it), fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
         }
-        expR?.let { Text("期望值 ${"%+.2f".format(it)}R（1R＝停損金額）", fontSize = AppText.label, color = if (it > 0) StockUp else StockDown) }
     }
 }
 

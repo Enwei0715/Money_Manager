@@ -37,6 +37,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -162,6 +163,7 @@ fun StatsTab(nav: NavController) {
                 }
             },
             actions = {
+                IconButton(onClick = { nav.navigate("spendmap") }) { Icon(androidx.compose.material.icons.Icons.Outlined.Map, "支出地圖") }
                 Box(Modifier.padding(end = 8.dp)) {
                     Row(
                         Modifier.border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(8.dp)).clickable { menu = true }

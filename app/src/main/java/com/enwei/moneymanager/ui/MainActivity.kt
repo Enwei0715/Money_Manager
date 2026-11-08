@@ -360,6 +360,7 @@ private fun AppScaffold(nav: NavHostController) {
                     runCatching { java.time.YearMonth.parse(e.arguments!!.getString("month")) }.getOrNull())
             }
             composable("budget") { BudgetScreen(nav) }
+            composable("spendmap") { com.enwei.moneymanager.ui.screens.SpendMapScreen(nav) }
             composable("debts") { com.enwei.moneymanager.ui.screens.DebtsScreen(nav) }
             composable("config?g={g}", arguments = listOf(navArgument("g") { type = NavType.StringType; defaultValue = "" })) { e ->
                 ConfigScreen(nav, e.arguments?.getString("g")?.takeIf { it.isNotBlank() })

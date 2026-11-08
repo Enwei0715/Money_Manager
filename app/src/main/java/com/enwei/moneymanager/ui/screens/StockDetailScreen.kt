@@ -90,6 +90,11 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     // K 線的設定（日／60 分、看幾根、均線、布林、副圖）會記住，換一檔股票或下次打開都一樣
     var hourly by remember { mutableStateOf(KlinePrefs.hourly) }
     var hourBars by remember { mutableStateOf<DailyBars?>(null) }
+    // 日 K 以外的週 K、月 K（看長期走勢）：0 日、1 週、2 月
+    var span by remember { mutableStateOf(KlinePrefs.span) }
+    var weekBars by remember { mutableStateOf<DailyBars?>(null) }
+    var monthBars by remember { mutableStateOf<DailyBars?>(null) }
+    var customRange by remember { mutableStateOf(false) }
     var count by remember { mutableStateOf(KlinePrefs.count(hourly)) }
     var back by remember { mutableStateOf(0f) }
     var mas by remember { mutableStateOf(KlinePrefs.mas(hourly)) }
@@ -99,11 +104,11 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     var divs by remember { mutableStateOf<List<com.enwei.moneymanager.core.DividendEvent>>(emptyList()) }
     var indicator by remember { mutableStateOf(KlinePrefs.indicator) }
     var showBB by remember { mutableStateOf(KlinePrefs.bb) }
-    LaunchedEffect(hourly, count, mas, indicator, showBB) { KlinePrefs.save(hourly, count, mas, indicator, showBB) }
+    LaunchedEffect(hourly, count, mas, indicator, showBB) { if (hourly || span == 0) KlinePrefs.save(hourly, count, mas, indicator, showBB) }
     val trades by repo.trades.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     LaunchedEffect(symbol) {
-        bars = InvestData.bars(symbol, "2y", tw = market == Market.TW)?.let { b0 ->
+        bars = InvestData.bars(symbol, "5y", tw = market == Market.TW)?.let { b0 ->
             // 一打開就併入即時價（Yahoo 的日 K 可能延遲）
             runCatching { com.enwei.moneymanager.net.QuoteService.live(market, symbol) }.getOrNull()?.let { b0.withLive(it) } ?: b0
         }
@@ -215,7 +220,14 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         hourBars = InvestData.bars(symbol, "1y", tw = market == Market.TW, interval = "60m")
                     }
                 }
-                val kb = if (hourly) hourBars else b
+                LaunchedEffect(span, hourly) {
+                    if (!hourly && span == 1 && weekBars == null) weekBars = InvestData.bars(symbol, "10y", tw = market == Market.TW, interval = "1wk")
+                    if (!hourly && span == 2 && monthBars == null) monthBars = InvestData.bars(symbol, "max", tw = market == Market.TW, interval = "1mo")
+                }
+                LaunchedEffect(span) { KlinePrefs.saveSpan(span) }
+                val daily = !hourly && span == 0
+                val kb = if (hourly) hourBars else when (span) { 1 -> weekBars; 2 -> monthBars; else -> b }
+                val unit = if (hourly) "" else when (span) { 1 -> "週"; 2 -> "月"; else -> "日" }
                 // 依紀律參數找出的買點、賣點（日 K）：長線用較寬的移動停損、分批停利門檻加倍；開啟保本＋移動停利時用它的回落 %
                 val style = settings.styleOf(symbol)
                 val plan = settings.investPlan
@@ -233,33 +245,65 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     Column(Modifier.padding(12.dp)) {
                         // 第一列：日 K／60 分 K（分段按鈕）；第二列：顯示區間
                         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
-                            listOf(false to "日 K", true to "60 分 K").forEach { (h, l) ->
-                                val on = hourly == h
+                            // 60 分、日、週、月 K
+                            listOf(Triple(true, 0, "60 分"), Triple(false, 0, "日 K"), Triple(false, 1, "週 K"), Triple(false, 2, "月 K")).forEach { (h, sp, l) ->
+                                val on = hourly == h && (h || span == sp)
                                 Box(
                                     Modifier.weight(1f).background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
-                                        .clickable { if (hourly != h) { hourly = h; count = KlinePrefs.count(h); back = 0f; mas = KlinePrefs.mas(h) } }.padding(vertical = 7.dp),
+                                        .clickable {
+                                            if (!on) {
+                                                if (hourly != h) { hourly = h; mas = KlinePrefs.mas(h) }
+                                                if (!h) span = sp
+                                                count = if (h) KlinePrefs.count(true) else when (sp) { 1 -> 104f; 2 -> 60f; else -> KlinePrefs.count(false) }
+                                                back = 0f; picked = null
+                                            }
+                                        }.padding(vertical = 7.dp),
                                     contentAlignment = Alignment.Center,
                                 ) { Text(l, fontSize = AppText.secondary, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal) }
                             }
                         }
                         Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("區間", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
-                            (if (hourly) listOf(25 to "5 天", 50 to "10 天", 100 to "1 個月") else listOf(60 to "3 個月", 120 to "6 個月", 250 to "1 年"))
+                            (if (hourly) listOf(25 to "5 天", 50 to "10 天", 100 to "1 個月")
+                            else when (span) {
+                                1 -> listOf(26 to "半年", 52 to "1 年", 104 to "2 年", 260 to "5 年")
+                                2 -> listOf(24 to "2 年", 60 to "5 年", 120 to "10 年")
+                                else -> listOf(22 to "1 個月", 60 to "3 個月", 120 to "半年", 250 to "1 年", 500 to "2 年")
+                            })
                                 .forEach { (n, l) ->
                                     val on = count.toInt() == n && back < 1f
                                     Text(l, fontSize = AppText.secondary, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                                         modifier = Modifier.clickable { count = n.toFloat(); back = 0f }.padding(horizontal = 10.dp, vertical = 4.dp))
                                 }
+                            Text("自訂", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.clickable { customRange = true }.padding(horizontal = 10.dp, vertical = 4.dp))
                             Spacer(Modifier.weight(1f))
                             if (back >= 1f) Text("回到最新 ›", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.clickable { back = 0f }.padding(4.dp))
+                        }
+                        if (customRange) {
+                            var txt by remember { mutableStateOf(count.toInt().toString()) }
+                            androidx.compose.material3.AlertDialog(
+                                onDismissRequest = { customRange = false },
+                                title = { Text("顯示幾根 K 棒") },
+                                text = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        androidx.compose.material3.OutlinedTextField(txt, { txt = it.filter(Char::isDigit).take(4) }, singleLine = true,
+                                            label = { Text(if (hourly) "根數（每根 1 小時）" else "根數（每根 1 $unit）") },
+                                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
+                                        Text("也可以在圖上用兩指縮放、左右拖曳", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                confirmButton = { TextButton(onClick = { txt.toIntOrNull()?.takeIf { it >= 10 }?.let { count = it.toFloat(); back = 0f }; customRange = false }) { Text("套用") } },
+                                dismissButton = { TextButton(onClick = { customRange = false }) { Text("取消") } },
+                            )
                         }
                         if (kb == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 40.dp))
                         if (kb != null) {
                             val total = kb.close.size
                             // 最前面幾根算不出均線（最長的那條要 N 根才有值）：不顯示那段，避免均線斷掉、買賣點失真
-                            val warm = (listOfNotNull(mas.maxOrNull(), if (hourly) plan.hourSlow else 60).max() - 1).coerceIn(0, (total - 10).coerceAtLeast(0))
+                            val warm = (if (daily || hourly) listOfNotNull(mas.maxOrNull(), if (hourly) plan.hourSlow else 60).max() - 1 else 0).coerceIn(0, (total - 10).coerceAtLeast(0))
                             val usable = total - warm
                             val n = count.toInt().coerceIn(minOf(10, usable), usable)
                             val from = (total - n - back.toInt()).coerceIn(warm, total - n)
@@ -278,13 +322,13 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             val hourSignals = if (hourly && showSignals) remember(System.identityHashCode(kb), plan) {
                                 com.enwei.moneymanager.core.TradeSignals.scanGuard(kb.close, plan.hourFast, plan.hourSlow, plan.tolerancePct, plan.confirmBars, plan.reducePct)
                             } else emptyList()
-                            val visibleSignals = if (!showSignals) emptyList() else (if (hourly) hourSignals else signals).filter { it.index in from until from + n }
+                            val visibleSignals = if (!showSignals || !(daily || hourly)) emptyList() else (if (hourly) hourSignals else signals).filter { it.index in from until from + n }
                             sel?.let { j -> visibleSignals.firstOrNull { it.index == j } }?.let { sg ->
                                 Text((if (sg.buy) "買點：" else "賣點：") + sg.reason, fontSize = AppText.caption, color = if (sg.buy) StockUp else StockDown)
                             }
-                            fun d(i: Int) = java.time.LocalDate.ofEpochDay(kb.days[i]).let { "${it.monthValue}/${it.dayOfMonth}" }
+                            fun d(i: Int) = java.time.LocalDate.ofEpochDay(kb.days[i]).let { if (daily || hourly) "${it.monthValue}/${it.dayOfMonth}" else "${it.year}/${it.monthValue}" }
                             val avg = held.takeIf { it.isNotEmpty() }?.let { hs -> hs.sumOf { it.avgCost * it.shares } / hs.sumOf { it.shares } }
-                            val stt = if (hourly) null else remember(System.identityHashCode(b), sigParams, avg) {
+                            val stt = if (!daily) null else remember(System.identityHashCode(b), sigParams, avg) {
                                 com.enwei.moneymanager.core.TradeSignals.status(b.high, b.close, sigParams, avg, signals) { i ->
                                     java.time.LocalDate.ofEpochDay(b.days[i]).let { "${it.monthValue}/${it.dayOfMonth}" }
                                 }
@@ -312,7 +356,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         Box(Modifier.size(width = 12.dp, height = 3.dp).background(maColor(len)))
-                                        Text(" ${len}${if (hourly) "" else "日"} ✕", fontSize = AppText.caption, color = maColor(len))
+                                        Text(" ${len}$unit ✕", fontSize = AppText.caption, color = maColor(len))
                                     }
                                 }
                                 Text(if (showBB) "布林 ✕" else "＋布林", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -920,6 +964,8 @@ private fun indicatorText(b: DailyBars, kind: Int): String {
 private object KlinePrefs {
     private val p by lazy { MoneyApp.instance.getSharedPreferences("kline", android.content.Context.MODE_PRIVATE) }
     val hourly get() = p.getBoolean("hourly", false)
+    val span get() = p.getInt("span", 0)
+    fun saveSpan(v: Int) = p.edit().putInt("span", v).apply()
     val indicator get() = p.getInt("indicator", 0)
     val bb get() = p.getBoolean("bb", false)
     fun count(hourly: Boolean) = p.getFloat(if (hourly) "countH" else "countD", if (hourly) 50f else 120f)
