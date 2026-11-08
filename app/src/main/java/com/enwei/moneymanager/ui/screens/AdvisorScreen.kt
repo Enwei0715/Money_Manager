@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.blockSurface
 import com.enwei.moneymanager.ui.AppText
 
 import com.enwei.moneymanager.data.hasAiKey
@@ -537,7 +538,7 @@ fun PickCard(
     val open = fold?.open ?: true
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val strengthColor = when { p.strength.contains("強") -> StockUp; p.strength.contains("弱") -> StockDown; else -> muted }
-    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), modifier = Modifier.fillMaxWidth()) {
+    Box(Modifier.fillMaxWidth().blockSurface()) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             // 標題列：收起、展開都一樣，右邊的箭頭固定在同一個位置
             Row(Modifier.fillMaxWidth().clickable(enabled = fold != null) { fold?.toggle() }, verticalAlignment = Alignment.CenterVertically) {
@@ -963,7 +964,7 @@ private fun Bubble(
         }
         // 回覆附的圖表：用實際資料畫（走勢比較、題材熱度、持股損益）
         m.charts.forEach { ch ->
-            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), modifier = Modifier.padding(top = 6.dp).fillMaxWidth()) {
+            Box(Modifier.padding(top = 6.dp).fillMaxWidth().blockSurface()) {
                 Box(Modifier.padding(10.dp)) { ChatChartView(ch, nav) }
             }
         }
@@ -1012,7 +1013,7 @@ private fun JobProgress(
             }
         }
         // 一張小卡：階段進度條＋一行目前步驟（批次、已執行時間）
-        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), modifier = Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().blockSurface()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PipelineSteps(step, refreshOnly = job?.refreshOnly == true)
                 Text(
@@ -1318,7 +1319,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("新聞資料集", fontSize = AppText.title, fontWeight = FontWeight.SemiBold)
                 // 自動更新：開關＋頻率
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)) {
+                Box(Modifier.blockSurface(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("自動更新與每日報告", fontSize = AppText.body, modifier = Modifier.weight(1f))

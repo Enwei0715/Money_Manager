@@ -7,6 +7,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.enwei.moneymanager.ui.AppearancePrefs
 
@@ -24,4 +26,33 @@ fun Modifier.groupCell(first: Boolean, last: Boolean): Modifier {
         bottomStart = if (last) r else 0.dp, bottomEnd = if (last) r else 0.dp,
     )
     return this.padding(horizontal = 12.dp).clip(shape).background(MaterialTheme.colorScheme.surface, shape)
+}
+
+/** 一個區塊：線條樣式＝表面色＋上下細線；卡片樣式＝圓角底色。 */
+@Composable
+fun Modifier.blockSurface(color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface): Modifier {
+    if (AppearancePrefs.cards) {
+        val shape = RoundedCornerShape(AppearancePrefs.cardRadius)
+        return this.clip(shape).background(color, shape)
+    }
+    val line = MaterialTheme.colorScheme.outlineVariant
+    return this.background(MaterialTheme.colorScheme.surface).drawBehind {
+        val w = 0.6.dp.toPx()
+        drawLine(line, Offset(0f, 0f), Offset(size.width, 0f), w)
+        drawLine(line, Offset(0f, size.height - w), Offset(size.width, size.height - w), w)
+    }
+}
+
+/** 清單裡的一列：線條樣式＝整排＋底線、列與列相接；卡片樣式＝左右留白的圓角小卡。 */
+@Composable
+fun Modifier.listRow(color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surfaceContainerLow): Modifier {
+    if (AppearancePrefs.cards) {
+        val shape = RoundedCornerShape(AppearancePrefs.cardRadius)
+        return this.padding(horizontal = 12.dp, vertical = 3.dp).clip(shape).background(color, shape)
+    }
+    val line = MaterialTheme.colorScheme.outlineVariant
+    return this.background(MaterialTheme.colorScheme.surface).drawBehind {
+        val w = 0.6.dp.toPx()
+        drawLine(line, Offset(16.dp.toPx(), size.height - w), Offset(size.width, size.height - w), w)
+    }
 }

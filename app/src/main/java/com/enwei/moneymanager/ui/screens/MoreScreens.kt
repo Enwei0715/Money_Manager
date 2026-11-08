@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.listRow
 import com.enwei.moneymanager.ui.AppText
 
 import androidx.compose.foundation.horizontalScroll
@@ -174,7 +175,7 @@ fun MoreScreen(nav: NavController) {
                 Text("可加入的工具", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 12.dp))
                 available.forEach { t ->
                     Row(
-                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius))
+                        Modifier.fillMaxWidth().listRow(MaterialTheme.colorScheme.surface)
                             .clickable { setOrder(shown.map { it.id } + t.id) }.padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -437,8 +438,8 @@ fun NotificationSettingsScreen(nav: NavController) {
                 // 小卡：App 名稱、偵測到幾則、最近一則的內容；可「啟用」或「忽略」（忽略後不再出現）
                 items(candidates, key = { "cand$it" }) { pkg ->
                     val notes = log.filter { it.packageName == pkg && it.result == "CANDIDATE" }
-                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp)) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().listRow()) {
                         Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("${labelOf[pkg] ?: pkg} · ${notes.size} 則", fontSize = AppText.body, maxLines = 1)
@@ -640,8 +641,8 @@ fun NotificationSettingsScreen(nav: NavController) {
                         e.result == "OFFLINE" -> "等網路後判讀" to Color(0xFFFFA000)
                         else -> "未啟用來源" to MaterialTheme.colorScheme.onSurfaceVariant
                     }
-                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp).clickable {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().listRow().clickable {
                             when {
                                 !gone && e.txnId != null && (e.result == "RECORDED" || e.result == "MERGED") -> nav.navigate("txn/${e.txnId}")
                                 gone -> testScope.launch {
