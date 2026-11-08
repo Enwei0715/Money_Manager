@@ -236,7 +236,6 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
         else LazyColumn(Modifier.fillMaxSize()) {
             item {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                val isLoan = acc?.type == AccountType.LOAN
                 SummaryBarCustom(
                     listOf("資產" to (Money.full(assets) to IncomeColor), "負債" to (Money.full(debts) to ExpenseColor),
                         "合計" to (Money.full(assets - debts) to MaterialTheme.colorScheme.onSurface)),
@@ -561,6 +560,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                     IconButton(onClick = { nav.navigate("account/$id") }) { Icon(Icons.Outlined.Edit, "編輯帳戶") }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                val isLoan = acc?.type == AccountType.LOAN
                 SummaryBarCustom(
                     listOf(
                         // 往來對象：用借出、收回的說法；其他帳戶用存入、提出
