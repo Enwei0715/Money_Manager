@@ -640,6 +640,8 @@ private fun FormRow(
         val icon = when (label) {
             "日期" -> Icons.Outlined.Event; "分類" -> Icons.Outlined.Category; "帳戶", "Account", "轉出" -> Icons.Outlined.AccountBalanceWallet
             "轉入" -> Icons.Outlined.Login; "內容" -> Icons.Outlined.Storefront; "說明" -> Icons.Outlined.Notes; "手續費" -> Icons.Outlined.Percent
+            "分帳" -> androidx.compose.material.icons.Icons.Outlined.Group; "對象" -> androidx.compose.material.icons.Icons.Outlined.Person
+            "對方付" -> androidx.compose.material.icons.Icons.Outlined.Payments
             else -> null
         }
         if (icon != null) Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 10.dp).size(20.dp))
@@ -662,9 +664,11 @@ private fun PlaceholderText(value: String?, placeholder: String) {
 }
 
 @Composable
-private fun UnderlineField(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier, singleLine: Boolean = true) {
+private fun UnderlineField(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier, singleLine: Boolean = true, numeric: Boolean = false) {
     BasicTextField(
         value = value, onValueChange = onChange, singleLine = singleLine,
+        keyboardOptions = if (numeric) androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)
+            else androidx.compose.foundation.text.KeyboardOptions.Default,
         textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         modifier = modifier.fillMaxWidth(),
@@ -940,39 +944,51 @@ private fun SplitSection(
 ) {
     val lk = rememberLookups()
     val people = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN && !it.archived }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("代墊／分帳", fontSize = AppText.body, modifier = Modifier.weight(1f))
-            androidx.compose.material3.Switch(on, onToggle)
-        }
-        if (on) {
-            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    val split = Calculator.evaluate(expr)?.abs()?.let(Money::toMinor)
+    val who = person?.let { lk.account(it)?.name } ?: newName.trim().ifBlank { null }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    // 和其他欄位一樣的一列：沒分帳時只是一行灰字，點一下展開；不再用開關
+    val cancel: @Composable () -> Unit = {
+        Text("取消", fontSize = AppText.secondary, color = muted, modifier = Modifier.clickable { onToggle(false) }.padding(start = 8.dp, top = 6.dp, bottom = 6.dp))
+    }
+    FormRow("分帳", color, on, onClick = { onToggle(!on) }, trailing = if (on) cancel else null) {
+        PlaceholderText(
+            if (!on) null else listOfNotNull(who ?: "選對象", split?.let { "對方付 ${Money.withSymbol(it, currency)}" }).joinToString("・"),
+            "幫別人代墊或一起分攤時點這裡",
+        )
+    }
+    if (!on) return
+    FormRow("對象", color, false, onClick = {}) {
+        Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (people.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 people.forEach { p ->
-                    androidx.compose.material3.FilterChip(person == p.id, { onPerson(if (person == p.id) null else p.id) }, label = { Text(p.name, fontSize = AppText.caption) })
+                    val sel = person == p.id
+                    Text(p.name, fontSize = AppText.body, color = if (sel) color else MaterialTheme.colorScheme.onSurface,
+                        textDecoration = if (sel) androidx.compose.ui.text.style.TextDecoration.Underline else null,
+                        modifier = Modifier.clickable { onPerson(if (sel) null else p.id) }.padding(vertical = 2.dp))
                 }
             }
-            if (person == null) androidx.compose.material3.OutlinedTextField(newName, onNewName, singleLine = true,
-                label = { Text(if (people.isEmpty()) "幫誰付" else "或輸入新的名字") }, modifier = Modifier.fillMaxWidth())
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                androidx.compose.material3.OutlinedTextField(expr, { onExpr(it.filter { c -> c.isDigit() || c == '.' }) }, singleLine = true,
-                    label = { Text("別人的部分") }, modifier = Modifier.weight(1f),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
-            }
-            // 快速分法：對方負擔 1/2、1/3、1/4（幾人平分時他的那一份），或全部是他的；也可以直接輸入任何金額
-            if (total != null) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(2 to "1/2", 3 to "1/3", 4 to "1/4").forEach { (n, l) ->
-                    androidx.compose.material3.AssistChip({ onExpr(minorToExpr(total / n)) }, { Text(l, fontSize = AppText.caption) })
-                }
-                androidx.compose.material3.AssistChip({ onExpr(minorToExpr(total)) }, { Text("全部他的", fontSize = AppText.caption) })
-            }
-            val split = Calculator.evaluate(expr)?.abs()?.let(Money::toMinor)
-            if (total != null && split != null) Text(
-                if (split > total) "別人的部分不能超過總額"
-                else "自己的支出 ${Money.withSymbol(total - split, currency)}，對方欠你 ${Money.withSymbol(split, currency)}",
-                fontSize = AppText.caption, color = if (split > total) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (person == null) UnderlineField(newName, onNewName, if (people.isEmpty()) "輸入名字" else "或輸入新的名字")
         }
     }
+    // 快速分法：對方負擔 1/2、1/3、1/4（幾人平分時他的一份）或全部；也可直接輸入任何金額
+    val quick: @Composable () -> Unit = {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            listOf(2 to "1/2", 3 to "1/3", 4 to "1/4", 1 to "全部").forEach { (n, l) ->
+                Text(l, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { if (total != null) onExpr(minorToExpr(total / n)) }.padding(vertical = 6.dp))
+            }
+        }
+    }
+    FormRow("對方付", color, false, onClick = {}, trailing = if (total != null) quick else null) {
+        UnderlineField(expr, { onExpr(it.filter { c -> c.isDigit() || c == '.' }) }, "0", numeric = true)
+    }
+    if (total != null && split != null) Text(
+        if (split > total) "對方付的部分不能超過總額"
+        else "自己的支出 ${Money.withSymbol(total - split, currency)}，${who ?: "對方"}欠你 ${Money.withSymbol(split, currency)}",
+        fontSize = AppText.caption, color = if (split > total) MaterialTheme.colorScheme.error else muted,
+        modifier = Modifier.padding(start = 102.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+    )
 }
 
 
