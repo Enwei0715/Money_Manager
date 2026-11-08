@@ -73,15 +73,22 @@ class SummaryWidget : AppWidgetProvider() {
                 .map { (id, l) -> (categories[id]?.name ?: "未分類") to l.sumOf { fx.convert(it.amount, it.currency) } }
                 .sortedByDescending { it.second }
             val top = byCat.take(4) + listOfNotNull(byCat.drop(4).takeIf { it.isNotEmpty() }?.let { rest -> "其他" to rest.sumOf { it.second } })
-            val legend = top.joinToString("\n") { (name, v) ->
-                "● ${com.enwei.moneymanager.ui.tr(name)} ${if (expenseTotal > 0) v * 100 / expenseTotal else 0}%"
-            }.ifEmpty { "本月還沒有支出" }
+            // 圖例：前三名排成一行，圓點顏色和圓餅一樣（不會被小工具的高度截掉）
+            val legend: CharSequence = if (top.isEmpty()) com.enwei.moneymanager.ui.tr("本月還沒有支出") else android.text.SpannableStringBuilder().apply {
+                top.take(3).forEachIndexed { i, (name, v) ->
+                    if (i > 0) append("  ")
+                    val st = length
+                    append("●")
+                    setSpan(android.text.style.ForegroundColorSpan(palette[i % palette.size]), st, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    append(" ${com.enwei.moneymanager.ui.tr(name)} ${if (expenseTotal > 0) v * 100 / expenseTotal else 0}%")
+                }
+            }
             val cash = repo.accounts.first().firstOrNull { it.type == AccountType.CASH && !it.archived }
 
             val views = RemoteViews(context.packageName, R.layout.widget_summary).apply {
                 setTextViewText(R.id.widget_title, com.enwei.moneymanager.ui.tr("${month.monthValue} 月支出"))
                 setTextViewText(R.id.widget_expense, Money.withSymbol(expenseTotal, s.baseCurrency))
-                setTextViewText(R.id.widget_income, "收入 ${Money.withSymbol(incomeTotal, s.baseCurrency)}　結餘 ${Money.full(incomeTotal - expenseTotal)}")
+                setTextViewText(R.id.widget_income, com.enwei.moneymanager.ui.tr("收入") + " ${Money.withSymbol(incomeTotal, s.baseCurrency)}　" + com.enwei.moneymanager.ui.tr("結餘") + " ${Money.full(incomeTotal - expenseTotal)}")
                 setTextViewText(R.id.widget_legend, legend)
                 setImageViewBitmap(R.id.widget_pie, pie(top.map { it.second }))
                 setOnClickPendingIntent(R.id.widget_stats, open(context, 10, "stats"))
@@ -96,6 +103,8 @@ class SummaryWidget : AppWidgetProvider() {
                 setInt(R.id.widget_bg, "setImageAlpha", 255)
                 setTextColor(R.id.widget_legend, if (dark) 0xFFDDDDDD.toInt() else 0xFF444444.toInt())
                 setTextColor(R.id.widget_title, if (dark) 0xFFAAAAAA.toInt() else 0xFF8A8A8A.toInt())
+                val line = if (dark) 0x33FFFFFF else 0x22000000
+                listOf(R.id.widget_div_top, R.id.widget_div_1, R.id.widget_div_2).forEach { setInt(it, "setBackgroundColor", line) }
             }
             manager.updateAppWidget(ids, views)
         }
