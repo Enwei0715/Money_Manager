@@ -537,7 +537,7 @@ fun PickCard(
     val open = fold?.open ?: true
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val strengthColor = when { p.strength.contains("強") -> StockUp; p.strength.contains("弱") -> StockDown; else -> muted }
-    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             // 標題列：收起、展開都一樣，右邊的箭頭固定在同一個位置
             Row(Modifier.fillMaxWidth().clickable(enabled = fold != null) { fold?.toggle() }, verticalAlignment = Alignment.CenterVertically) {
@@ -939,7 +939,7 @@ private fun Bubble(
         Box {
             Surface(
                 color = if (m.fromUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius),
                 modifier = Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { menu = true }),
             ) {
                 // AI 回覆：結論＋重點條列（格式依「設定 → AI 語氣」）
@@ -963,7 +963,7 @@ private fun Bubble(
         }
         // 回覆附的圖表：用實際資料畫（走勢比較、題材熱度、持股損益）
         m.charts.forEach { ch ->
-            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.padding(top = 6.dp).fillMaxWidth()) {
+            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), modifier = Modifier.padding(top = 6.dp).fillMaxWidth()) {
                 Box(Modifier.padding(10.dp)) { ChatChartView(ch, nav) }
             }
         }
@@ -1012,7 +1012,7 @@ private fun JobProgress(
             }
         }
         // 一張小卡：階段進度條＋一行目前步驟（批次、已執行時間）
-        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PipelineSteps(step, refreshOnly = job?.refreshOnly == true)
                 Text(
@@ -1129,7 +1129,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
         // 精簡工具列（漸進式揭露）：重點／全部切換＋搜尋、篩選、更多三個圖示；搜尋框與篩選條件點了才展開
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
+            Row(Modifier.weight(1f).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).padding(3.dp)) {
                 listOf("重點", "全部" + (if (filteredOrNull != null) " ${filtered.size}" else "")).forEachIndexed { i, l ->
                     val sel = view == i
                     Box(
@@ -1165,7 +1165,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
             decorationBox = { inner ->
                 Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).padding(horizontal = 12.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.weight(1f)) {
@@ -1318,7 +1318,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("新聞資料集", fontSize = AppText.title, fontWeight = FontWeight.SemiBold)
                 // 自動更新：開關＋頻率
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(12.dp)) {
+                Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("自動更新與每日報告", fontSize = AppText.body, modifier = Modifier.weight(1f))
@@ -1341,7 +1341,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 val pct = stats.coverage?.let { c -> if (c.recent > 0) c.digested * 100 / c.recent else 0 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     @Composable fun tile(value: String, label: String, sub: String, done: Boolean = false) {
-                        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f)) {
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), modifier = Modifier.weight(1f)) {
                             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                                 Text(value, fontSize = AppText.title, fontWeight = FontWeight.SemiBold, color = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1)
                                 Text(label, fontSize = AppText.caption, maxLines = 1)

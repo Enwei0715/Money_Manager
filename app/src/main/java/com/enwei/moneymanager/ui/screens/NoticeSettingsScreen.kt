@@ -76,7 +76,7 @@ fun NoticeSettingsScreen(nav: NavController) {
             Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background).verticalScroll(rememberScrollState()).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (!systemOn) Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+            if (!systemOn) Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("系統已關閉帳理的通知", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
                     TextButton(onClick = {

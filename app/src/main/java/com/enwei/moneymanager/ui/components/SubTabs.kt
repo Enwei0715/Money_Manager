@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.sp
  */
 @Composable
 fun SubTabs(options: List<String>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) = com.enwei.moneymanager.ui.ChromeScale {
-    Row(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
+    Row(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).padding(3.dp)) {
         options.forEachIndexed { i, label ->
             val sel = i == selected
             Box(

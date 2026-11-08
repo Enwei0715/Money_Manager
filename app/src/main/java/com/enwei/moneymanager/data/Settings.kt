@@ -288,6 +288,12 @@ data class AppSettings(
     val themeMode: Int = 0,
     /** 介面縮放比例（整體文字、間距、圖示等比例） */
     val uiScale: Float = 1f,
+    /** 外觀：主題色組、字體、字體大小、圓角、數字等寬 */
+    val themePreset: String = "coral",
+    val fontChoice: Int = 0,
+    val textScale: Float = 1f,
+    val cornerStyle: Int = 0,
+    val tabularNums: Boolean = true,
     /** 舊版欄位；現行版本固定啟用子分類。 */
     val subcategoryOn: Boolean = true,
     /** 交易頁顯示「新增備註」按鈕 */
@@ -539,6 +545,11 @@ class SettingsStore(context: Context) {
         cashCounts = runCatching { json.decodeFromString(cashSerializer, prefs.getString("cashCounts", "{}")!!) }.getOrDefault(emptyMap()),
         themeMode = prefs.getInt("themeMode", 0),
         uiScale = prefs.getFloat("uiScale2", 1f),
+        themePreset = prefs.getString("themePreset", "coral")!!,
+        fontChoice = prefs.getInt("fontChoice", 0),
+        textScale = prefs.getFloat("textScale", 1f),
+        cornerStyle = prefs.getInt("cornerStyle", 0),
+        tabularNums = prefs.getBoolean("tabularNums", true),
         subcategoryOn = true,
         noteButton = prefs.getBoolean("noteButton", true),
         swipe = prefs.getInt("swipe", 0),
@@ -722,6 +733,11 @@ class SettingsStore(context: Context) {
             .putString("cashCounts", json.encodeToString(cashSerializer, s.cashCounts))
             .putInt("themeMode", s.themeMode)
             .putFloat("uiScale2", s.uiScale)
+            .putString("themePreset", s.themePreset)
+            .putInt("fontChoice", s.fontChoice)
+            .putFloat("textScale", s.textScale)
+            .putInt("cornerStyle", s.cornerStyle)
+            .putBoolean("tabularNums", s.tabularNums)
             .putBoolean("subcategoryOn", true)
             .putBoolean("noteButton", s.noteButton)
             .putInt("swipe", s.swipe)

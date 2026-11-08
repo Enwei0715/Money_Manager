@@ -244,7 +244,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 if (dtab == 0) Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         // 第一列：日 K／60 分 K（分段按鈕）；第二列：顯示區間
-                        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
+                        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).padding(3.dp)) {
                             // 60 分、日、週、月 K
                             listOf(Triple(true, 0, "60 分"), Triple(false, 0, "日 K"), Triple(false, 1, "週 K"), Triple(false, 2, "月 K")).forEach { (h, sp, l) ->
                                 val on = hourly == h && (h || span == sp)
@@ -351,7 +351,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                 Text("${d(from)}–${d(from + n - 1)}", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 mas.sorted().forEach { len ->
                                     Row(
-                                        Modifier.background(maColor(len).copy(alpha = 0.12f), RoundedCornerShape(12.dp)).clickable { mas = mas - len }
+                                        Modifier.background(maColor(len).copy(alpha = 0.12f), RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).clickable { mas = mas - len }
                                             .padding(horizontal = 8.dp, vertical = 3.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
@@ -360,10 +360,10 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                     }
                                 }
                                 Text(if (showBB) "布林 ✕" else "＋布林", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).clickable { showBB = !showBB }
+                                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).clickable { showBB = !showBB }
                                         .padding(horizontal = 8.dp, vertical = 3.dp))
                                 Text("＋均線", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(12.dp)).clickable { addMa = true }
+                                    modifier = Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).clickable { addMa = true }
                                         .padding(horizontal = 8.dp, vertical = 3.dp))
                             }
                             if (addMa) {
@@ -426,7 +426,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                 }
                             }
                             // 下方指標：分段按鈕
-                            Row(Modifier.fillMaxWidth().padding(top = 8.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
+                            Row(Modifier.fillMaxWidth().padding(top = 8.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).padding(3.dp)) {
                                 listOf("成交量", "RSI", "MACD", "KD").forEachIndexed { i, l ->
                                     val on = indicator == i
                                     Box(Modifier.weight(1f).background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))

@@ -133,8 +133,8 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     decorationBox = { inner ->
                         Row(
-                            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background, RoundedCornerShape(12.dp))
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius))
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(Icons.Outlined.Search, null)

@@ -130,7 +130,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                 val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
             }
-            MoneyTheme(dark = dark, uiScale = settings.uiScale) {
+            MoneyTheme(dark = dark, uiScale = settings.uiScale, preset = settings.themePreset, font = settings.fontChoice,
+                textScale = settings.textScale, corner = settings.cornerStyle, tabular = settings.tabularNums) {
                 if (locked.value && settings.passcodeOn) {
                     LockScreen(settings.passcodeHash, biometric = settings.biometric) { locked.value = false }
                 } else {
@@ -360,6 +361,7 @@ private fun AppScaffold(nav: NavHostController) {
                     runCatching { java.time.YearMonth.parse(e.arguments!!.getString("month")) }.getOrNull())
             }
             composable("budget") { BudgetScreen(nav) }
+            composable("appearance") { com.enwei.moneymanager.ui.screens.AppearanceScreen(nav) }
             composable("spendmap") { com.enwei.moneymanager.ui.screens.SpendMapScreen(nav) }
             composable("debts") { com.enwei.moneymanager.ui.screens.DebtsScreen(nav) }
             composable("config?g={g}", arguments = listOf(navArgument("g") { type = NavType.StringType; defaultValue = "" })) { e ->

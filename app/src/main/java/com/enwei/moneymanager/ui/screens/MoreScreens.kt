@@ -174,7 +174,7 @@ fun MoreScreen(nav: NavController) {
                 Text("可加入的工具", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 12.dp))
                 available.forEach { t ->
                     Row(
-                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
+                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius))
                             .clickable { setOrder(shown.map { it.id } + t.id) }.padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -196,7 +196,7 @@ private fun ToolTile(
     onOpen: () -> Unit, onLongPress: () -> Unit, onLeft: () -> Unit, onRight: () -> Unit, onToggleWide: () -> Unit, onHide: () -> Unit,
 ) {
     androidx.compose.material3.Surface(
-        shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), color = MaterialTheme.colorScheme.surface,
         border = if (editing) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)) else null,
         modifier = modifier.heightIn(min = 96.dp).combinedClickable(onClick = onOpen, onLongClick = onLongPress),
     ) {
@@ -412,7 +412,7 @@ fun NotificationSettingsScreen(nav: NavController) {
             }
             item {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(3.dp)) {
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).padding(3.dp)) {
                     listOf("紀錄", "來源 App", "進階").forEachIndexed { i, l ->
                         val on = tab == i
                         Box(Modifier.weight(1f).background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
@@ -437,7 +437,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                 // 小卡：App 名稱、偵測到幾則、最近一則的內容；可「啟用」或「忽略」（忽略後不再出現）
                 items(candidates, key = { "cand$it" }) { pkg ->
                     val notes = log.filter { it.packageName == pkg && it.result == "CANDIDATE" }
-                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(10.dp),
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp)) {
                         Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -640,7 +640,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         e.result == "OFFLINE" -> "等網路後判讀" to Color(0xFFFFA000)
                         else -> "未啟用來源" to MaterialTheme.colorScheme.onSurfaceVariant
                     }
-                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(10.dp),
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp).clickable {
                             when {
                                 !gone && e.txnId != null && (e.result == "RECORDED" || e.result == "MERGED") -> nav.navigate("txn/${e.txnId}")
@@ -1044,7 +1044,7 @@ fun SettingsScreen(nav: NavController) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(14.dp)) {
+                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)) {
                             Icon(androidx.compose.material.icons.Icons.Outlined.SystemUpdate, null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(12.dp).size(28.dp))
                         }

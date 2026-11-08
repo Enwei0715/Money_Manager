@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
 private val Blue = Color(0xFF3C82E6)
 private val Coral = Color(0xFFF0605A)
@@ -68,6 +69,77 @@ private val Dark = darkColorScheme(
     outlineVariant = Color(0xFF333333),
 )
 
+/**
+ * 主題色組：每組有淺色與深色兩套。
+ * 「墨」走建築作品集式的極簡：近黑主色、紙感米白底、細線分隔、低彩度。
+ */
+class ThemePreset(val key: String, val label: String, val swatch: Color, val light: androidx.compose.material3.ColorScheme, val dark: androidx.compose.material3.ColorScheme)
+
+private fun lightOf(primary: Color, container: Color, onContainer: Color, bg: Color, variant: Color, line: Color, muted: Color, secondary: Color = Color(0xFF3C82E6)) = lightColorScheme(
+    primary = primary, onPrimary = Color.White, primaryContainer = container, onPrimaryContainer = onContainer,
+    secondary = secondary, secondaryContainer = container.copy(alpha = 0.7f).compositeOver(Color.White), tertiary = muted, tertiaryContainer = Color(0xFFFFF2D6),
+    background = bg, surface = Color.White, surfaceVariant = variant, surfaceContainer = Color.White, surfaceContainerLow = Color.White,
+    surfaceContainerHigh = variant, onSurfaceVariant = muted, outlineVariant = line, outline = line.copy(alpha = 1f).compositeOver(muted.copy(alpha = 0.4f)),
+)
+private fun darkOf(primary: Color, onPrimary: Color, container: Color, bg: Color, surface: Color, variant: Color, line: Color, muted: Color, secondary: Color = Color(0xFF7FB0F5)) = darkColorScheme(
+    primary = primary, onPrimary = onPrimary, primaryContainer = container, secondary = secondary, secondaryContainer = container,
+    tertiaryContainer = Color(0xFF4A3B1A), background = bg, surface = surface, surfaceVariant = variant, surfaceContainer = surface,
+    surfaceContainerLow = surface, surfaceContainerHigh = variant, onSurfaceVariant = muted, outlineVariant = line,
+)
+private fun Color.compositeOver(bg: Color): Color = Color(
+    red = red * alpha + bg.red * (1 - alpha), green = green * alpha + bg.green * (1 - alpha), blue = blue * alpha + bg.blue * (1 - alpha), alpha = 1f,
+)
+
+object Themes {
+    val all = listOf(
+        ThemePreset("coral", "珊瑚", Color(0xFFF0605A), Light, Dark),
+        ThemePreset("mono", "墨", Color(0xFF1F1F1F),
+            lightOf(Color(0xFF1F1F1F), Color(0xFFECE9E3), Color(0xFF1F1F1F), Color(0xFFF5F3EF), Color(0xFFEFECE6), Color(0xFFE2DED6), Color(0xFF7D786E), Color(0xFF5B5B5B)),
+            darkOf(Color(0xFFEDEAE4), Color(0xFF141414), Color(0xFF2A2926), Color(0xFF0E0E0D), Color(0xFF171716), Color(0xFF222120), Color(0xFF2D2C29), Color(0xFF9B978E), Color(0xFFBDBAB3))),
+        ThemePreset("sage", "苔綠", Color(0xFF4F7A5E),
+            lightOf(Color(0xFF4F7A5E), Color(0xFFDCEBDF), Color(0xFF173822), Color(0xFFF3F5F1), Color(0xFFEBEFE8), Color(0xFFDDE3D9), Color(0xFF7A8578)),
+            darkOf(Color(0xFF8DBF9E), Color(0xFF0E2416), Color(0xFF1F3527), Color(0xFF0F120F), Color(0xFF181C18), Color(0xFF222822), Color(0xFF2C332C), Color(0xFF97A196))),
+        ThemePreset("navy", "深海", Color(0xFF2F5D8A),
+            lightOf(Color(0xFF2F5D8A), Color(0xFFDDE7F2), Color(0xFF0E2A45), Color(0xFFF3F5F8), Color(0xFFEAEEF3), Color(0xFFDCE2EA), Color(0xFF76808C), Color(0xFF5E7FA3)),
+            darkOf(Color(0xFF8FB4E0), Color(0xFF0B1E33), Color(0xFF1D2F45), Color(0xFF0D1015), Color(0xFF161B22), Color(0xFF1F252E), Color(0xFF2A313B), Color(0xFF939BA6))),
+        ThemePreset("sand", "暖砂", Color(0xFFB07A4F),
+            lightOf(Color(0xFFB07A4F), Color(0xFFF2E3D5), Color(0xFF4A2A12), Color(0xFFF7F3EE), Color(0xFFF0EAE2), Color(0xFFE5DCD1), Color(0xFF8A7E72)),
+            darkOf(Color(0xFFE0B48D), Color(0xFF3A220F), Color(0xFF3B2B1E), Color(0xFF12100E), Color(0xFF1C1916), Color(0xFF26221E), Color(0xFF332E28), Color(0xFFA39A90))),
+        ThemePreset("plum", "薰紫", Color(0xFF7A5C9E),
+            lightOf(Color(0xFF7A5C9E), Color(0xFFEAE1F4), Color(0xFF2E1A45), Color(0xFFF5F3F8), Color(0xFFEEEAF3), Color(0xFFE0DAE8), Color(0xFF83798F)),
+            darkOf(Color(0xFFC0A6E3), Color(0xFF26153A), Color(0xFF33264A), Color(0xFF110F14), Color(0xFF1A171E), Color(0xFF241F29), Color(0xFF2F2935), Color(0xFF9E96A8))),
+    )
+    fun of(key: String) = all.firstOrNull { it.key == key } ?: all.first()
+
+    /** 字體：0 系統、1 黑體、2 明體（襯線） */
+    val fonts = listOf("系統字體", "黑體", "明體")
+    fun family(i: Int): androidx.compose.ui.text.font.FontFamily? = when (i) {
+        1 -> androidx.compose.ui.text.font.FontFamily.SansSerif
+        2 -> androidx.compose.ui.text.font.FontFamily.Serif
+        else -> null
+    }
+    /** 圓角：0 圓潤、1 細緻、2 直角 */
+    val corners = listOf("圓潤", "細緻", "直角")
+    fun shapes(i: Int) = when (i) {
+        1 -> androidx.compose.material3.Shapes(
+            extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(2.dp), small = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+            medium = androidx.compose.foundation.shape.RoundedCornerShape(6.dp), large = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+            extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+        2 -> androidx.compose.material3.Shapes(
+            extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(0.dp), small = androidx.compose.foundation.shape.RoundedCornerShape(0.dp),
+            medium = androidx.compose.foundation.shape.RoundedCornerShape(0.dp), large = androidx.compose.foundation.shape.RoundedCornerShape(0.dp),
+            extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+        else -> androidx.compose.material3.Shapes()
+    }
+}
+
+/** 目前的外觀設定（給少數自己畫形狀的元件讀，例如圓角）。 */
+object AppearancePrefs {
+    var corner by mutableStateOf(0)
+    /** 卡片圓角（依圓角設定） */
+    val cardRadius get() = when (corner) { 1 -> 6.dp; 2 -> 0.dp; else -> 12.dp }
+}
+
 /** themeMode：0 跟隨系統、1 淺色、2 深色 */
 @Composable
 fun isDarkTheme(themeMode: Int): Boolean = when (themeMode) {
@@ -84,11 +156,40 @@ const val BASE_UI_SCALE = 0.93f
  * 不必逐一修改各元件的字級與間距。
  */
 @Composable
-fun MoneyTheme(dark: Boolean = isSystemInDarkTheme(), uiScale: Float = 1f, content: @Composable () -> Unit) {
+fun MoneyTheme(
+    dark: Boolean = isSystemInDarkTheme(), uiScale: Float = 1f,
+    /** 主題色組（Themes.all 的 key） */
+    preset: String = "coral",
+    /** 字體：0 系統、1 黑體、2 明體 */
+    font: Int = 0,
+    /** 字體大小（和介面大小分開，只放大文字） */
+    textScale: Float = 1f,
+    /** 圓角：0 圓潤、1 細緻、2 直角 */
+    corner: Int = 0,
+    /** 數字等寬（金額上下對齊） */
+    tabular: Boolean = true,
+    content: @Composable () -> Unit,
+) {
     val base = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale * BASE_UI_SCALE, base.fontScale.coerceIn(0.85f, 1.15f))) {
-        MaterialTheme(colorScheme = if (dark) Dark else Light, typography = AppTypography, content = content)
+    val p = Themes.of(preset)
+    AppearancePrefs.corner = corner
+    val typo = androidx.compose.runtime.remember(font, tabular) { typographyOf(Themes.family(font), tabular) }
+    CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale * BASE_UI_SCALE, base.fontScale.coerceIn(0.85f, 1.15f) * textScale)) {
+        MaterialTheme(colorScheme = if (dark) p.dark else p.light, typography = typo, shapes = Themes.shapes(corner), content = content)
     }
+}
+
+/** 套上字體與等寬數字後的字級表。 */
+private fun typographyOf(family: androidx.compose.ui.text.font.FontFamily?, tabular: Boolean): androidx.compose.material3.Typography {
+    fun androidx.compose.ui.text.TextStyle.f() = copy(fontFamily = family ?: fontFamily, fontFeatureSettings = if (tabular) "tnum" else null)
+    val t = AppTypography
+    return t.copy(
+        displayLarge = t.displayLarge.f(), displayMedium = t.displayMedium.f(), displaySmall = t.displaySmall.f(),
+        headlineLarge = t.headlineLarge.f(), headlineMedium = t.headlineMedium.f(), headlineSmall = t.headlineSmall.f(),
+        titleLarge = t.titleLarge.f(), titleMedium = t.titleMedium.f(), titleSmall = t.titleSmall.f(),
+        bodyLarge = t.bodyLarge.f(), bodyMedium = t.bodyMedium.f(), bodySmall = t.bodySmall.f(),
+        labelLarge = t.labelLarge.f(), labelMedium = t.labelMedium.f(), labelSmall = t.labelSmall.f(),
+    )
 }
 
 

@@ -100,7 +100,7 @@ fun UpdatePrompt() {
                 val list = sections.asReversed().let { if (showAll) it else it.take(3) }
                 Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     list.forEach { (title, lines) ->
-                        androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)) {
+                        androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = androidx.compose.foundation.shape.RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)) {
                             Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 if (title.isNotBlank()) Text(title, fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
                                 lines.forEach { l -> Text("• " + l.removePrefix("・").removePrefix("-").trim(), fontSize = AppText.caption, lineHeight = 17.sp) }

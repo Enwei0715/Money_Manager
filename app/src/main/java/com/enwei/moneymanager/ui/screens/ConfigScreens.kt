@@ -267,7 +267,8 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 cfg("即時匯率") { nav.navigate("fx") }
 
                 sec("外觀")
-                cfg("主題", listOf("跟隨系統", "淺色", "深色")[s.themeMode.coerceIn(0, 2)]) {
+                cfg("主題、字體與大小", com.enwei.moneymanager.ui.Themes.of(s.themePreset).label + "・" + com.enwei.moneymanager.ui.Themes.fonts[s.fontChoice.coerceIn(0, 2)]) { nav.navigate("appearance") }
+                cfg("明暗", listOf("跟隨系統", "淺色", "深色")[s.themeMode.coerceIn(0, 2)]) {
                     ask("主題", listOf(0 to "跟隨系統", 1 to "淺色", 2 to "深色"), s.themeMode) { v -> repo.settings.update { it.copy(themeMode = v) } }
                 }
                 cfg("語言", listOf("跟隨系統", "繁體中文", "English")[s.language.coerceIn(0, 2)]) {

@@ -171,7 +171,7 @@ fun ToolGrid(
                     .scale(if (isDrag) 1.05f else 1f),
             ) {
                 Surface(
-                    shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), color = MaterialTheme.colorScheme.surface,
                     border = if (editing) BorderStroke(if (selected == t.id) 2.dp else 1.dp, MaterialTheme.colorScheme.primary.copy(alpha = if (selected == t.id) 1f else 0.5f)) else null,
                     shadowElevation = if (isDrag) 8.dp else 0.dp,
                     modifier = Modifier.fillMaxSize()

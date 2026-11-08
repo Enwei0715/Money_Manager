@@ -120,7 +120,7 @@ fun SpendMapScreen(nav: NavController) {
             item {
                 if (spots.isEmpty()) Text("這段期間沒有可以標在地圖上的支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
-                else MapView(html, Modifier.fillMaxWidth().height(360.dp).padding(horizontal = 12.dp).clip(RoundedCornerShape(12.dp)))
+                else MapView(html, Modifier.fillMaxWidth().height(360.dp).padding(horizontal = 12.dp).clip(RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)))
             }
             // 沒有位置的店：用店名在 OpenStreetMap 找（每秒一家）
             val missing = unplaced.mapNotNull { it.merchant?.trim()?.takeIf { m -> m.isNotEmpty() && m !in geo } }.distinct()

@@ -491,7 +491,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     if (suggestions.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(start = 96.dp, end = 16.dp, top = 6.dp)) {
                         suggestions.forEach { s ->
                             Surface(
-                                shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), color = MaterialTheme.colorScheme.surfaceVariant,
                                 modifier = Modifier.padding(end = 6.dp).clickable {
                                     merchant = s.merchant!!
                                     if (categoryId == null) categoryId = s.categoryId
@@ -890,7 +890,7 @@ private fun SourceDialog(t: TxnEntity, onDismiss: () -> Unit) {
                 }
                 notes.forEach { n ->
                     val lines = n.lines().map { it.trim() }.filter { it.isNotBlank() }
-                    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(lines.firstOrNull().orEmpty(), fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
