@@ -154,7 +154,9 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
     val groupRank = st.groupOrder()
 
     // 帳戶頁只放一般帳戶；證券帳戶與股票資產在「股票」分頁另外計算
-    val visible = balances.filter { (showHidden || !it.account.archived) && it.account.type != AccountType.BROKERAGE }
+    // 借貸對象不放在帳戶清單，集中在「往來」
+    val visible = balances.filter { (showHidden || !it.account.archived) && it.account.type != AccountType.BROKERAGE && it.account.type != AccountType.LOAN }
+    val people = balances.filter { it.account.type == AccountType.LOAN && !it.account.archived }
         .sortedWith(compareBy({ it.account.sortOrder }, { it.account.id }))
     val counted = balances.filter { !it.account.archived && it.account.includeInNetWorth && it.account.type != AccountType.BROKERAGE }
     val assets = counted.filter { it.balance > 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
@@ -219,6 +221,30 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     listOf("資產" to (Money.full(assets) to IncomeColor), "負債" to (Money.full(debts) to ExpenseColor),
                         "合計" to (Money.full(assets - debts) to MaterialTheme.colorScheme.onSurface)),
                 )
+            }
+            // 往來：別人欠我、我欠別人（借貸與代墊），點進去看每個人
+            item(key = "debts") {
+                val owed = people.filter { it.balance > 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
+                val owe = -people.filter { it.balance < 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("debts") }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("往來", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            if (people.isEmpty()) "借貸與代墊" else "${people.count { it.balance != 0L }} 人未結清",
+                            fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (owed > 0) Text("別人欠我 ${Money.withSymbol(owed, lk.base)}", fontSize = AppText.secondary, color = IncomeColor)
+                        if (owe > 0) Text("我欠別人 ${Money.withSymbol(owe, lk.base)}", fontSize = AppText.secondary, color = ExpenseColor)
+                        if (owed == 0L && owe == 0L) Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
             // 借貸：7 天內要收付款、快到期或已逾期
             if (loanNotes.isNotEmpty()) item(key = "loanNotes") {

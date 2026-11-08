@@ -1222,7 +1222,7 @@ private fun LocationTest() {
                     val g = ph.fromHistory(ctx, loc, repo.transactions.first())
                     out += (g?.let { "過去紀錄：常在這裡記「${it.merchant}」" } ?: "過去紀錄：這附近還沒有") to (g != null)
                     val near = ph.nearbyPlace(loc)
-                    out += (near?.let { "附近店家（OpenStreetMap）：${it}" } ?: "附近店家：40 公尺內查不到") to (near != null)
+                    out += (near?.let { "附近店家（OpenStreetMap）：${it.name}" + (it.kind?.let { k -> "（$k）" } ?: "") } ?: "附近店家：50 公尺內查不到") to (near != null)
                 }
                 lines = out; running = false
             }

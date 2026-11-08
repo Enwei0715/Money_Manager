@@ -360,6 +360,7 @@ private fun AppScaffold(nav: NavHostController) {
                     runCatching { java.time.YearMonth.parse(e.arguments!!.getString("month")) }.getOrNull())
             }
             composable("budget") { BudgetScreen(nav) }
+            composable("debts") { com.enwei.moneymanager.ui.screens.DebtsScreen(nav) }
             composable("config?g={g}", arguments = listOf(navArgument("g") { type = NavType.StringType; defaultValue = "" })) { e ->
                 ConfigScreen(nav, e.arguments?.getString("g")?.takeIf { it.isNotBlank() })
             }
@@ -386,7 +387,7 @@ private fun AppScaffold(nav: NavHostController) {
                 )
             }
             composable(
-                "txn/{id}?type={type}&date={date}&account={account}&to={to}&amount={amount}",
+                "txn/{id}?type={type}&date={date}&account={account}&to={to}&amount={amount}&split={split}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.LongType },
                     navArgument("type") { type = NavType.StringType; nullable = true; defaultValue = null },
@@ -394,11 +395,12 @@ private fun AppScaffold(nav: NavHostController) {
                     navArgument("account") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("to") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("amount") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("split") { type = NavType.LongType; defaultValue = 0L },
                 ),
             ) { e ->
                 val a = e.arguments!!
                 TxnEditScreen(nav, a.getLong("id"), a.getString("type"), a.getLong("date").takeIf { it != Long.MIN_VALUE }, a.getLong("account").takeIf { it > 0 },
-                    a.getLong("to").takeIf { it > 0 }, a.getLong("amount").takeIf { it > 0 })
+                    a.getLong("to").takeIf { it > 0 }, a.getLong("amount").takeIf { it > 0 }, a.getLong("split").takeIf { it > 0 })
             }
             composable(
                 "account/{id}?type={type}",

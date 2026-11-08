@@ -128,6 +128,8 @@ private fun minorToExpr(minor: Long) = Money.fromMinor(minor).stripTrailingZeros
 @Composable
 fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpochDay: Long? = null, initialAccountId: Long? = null,
     initialToAccountId: Long? = null, initialAmount: Long? = null,
+    /** 從「往來」的「記代墊」進來：預先打開代墊並選好這個人 */
+    initialSplitPerson: Long? = null,
 ) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
@@ -149,6 +151,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var merchant by rememberSaveable { mutableStateOf("") }
     var note by rememberSaveable { mutableStateOf("") }
+    // 代墊／分帳：幫別人付的部分不算自己的支出，記成對方欠我
+    var splitOn by rememberSaveable { mutableStateOf(initialSplitPerson != null) }
+    var splitPerson by rememberSaveable { mutableStateOf(initialSplitPerson) }
+    var splitNewName by rememberSaveable { mutableStateOf("") }
+    var splitExpr by rememberSaveable { mutableStateOf("") }
     var date by rememberSaveable { mutableStateOf(initialEpochDay?.let(LocalDate::ofEpochDay) ?: LocalDate.now()) }
     var time by rememberSaveable { mutableStateOf(LocalTime.now().withSecond(0).withNano(0)) }
     var panel by rememberSaveable {
@@ -245,8 +252,22 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         )
     }
 
+    val splitMinor = if (splitOn && type == TxnType.EXPENSE) Calculator.evaluate(splitExpr)?.abs()?.let(Money::toMinor)?.takeIf { it > 0 } else null
+    val splitReady = splitMinor != null && amountMinor != null && splitMinor <= amountMinor && (splitPerson != null || splitNewName.isNotBlank())
+
     fun save(again: Boolean) {
         val t = build() ?: return
+        if (splitReady) {
+            scope.launch {
+                val person = splitPerson ?: repo.debtPerson(splitNewName)
+                repo.saveWithSplit(t, person, splitMinor!!)
+                if (again) {
+                    expr = ""; merchant = ""; note = ""; splitExpr = ""; splitOn = false
+                    snack.showSnackbar(com.enwei.moneymanager.ui.tr("已儲存，繼續記下一筆"))
+                } else nav.popBackStack()
+            }
+            return
+        }
         if (original == null) repo.settings.update { st ->
             st.copy(lastPicks = st.lastPicks + listOfNotNull(
                 t.accountId?.let { "txn.account" to it.toString() },
@@ -427,6 +448,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
                         PlaceholderText(lk.account(accountId)?.name, "")
                     }
+                    if (type == TxnType.EXPENSE && (original == null || original?.type == TxnType.EXPENSE)) SplitSection(
+                        splitOn, { splitOn = it; if (it && splitExpr.isBlank() && amountMinor != null) splitExpr = minorToExpr(amountMinor / 2) },
+                        splitPerson, { splitPerson = it; if (it != null) splitNewName = "" }, splitNewName, { splitNewName = it; splitPerson = null },
+                        splitExpr, { splitExpr = it }, amountMinor, currency, color,
+                    )
 
                 }
                 FormRow("內容", color, merchantFocused, onClick = {}) {
@@ -857,4 +883,50 @@ private fun SourceDialog(t: TxnEntity, onDismiss: () -> Unit) {
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
     )
+}
+
+
+/**
+ * 代墊／分帳：開啟後選「幫誰付」（往來對象或新名字）與別人的部分；
+ * 儲存時支出只記自己的部分，別人的部分記成對方欠我（收回時不算收入）。
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SplitSection(
+    on: Boolean, onToggle: (Boolean) -> Unit,
+    person: Long?, onPerson: (Long?) -> Unit, newName: String, onNewName: (String) -> Unit,
+    expr: String, onExpr: (String) -> Unit, total: Long?, currency: String, color: Color,
+) {
+    val lk = rememberLookups()
+    val people = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN && !it.archived }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("代墊／分帳", fontSize = AppText.body, modifier = Modifier.weight(1f))
+            androidx.compose.material3.Switch(on, onToggle)
+        }
+        if (on) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                people.forEach { p ->
+                    androidx.compose.material3.FilterChip(person == p.id, { onPerson(if (person == p.id) null else p.id) }, label = { Text(p.name, fontSize = AppText.caption) })
+                }
+            }
+            if (person == null) androidx.compose.material3.OutlinedTextField(newName, onNewName, singleLine = true,
+                label = { Text(if (people.isEmpty()) "幫誰付" else "或輸入新的名字") }, modifier = Modifier.fillMaxWidth())
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                androidx.compose.material3.OutlinedTextField(expr, { onExpr(it.filter { c -> c.isDigit() || c == '.' }) }, singleLine = true,
+                    label = { Text("別人的部分") }, modifier = Modifier.weight(1f),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+                if (total != null) {
+                    androidx.compose.material3.AssistChip({ onExpr(minorToExpr(total / 2)) }, { Text("一半", fontSize = AppText.caption) })
+                    androidx.compose.material3.AssistChip({ onExpr(minorToExpr(total)) }, { Text("全部", fontSize = AppText.caption) })
+                }
+            }
+            val split = Calculator.evaluate(expr)?.abs()?.let(Money::toMinor)
+            if (total != null && split != null) Text(
+                if (split > total) "別人的部分不能超過總額"
+                else "自己的支出 ${Money.withSymbol(total - split, currency)}，對方欠你 ${Money.withSymbol(split, currency)}",
+                fontSize = AppText.caption, color = if (split > total) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }

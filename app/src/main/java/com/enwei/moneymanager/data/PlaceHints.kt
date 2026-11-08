@@ -22,7 +22,10 @@ object PlaceHints {
     @Serializable
     data class Sample(val txnId: Long, val lat: Double, val lon: Double, val at: Long)
 
-    data class Guess(val merchant: String, val categoryId: Long?, val fromHistory: Boolean)
+    data class Guess(val merchant: String, val categoryId: Long?, val fromHistory: Boolean, val kind: String? = null)
+
+    /** 附近的店：名稱與 OpenStreetMap 類型（restaurant、convenience…，推測分類用）。 */
+    data class Place(val name: String, val kind: String?)
 
     private const val RADIUS_M = 80f
     private const val MAX_SAMPLES = 3000
@@ -32,9 +35,13 @@ object PlaceHints {
     @Volatile private var cache: List<Sample>? = null
 
     /** 上一次讀通知時推測的結果或沒推測的原因（地點測試顯示用）。 */
-    @Volatile var lastResult: String = ""
-        private set
-    fun note(msg: String) { lastResult = java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date()) + "　" + msg }
+    private val prefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("place_hints", Context.MODE_PRIVATE) }
+    /** 上一次讀通知時推測的結果或沒推測的原因（存起來，App 重開後地點測試仍看得到）。 */
+    val lastResult: String get() = runCatching { prefs.getString("last", "") }.getOrNull().orEmpty()
+    fun note(msg: String) {
+        val line = java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date()) + "　" + msg
+        runCatching { prefs.edit().putString("last", line).apply() }
+    }
 
     /** 已記下的位置筆數。 */
     fun sampleCount(ctx: Context): Int = load(ctx).size
@@ -51,28 +58,34 @@ object PlaceHints {
     fun hasBackground(ctx: Context): Boolean = android.os.Build.VERSION.SDK_INT < 29 ||
         ctx.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-    /** 手機目前的位置：先用 15 分鐘內的最後位置，太舊就等一次新的定位（最多 6 秒）。 */
+    /**
+     * 手機目前的位置：15 分鐘內的最後位置先用；太舊就依序向 fused、網路、GPS 要一次新的定位（共約 12 秒）；
+     * 都拿不到時退回 45 分鐘內的最後位置。
+     */
     suspend fun current(ctx: Context): Location? {
         if (!hasPermission(ctx)) return null
         val lm = ctx.getSystemService(LocationManager::class.java) ?: return null
         val now = System.currentTimeMillis()
-        val providers = listOf("fused", LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)
-            .filter { runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) || it == LocationManager.PASSIVE_PROVIDER }
-        val last = providers.mapNotNull { p -> runCatching { lm.getLastKnownLocation(p) }.getOrNull() }
-            .filter { now - it.time <= 15 * 60_000L && it.accuracy <= 300f }
-            .minByOrNull { it.accuracy + (now - it.time) / 10_000f }
-        if (last != null) return last
-        if (android.os.Build.VERSION.SDK_INT < 30) return null
-        val provider = providers.firstOrNull { it != LocationManager.PASSIVE_PROVIDER } ?: return null
-        return kotlinx.coroutines.withTimeoutOrNull(6_000) {
-            kotlinx.coroutines.suspendCancellableCoroutine<Location?> { cont ->
-                val cancel = android.os.CancellationSignal()
-                cont.invokeOnCancellation { cancel.cancel() }
-                runCatching {
-                    lm.getCurrentLocation(provider, cancel, ctx.mainExecutor) { loc -> if (cont.isActive) cont.resume(loc) }
-                }.onFailure { if (cont.isActive) cont.resume(null) }
+        val providers = listOf("fused", LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER, LocationManager.PASSIVE_PROVIDER)
+            .filter { runCatching { lm.allProviders.contains(it) && (it == LocationManager.PASSIVE_PROVIDER || lm.isProviderEnabled(it)) }.getOrDefault(false) }
+        val known = providers.mapNotNull { p -> runCatching { lm.getLastKnownLocation(p) }.getOrNull() }.filter { it.accuracy <= 300f }
+        fun best(maxAge: Long) = known.filter { now - it.time <= maxAge }.minByOrNull { it.accuracy + (now - it.time) / 10_000f }
+        best(15 * 60_000L)?.let { return it }
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            for ((i, provider) in providers.filter { it != LocationManager.PASSIVE_PROVIDER }.withIndex()) {
+                val loc = kotlinx.coroutines.withTimeoutOrNull(if (i == 0) 6_000L else 4_000L) {
+                    kotlinx.coroutines.suspendCancellableCoroutine<Location?> { cont ->
+                        val cancel = android.os.CancellationSignal()
+                        cont.invokeOnCancellation { cancel.cancel() }
+                        runCatching {
+                            lm.getCurrentLocation(provider, cancel, ctx.mainExecutor) { l -> if (cont.isActive) cont.resume(l) }
+                        }.onFailure { if (cont.isActive) cont.resume(null) }
+                    }
+                }
+                if (loc != null && loc.accuracy <= 300f) return loc
             }
         }
+        return best(45 * 60_000L)
     }
 
     /** 記下這筆交易的位置。 */
@@ -106,26 +119,68 @@ object PlaceHints {
         return Guess(best.key, cat, true)
     }
 
-    /** 沒有紀錄時：OpenStreetMap 上 40 公尺內最近的店家或餐廳（查不到回傳 null）。 */
-    suspend fun nearbyPlace(loc: Location): String? = withContext(Dispatchers.IO) {
-        val q = "[out:json][timeout:5];(node(around:40,${loc.latitude},${loc.longitude})[name][~\"^(shop|amenity)$\"~\".\"];" +
-            "way(around:40,${loc.latitude},${loc.longitude})[name][~\"^(shop|amenity)$\"~\".\"];);out center 20;"
-        runCatching {
-            val root = com.enwei.moneymanager.net.Http.getJson("https://overpass-api.de/api/interpreter?data=" + java.net.URLEncoder.encode(q, "UTF-8"), quick = true)
-            val els = (root as? kotlinx.serialization.json.JsonObject)?.get("elements") as? kotlinx.serialization.json.JsonArray ?: return@runCatching null
-            els.mapNotNull { e ->
-                val o = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
-                fun num(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
-                    ?: ((o["center"] as? kotlinx.serialization.json.JsonObject)?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
-                val tags = o["tags"] as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
-                val name = ((tags["name:zh"] ?: tags["name"]) as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return@mapNotNull null
-                // 停車場、ATM、廁所這類不是消費的地點不算
-                val kind = (tags["amenity"] as? kotlinx.serialization.json.JsonPrimitive)?.content
-                if (kind in setOf("parking", "atm", "toilets", "bench", "bicycle_parking", "waste_basket", "post_box", "bank")) return@mapNotNull null
-                val lat = num("lat") ?: return@mapNotNull null
-                val lon = num("lon") ?: return@mapNotNull null
-                name to dist(loc.latitude, loc.longitude, lat, lon)
-            }.minByOrNull { it.second }?.takeIf { it.second <= 40f }?.first
-        }.getOrNull()
+    private const val UA = "Ledgerly/2.1 (Android personal finance app)"
+
+    /**
+     * 沒有紀錄時查附近的店：先用 Nominatim 反查這個座標上的店家（快），查不到再用 Overpass 找 50 公尺內最近的
+     * 店家、餐廳（較慢，最多等 15 秒）。查不到回傳 null。
+     */
+    suspend fun nearbyPlace(loc: Location): Place? = withContext(Dispatchers.IO) {
+        reverse(loc) ?: overpass(loc)
+    }
+
+    private val spendKeys = setOf("shop", "amenity", "tourism", "leisure", "craft")
+    private val notSpend = setOf("parking", "parking_space", "atm", "toilets", "bench", "bicycle_parking", "waste_basket", "post_box",
+        "bank", "school", "university", "place_of_worship", "police", "townhall", "shelter", "drinking_water", "vending_machine", "motorcycle_parking")
+
+    private suspend fun reverse(loc: Location): Place? = runCatching {
+        val url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&namedetails=1&accept-language=zh-TW&lat=${loc.latitude}&lon=${loc.longitude}"
+        val o = com.enwei.moneymanager.net.Http.getJson(url, mapOf("User-Agent" to UA)) as? kotlinx.serialization.json.JsonObject ?: return@runCatching null
+        fun str(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        val cat = str("category") ?: return@runCatching null
+        val type = str("type")
+        if (cat !in spendKeys || type in notSpend) return@runCatching null
+        val name = str("name")?.takeIf { it.isNotBlank() } ?: return@runCatching null
+        val lat = str("lat")?.toDoubleOrNull() ?: return@runCatching null
+        val lon = str("lon")?.toDoubleOrNull() ?: return@runCatching null
+        if (dist(loc.latitude, loc.longitude, lat, lon) > 60f + loc.accuracy.coerceAtMost(60f)) null else Place(name, type)
+    }.getOrNull()
+
+    private suspend fun overpass(loc: Location): Place? = runCatching {
+        val r = 50
+        val q = "[out:json][timeout:12];(" +
+            "node(around:$r,${loc.latitude},${loc.longitude})[name][shop];" +
+            "node(around:$r,${loc.latitude},${loc.longitude})[name][amenity];" +
+            "way(around:$r,${loc.latitude},${loc.longitude})[name][shop];" +
+            "way(around:$r,${loc.latitude},${loc.longitude})[name][amenity];" +
+            ");out center 30;"
+        val body = com.enwei.moneymanager.net.Http.getJson("https://overpass-api.de/api/interpreter?data=" + java.net.URLEncoder.encode(q, "UTF-8"), mapOf("User-Agent" to UA))
+        val els = (body as? kotlinx.serialization.json.JsonObject)?.get("elements") as? kotlinx.serialization.json.JsonArray ?: return@runCatching null
+        els.mapNotNull { e ->
+            val o = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+            fun num(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                ?: ((o["center"] as? kotlinx.serialization.json.JsonObject)?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+            val tags = o["tags"] as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+            fun tag(k: String) = (tags[k] as? kotlinx.serialization.json.JsonPrimitive)?.content
+            val name = tag("name:zh") ?: tag("name") ?: return@mapNotNull null
+            val kind = tag("amenity") ?: tag("shop")
+            if (kind in notSpend) return@mapNotNull null
+            val lat = num("lat") ?: return@mapNotNull null
+            val lon = num("lon") ?: return@mapNotNull null
+            Triple(name, kind, dist(loc.latitude, loc.longitude, lat, lon))
+        }.minByOrNull { it.third }?.takeIf { it.third <= r + loc.accuracy.coerceAtMost(40f) }?.let { Place(it.first, it.second) }
+    }.getOrNull()
+
+    /** OpenStreetMap 類型 → 分類名稱關鍵字（在使用者的分類裡找名稱含這些字的）。 */
+    fun categoryWords(kind: String?): List<String> = when (kind) {
+        "restaurant", "fast_food", "cafe", "food_court", "bakery", "ice_cream", "bar", "pub", "biergarten", "deli", "confectionery", "beverages", "tea", "coffee" ->
+            listOf("飲食", "餐", "食")
+        "convenience", "supermarket", "department_store", "mall", "variety_store", "general" -> listOf("日用", "購物", "超市", "生活")
+        "clothes", "shoes", "electronics", "mobile_phone", "books", "gift", "sports", "cosmetics", "jewelry", "furniture", "toys", "stationery" -> listOf("購物", "服飾", "3C")
+        "fuel", "charging_station", "car_wash", "car_repair", "bicycle_rental" -> listOf("交通", "加油", "汽機車")
+        "pharmacy", "chemist", "clinic", "doctors", "dentist", "hospital", "optician" -> listOf("醫療", "藥", "保健")
+        "cinema", "theatre", "karaoke", "amusement_arcade", "fitness_centre", "sports_centre" -> listOf("娛樂", "休閒", "運動")
+        "hairdresser", "beauty" -> listOf("美容", "美髮", "個人")
+        else -> emptyList()
     }
 }

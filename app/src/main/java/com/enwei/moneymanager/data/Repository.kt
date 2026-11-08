@@ -514,6 +514,60 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return if (a.id == 0L) r else a.id
     }
 
+    /**
+     * 往來對象（借貸、代墊都記在這個人身上）：底層是一個「借貸」帳戶，餘額為正＝對方欠我、負＝我欠對方。
+     * 同名的已存在就沿用。
+     */
+    suspend fun debtPerson(name: String): Long {
+        val n = name.trim()
+        db.accounts().all().firstOrNull { a ->
+            a.type == AccountType.LOAN && !a.archived && (a.name == n || settings.value.loans[a.id]?.counterparty == n)
+        }?.let { return it.id }
+        val id = saveAccount(AccountEntity(name = n, type = AccountType.LOAN, currency = settings.value.baseCurrency))
+        settings.update { it.copy(loans = it.loans + (id to LoanInfo(counterparty = n, lent = true))) }
+        return id
+    }
+
+    /**
+     * 代墊／分帳：一筆消費裡 [split] 是幫 [personId] 付的。支出只記自己的部分（統計不會多算），
+     * 別人的部分記成轉到這個人的「應收」（之後收回時是轉帳，不算收入）。自己的部分是 0 時整筆都是代墊。
+     */
+    suspend fun saveWithSplit(t: TxnEntity, personId: Long, split: Long): Long {
+        val share = (t.amount - split).coerceAtLeast(0)
+        val who = db.accounts().get(personId)?.name.orEmpty()
+        val label = listOfNotNull("代墊", t.merchant?.takeIf { it.isNotBlank() }).joinToString("：")
+        return if (share == 0L) {
+            saveTxn(t.copy(type = TxnType.TRANSFER, toAccountId = personId, categoryId = null, merchant = label,
+                note = listOfNotNull(t.note, "幫 $who 付").joinToString(" · ")))
+        } else {
+            val id = saveTxn(t.copy(amount = share, note = listOfNotNull(t.note, "共 ${Money.format(t.amount, t.currency)}，代墊 $who ${Money.format(split, t.currency)}").joinToString(" · ")))
+            db.txns().insert(TxnEntity(
+                type = TxnType.TRANSFER, amount = split, currency = t.currency, accountId = t.accountId, toAccountId = personId,
+                merchant = label, note = "幫 $who 付", date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
+            ))
+            id
+        }
+    }
+
+    /** 收付款通知對得到哪個往來對象：通知裡有對方名字（確定），或入帳金額等於他欠的整筆／某一筆（不確定）。 */
+    private suspend fun debtMatch(raw: String, amount: Long, income: Boolean, at: Long): Pair<AccountEntity, Boolean>? {
+        val people = db.accounts().all().filter { it.type == AccountType.LOAN && !it.archived }
+        if (people.isEmpty()) return null
+        val bal = balances.first().associate { it.account.id to it.balance }
+        fun names(a: AccountEntity) = listOfNotNull(a.name, settings.value.loans[a.id]?.counterparty).map { it.trim() }.filter { it.length >= 2 }
+        val open = people.filter { a -> val b = bal[a.id] ?: 0; if (income) b > 0 && amount <= b else b < 0 && amount <= -b }
+        open.firstOrNull { a -> names(a).any { raw.contains(it) } }?.let { return it to true }
+        if (!income) return null
+        val since = at - 180L * 86_400_000
+        val txns = db.txns().all()
+        return open.filter { a ->
+            bal[a.id] == amount || txns.any { it.type == TxnType.TRANSFER && it.toAccountId == a.id && it.amount == amount && it.date >= since }
+        }.singleOrNull()?.let { it to false }
+    }
+
+    /** 往來對象的摘要：對方欠我、我欠對方的合計（基準幣別）。 */
+    data class DebtSummary(val owedToMe: Long, val iOwe: Long, val people: Int)
+
     suspend fun deleteAccount(a: AccountEntity) {
         db.withTransaction {
             db.txns().detachAccount(a.id)
@@ -1106,6 +1160,21 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             date = occurred, source = TxnSource.NOTIFICATION, status = status, externalKey = key, rawText = raw,
         )
 
+        // 往來：入帳通知寫了欠我錢的人的名字，或金額剛好等於他欠的（整筆或某一筆代墊／借出）→ 記成他還款（轉帳，不算收入）；
+        // 付款通知寫了我欠的人的名字 → 記成我還款（不算支出）。只靠金額對到的放「待確認」。
+        if (p.kind == ParsedKind.NORMAL || p.kind == ParsedKind.TRANSFER_IN || p.kind == ParsedKind.TRANSFER_OUT) {
+            val inc = p.type == ParsedType.INCOME
+            debtMatch(raw0, p.amountMinor, inc, occurred)?.let { (person, named) ->
+                val sure = named && account != null && status == TxnStatus.CONFIRMED
+                val t = base.copy(
+                    type = TxnType.TRANSFER, accountId = if (inc) person.id else account?.id, toAccountId = if (inc) account?.id else person.id,
+                    merchant = "${person.name} ${if (inc) "還款" else "我還款"}", status = if (sure) TxnStatus.CONFIRMED else TxnStatus.PENDING,
+                )
+                return insert(t, "RECORDED", "${if (inc) "${person.name} 還款" else "還給 ${person.name}"} $amountText（往來，不算${if (inc) "收入" else "支出"}）" +
+                    if (sure) "" else "，請確認")
+            }
+        }
+
         when (p.kind) {
             ParsedKind.WITHDRAWAL -> {
                 val cash = accounts.firstOrNull { it.type == AccountType.CASH }
@@ -1264,16 +1333,21 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             here == null -> PlaceHints.note("${merchant ?: amountText}：拿不到目前位置（定位關閉或訊號不足）")
         }
         if (here != null) {
-            val weak = merchant.isNullOrBlank() || CategoryGuesser.isGenericMerchant(merchant) || weakMerchant(merchant)
+            // 店名是 AI 自己編的（通知裡根本沒有這幾個字，例如只有金額的通知被填成「消費」「Payment」）也當成沒有店名
+            fun norm(t: String) = t.replace(Regex("\\s"), "").lowercase()
+            val invented = merchant != null && aiParsed && !norm(raw).contains(norm(merchant!!))
+            val weak = invented || merchant.isNullOrBlank() || CategoryGuesser.isGenericMerchant(merchant) || weakMerchant(merchant)
+            // 分類是 AI 依那個編出來的店名猜的：位置推測可以蓋過
+            val catGuessed = categoryId == null || (weak && aiNote.contains("分類由 AI 推測"))
             if (weak || categoryId == null) {
                 val g = PlaceHints.fromHistory(appCtx, here, db.txns().all())
-                    ?: if (weak) PlaceHints.nearbyPlace(here)?.let { PlaceHints.Guess(it, null, false) } else null
+                    ?: if (weak) PlaceHints.nearbyPlace(here)?.let { pl -> PlaceHints.Guess(pl.name, placeCategory(pl.kind), false, pl.kind) } else null
                 if (g != null) {
                     if (weak) merchant = g.merchant
-                    if (categoryId == null) categoryId = g.categoryId ?: suggestCategory(g.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId
+                    if (catGuessed) categoryId = g.categoryId ?: suggestCategory(g.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId ?: categoryId
                     aiNote += if (g.fromHistory) "（依位置：常在這裡記「${g.merchant}」）" else "（依位置推測：附近的「${g.merchant}」）"
                     PlaceHints.note("$amountText → 「${g.merchant}」" + if (g.fromHistory) "（過去紀錄）" else "（附近店家）")
-                } else PlaceHints.note("$amountText：附近沒有過去紀錄，也查不到 40 公尺內的店家（已記下位置，改好店家後下次就會用）")
+                } else PlaceHints.note("$amountText：這附近沒有過去紀錄，OpenStreetMap 也查不到 50 公尺內的店（已記下位置，補上店家後下次就會用）")
             } else PlaceHints.note("${merchant}：通知已有店家與分類，不需要推測（已記下位置）")
         }
         // 不確定的一律放「待確認」：分類填不出來、單邊的轉入／轉出（可能是自己帳戶間的轉帳，不一定是真正的收支）、
@@ -1327,6 +1401,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     )
 
     /** 商家名稱有沒有參考價值：空白、支付工具名稱、代碼都算沒有。 */
+    /** 附近店家的 OpenStreetMap 類型 → 使用者的支出分類（名稱含對應關鍵字的第一個）。 */
+    private suspend fun placeCategory(kind: String?): Long? {
+        val words = PlaceHints.categoryWords(kind).ifEmpty { return null }
+        val cats = db.categories().all().filter { it.kind == TxnType.EXPENSE && !it.archived }
+        return words.firstNotNullOfOrNull { w -> cats.firstOrNull { it.name.contains(w) }?.id }
+    }
+
     private fun weakMerchant(m: String?): Boolean = m.isNullOrBlank() || CategoryGuesser.isGenericMerchant(m) || looksRaw(m) ||
         m in setOf("轉出", "轉入", "儲值", "電支儲值", "提款")
 
