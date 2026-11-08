@@ -236,6 +236,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
         else LazyColumn(Modifier.fillMaxSize()) {
             item {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                val isLoan = acc?.type == AccountType.LOAN
                 SummaryBarCustom(
                     listOf("資產" to (Money.full(assets) to IncomeColor), "負債" to (Money.full(debts) to ExpenseColor),
                         "合計" to (Money.full(assets - debts) to MaterialTheme.colorScheme.onSurface)),
@@ -562,10 +563,12 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 SummaryBarCustom(
                     listOf(
-                        "存入" to (Money.full(deposit) to IncomeColor),
-                        "提出" to (Money.full(withdrawal) to ExpenseColor),
-                        "合計" to (Money.full(deposit - withdrawal) to MaterialTheme.colorScheme.onSurface),
-                        "餘額" to (Money.full(endBalance) to balanceColor(endBalance, MaterialTheme.colorScheme.onSurface)),
+                        // 往來對象：用借出、收回的說法；其他帳戶用存入、提出
+                        (if (isLoan) "借出" else "存入") to (Money.full(deposit) to IncomeColor),
+                        (if (isLoan) "收回" else "提出") to (Money.full(withdrawal) to ExpenseColor),
+                        (if (isLoan) "期間淨額" else "合計") to (Money.full(deposit - withdrawal) to MaterialTheme.colorScheme.onSurface),
+                        (if (isLoan) (if (endBalance >= 0) "對方欠你" else "你欠對方") else "餘額") to
+                            (Money.full(if (isLoan) kotlin.math.abs(endBalance) else endBalance) to balanceColor(endBalance, MaterialTheme.colorScheme.onSurface)),
                     ),
                 )
             }

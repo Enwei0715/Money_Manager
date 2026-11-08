@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import androidx.compose.ui.draw.drawBehind
 import com.enwei.moneymanager.ui.AppText
 
 import androidx.compose.foundation.BorderStroke
@@ -147,11 +148,12 @@ fun ToolGrid(
         val gapPx = with(density) { gap.toPx() }
         val line = MaterialTheme.colorScheme.outlineVariant
         // 編輯時的實際格線
+        val gridRadius = with(androidx.compose.ui.platform.LocalDensity.current) { com.enwei.moneymanager.ui.AppearancePrefs.cardRadius.toPx() }
         if (editing) Canvas(Modifier.fillMaxSize()) {
             for (r in 0 until rows) for (c in 0 until GRID_COLS) {
+                // 編輯時的格線：很淡的實心底，不用虛線（看起來比較整齊）
                 drawRoundRect(
-                    line, Offset(c * (cellPx + gapPx), r * (rowPx + gapPx)), Size(cellPx, rowPx), CornerRadius(28f, 28f),
-                    style = Stroke(2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))),
+                    line.copy(alpha = 0.18f), Offset(c * (cellPx + gapPx), r * (rowPx + gapPx)), Size(cellPx, rowPx), CornerRadius(gridRadius, gridRadius),
                 )
             }
         }
@@ -172,7 +174,8 @@ fun ToolGrid(
             ) {
                 Surface(
                     shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), color = MaterialTheme.colorScheme.surface,
-                    border = if (editing) BorderStroke(if (selected == t.id) 2.dp else 1.dp, MaterialTheme.colorScheme.primary.copy(alpha = if (selected == t.id) 1f else 0.5f)) else null,
+                    border = if (editing) BorderStroke(if (selected == t.id) 1.5.dp else 1.dp,
+                        if (selected == t.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)) else null,
                     shadowElevation = if (isDrag) 8.dp else 0.dp,
                     modifier = Modifier.fillMaxSize()
                         .then(
@@ -198,17 +201,28 @@ fun ToolGrid(
                         ),
                 ) { TileContent(t, w, h, summary[t.id]) }
                 if (editing) {
-                    // 左上角移除
+                    // 右上角移除：格子裡面的小圓，細線「－」，不壓到外框
                     Box(
-                        Modifier.align(Alignment.TopStart).offset((-6).dp, (-6).dp).size(22.dp)
-                            .background(MaterialTheme.colorScheme.error, CircleShape).clickable { onRemove(t.id) },
+                        Modifier.align(Alignment.TopEnd).padding(6.dp).size(24.dp)
+                            .background(MaterialTheme.colorScheme.surface, CircleShape)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            .clickable { onRemove(t.id) },
                         contentAlignment = Alignment.Center,
-                    ) { Text("✕", fontSize = AppText.label, color = MaterialTheme.colorScheme.onError) }
+                    ) {
+                        val c = MaterialTheme.colorScheme.onSurfaceVariant
+                        Canvas(Modifier.size(10.dp)) { drawLine(c, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1.4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round) }
+                    }
                     // 右下角把手：拖動改大小
+                    // 右下角把手：格子內側一個細線直角，拖動改大小（觸控範圍比看到的大）
+                    val handle = MaterialTheme.colorScheme.primary
                     Box(
-                        Modifier.align(Alignment.BottomEnd).offset(4.dp, 4.dp).size(24.dp)
-                            .background(MaterialTheme.colorScheme.primary, CircleShape)
-                            .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                        Modifier.align(Alignment.BottomEnd).size(32.dp)
+                            .drawBehind {
+                                val m = 8.dp.toPx(); val l = 10.dp.toPx(); val w = 1.6.dp.toPx()
+                                val ex = size.width - m; val ey = size.height - m
+                                drawLine(handle, Offset(ex - l, ey), Offset(ex, ey), w, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                                drawLine(handle, Offset(ex, ey - l), Offset(ex, ey), w, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                            }
                             .pointerInput(t.id, p) {
                                 detectDragGestures(
                                     onDragStart = { resizeId = t.id; resize = Offset.Zero; selected = t.id },
@@ -222,8 +236,7 @@ fun ToolGrid(
                                     onDragCancel = { resizeId = null; resize = Offset.Zero },
                                 )
                             },
-                        contentAlignment = Alignment.Center,
-                    ) { Text("⤡", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onPrimary) }
+                    )
                 }
             }
         }
