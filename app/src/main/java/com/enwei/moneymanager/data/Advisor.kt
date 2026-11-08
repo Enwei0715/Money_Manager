@@ -609,6 +609,18 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
     runCatching { com.enwei.moneymanager.net.TwData.stockList(com.enwei.moneymanager.MoneyApp.instance) }
     val limit = com.enwei.moneymanager.net.GroqAi.chatContextLimit()
     val holdSyms = snap.holdings.map { it.symbol }.toSet()
+    // 0. 規劃與查資料：AI 判斷要查什麼（全市場篩選、估值、營收、法人、類股、個股、自己的支出），App 實際去查
+    onStep("判斷要查哪些資料…")
+    val history0 = st.chat.takeLast(6).map { it.fromUser to it.text }
+    val plan = runCatching { com.enwei.moneymanager.net.GroqAi.planTools(question, history0) }.getOrDefault(emptyList())
+        .ifEmpty { AdvisorTools.fallbackPlan(question) }
+    val toolResults = plan.mapNotNull { c ->
+        onStep("查資料：" + when (c.tool) { "screen" -> "全市場篩選"; "valuation" -> "本益比與殖利率"; "revenue" -> "月營收"; "institutional" -> "法人買賣超"
+            "sectors" -> "類股漲跌"; "stock" -> "個股 ${c.args["symbol"].orEmpty()}"; "spending" -> "你的記帳"; else -> c.tool } + "…")
+        AdvisorTools.run(c, this)
+    }
+    val toolText = if (toolResults.isEmpty()) "" else ("App 實際查到的資料（回答時以這些數字為準；要列出股票時只能從這裡挑，不可以自己編代號或價格）：\n" +
+        toolResults.joinToString("\n") { it.text }).take((limit * if (big) 0.5 else 0.55).toInt())
     // 1. 搜尋：依代號、公司名稱、題材與關鍵詞找出相關新聞
     onStep("搜尋相關新聞…")
     val related0 = relatedNews(ds, st, question, holdSyms, if (big) 20 else 5)
@@ -625,7 +637,7 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
     val factsText = if (facts.isEmpty()) "" else "紀律檢查（App 依 K 線與使用者的紀律參數算出，回答持股怎麼處理時要引用這些依據，例如「站上月線」「跌破移動停損價」）：\n" + facts.joinToString("\n")
     // 即時行情（主要指數、費半、美元）：AI 可以直接引用最新的數字
     val live = runCatching { com.enwei.moneymanager.net.InvestData.liveMarketLine() }.getOrDefault("")
-    val sit = live + "\n" + factsText + "\n" + situation(snap).let { if (!big && related0.isNotEmpty()) it.take(700) else it }
+    val sit = toolText + "\n" + live + "\n" + factsText + "\n" + situation(snap).let { if (!big && (related0.isNotEmpty() || toolText.isNotEmpty())) it.take(if (toolText.isNotEmpty()) 400 else 700) else it }
     val today2 = if (!big && related0.isNotEmpty()) today.take(160) else today
     val reserved0 = sit.length + today2.length + 2
     // 2. 讀取最相關的前幾篇新聞全文（Groq 2 篇、Gemini 5 篇）
@@ -740,7 +752,9 @@ suspend fun Repository.askAdvisor(ds: NewsDataset, question: String, onStep: (St
     }
     // 讀過全文的新聞一定附在回覆下方
     related0.filter { it.id in bodies }.forEach { if (it.id !in ids) ids += it.id }
-    val basis = if (related0.isEmpty()) "" else "依據：搜尋到 ${related0.size} 則相關新聞" + (if (bodies.isNotEmpty()) "，讀了 ${bodies.size} 篇全文" else "，全文沒有讀到（用標題與摘要）")
+    val basis0 = if (related0.isEmpty()) "" else "搜尋到 ${related0.size} 則相關新聞" + (if (bodies.isNotEmpty()) "，讀了 ${bodies.size} 篇全文" else "，全文沒有讀到（用標題與摘要）")
+    val basis = listOfNotNull(toolResults.takeIf { it.isNotEmpty() }?.joinToString("、") { it.label }, basis0.ifBlank { null })
+        .joinToString("；").let { if (it.isBlank()) "" else "依據：$it" }
     val fixed = reply.copy(text = text, points = points, newsIds = ids, cards = cards2, charts = charts.take(3), basis = basis +
         (if (facts.isNotEmpty()) (if (basis.isEmpty()) "依據：" else "；") + "依紀律檢查 ${facts.size} 檔（月線、季線、停損與移動停損價）" else ""))
     // 使用者按了停止：不把回覆加進對話

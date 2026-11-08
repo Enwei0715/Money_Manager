@@ -1045,11 +1045,14 @@ object GroqAi {
             lastError = "AI 對話資料超過安全上下文上限（${context.length}/$contextLimit 字元），未截斷或送出；請稍後重試"
             return null
         }
-        val system = advisorRole() + "以下是資料與使用者狀況，請回答他的問題。字要少、多用圖表：結論 reply 40 字內，重點 points 最多 3 點、每點 30 字內；" +
+        val system = advisorRole() + "以下是資料與使用者狀況，請回答他的問題。字要少、多用圖表：結論 reply 40 字內，重點 points 最多 3 點（列股票清單時最多 5 點）、每點 40 字內；" +
             tone().chat + "cards 只放回覆文字裡實際討論到的個股（App 會在卡片上畫近期 K 線，文字不必描述走勢）；問大盤或整體市場時不要硬放個股，改用指數的 compare 圖；" +
             "資料裡有「即時行情」時，引用指數與匯率要用那裡的數字；" +
             "需要比較或呈現時加 charts（App 用實際資料畫）：{\"kind\": \"compare\", \"items\": [2～5 個代號或指數]} 比較走勢（指數用 ^TWII 加權、^TWOII 櫃買、^SOX 費半、^IXIC 那斯達克、^GSPC 標普、^DJI 道瓊）、" +
             "{\"kind\": \"themes\", \"items\": [題材名稱]} 題材熱度與多空、{\"kind\": \"signals\", \"items\": [1～3 個代號]} 個股 K 線框出紀律買賣點與依據、{\"kind\": \"revenue\", \"items\": [2～6 個代號]} 月營收年增率比較、{\"kind\": \"holdings\", \"items\": []} 使用者持股損益；" +
+            "直接回答問題本身，不要揣測或評論使用者的情緒。" +
+            "資料裡有「App 實際查到的資料」時：這題要靠那些數字回答——先用一句話說查到幾檔、條件是什麼，points 列出最值得看的 3～5 檔（代號 名稱 與關鍵數字，例如股價、漲跌、殖利率、營收年增），" +
+            "並把其中 3～5 檔做成 cards（reason 寫查到的數字）；只能用查到的代號與數字，查不到就說查不到，不要說「資料集中沒有」或叫使用者自己去找。" +
             "引用新聞時在句子後面用 [編號] 標出，並把編號放進 news。" +
             (if (focused) "這題有 App 搜尋到的相關新聞（部分附全文摘錄）：結論與每個重點都要根據這些新聞的具體內容（事件、數字、日期、公司），不要寫泛泛的看法；" +
                 "新聞提到的個股都做成 cards，reason 寫新聞裡的具體依據並附 [編號]；新聞沒有提到的就說資料不足，不要猜。" else "") +
@@ -1072,10 +1075,35 @@ object GroqAi {
         }.orEmpty().take(3)
         val news = (r["news"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt()?.toString() }.orEmpty()
         val points = (r["points"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.take(120)?.takeIf { s -> s.isNotEmpty() } }.orEmpty().take(5)
-        return com.enwei.moneymanager.data.ChatMsg(false, r.str("reply")?.take(300) ?: return null, points = points.take(3), charts = charts, cards = cards, newsIds = news)
+        return com.enwei.moneymanager.data.ChatMsg(false, r.str("reply")?.take(300) ?: return null, points = points.take(5), charts = charts, cards = cards, newsIds = news)
     }
 
     /** 對話可以帶的資料量（字元）：Gemini 可讀大量資料，Groq 每分鐘 token 有限。 */
+    /** 問 AI 前的規劃：要呼叫哪些工具（App 實際去查資料），最多 4 個。 */
+    data class ToolCall(val tool: String, val args: Map<String, String>)
+
+    suspend fun planTools(question: String, history: List<Pair<Boolean, String>>): List<ToolCall> {
+        val system = """你是台股助理的「查資料規劃員」。根據使用者的問題，決定要叫 App 查哪些資料（App 會真的去查，再把結果交給回答的 AI）。
+可用工具（args 的值一律用字串）：
+- screen：全市場篩選上市櫃股票。args：price_min、price_max（股價）、pct_min、pct_max（今日漲跌%）、industry（產業關鍵字，例如 半導體、金融、航運、生技）、etf（"yes" 只要 ETF、"no" 排除 ETF）、sort（value 成交值大到小、pct 漲幅大到小、-pct 跌幅大到小、price 股價高到低、-price 股價低到高）、limit（最多 20）
+- valuation：用本益比、殖利率、股價淨值比篩選。args：pe_max、pe_min、yield_min、pb_max、sort（yield 殖利率高到低、pe 本益比低到高、pb）、limit
+- revenue：用最新月營收年增率篩選。args：yoy_min、mom_min、sort（yoy、mom）、limit
+- institutional：近幾天三大法人買賣超排行。args：days（1～10）、who（foreign 外資、trust 投信、total 合計）、side（buy 買超、sell 賣超）、limit
+- sectors：今天各產業類股的漲跌與成交值排行。args：無
+- stock：查單一個股的完整資料（現價、漲跌、本益比、殖利率、營收年增、法人近 5 日、近 20 日報酬、月線季線）。args：symbol（代號或名稱）
+- spending：使用者自己的記帳支出（依分類）。args：month（"0" 本月、"1" 上個月）
+只問新聞、大盤消息或一般觀念時不用工具（calls 給空陣列）。數字條件要從問題推出來，例如「價位個位數」＝ price_max 10、「百元以下」＝ price_max 100、「高殖利率」＝ yield_min 5。
+只回 JSON：{"calls":[{"tool":"screen","args":{"price_max":"10","sort":"value","limit":"15"}}]}"""
+        val convo = history.takeLast(4).joinToString("\n") { (u, t) -> (if (u) "使用者：" else "助理：") + t.take(150) }
+        val r = chatJson(system, (if (convo.isNotBlank()) "先前對話：\n$convo\n\n" else "") + "問題：$question", 300, task = AiTask.NAMING) ?: return emptyList()
+        return (r["calls"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val tool = (o["tool"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return@mapNotNull null
+            val args = (o["args"] as? JsonObject)?.mapValues { (_, v) -> (v as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty() }.orEmpty()
+            ToolCall(tool, args)
+        }.take(4)
+    }
+
     fun chatContextLimit(): Int = if (bigContext(AiTask.CHAT)) 80_000 else 3500
 
     /**
