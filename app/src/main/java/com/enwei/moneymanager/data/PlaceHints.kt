@@ -270,7 +270,7 @@ object PlaceHints {
         }.getOrNull()
     }
 
-    /** 已經試過對準的點（不管有沒有找到）    /** 已經試過對準的點（不管有沒有找到），避免每次打開地圖都重查 */
+    /** 已經試過對準的點（不管有沒有找到），避免每次打開地圖都重查 */
     private val snapPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("spot_snap", Context.MODE_PRIVATE) }
     fun snapTried(key: String) = snapPrefs.contains(key)
     fun markSnapTried(key: String) = snapPrefs.edit().putBoolean(key, true).apply()
