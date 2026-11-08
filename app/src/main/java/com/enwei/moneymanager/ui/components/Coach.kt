@@ -74,9 +74,24 @@ object Coach {
         Step(null, "就這樣！", "開始記第一筆吧。想再看一次，到「設定 → 關於 → 新手導覽」。", tab = "txns"),
     )
 
-    fun start() { step = 0 }
+    /** 這次要走的步驟：依問卷與功能開關，關掉的功能不介紹 */
+    var active by androidx.compose.runtime.mutableStateOf(steps)
+        private set
+
+    fun start(s: com.enwei.moneymanager.data.AppSettings? = null, split: Boolean = true) {
+        active = steps.filter { st ->
+            when (st.target) {
+                "tab.assistant" -> s?.featureStocks != false
+                "stats.map" -> s?.locationHints != false
+                else -> true
+            }
+        }.map { st ->
+            if (st.target == "fab.add" && split) st.copy(body = st.body + "幫別人付錢時點「分帳」，可以分給好幾個人。") else st
+        }
+        step = 0
+    }
     fun stop() { step = -1 }
-    fun next() { step = if (step + 1 < steps.size) step + 1 else -1 }
+    fun next() { step = if (step + 1 < active.size) step + 1 else -1 }
     fun prev() { if (step > 0) step-- }
 }
 
@@ -87,8 +102,9 @@ fun Modifier.coachTarget(id: String): Modifier = this.onGloballyPositioned { Coa
 @Composable
 fun CoachOverlay(onTab: (String) -> Unit) {
     val i = Coach.step
-    if (i !in Coach.steps.indices) return
-    val st = Coach.steps[i]
+    val steps = Coach.active
+    if (i !in steps.indices) return
+    val st = steps[i]
     LaunchedEffect(i) { st.tab?.let(onTab) }
     val density = LocalDensity.current
     val hole = st.target?.let { Coach.rects[it] }?.takeIf { it.width > 0 && it.height > 0 }
@@ -123,14 +139,14 @@ fun CoachOverlay(onTab: (String) -> Unit) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(st.title, fontSize = AppText.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    Text("${i + 1} / ${Coach.steps.size}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${i + 1} / ${steps.size}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(st.body, fontSize = AppText.body)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    if (i < Coach.steps.lastIndex) TextButton(onClick = { Coach.stop(); onTab("txns") }) { Text("跳過全部") }
+                    if (i < steps.lastIndex) TextButton(onClick = { Coach.stop(); onTab("txns") }) { Text("跳過全部") }
                     Spacer(Modifier.weight(1f))
                     if (i > 0) TextButton(onClick = { Coach.prev() }) { Text("上一步") }
-                    Button(onClick = { Coach.next() }) { Text(if (i < Coach.steps.lastIndex) "下一步" else "開始使用") }
+                    Button(onClick = { Coach.next() }) { Text(if (i < steps.lastIndex) "下一步" else "開始使用") }
                 }
             }
         }

@@ -300,7 +300,9 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     item(key = "g${type.name}") {
                         val payable = list.sumOf { cards[it.account.id]?.payable ?: 0 }
                         val outst = list.sumOf { cards[it.account.id]?.outstanding ?: 0 }
-                        GrayHeader(st.groupLabel(type))
+                        GrayHeader(st.groupLabel(type)) {
+                            com.enwei.moneymanager.ui.components.HelpIcon("應繳、未出帳是什麼", com.enwei.moneymanager.ui.components.HelpText.CREDIT, Modifier.size(24.dp))
+                        }
                         Column(Modifier.fillMaxWidth().groupCell(true, false).padding(horizontal = 16.dp, vertical = 12.dp)) {
                             Column {
                                 CreditCardMetrics(

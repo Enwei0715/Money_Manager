@@ -164,9 +164,9 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     var note by rememberSaveable { mutableStateOf("") }
     // 代墊／分帳：幫別人付的部分不算自己的支出，記成對方欠我
     var splitOn by rememberSaveable { mutableStateOf(initialSplitPerson != null) }
-    var splitPerson by rememberSaveable { mutableStateOf(initialSplitPerson) }
-    var splitNewName by rememberSaveable { mutableStateOf("") }
-    var splitExpr by rememberSaveable { mutableStateOf("") }
+    // 可以分給好幾個人：每一列＝對象（既有的往來對象或新名字）＋他的部分
+    var splitRaw by rememberSaveable { mutableStateOf(SplitRow.encode(listOf(SplitRow(initialSplitPerson, "", "")))) }
+    val splitRows = SplitRow.decode(splitRaw)
     var debtOpen by remember { mutableStateOf(false) }
     // 往來模式：類型列選「往來」時，在頁面上直接選對象與方向（底層仍是支出＋代墊或轉帳）
     var debtMode by rememberSaveable { mutableStateOf(false) }
@@ -269,17 +269,20 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         )
     }
 
-    val splitMinor = if (splitOn && type == TxnType.EXPENSE) Calculator.evaluate(splitExpr)?.abs()?.let(Money::toMinor)?.takeIf { it > 0 } else null
-    val splitReady = splitMinor != null && amountMinor != null && splitMinor <= amountMinor && (splitPerson != null || splitNewName.isNotBlank())
+    val splitParts = if (splitOn && type == TxnType.EXPENSE && !debtMode) splitRows.mapNotNull { r ->
+        val v = Calculator.evaluate(r.expr)?.abs()?.let(Money::toMinor)?.takeIf { it > 0 } ?: return@mapNotNull null
+        if (r.person == null && r.name.isBlank()) null else r to v
+    } else emptyList()
+    val splitReady = splitParts.isNotEmpty() && amountMinor != null && splitParts.sumOf { it.second } <= amountMinor
 
     fun save(again: Boolean) {
         val t = build() ?: return
         if (splitReady) {
             scope.launch {
-                val person = splitPerson ?: repo.debtPerson(splitNewName)
-                repo.saveWithSplit(t, person, splitMinor!!)
+                val shares = splitParts.map { (r, v) -> (r.person ?: repo.debtPerson(r.name)) to v }
+                repo.saveWithSplits(t, shares)
                 if (again) {
-                    expr = ""; merchant = ""; note = ""; splitExpr = ""; splitOn = false
+                    expr = ""; merchant = ""; note = ""; splitRaw = SplitRow.encode(listOf(SplitRow(null, "", ""))); splitOn = false
                     snack.showSnackbar(com.enwei.moneymanager.ui.tr("已儲存，繼續記下一筆"))
                 } else nav.popBackStack()
             }
@@ -334,7 +337,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         val name = lk.account(person)?.name.orEmpty()
         when (kind) {
             // 幫他付：一般支出＋代墊（別人的部分預設全部）
-            0 -> { type = TxnType.EXPENSE; splitOn = true; splitPerson = person; if (amountMinor != null) splitExpr = minorToExpr(amountMinor) }
+            0 -> { type = TxnType.EXPENSE; splitOn = true; splitRaw = SplitRow.encode(listOf(SplitRow(person, "", amountMinor?.let { minorToExpr(it) }.orEmpty()))) }
             // 借給他、我還他：從我的帳戶轉給他
             1, 4 -> { type = TxnType.TRANSFER; toAccountId = person; if (accountId == person) accountId = null; merchant = if (kind == 1) "借給 $name" else "還給 $name" }
             // 他還我、我向他借：從他轉進我的帳戶
@@ -372,7 +375,12 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 // 類型：支出／收入／轉帳／往來（＋股票），一條分段選擇，選中的填色
                 val segs = buildList {
                     TxnType.entries.forEach { t -> add(Triple(t.label, !debtMode && type == t, typeColor(t)) to { debtMode = false; if (type != t) { type = t; categoryId = null } }) }
-                    if (original == null || debtMode) add(Triple("往來", debtMode, MaterialTheme.colorScheme.primary) to { debtMode = true })
+                    if (original == null || debtMode) add(Triple("往來", debtMode, MaterialTheme.colorScheme.primary) to {
+                        debtMode = true
+                        // 預設「借給他」：借還是轉帳，不顯示分類與分帳
+                        if (debtKind < 1) debtKind = 1
+                        type = TxnType.TRANSFER; categoryId = null
+                    })
                     if (original == null && settings.featureStocks) add(Triple("股票", false, MaterialTheme.colorScheme.onSurfaceVariant) to { nav.popBackStack(); nav.navigate("trade/0") })
                 }
                 Row(
@@ -486,10 +494,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
                         PlaceholderText(lk.account(accountId)?.name, "")
                     }
-                    if (type == TxnType.EXPENSE && (original == null || original?.type == TxnType.EXPENSE)) SplitSection(
-                        splitOn, { splitOn = it; if (it && splitExpr.isBlank() && amountMinor != null) splitExpr = minorToExpr(amountMinor / 2) },
-                        splitPerson, { splitPerson = it; if (it != null) splitNewName = "" }, splitNewName, { splitNewName = it; splitPerson = null },
-                        splitExpr, { splitExpr = it }, amountMinor, currency, color,
+                    if (!debtMode && type == TxnType.EXPENSE && (original == null || original?.type == TxnType.EXPENSE)) SplitSection(
+                        splitOn, { splitOn = it },
+                        splitRows, { splitRaw = SplitRow.encode(it) }, amountMinor, currency, color,
+                        onFieldFocus = { panel = Panel.NONE },
                     )
 
                 }
@@ -647,7 +655,8 @@ private fun FormRow(
             "對方付" -> Icons.Outlined.Payments
             else -> null
         }
-        if (icon != null) Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 10.dp).size(20.dp))
+        // 列表圖示關閉時，欄位左邊也不顯示圖示
+        if (icon != null && com.enwei.moneymanager.ui.AppearancePrefs.icons) Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 10.dp).size(20.dp))
         Text(shown, Modifier.width(if (english) 84.dp else 56.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = AppText.secondary, maxLines = 1, softWrap = false)
         Column(Modifier.weight(1f)) {
@@ -934,63 +943,102 @@ private fun SourceDialog(t: TxnEntity, onDismiss: () -> Unit) {
 }
 
 
+/** 分帳的一列：對象（既有往來帳戶 id，或新名字）與他的部分（可輸入算式）。 */
+private data class SplitRow(val person: Long?, val name: String, val expr: String) {
+    companion object {
+        fun encode(rows: List<SplitRow>) = rows.joinToString("\n") { "${it.person ?: ""}\t${it.name.replace("\t", " ").replace("\n", " ")}\t${it.expr}" }
+        fun decode(raw: String) = raw.split("\n").map { line ->
+            val f = line.split("\t")
+            SplitRow(f.getOrNull(0)?.toLongOrNull(), f.getOrNull(1).orEmpty(), f.getOrNull(2).orEmpty())
+        }.ifEmpty { listOf(SplitRow(null, "", "")) }
+    }
+}
+
 /**
- * 代墊／分帳：開啟後選「幫誰付」（往來對象或新名字）與別人的部分；
- * 儲存時支出只記自己的部分，別人的部分記成對方欠我（收回時不算收入）。
+ * 代墊／分帳：一筆付款可以分給好幾個人（例如房租幫兩位室友代墊）。
+ * 每個人：輸入名字（像「內容」一樣會推薦過去的往來對象）＋他的部分；快捷只有「全付」「1/2」，其他直接輸入。
+ * 儲存時自己的部分記支出，每個人的部分記成對方欠我。
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SplitSection(
     on: Boolean, onToggle: (Boolean) -> Unit,
-    person: Long?, onPerson: (Long?) -> Unit, newName: String, onNewName: (String) -> Unit,
-    expr: String, onExpr: (String) -> Unit, total: Long?, currency: String, color: Color,
+    rows: List<SplitRow>, onRows: (List<SplitRow>) -> Unit, total: Long?, currency: String, color: Color,
+    onFieldFocus: () -> Unit,
 ) {
     val lk = rememberLookups()
     val people = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN && !it.archived }
-    val split = Calculator.evaluate(expr)?.abs()?.let(Money::toMinor)
-    val who = person?.let { lk.account(it)?.name } ?: newName.trim().ifBlank { null }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    // 和其他欄位一樣的一列：沒分帳時只是一行灰字，點一下展開；不再用開關
+    fun nameOf(r: SplitRow) = r.person?.let { lk.account(it)?.name } ?: r.name.trim()
+    val amounts = rows.map { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L }
+    val others = amounts.sum()
     val cancel: @Composable () -> Unit = {
         Text("取消", fontSize = AppText.secondary, color = muted, modifier = Modifier.clickable { onToggle(false) }.padding(start = 8.dp, top = 6.dp, bottom = 6.dp))
     }
-    FormRow("分帳", color, on, onClick = { onToggle(!on) }, trailing = if (on) cancel else null) {
+    FormRow("分帳", color, on, onClick = { if (!on) onToggle(true) }, trailing = if (on) cancel else null) {
+        val named = rows.filter { nameOf(it).isNotEmpty() }
         PlaceholderText(
-            if (!on) null else listOfNotNull(who ?: "選對象", split?.let { "對方付 ${Money.withSymbol(it, currency)}" }).joinToString("・"),
+            if (!on) null else if (named.isEmpty()) "輸入要分給誰" else "${named.size} 人・對方共 ${Money.withSymbol(others, currency)}",
             "幫別人代墊或一起分攤時點這裡",
         )
     }
     if (!on) return
-    FormRow("對象", color, false, onClick = {}) {
-        Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (people.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                people.forEach { p ->
-                    val sel = person == p.id
-                    Text(p.name, fontSize = AppText.body, color = if (sel) color else MaterialTheme.colorScheme.onSurface,
-                        textDecoration = if (sel) androidx.compose.ui.text.style.TextDecoration.Underline else null,
-                        modifier = Modifier.clickable { onPerson(if (sel) null else p.id) }.padding(vertical = 2.dp))
+    rows.forEachIndexed { i, r ->
+        var focused by remember { mutableStateOf(false) }
+        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 86.dp else 56.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        // 名字：像「內容」一樣輸入，下方推薦過去的往來對象
+                        Box(Modifier.weight(1f)) {
+                            UnderlineField(r.person?.let { lk.account(it)?.name } ?: r.name, { v ->
+                                onRows(rows.toMutableList().also { it[i] = r.copy(person = null, name = v) })
+                            }, "對象名字", Modifier.onFocusChanged { focused = it.isFocused; if (it.isFocused) onFieldFocus() })
+                        }
+                        Box(Modifier.width(96.dp)) {
+                            UnderlineField(r.expr, { v -> onRows(rows.toMutableList().also { it[i] = r.copy(expr = v.filter { c -> c.isDigit() || c == '.' }) }) },
+                                "他的部分", Modifier.onFocusChanged { if (it.isFocused) onFieldFocus() }, numeric = true)
+                        }
+                        if (rows.size > 1) Text("✕", color = muted, fontSize = AppText.body,
+                            modifier = Modifier.clickable { onRows(rows.filterIndexed { j, _ -> j != i }) }.padding(start = 10.dp, top = 6.dp, bottom = 6.dp))
+                    }
+                    // 推薦：輸入中顯示名字相符的往來對象；還沒輸入時顯示前幾位
+                    val typed = (r.person?.let { null } ?: r.name.trim())
+                    val sugg = if (r.person != null || !focused) emptyList() else people.filter { p ->
+                        rows.none { it.person == p.id } && (typed.isNullOrEmpty() || p.name.contains(typed, true))
+                    }.take(6)
+                    if (sugg.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(bottom = 4.dp)) {
+                        sugg.forEach { p ->
+                            Text(p.name, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { onRows(rows.toMutableList().also { it[i] = r.copy(person = p.id, name = "") }) }.padding(vertical = 4.dp))
+                        }
+                    }
+                    if (total != null) Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(bottom = 6.dp)) {
+                        val rest = (total - (others - amounts[i])).coerceAtLeast(0)
+                        Text("全付", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { onRows(rows.toMutableList().also { it[i] = r.copy(expr = minorToExpr(rest)) }) }.padding(vertical = 4.dp))
+                        Text("1/2", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { onRows(rows.toMutableList().also { it[i] = r.copy(expr = minorToExpr(total / 2)) }) }.padding(vertical = 4.dp))
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
-            if (person == null) UnderlineField(newName, onNewName, if (people.isEmpty()) "輸入名字" else "或輸入新的名字")
         }
     }
-    // 快速分法：對方負擔 1/2、1/3、1/4（幾人平分時他的一份）或全部；也可直接輸入任何金額
-    val quick: @Composable () -> Unit = {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf(2 to "1/2", 3 to "1/3", 4 to "1/4", 1 to "全部").forEach { (n, l) ->
-                Text(l, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { if (total != null) onExpr(minorToExpr(total / n)) }.padding(vertical = 6.dp))
-            }
-        }
+    Row(Modifier.fillMaxWidth().padding(start = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp, end = 16.dp, top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text("＋ 再分給一個人", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { onRows(rows + SplitRow(null, "", "")) }.padding(vertical = 6.dp))
     }
-    FormRow("對方付", color, false, onClick = {}, trailing = if (total != null) quick else null) {
-        UnderlineField(expr, { onExpr(it.filter { c -> c.isDigit() || c == '.' }) }, "0", numeric = true)
-    }
-    if (total != null && split != null) Text(
-        if (split > total) "對方付的部分不能超過總額"
-        else "自己的支出 ${Money.withSymbol(total - split, currency)}，${who ?: "對方"}欠你 ${Money.withSymbol(split, currency)}",
-        fontSize = AppText.caption, color = if (split > total) MaterialTheme.colorScheme.error else muted,
-        modifier = Modifier.padding(start = 102.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+    if (total != null && others > 0) Text(
+        if (others > total) "分給別人的合計不能超過總額"
+        else "自己的支出 ${Money.withSymbol(total - others, currency)}；" + rows.mapIndexedNotNull { i, r ->
+            nameOf(r).takeIf { it.isNotEmpty() && amounts[i] > 0 }?.let { "$it 欠你 ${Money.withSymbol(amounts[i], currency)}" }
+        }.joinToString("、"),
+        fontSize = AppText.caption, color = if (others > total) MaterialTheme.colorScheme.error else muted,
+        modifier = Modifier.padding(start = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp, end = 16.dp, top = 2.dp, bottom = 6.dp),
     )
 }
 
@@ -1042,7 +1090,8 @@ private fun DebtPicker(onDismiss: () -> Unit, onPick: (Long, Int) -> Unit) {
 private fun DebtInline(person: Long?, onPerson: (Long?) -> Unit, newName: String, onNewName: (String) -> Unit, kind: Int, onKind: (Int) -> Unit) {
     val lk = rememberLookups()
     val people = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN && !it.archived }
-    val kinds = listOf("幫他付", "借給他", "他還我", "我向他借", "我還他")
+    // 往來只處理借還；幫別人付錢（代墊、分攤）統一在「支出」的「分帳」記，不重複
+    val kinds = listOf(1 to "借給他", 2 to "他還我", 3 to "我向他借", 4 to "我還他")
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("對象", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1053,14 +1102,15 @@ private fun DebtInline(person: Long?, onPerson: (Long?) -> Unit, newName: String
         if (person == null) UnderlineField(newName, onNewName, if (people.isEmpty()) "輸入對象名字" else "或輸入新的名字")
         Text("方向", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
         Row(Modifier.fillMaxWidth().border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), MaterialTheme.shapes.small)) {
-            kinds.forEachIndexed { i, l ->
+            kinds.forEach { (i, l) ->
                 val on = i == kind
                 Box(
-                    Modifier.weight(1f).height(34.dp).background(if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent, MaterialTheme.shapes.small)
+                    Modifier.weight(1f).height(36.dp).background(if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent, MaterialTheme.shapes.small)
                         .clickable { onKind(i) },
                     contentAlignment = Alignment.Center,
-                ) { Text(l, fontSize = AppText.label, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
+                ) { Text(l, fontSize = AppText.secondary, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
             }
         }
+        Text("幫別人付錢（代墊、分攤）請切到「支出」，用下方的「分帳」", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

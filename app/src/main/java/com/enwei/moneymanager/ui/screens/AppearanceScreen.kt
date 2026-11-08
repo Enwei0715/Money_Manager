@@ -139,7 +139,7 @@ fun AppearanceScreen(nav: NavController) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
                         }
                         Group("字體大小") {
-                            val opts = listOf(1.0f to "小", 1.1f to "標準", 1.2f to "大", 1.3f to "特大")
+                            val opts = listOf(0.9f to "小", 1.0f to "標準", 1.1f to "大", 1.2f to "特大")
                             Segments(opts.map { it.second }, opts.indexOfFirst { kotlin.math.abs(it.first - s.textScale) < 0.01f }.let { if (it < 0) 1 else it }) { i ->
                                 repo.settings.update { it.copy(textScale = opts[i].first) }
                             }
@@ -162,7 +162,7 @@ fun AppearanceScreen(nav: NavController) {
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 TextButton(onClick = {
-                    repo.settings.update { it.copy(themePreset = "coral", themeMode = 0, fontChoice = 2, textScale = 1.1f, uiScale = 1f, cornerStyle = 0,
+                    repo.settings.update { it.copy(themePreset = "coral", themeMode = 0, fontChoice = 2, textScale = 1f, uiScale = 1f, cornerStyle = 0,
                         tabularNums = true, colorSetB = false, cardStyle = false, rowStyle = 0) }
                 }) { Text("全部恢復預設") }
                 Spacer(Modifier.height(24.dp))
@@ -173,9 +173,9 @@ fun AppearanceScreen(nav: NavController) {
 
 /** 推薦組合：一次設定字體、大小、區塊、圖示、圓角（顏色不動）。 */
 private val presets: List<Pair<String, (com.enwei.moneymanager.data.AppSettings) -> com.enwei.moneymanager.data.AppSettings>> = listOf(
-    "簡潔" to { it.copy(fontChoice = 2, textScale = 1.1f, cardStyle = false, rowStyle = 1, cornerStyle = 2, tabularNums = true) },
-    "清晰" to { it.copy(fontChoice = 1, textScale = 1.2f, cardStyle = false, rowStyle = 0, cornerStyle = 1, tabularNums = true) },
-    "卡片" to { it.copy(fontChoice = 0, textScale = 1.1f, cardStyle = true, rowStyle = 0, cornerStyle = 0, tabularNums = true) },
+    "簡潔" to { it.copy(fontChoice = 2, textScale = 1f, cardStyle = false, rowStyle = 1, cornerStyle = 2, tabularNums = true) },
+    "清晰" to { it.copy(fontChoice = 1, textScale = 1.1f, cardStyle = false, rowStyle = 0, cornerStyle = 1, tabularNums = true) },
+    "卡片" to { it.copy(fontChoice = 0, textScale = 1f, cardStyle = true, rowStyle = 0, cornerStyle = 0, tabularNums = true) },
 )
 
 @Composable

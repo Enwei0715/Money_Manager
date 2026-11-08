@@ -419,6 +419,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                     Text(stt?.verdict ?: (if (hourly) "移動停利 ${plan.hourFast}／${plan.hourSlow}MA" else "紀律買賣點"), fontSize = AppText.secondary, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f),
                                         maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                         color = when (stt?.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface })
+                                    if (hourly) com.enwei.moneymanager.ui.components.HelpIcon("移動停利是什麼", com.enwei.moneymanager.ui.components.HelpText.TRAIL)
                                     androidx.compose.material3.Switch(showSignals, { showSignals = it }, Modifier.scale(0.75f))
                                 }
                                 if (showSignals) {
@@ -1087,7 +1088,10 @@ private fun RevenueCard(symbol: String) {
     val max = show.maxOf { it.revenue }.takeIf { it > 0 } ?: 1.0
     com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("月營收", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("月營收", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                com.enwei.moneymanager.ui.components.HelpIcon("月營收怎麼看", com.enwei.moneymanager.ui.components.HelpText.REVENUE)
+            }
             Text(
                 "${last.year}/${last.month}：${"%,.1f".format(last.revenue / 1e8)} 億" +
                     (last.yoy?.let { "　年增 ${"%+.1f".format(it)}%" } ?: "") + (last.mom?.let { "　月增 ${"%+.1f".format(it)}%" } ?: ""),

@@ -532,6 +532,32 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 代墊／分帳：一筆消費裡 [split] 是幫 [personId] 付的。支出只記自己的部分（統計不會多算），
      * 別人的部分記成轉到這個人的「應收」（之後收回時是轉帳，不算收入）。自己的部分是 0 時整筆都是代墊。
      */
+    /**
+     * 多人分帳：一筆付款裡有好幾個人的部分（例如房租幫兩位室友代墊）。
+     * 自己的部分記成支出（全部是別人的就不記支出），每個人的部分各記一筆轉帳到他的往來帳戶（對方欠我）。
+     */
+    suspend fun saveWithSplits(t: TxnEntity, shares: List<Pair<Long, Long>>): Long {
+        val parts = shares.filter { it.second > 0 }
+        if (parts.isEmpty()) return saveTxn(t)
+        if (parts.size == 1) return saveWithSplit(t, parts[0].first, parts[0].second)
+        val others = parts.sumOf { it.second }
+        val own = (t.amount - others).coerceAtLeast(0)
+        val label = listOfNotNull("代墊", t.merchant?.takeIf { it.isNotBlank() }).joinToString("：")
+        val names = parts.map { (pid, v) -> (db.accounts().get(pid)?.name.orEmpty()) to v }
+        val detail = names.joinToString("、") { (n, v) -> "$n ${Money.format(v, t.currency)}" }
+        var firstId = 0L
+        if (own > 0) firstId = saveTxn(t.copy(amount = own, note = listOfNotNull(t.note, "共 ${Money.format(t.amount, t.currency)}，代墊 $detail").joinToString(" · ")))
+        parts.forEachIndexed { i, (pid, v) ->
+            val tr = TxnEntity(
+                type = TxnType.TRANSFER, amount = v, currency = t.currency, accountId = t.accountId, toAccountId = pid,
+                merchant = label, note = "幫 ${names[i].first} 付", date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
+            )
+            val id = if (own == 0L && i == 0 && t.id != 0L) saveTxn(tr.copy(id = t.id)) else db.txns().insert(tr)
+            if (firstId == 0L) firstId = id
+        }
+        return firstId
+    }
+
     suspend fun saveWithSplit(t: TxnEntity, personId: Long, split: Long): Long {
         val share = (t.amount - split).coerceAtLeast(0)
         val who = db.accounts().get(personId)?.name.orEmpty()

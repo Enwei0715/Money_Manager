@@ -565,16 +565,17 @@ fun PickCard(
                 }
                 return@Column
             }
-            @Composable fun section(title: String) {
+            // 段落：上方一條分隔線，標題在線下；有說明時「？」放在標題同一行的最右邊
+            @Composable fun section(title: String, help: Pair<String, String>? = null) {
                 HorizontalDivider(Modifier.padding(top = 10.dp, bottom = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                Text(title, fontSize = AppText.label, color = muted, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
+                    Text(title, fontSize = AppText.label, color = muted, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    if (help != null) com.enwei.moneymanager.ui.components.HelpIcon(help.first, help.second, Modifier.size(24.dp))
+                }
             }
             // ① 依據：App 算的標籤與五大面向分數
             if (p.basis.isNotEmpty() || p.scores.size == 5) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) { section("依據") }
-                    com.enwei.moneymanager.ui.components.HelpIcon("分數怎麼算", com.enwei.moneymanager.ui.components.HelpText.SCORES)
-                }
+                section("依據", "分數怎麼算" to com.enwei.moneymanager.ui.components.HelpText.SCORES)
                 if (p.basis.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     p.basis.forEach { b ->
                         val neg = b.contains("弱於") || b.contains("跌破") || b.contains("連賣") || Regex("[-−]\\d").containsMatchIn(b)
@@ -594,10 +595,7 @@ fun PickCard(
             }
             // ② 時光機
             if (p.simTarget != null && p.simStop != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) { section("時光機 · 未來 20 個交易日") }
-                    com.enwei.moneymanager.ui.components.HelpIcon("時光機是什麼", com.enwei.moneymanager.ui.components.HelpText.SIM)
-                }
+                section("時光機 · 未來 20 個交易日", "時光機是什麼" to com.enwei.moneymanager.ui.components.HelpText.SIM)
                 SimBar(p.simTarget, p.simStop, p.simNone ?: 0, p.simExpR, p.targetPrice, p.stopPrice)
             }
             // ③ 走勢：近期 K 線、營收、新聞熱度
