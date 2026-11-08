@@ -262,7 +262,7 @@ private fun rememberToolSummaries(): Map<String, String> {
         put("ai-hub", report?.takeIf { it.running }?.step ?: if (com.enwei.moneymanager.net.GroqAi.enabled) "AI 待命中" else "尚未設定 AI 金鑰")
         put("advisor", news?.report?.let { "報告 ${fmt.format(Date(it.createdAt))}" } ?: "還沒有報告")
         put("review", "本月支出 ${Money.withSymbol(monthExpense, lk.base)}")
-        settings.budgets[0L]?.let { b -> put("budget", "本月已用 ${if (b > 0) monthExpense * 100 / b else 0}%（${Money.withSymbol(monthExpense, lk.base)} / ${Money.withSymbol(b, lk.base)}）") }
+        settings.budgets[0L]?.let { b -> put("budget", "已用 ${if (b > 0) monthExpense * 100 / b else 0}%・剩 ${Money.withSymbol((b - monthExpense).coerceAtLeast(0), lk.base).substringBefore(".")}") }
         put("totalstats", "淨資產 ${Money.withSymbol(balances.filter { it.account.includeInNetWorth && !it.account.archived }.sumOf { lk.fx.convert(it.balance, it.account.currency) }, lk.base)}")
         put("notif", "監聽 ${settings.notifPackages.size} 個 App")
         put("settings", if (settings.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.1.${settings.updateAvailable}" else "目前 ${BuildConfig.VERSION_NAME}")
