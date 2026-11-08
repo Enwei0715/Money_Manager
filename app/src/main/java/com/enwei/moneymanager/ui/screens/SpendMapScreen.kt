@@ -71,7 +71,7 @@ private val CHAINS = listOf("7-11", "全家", "萊爾富", "OK超商", "全聯",
     "家樂福", "寶雅", "屈臣氏", "康是美", "吉野家", "八方", "可不可", "50嵐", "迷客夏", "中油", "台北捷運", "公車", "YouBike", "台鐵", "台灣高鐵", "Subway", "漢堡王", "Burger King")
 
 /** 地圖上的一個點：同一家店（或同一個位置）在這段期間的支出合計。 */
-private data class SpendSpot(val lat: Double, val lon: Double, val name: String, val total: Long, val count: Int, val cat: String)
+private data class SpendSpot(val lat: Double, val lon: Double, val name: String, val total: Long, val count: Int, val cat: String, val key: String = "", val fixed: Boolean = false)
 
 /**
  * 支出地圖：每日／每週／每月的支出畫在地圖上（圓越大花越多），下方列出各地點。
@@ -123,15 +123,23 @@ fun SpendMapScreen(nav: NavController) {
     val onlineCount = inRange.size - offline.size
     val placed = offline.mapNotNull { t -> locOf(t)?.let { t to it } }
     val unplaced = offline.filter { locOf(it) == null }
+    var fixes by remember { mutableStateOf(PlaceHints.spotFixes()) }
     val spots = placed.groupBy { (t, l) -> (t.merchant?.trim().orEmpty()) to ("%.4f,%.4f".format(l.first, l.second)) }.map { (k, l) ->
         val total = l.sumOf { lk.fx.convert(it.first.amount, it.first.currency) }
         val cat = l.groupingBy { lk.category(lk.rootId(it.first.categoryId))?.name ?: "" }.eachCount().maxByOrNull { it.value }?.key.orEmpty()
-        SpendSpot(l.map { it.second.first }.average(), l.map { it.second.second }.average(), k.first.ifBlank { "（未命名）" }, total, l.size, cat)
+        val key = "${k.first}|${k.second}"
+        // 使用者在地圖上修正過的位置優先
+        val fix = fixes[key]
+        SpendSpot(fix?.first ?: l.map { it.second.first }.average(), fix?.second ?: l.map { it.second.second }.average(),
+            k.first.ifBlank { "（未命名）" }, total, l.size, cat, key, fix != null)
     }.sortedByDescending { it.total }
+    var selKey by remember { mutableStateOf<String?>(null) }
+    var focusTick by remember { mutableStateOf(0) }
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.4f
 
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     Scaffold(topBar = { BackTopBar("支出地圖", { nav.popBackStack() }) }) { pad ->
-        LazyColumn(Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        LazyColumn(Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background), state = listState) {
             item {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     com.enwei.moneymanager.ui.components.SubTabs(listOf("每日", "每週", "每月"), span) { span = it }
@@ -149,7 +157,10 @@ fun SpendMapScreen(nav: NavController) {
             item {
                 if (spots.isEmpty()) Text("這段期間沒有可以標在地圖上的支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
-                else SpendMap(spots, dark, Modifier.fillMaxWidth().height(380.dp).clipToBounds())
+                else SpendMap(spots, dark, Modifier.fillMaxWidth().height(380.dp).clipToBounds(), selKey, focusTick,
+                    onSelect = { selKey = it?.key },
+                    onMove = { sp, la, lo -> PlaceHints.setSpotFix(sp.key, la, lo); fixes = PlaceHints.spotFixes() },
+                    onReset = { sp -> PlaceHints.clearSpotFix(sp.key); fixes = PlaceHints.spotFixes() })
             }
             // 沒有位置的店：用店名在 OpenStreetMap 找（每秒一家）
             val missing = unplaced.mapNotNull { it.merchant?.trim()?.takeIf { m -> m.isNotEmpty() && m !in geo && !chain(m) } }.distinct()
@@ -170,9 +181,13 @@ fun SpendMapScreen(nav: NavController) {
                 Text("地點", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
             }
             items(spots, key = { "${it.name}${it.lat}${it.lon}" }) { s ->
-                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                // 點一下：地圖移到這個地點並標出來
+                val on = s.key == selKey
+                Row(Modifier.fillMaxWidth().background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
+                    .clickable { selKey = s.key; focusTick++; scope.launch { listState.animateScrollToItem(0) } }
+                    .padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(s.name, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(s.name + if (s.fixed) "（已修正位置）" else "", fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${s.cat.ifBlank { "—" }}・${s.count} 筆", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(Money.withSymbol(s.total, lk.base), fontSize = AppText.body, color = com.enwei.moneymanager.ui.ExpenseColor)
@@ -189,7 +204,14 @@ private object TileCache {
     val mem = object : android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(120) {}
     val inflight = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     val failed = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-    val gate = kotlinx.coroutines.sync.Semaphore(4)
+    val gate = kotlinx.coroutines.sync.Semaphore(6)
+    /** 圖磚存在手機的快取（60MB）：看過的地方下次直接從手機讀，不用再下載 */
+    val client by lazy {
+        com.enwei.moneymanager.net.Http.client.newBuilder()
+            .cache(okhttp3.Cache(java.io.File(com.enwei.moneymanager.MoneyApp.instance.cacheDir, "map_tiles"), 60L * 1024 * 1024))
+            .addNetworkInterceptor { ch -> ch.proceed(ch.request()).newBuilder().header("Cache-Control", "public, max-age=1209600").build() }
+            .build()
+    }
 }
 
 private fun mx(lon: Double) = (lon + 180.0) / 360.0
@@ -203,7 +225,10 @@ private fun my(lat: Double): Double {
  * 手指拖曳移動、兩指縮放、點兩下放大；點圓顯示店名與金額。
  */
 @Composable
-private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) {
+private fun SpendMap(
+    spots: List<SpendSpot>, dark: Boolean, modifier: Modifier, selKey: String?, focusTick: Int,
+    onSelect: (SpendSpot?) -> Unit, onMove: (SpendSpot, Double, Double) -> Unit, onReset: (SpendSpot) -> Unit,
+) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val tilePx = with(density) { 256.dp.toPx() }
     val scope = rememberCoroutineScope()
@@ -212,7 +237,12 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
     var zoom by remember(spots) { mutableStateOf(-1.0) }
     var cx by remember(spots) { mutableStateOf(0.5) }
     var cy by remember(spots) { mutableStateOf(0.5) }
-    var picked by remember(spots) { mutableStateOf<SpendSpot?>(null) }
+    val picked = spots.firstOrNull { it.key == selKey }
+    var moving by remember { mutableStateOf(false) }
+    // 從下方清單點地點：地圖移過去並放大
+    androidx.compose.runtime.LaunchedEffect(focusTick) {
+        if (focusTick > 0) picked?.let { cx = mx(it.lon); cy = my(it.lat); if (zoom < 16.0) zoom = 16.0 }
+    }
     val palette = listOf(0xFFE8564F, 0xFF3C82E6, 0xFFF5A623, 0xFF26A69A, 0xFFAB47BC, 0xFF7CB342, 0xFFEF6C00, 0xFF5C6BC0)
     val cats = remember(spots) { spots.map { it.cat }.distinct() }
     val maxTotal = spots.maxOfOrNull { it.total }?.coerceAtLeast(1) ?: 1
@@ -236,7 +266,7 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
                 try {
                     val url = "https://tile.openstreetmap.org/$z/$x/$y.png"
                     val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Ledgerly/2.1 (Android personal finance app)").build()
-                    com.enwei.moneymanager.net.Http.client.newCall(req).execute().use { r ->
+                    TileCache.client.newCall(req).execute().use { r ->
                         val bytes = r.body?.bytes()
                         val bmp = if (r.isSuccessful && bytes != null) android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) else null
                         if (bmp != null) TileCache.mem.put(key, bmp.asImageBitmap()) else TileCache.failed.add(key)
@@ -270,14 +300,22 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
                         }
                     }
                 }
-                .pointerInput(spots) {
+                .pointerInput(spots, moving, selKey) {
                     detectTapGestures(
                         onDoubleTap = { if (zoom >= 0) zoom = (zoom + 1).coerceAtMost(18.0) },
                         onTap = { o ->
                             if (zoom >= 0) {
                                 val world = tilePx * Math.pow(2.0, zoom)
-                                fun dist(sp: SpendSpot) = kotlin.math.hypot((mx(sp.lon) - cx) * world + sizePx.width / 2 - o.x, (my(sp.lat) - cy) * world + sizePx.height / 2 - o.y)
-                                picked = spots.minByOrNull { dist(it) }?.takeIf { dist(it) < 30.dp.toPx() }
+                                val wx = cx + (o.x - sizePx.width / 2) / world; val wy = cy + (o.y - sizePx.height / 2) / world
+                                val sp = picked
+                                if (moving && sp != null) {
+                                    // 修正位置：點的地方就是正確位置
+                                    onMove(sp, Math.toDegrees(kotlin.math.atan(kotlin.math.sinh(Math.PI * (1 - 2 * wy)))), wx * 360 - 180)
+                                    moving = false
+                                } else {
+                                    fun dist(p: SpendSpot) = kotlin.math.hypot((mx(p.lon) - cx) * world + sizePx.width / 2 - o.x, (my(p.lat) - cy) * world + sizePx.height / 2 - o.y)
+                                    onSelect(spots.minByOrNull { dist(it) }?.takeIf { dist(it) < 30.dp.toPx() })
+                                }
                             }
                         },
                     )
@@ -296,7 +334,19 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
             for (ty in y0..y1) for (tx in x0..x1) {
                 val wx = ((tx % n) + n) % n
                 val img = TileCache.mem.get("$style/$z/$wx/$ty")
-                if (img == null) { load(z, wx, ty); continue }
+                if (img == null) {
+                    load(z, wx, ty)
+                    // 還在下載：先用上一級（已經有的）圖磚放大頂著，不會一片空白
+                    TileCache.mem.get("$style/${z - 1}/${wx / 2}/${ty / 2}")?.let { parent ->
+                        val half = parent.width / 2
+                        drawImage(parent, srcOffset = androidx.compose.ui.unit.IntOffset((wx % 2) * half, (ty % 2) * half),
+                            srcSize = androidx.compose.ui.unit.IntSize(half, half),
+                            dstOffset = androidx.compose.ui.unit.IntOffset((tx * t - left).toInt(), (ty * t - top).toInt()),
+                            dstSize = androidx.compose.ui.unit.IntSize(kotlin.math.ceil(t).toInt() + 1, kotlin.math.ceil(t).toInt() + 1),
+                            colorFilter = tileFilter)
+                    } ?: load(z - 1, wx / 2, ty / 2)
+                    continue
+                }
                 drawImage(img, dstOffset = androidx.compose.ui.unit.IntOffset((tx * t - left).toInt(), (ty * t - top).toInt()),
                     dstSize = androidx.compose.ui.unit.IntSize(kotlin.math.ceil(t).toInt() + 1, kotlin.math.ceil(t).toInt() + 1),
                     colorFilter = tileFilter)
@@ -308,6 +358,19 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
                 drawCircle(col.copy(alpha = 0.45f), r, androidx.compose.ui.geometry.Offset(px, py))
                 drawCircle(col, r, androidx.compose.ui.geometry.Offset(px, py), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
                 if (sp == picked) drawCircle(androidx.compose.ui.graphics.Color.White, r + 3.dp.toPx(), androidx.compose.ui.geometry.Offset(px, py), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+            }
+            // 店名標籤：金額最大的前 8 個與選中的那個，寫在圓圈右邊，底下墊底色
+            val labelBg = if (dark) androidx.compose.ui.graphics.Color(0xE6202024) else androidx.compose.ui.graphics.Color(0xF0FFFFFF)
+            val labelFg = if (dark) androidx.compose.ui.graphics.Color(0xFFEDEDED) else androidx.compose.ui.graphics.Color(0xFF222222)
+            (spots.take(8) + listOfNotNull(picked)).distinct().forEach { sp ->
+                val px = ((mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
+                if (px < -40 || px > size.width + 40 || py < -20 || py > size.height + 20) return@forEach
+                val r = (6 + 16 * kotlin.math.sqrt(sp.total.toDouble() / maxTotal)).dp.toPx()
+                val lay = textMeasurer.measure(sp.name.take(10), androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = labelFg))
+                val lx = px + r + 4.dp.toPx(); val ly = py - lay.size.height / 2f
+                drawRoundRect(labelBg, androidx.compose.ui.geometry.Offset(lx - 4.dp.toPx(), ly - 1.dp.toPx()),
+                    androidx.compose.ui.geometry.Size(lay.size.width + 8.dp.toPx(), lay.size.height + 2.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
+                drawText(lay, topLeft = androidx.compose.ui.geometry.Offset(lx, ly))
             }
             val credit = textMeasurer.measure("© OpenStreetMap contributors", androidx.compose.ui.text.TextStyle(fontSize = 9.sp, color = if (dark) androidx.compose.ui.graphics.Color(0xAAFFFFFF) else androidx.compose.ui.graphics.Color(0xAA000000)))
             drawText(credit, topLeft = androidx.compose.ui.geometry.Offset(size.width - credit.size.width - 6.dp.toPx(), size.height - credit.size.height - 4.dp.toPx()))
@@ -328,6 +391,13 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
                     Text(sp.name, fontSize = AppText.body, fontWeight = FontWeight.SemiBold)
                     Text("${Money.withSymbol(sp.total, "TWD")}・${sp.count} 筆" + (if (sp.cat.isNotBlank()) "・${sp.cat}" else ""), fontSize = AppText.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (moving) Text("在地圖上點正確的位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 4.dp)) {
+                        Text(if (moving) "取消" else "位置不對？", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { moving = !moving })
+                        if (sp.fixed && !moving) Text("還原", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.clickable { onReset(sp) })
+                    }
                 }
             }
         }

@@ -2,6 +2,7 @@ package com.enwei.moneymanager.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -193,7 +194,7 @@ object Onboarding {
                     Text("記帳、預算與統計", fontSize = AppText.body)
                     Text("基本功能，一定會有", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                androidx.compose.material3.Checkbox(true, null, enabled = false)
+                CheckMark(true, enabled = false)
             }
             androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             wants.forEach { o ->
@@ -216,9 +217,48 @@ object Onboarding {
                         Text(o.title, fontSize = AppText.body)
                         Text(o.desc, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    androidx.compose.material3.Checkbox(on, { toggle() })
+                    CheckMark(on)
                 }
                 androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
+    }
+
+    /** 勾選框：固定大小，每一列都對齊（不用 Checkbox，停用狀態時大小會不同） */
+    @Composable
+    private fun CheckMark(on: Boolean, enabled: Boolean = true) {
+        val c = if (!enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
+        Box(Modifier.padding(start = 12.dp).size(24.dp)
+            .background(if (on) c else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(5.dp))
+            .border(1.5.dp, if (on) c else MaterialTheme.colorScheme.outline, RoundedCornerShape(5.dp)),
+            contentAlignment = Alignment.Center) {
+            if (on) Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.surface, modifier = Modifier.size(18.dp))
+        }
+    }
+
+    /** 外觀預覽：用真的元件畫一小段交易列表，選了什麼馬上看得到 */
+    @Composable
+    private fun MiniPreview() {
+        com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("本月支出", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text("$ 18,420", fontSize = AppText.title, fontWeight = FontWeight.SemiBold, color = com.enwei.moneymanager.ui.ExpenseColor)
+            }
+            androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            listOf(Triple("越香", "飲食／午餐", "$ 90"), Triple("台北捷運", "交通／捷運", "$ 20")).forEachIndexed { i, (m, sub, a) ->
+                if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 14.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(m, fontSize = AppText.body)
+                        Text(sub, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(a, fontSize = AppText.body, color = com.enwei.moneymanager.ui.ExpenseColor)
+                }
+            }
+            Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Surface(color = MaterialTheme.colorScheme.primary, shape = MaterialTheme.shapes.small) {
+                    Text("主要按鈕", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                }
             }
         }
     }
@@ -228,6 +268,7 @@ object Onboarding {
     private fun AppearanceQuick() {
         val st by MoneyApp.repo.settings.flow.collectAsStateWithLifecycle()
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            MiniPreview()
             Text("主題色", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 com.enwei.moneymanager.ui.Themes.all.forEach { t ->

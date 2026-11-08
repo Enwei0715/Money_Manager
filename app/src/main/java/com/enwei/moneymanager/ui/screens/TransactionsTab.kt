@@ -867,7 +867,8 @@ private fun CalendarView(
                         // 收入、支出、合計：完整千分位金額，靠右；放不下時自動縮小字級，不縮寫成「萬」
                         if (t.income > 0) FitAmount(Money.full(t.income), IncomeColor.copy(alpha = alpha))
                         if (t.expense > 0) FitAmount(Money.full(t.expense), ExpenseColor.copy(alpha = alpha))
-                        if (t.income > 0 && t.expense > 0) FitAmount(Money.full(t.total), MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
+                        // 合計只在格子夠高（可捲動模式）時顯示；平分模式下格子固定高，三行會擠出格子造成跑版
+                        if (t.income > 0 && t.expense > 0 && !fit) FitAmount(Money.full(t.total), MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
                     }
                 }
             }
@@ -912,7 +913,11 @@ private fun CalendarView(
                 dayMemos.forEach { m -> MemoLine(m) { sheetDay = null; onMemo(m) } }
                 if (dayMemos.isNotEmpty() || txns.isNotEmpty()) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 if (txns.isEmpty()) Text("沒有交易", color = gray, fontSize = AppText.secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
-                else txns.sortedByDescending { it.date }.forEach { t -> MmTxnRow(t, lk) { sheetDay = null; nav.navigate("txn/${t.id}") } }
+                else txns.sortedByDescending { it.date }.forEachIndexed { i, t ->
+                    if (i > 0) HorizontalDivider(Modifier.padding(start = 14.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    MmTxnRow(t, lk) { sheetDay = null; nav.navigate("txn/${t.id}") }
+                }
+                if (txns.isNotEmpty()) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
             Spacer(Modifier.height(24.dp))
         }

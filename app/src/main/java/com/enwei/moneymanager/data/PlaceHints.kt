@@ -53,6 +53,17 @@ object PlaceHints {
         k to s.split(',').takeIf { it.size == 2 }?.let { (a, b) -> a.toDoubleOrNull()?.let { la -> b.toDoubleOrNull()?.let { lo -> la to lo } } }
     }.toMap()
 
+    /** 使用者在地圖上手動修正的位置：key＝「店名|原本座標」，只改那一個點 */
+    private val fixPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("spot_fix", Context.MODE_PRIVATE) }
+    fun spotFixes(): Map<String, Pair<Double, Double>> = fixPrefs.all.mapNotNull { (k, v) ->
+        val p = (v as? String)?.split(',')?.takeIf { it.size == 2 } ?: return@mapNotNull null
+        val la = p[0].toDoubleOrNull() ?: return@mapNotNull null
+        val lo = p[1].toDoubleOrNull() ?: return@mapNotNull null
+        k to (la to lo)
+    }.toMap()
+    fun setSpotFix(key: String, lat: Double, lon: Double) = fixPrefs.edit().putString(key, "$lat,$lon").apply()
+    fun clearSpotFix(key: String) = fixPrefs.edit().remove(key).apply()
+
     /**
      * 用 OpenStreetMap 依店名找位置（在 [center] 附近約 15 公里內），每秒最多查一次；
      * 回傳這次找到幾家。查不到的記下來不再重查。
