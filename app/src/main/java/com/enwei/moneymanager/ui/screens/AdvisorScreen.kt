@@ -38,6 +38,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -358,6 +360,11 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         }
         if (r.trend.isNotBlank()) Text(com.enwei.moneymanager.data.stripCites(r.trend), fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (r.summary.isNotBlank()) PointList(r.summary, r.cites, newsById, foldKey = "summary")
+        // App 算的大盤狀態與過去推薦的實際表現
+        if (r.regime.isNotBlank()) Text("大盤：" + r.regime.substringAfterLast("→ ").let { l -> "$l（${r.regime.substringBeforeLast("→").trim().trimEnd('，')}）" },
+            fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (r.track.isNotBlank()) Text(r.track, fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
+        if (r.scanned > 0) Text("全市場 ${r.scanned} 檔依趨勢、法人籌碼、基本面、消息、風險評分後挑選", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     // ② 大盤 K 線與題材熱度
     if (rtab == 0) Section("大盤與題材") {
@@ -531,6 +538,7 @@ fun PickCard(
                     Text("${p.symbol} ${p.name}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     p.price?.let { Text("%.2f".format(it), fontSize = AppText.secondary, modifier = Modifier.padding(start = 6.dp)) }
+                    p.score?.let { ScoreBadge(it) }
                     if (p.strength.isNotBlank()) Tag(p.strength, when {
                         p.strength.contains("強") -> StockUp.copy(alpha = 0.18f)
                         p.strength.contains("弱") -> StockDown.copy(alpha = 0.18f)
@@ -579,6 +587,14 @@ fun PickCard(
                     }
                 }
             }
+            // 綜合分數與五大面向、時光機模擬
+            if (p.score != null && p.scores.size == 5) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ScoreBadge(p.score)
+                listOf("趨勢", "籌碼", "基本", "消息", "風險").zip(p.scores).forEach { (l, v) ->
+                    Text("$l $v", fontSize = AppText.label, color = if (v >= 65) StockUp else if (v <= 35) StockDown else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (p.simTarget != null && p.simStop != null) SimBar(p.simTarget, p.simStop, p.simNone ?: 0, p.simExpR, p.targetPrice, p.stopPrice)
             // 近期 K 線：一眼看出走勢，不必點進去
             com.enwei.moneymanager.ui.components.MiniKLine(p.symbol)
             com.enwei.moneymanager.ui.components.RevenueLine(p.symbol)
@@ -611,6 +627,34 @@ fun PickCard(
                 }) { Text(if (inList) "★ 觀察中" else "☆ 加入觀察", fontSize = AppText.caption) }
             }
         }
+    }
+}
+
+/** 綜合分數小徽章（0–100，越高越綠／紅依漲跌色）。 */
+@Composable
+private fun ScoreBadge(score: Int) {
+    val c = if (score >= 65) StockUp else if (score <= 40) StockDown else MaterialTheme.colorScheme.onSurfaceVariant
+    Surface(color = c.copy(alpha = 0.14f), shape = RoundedCornerShape(4.dp), modifier = Modifier.padding(start = 4.dp)) {
+        Text("$score 分", fontSize = AppText.caption, color = c, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+    }
+}
+
+/** 時光機：未來 20 個交易日先到目標／先到停損／都沒到的比例條，與目標價、停損價。 */
+@Composable
+private fun SimBar(target: Int, stop: Int, none: Int, expR: Double?, targetPrice: Double?, stopPrice: Double?) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text("時光機（重播過去一年走勢 3,000 次，未來 20 個交易日）", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))) {
+            if (target > 0) Box(Modifier.weight(target.toFloat()).fillMaxHeight().background(StockUp))
+            if (none > 0) Box(Modifier.weight(none.toFloat()).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
+            if (stop > 0) Box(Modifier.weight(stop.toFloat()).fillMaxHeight().background(StockDown))
+        }
+        Row {
+            Text("先到目標 $target%" + (targetPrice?.let { "（${"%.1f".format(it)}）" } ?: ""), fontSize = AppText.label, color = StockUp, modifier = Modifier.weight(1f))
+            Text("都沒到 $none%", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("　先到停損 $stop%" + (stopPrice?.let { "（${"%.1f".format(it)}）" } ?: ""), fontSize = AppText.label, color = StockDown)
+        }
+        expR?.let { Text("期望值 ${"%+.2f".format(it)}R（1R＝停損金額）", fontSize = AppText.label, color = if (it > 0) StockUp else StockDown) }
     }
 }
 

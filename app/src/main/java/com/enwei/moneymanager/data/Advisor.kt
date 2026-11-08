@@ -15,6 +15,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.withPermit
 import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
 
@@ -473,74 +474,111 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
     }
     onStep("讀取大盤與持股走勢…")
     val snap = advisorSnapshot(fetch = true)
-    val big = com.enwei.moneymanager.net.GroqAi.bigContext(com.enwei.moneymanager.net.GroqAi.AiTask.REPORT)
-    val (digest, imp) = if (big) datasetDigest(ds, st, themes = 30, symbols = 60, important = 60, full = true)
-    else datasetDigest(ds, st, themes = 10, symbols = 18, important = 15)
-    onStep("讀取熱門個股的月營收…")
-    val revText = runCatching {
-        val syms = ds.symbols(st).take(if (big) 20 else 10).map { it.key }
-        kotlinx.coroutines.coroutineScope {
-            syms.map { sym -> async { sym to com.enwei.moneymanager.net.TwData.monthRevenue(sym, 15) } }.map { it.await() }
-        }.filter { it.second.isNotEmpty() }.joinToString("\n", prefix = "熱門個股月營收（代號｜最新月份｜年增率｜近三月平均年增）：\n") { (sym, l) ->
-            val last = l.last()
-            val avg3 = l.takeLast(3).mapNotNull { it.yoy }.takeIf { it.isNotEmpty() }?.average()
-            "- $sym｜${last.year}/${last.month}｜${last.yoy?.let { "%+.1f%%".format(it) } ?: "?"}｜${avg3?.let { "%+.1f%%".format(it) } ?: "?"}"
-        }
-    }.getOrDefault("")
-    // 全市場量價：各產業強弱與強勢候選（不只看新聞熱度，避免每天只推同一批科技股）
-    onStep("掃描全市場產業強弱…")
-    runCatching { com.enwei.moneymanager.net.TwData.stockList(com.enwei.moneymanager.MoneyApp.instance) }
+    // ── 選股引擎：數字全部由 App 算好，AI 只看候選表判讀與撰寫（省 token、有依據）──
     val scan = com.enwei.moneymanager.net.MarketScan
+    val tw = com.enwei.moneymanager.net.TwMarket
+    runCatching { com.enwei.moneymanager.net.TwData.stockList(com.enwei.moneymanager.MoneyApp.instance) }
+    onStep("① 掃描全市場收盤與產業強弱…")
     val board = runCatching { scan.board() }.getOrDefault(emptyList())
     val boardBy = board.associateBy { it.code }
     val sectors = scan.sectors(board)
-    val indexR20 = runCatching { BarCache.get("^TWII", "1y")?.close?.let { scan.ret(it, 20) } }.getOrNull()
-    val newsSyms = ds.symbols(st).take(if (big) 20 else 12).map { it.key }
-    val cands = scan.candidates(board, sectors, perSector = if (big) 3 else 2)
-    val strength = runCatching { scan.strength((cands.map { it.code } + newsSyms).distinct().take(40), indexR20) }.getOrDefault(emptyMap())
     fun industryOf(c: String) = scan.shortIndustry(boardBy[c]?.industry ?: com.enwei.moneymanager.net.TwData.cached().firstOrNull { it.code == c }?.industry.orEmpty())
-    val scanText = buildString {
-        if (sectors.isNotEmpty()) {
-            appendLine("今日產業強弱（產業｜成交值加權漲跌｜上漲家數比例｜成交值億）：")
-            (sectors.take(8) + sectors.filter { it.name.contains("金融") } + sectors.takeLast(3)).distinct().forEach {
-                appendLine("- ${it.name}｜${"%+.2f%%".format(it.pct)}｜${"%.0f%%".format(it.upRatio * 100)}｜${"%.0f".format(it.value / 1e8)}")
-            }
-        }
-        if (strength.isNotEmpty()) {
-            appendLine("量價強勢候選（代號 名稱｜產業｜今日｜5日｜20日｜相對大盤20日｜均線｜量比｜距60日高）：")
-            strength.values.sortedByDescending { it.rs20 ?: it.ret20 }.forEach { s ->
-                val name = boardBy[s.code]?.name ?: com.enwei.moneymanager.net.TwData.nameOf(s.code).orEmpty()
-                appendLine(scan.line(boardBy[s.code], s, name, industryOf(s.code)))
-            }
-        }
-        // 近幾份報告推過的個股：避免每天推同一批
-        val past = (listOfNotNull(st.report) + st.history).filter { it.day < LocalDate.now().toEpochDay() }.distinctBy { it.day }.take(5)
-        val seen = past.flatMap { it.picks.map { p -> p.symbol } }.groupingBy { it }.eachCount()
-        if (seen.isNotEmpty()) appendLine("近 ${past.size} 份報告已推薦（代號×次數）：" + seen.entries.sortedByDescending { it.value }.joinToString("、") { "${it.key}×${it.value}" })
+    val indexCloses = snap.index?.close.orEmpty()
+    val indexR20 = scan.ret(indexCloses, 20)
+    val regime = StockEngine.regime(indexCloses, board.takeIf { it.isNotEmpty() }?.let { b -> b.count { it.pct > 0 }.toDouble() / b.size })
+    onStep("② 讀取三大法人、本益比與月營收…")
+    val (inst, valuation, revAll) = coroutineScope {
+        val a = async { runCatching { tw.institutional(10) }.getOrDefault(emptyMap()) }
+        val b = async { runCatching { tw.valuation() }.getOrDefault(emptyMap()) }
+        val c = async { runCatching { tw.revenueAll() }.getOrDefault(emptyMap()) }
+        Triple(a.await(), b.await(), c.await())
     }
-    onStep("AI 分析資料集（${ds.recent(st, 3).size} 則新聞）…")
-    val r = com.enwei.moneymanager.net.GroqAi.dailyReport(situation(snap) + "\n" + digest + "\n" + revText + "\n" + scanText) ?: return null
-    onStep("確認推薦的代號與價格…")
-    val quotes = runCatching { com.enwei.moneymanager.net.QuoteService.fetch(r.picks.map { Market.TW to it.symbol }) }
-        .getOrDefault(emptyList()).associateBy { it.key }
-    // 同一產業最多 2 檔（AI 偶爾還是會全挑同一類）
+    val newsStat = ds.symbols(st).associateBy { it.key }
+    val recent3 = ds.recent(st, 3)
+    val holdSet = snap.holdings.map { it.symbol }.toSet()
+    // ③ 全市場初篩：成交值 5 千萬以上、股價 10 元以上，用便宜的數字（當日漲跌、法人 5 日、營收年增、新聞）先排序
+    val universe = board.filter { it.value >= 5e7 && it.close >= 10 && "ETF" !in it.industry }
+    fun pre(r: com.enwei.moneymanager.net.MarketScan.Row): Double {
+        val i5 = inst[r.code].orEmpty().takeLast(5).sumOf { it.total }.toDouble() * r.close
+        return r.pct.coerceIn(-10.0, 10.0) * 2 + (i5 / r.value.coerceAtLeast(1.0) * 100).coerceIn(-20.0, 20.0) +
+            (revAll[r.code]?.yoy ?: 0.0).coerceIn(-30.0, 60.0) / 5 + (newsStat[r.code]?.count ?: 0).coerceAtMost(8)
+    }
+    val perInd0 = HashMap<String, Int>()
+    val firstPass = universe.sortedByDescending(::pre).filter { r -> (perInd0.merge(industryOf(r.code), 1) { a, b -> a + b } ?: 1) <= 4 }.take(45).map { it.code }
+    val pool = (firstPass + holdSet.filter { it.matches(Regex("[0-9]{4}")) } + settings.value.watchlist.filter { it.matches(Regex("[0-9]{4}")) } +
+        ds.symbols(st).take(10).map { it.key }.filter { it.matches(Regex("[0-9]{4}")) }).distinct().take(70)
+    onStep("③ 計算 ${pool.size} 檔的趨勢、籌碼與基本面…")
+    fun cand(code: String, bars: DailyBars?, revHist: List<com.enwei.moneymanager.net.TwData.MonthRevenue>, eps: List<Double>): StockEngine.Candidate? {
+        val b = bars ?: return null
+        val ns = newsStat[code]
+        val title = recent3.filter { code in it.symbols }.maxByOrNull { it.importance * 10 + it.epochSec / 86_400 }?.title
+        return StockEngine.candidate(code, boardBy[code]?.name ?: com.enwei.moneymanager.net.TwData.nameOf(code).orEmpty(), industryOf(code),
+            b.close, b.volume, indexR20, inst[code].orEmpty(), revAll[code], revHist, eps, valuation[code],
+            ns?.count ?: 0, ns?.avgSentiment ?: 0.0, title, code in holdSet, regime.label)
+    }
+    val gate = kotlinx.coroutines.sync.Semaphore(6)
+    val bars = coroutineScope {
+        pool.map { c -> async { gate.withPermit { c to runCatching { BarCache.get(c, "1y") }.getOrNull() } } }.awaitAll().toMap()
+    }
+    val pass1 = pool.mapNotNull { cand(it, bars[it], emptyList(), emptyList()) }.sortedByDescending { it.score }
+    // ④ 前 30 檔補上營收歷史（是否創新高）與 EPS，重新評分並跑時光機
+    onStep("④ 讀取前 30 檔的營收與 EPS、時光機模擬…")
+    val top30 = (pass1.take(30).map { it.code } + pass1.filter { it.holding }.map { it.code }).distinct()
+    val enriched = coroutineScope {
+        top30.map { c ->
+            async {
+                gate.withPermit {
+                    val rh = runCatching { com.enwei.moneymanager.net.TwData.monthRevenue(c, 13) }.getOrDefault(emptyList())
+                    val eps = runCatching { tw.epsHistory(c).map { it.second } }.getOrDefault(emptyList())
+                    cand(c, bars[c], rh, eps)?.let { it.copy(sim = StockEngine.simulate(bars[c]!!.close)) }
+                }
+            }
+        }.awaitAll().filterNotNull()
+    }.sortedByDescending { it.score }
     val perInd = HashMap<String, Int>()
-    val capped = r.picks.filter { p ->
-        val k = industryOf(p.symbol).ifBlank { return@filter true }
-        val n = perInd.merge(k, 1) { a, b -> a + b } ?: 1
-        n <= 2 || r.picks.size <= 5
+    val candidates = (enriched.filter { c -> (perInd.merge(c.industry, 1) { a, b -> a + b } ?: 1) <= 3 }.take(25) + enriched.filter { it.holding })
+        .distinctBy { it.code }
+    val candBy = candidates.associateBy { it.code }
+    // ⑤ 過去推薦的實際表現（近 30 天，用今天收盤算）
+    val past = (listOfNotNull(st.report) + st.history).filter { it.day >= LocalDate.now().toEpochDay() - 30 && it.day < LocalDate.now().toEpochDay() }
+    val track = run {
+        val rets = past.flatMap { rep -> rep.picks.mapNotNull { p -> val now = boardBy[p.symbol]?.close; val at = p.price; if (now != null && at != null && at > 0) (now / at - 1) * 100 else null } }
+        val idxNow = indexCloses.lastOrNull()
+        val idxRets = past.mapNotNull { rep -> val at = rep.indexAt; if (at != null && idxNow != null && at > 0) (idxNow / at - 1) * 100 else null }
+        if (rets.size < 3) "" else "近 30 天推薦 ${rets.size} 檔：平均 ${"%+.1f".format(rets.average())}%，上漲比例 ${rets.count { it > 0 } * 100 / rets.size}%" +
+            (idxRets.takeIf { it.isNotEmpty() }?.let { "（同期加權平均 ${"%+.1f".format(it.average())}%）" } ?: "")
     }
-    val missing = capped.filter { it.symbol !in strength }.map { it.symbol }
-    val strength2 = strength + runCatching { scan.strength(missing, indexR20) }.getOrDefault(emptyMap())
-    val yoy = runCatching {
-        coroutineScope {
-            capped.map { p -> async { p.symbol to com.enwei.moneymanager.net.TwData.monthRevenue(p.symbol, 15).lastOrNull()?.yoy } }.awaitAll()
-        }.toMap()
-    }.getOrDefault(emptyMap())
-    val picks = capped.map { p ->
-        val q = quotes[quoteKey(Market.TW, p.symbol)]
-        p.copy(price = q?.price, name = p.name.ifBlank { q?.name.orEmpty() }, industry = industryOf(p.symbol),
-            basis = scan.basis(strength2[p.symbol], yoy[p.symbol]))
+    val seen = past.take(5).flatMap { it.picks.map { p -> p.symbol } }.groupingBy { it }.eachCount()
+    val (digest, imp) = datasetDigest(ds, st, themes = 10, symbols = 0, important = 15)
+    val table = buildString {
+        appendLine("大盤狀態：${regime.text}")
+        if (sectors.isNotEmpty()) appendLine("今日強勢產業：" + sectors.take(6).joinToString("、") { "${it.name}${"%+.1f".format(it.pct)}%" } +
+            "；弱勢：" + sectors.takeLast(3).joinToString("、") { "${it.name}${"%+.1f".format(it.pct)}%" })
+        appendLine("候選股評分表（全市場 ${universe.size} 檔初篩、${pool.size} 檔細算後的前 ${candidates.size} 檔；分數 0–100；外/投＝外資、投信近 5 日買賣超與連續天數；時光機＝未來 20 個交易日先到目標(+2R)/先到停損(-1R)的機率）：")
+        candidates.forEach { appendLine("- " + it.row()) }
+        if (track.isNotBlank()) appendLine("過去推薦表現：$track")
+        if (seen.isNotEmpty()) appendLine("近幾份報告已推薦（代號×次數）：" + seen.entries.sortedByDescending { it.value }.joinToString("、") { "${it.key}×${it.value}" })
+    }
+    onStep("⑤ AI 判讀候選表與新聞（${candidates.size} 檔）…")
+    val r = com.enwei.moneymanager.net.GroqAi.dailyReport(situation(snap) + "\n" + table + "\n" + digest) ?: return null
+    onStep("⑥ 檢查推薦與數字…")
+    // 只留候選表裡的；同產業最多 2 檔；不足 4 檔時用分數最高的補上（理由用 App 算的依據）
+    val perPick = HashMap<String, Int>()
+    val valid = r.picks.filter { it.symbol in candBy }.filter { p -> (perPick.merge(candBy[p.symbol]!!.industry, 1) { a, b -> a + b } ?: 1) <= 2 }.toMutableList()
+    if (valid.size < 4) candidates.filter { c -> valid.none { it.symbol == c.code } && !c.holding && (c.sim?.expR ?: 0.0) >= 0 }.take(4 - valid.size).forEach { c ->
+        valid += StockPick(c.code, c.name, if (c.sFund >= 60) "長線" else "短線", strength = if (c.sTrend >= 65) "強勢" else if (c.sTrend <= 35) "弱勢" else "中性",
+            reason = c.tags().joinToString("、"))
+    }
+    val picks = valid.map { p ->
+        val c = candBy[p.symbol]!!
+        val sim = c.sim
+        p.copy(
+            name = p.name.ifBlank { c.name }, price = c.close, industry = c.industry, basis = c.tags(),
+            score = c.score, scores = listOf(c.sTrend, c.sChip, c.sFund, c.sNews, c.sRisk),
+            simTarget = sim?.target, simStop = sim?.stop, simNone = sim?.none, simExpR = sim?.expR,
+            stopPrice = sim?.stopPrice, targetPrice = sim?.targetPrice,
+            stop = p.stop.ifBlank { sim?.let { "跌破 ${"%.1f".format(it.stopPrice)}" }.orEmpty() },
+        )
     }
     val keyNews = r.keyNews.mapNotNull { k -> k.id.toIntOrNull()?.let { imp.getOrNull(it) }?.let { KeyNews(it.id, k.why) } }
     // 報告文字裡的新聞編號換成報告自己的 [1][2]…，重點新聞也編進同一組編號
@@ -550,7 +588,8 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
     val picks2 = picks.map { it.copy(reason = rn(it.reason)) }
     val holdings2 = r.holdings.map { it.copy(reason = rn(it.reason)) }
     keyNews.forEach { if (it.id !in ids) ids += it.id }
-    val report = r.copy(trend = trend, summary = summary, allocation = allocation, picks = picks2, holdings = holdings2, cites = ids, keyNews = keyNews, createdAt = System.currentTimeMillis(), day = LocalDate.now().toEpochDay(), newsCount = ds.recent(st, 3).size)
+    val report = r.copy(trend = trend, summary = summary, allocation = allocation, picks = picks2, holdings = holdings2, cites = ids, keyNews = keyNews, createdAt = System.currentTimeMillis(), day = LocalDate.now().toEpochDay(), newsCount = ds.recent(st, 3).size,
+        regime = regime.text, track = track, indexAt = indexCloses.lastOrNull(), scanned = universe.size)
     ds.update { it.copy(report = report, history = (listOfNotNull(it.report) + it.history).take(400), business = it.business + picks2.filter { p -> p.business.isNotBlank() }.associate { p -> p.symbol to p.business }).prunedHistory() }
     return report
 }

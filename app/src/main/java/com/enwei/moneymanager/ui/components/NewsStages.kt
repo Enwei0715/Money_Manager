@@ -27,6 +27,8 @@ object NewsStages {
     val full = listOf("蒐集新聞", "thread 標註", "合併題材", "block 整理", "grid 市場大局", "產生報告")
 
     fun of(step: String): Int = when {
+        // 報告的選股引擎步驟（①～⑥）
+        step.firstOrNull()?.let { it in "①②③④⑤⑥" } == true -> 5
         step.contains("thread") || step.contains("標註") -> 1
         step.contains("合併題材") -> 2
         step.contains("block") || step.contains("重點") -> 3

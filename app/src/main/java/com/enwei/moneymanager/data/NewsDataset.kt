@@ -86,6 +86,16 @@ data class StockPick(
     val industry: String = "",
     /** App 用量價與營收算出的依據標籤（20 日漲幅、相對大盤、均線、量比、營收） */
     val basis: List<String> = emptyList(),
+    /** 綜合分數 0–100 與五大面向（趨勢、籌碼、基本面、消息、風險） */
+    val score: Int? = null,
+    val scores: List<Int> = emptyList(),
+    /** 時光機：20 個交易日內先到目標、先到停損、都沒到的機率（%）與期望值（R） */
+    val simTarget: Int? = null,
+    val simStop: Int? = null,
+    val simNone: Int? = null,
+    val simExpR: Double? = null,
+    val stopPrice: Double? = null,
+    val targetPrice: Double? = null,
 )
 
 /** 重點新聞：新聞 id 與 AI 說明為什麼重要。 */
@@ -116,6 +126,14 @@ data class DailyReport(
     val levels: List<KeyLevel> = emptyList(),
     /** 大盤短期展望：偏多／盤整／偏空 */
     val outlook: String = "",
+    /** App 算的大盤狀態（多頭／盤整／空頭與依據） */
+    val regime: String = "",
+    /** 過去推薦的實際表現（近 30 天） */
+    val track: String = "",
+    /** 產生報告時的加權指數（之後算推薦表現與大盤比較） */
+    val indexAt: Double? = null,
+    /** 這次分析了幾檔（全市場初篩後） */
+    val scanned: Int = 0,
 )
 
 @Serializable
