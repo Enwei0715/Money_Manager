@@ -137,7 +137,7 @@ fun SpendMapScreen(nav: NavController) {
     var focusTick by remember { mutableStateOf(0) }
     // 自動對準店家：GPS 有誤差，在原本位置附近 300 公尺找同名的店（連鎖店找最近的分店），找到就用店的座標
     var snapping by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(spots.map { it.key }) {
+    androidx.compose.runtime.LaunchedEffect(spots.map { it.key }) {
         val todo = spots.filter { !it.fixed && it.key.isNotBlank() && !it.name.startsWith("（") && !PlaceHints.snapTried(it.key) }.take(20)
         todo.forEachIndexed { i, sp ->
             snapping = "對準店家位置 ${i + 1}/${todo.size}…"
