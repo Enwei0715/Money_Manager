@@ -172,7 +172,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             // 🔔 價格提醒：放在右上角，任何分頁都按得到；已設定時亮起
             androidx.compose.material3.IconButton(onClick = { alertOpen = true }) {
                 androidx.compose.material3.Icon(
-                    if (alertSet) androidx.compose.material.icons.Icons.Filled.NotificationsActive else androidx.compose.material.icons.Icons.Outlined.NotificationAdd,
+                    if (alertSet) androidx.compose.material.icons.Icons.Filled.NotificationsActive else androidx.compose.material.icons.Icons.Outlined.NotificationsNone,
                     "價格提醒", tint = if (alertSet) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
