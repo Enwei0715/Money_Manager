@@ -59,7 +59,7 @@ fun AiHubScreen(nav: NavController) {
 
 @Composable
 private fun HubCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.material3.Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 14.dp).weight(1f))

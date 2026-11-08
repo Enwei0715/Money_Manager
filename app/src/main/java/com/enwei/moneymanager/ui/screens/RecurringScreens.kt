@@ -80,7 +80,7 @@ fun RecurringScreen(nav: NavController) {
                     return (base * when (r.frequency) { Frequency.DAILY -> 30.0; Frequency.WEEKLY -> 4.33; Frequency.MONTHLY -> 1.0; Frequency.YEARLY -> 1 / 12.0 }).toLong()
                 }
                 val on = list.filter { it.enabled }
-                androidx.compose.material3.Card(Modifier.fillMaxWidth().padding(12.dp)) {
+                com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth().padding(12.dp)) {
                     Row(Modifier.padding(16.dp)) {
                         Column(Modifier.weight(1f)) {
                             Text("每月固定支出", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

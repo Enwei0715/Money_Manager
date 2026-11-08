@@ -201,7 +201,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                                     "features" -> "開關各項功能"; "autorecord" -> "通知、錢包畫面"; "ai" -> "金鑰、模型、語氣"
                                     "stocks" -> "手續費、紀律"; "notify" -> "七種通知"; "data" -> "密碼、備份還原"; else -> "版本與更新"
                                 }
-                                androidx.compose.material3.Card(Modifier.weight(1f).height(72.dp).clickable { nav.navigate(g.route ?: "config?g=${g.id}") }) {
+                                com.enwei.moneymanager.ui.components.AppCard(Modifier.weight(1f).height(72.dp).clickable { nav.navigate(g.route ?: "config?g=${g.id}") }) {
                                     Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                         androidx.compose.foundation.layout.Box(
                                             Modifier.size(36.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), androidx.compose.foundation.shape.CircleShape),
@@ -481,7 +481,7 @@ fun BudgetScreen(nav: NavController) {
         LazyColumn(Modifier.padding(pad).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // ① 總預算＋儲蓄率目標（點一下修改）
             item {
-                Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         val total = s.budgets[0L]
                         Box(Modifier.clickable { editing = 0L to "總預算" }) {
@@ -501,7 +501,7 @@ fun BudgetScreen(nav: NavController) {
             }
             // ② 分類預算：每個一行（點一下修改）
             if (setCats.isNotEmpty()) item {
-                Card(Modifier.fillMaxWidth()) {
+                com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("分類預算", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -517,7 +517,7 @@ fun BudgetScreen(nav: NavController) {
             }
             // ③ 還沒設定的分類：小標籤，點一下設定
             if (unsetCats.isNotEmpty()) item {
-                Card(Modifier.fillMaxWidth()) {
+                com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("新增分類預算", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

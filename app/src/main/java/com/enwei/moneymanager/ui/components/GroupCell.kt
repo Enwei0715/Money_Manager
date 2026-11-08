@@ -16,6 +16,8 @@ import com.enwei.moneymanager.ui.AppearancePrefs
  */
 @Composable
 fun Modifier.groupCell(first: Boolean, last: Boolean): Modifier {
+    // 線條樣式：整排、不圓角（分隔線由各列自己畫）
+    if (!AppearancePrefs.cards) return this.background(MaterialTheme.colorScheme.surface)
     val r = AppearancePrefs.cardRadius
     val shape = RoundedCornerShape(
         topStart = if (first) r else 0.dp, topEnd = if (first) r else 0.dp,

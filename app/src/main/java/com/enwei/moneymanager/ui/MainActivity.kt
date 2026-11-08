@@ -131,7 +131,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
             }
             MoneyTheme(dark = dark, uiScale = settings.uiScale, preset = settings.themePreset, font = settings.fontChoice,
-                textScale = settings.textScale, corner = settings.cornerStyle, tabular = settings.tabularNums) {
+                textScale = settings.textScale, corner = settings.cornerStyle, tabular = settings.tabularNums, cards = settings.cardStyle) {
                 if (locked.value && settings.passcodeOn) {
                     LockScreen(settings.passcodeHash, biometric = settings.biometric) { locked.value = false }
                 } else {

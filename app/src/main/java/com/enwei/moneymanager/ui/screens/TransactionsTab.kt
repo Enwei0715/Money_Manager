@@ -558,9 +558,9 @@ fun DayBlock(
                         color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.label)
                 }
                 Spacer(Modifier.weight(1f))
-                Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = if (compact) AppText.label else AppText.secondary,
+                Text(if (t.income == 0L) "" else Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = if (compact) AppText.secondary else AppText.body, fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = if (compact) AppText.label else AppText.secondary,
+                Text(if (t.expense == 0L) "" else Money.withSymbol(t.expense, lk.base), color = ExpenseColor, fontSize = if (compact) AppText.secondary else AppText.body, fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }

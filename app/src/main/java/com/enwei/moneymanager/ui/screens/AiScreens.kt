@@ -59,7 +59,7 @@ fun AiSettingsScreen(nav: NavController) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             AiAllTasksProgress()
-            Card(Modifier.fillMaxWidth()) {
+            com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     // 設定像樹狀：上層「啟用 AI」關閉時，下面的設定全部隱藏也不生效
                     SwitchRow("啟用 AI", "判讀通知、整理名稱與分類、收支與股票分析", s.aiEnabled, true) { v ->
@@ -133,7 +133,7 @@ private fun ProviderCard(
     val key = k
     var result by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth()) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(p.label, fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             Text(desc, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -194,7 +194,7 @@ private fun RouteOverview() {
         Provider.GROQ -> androidx.compose.ui.graphics.Color(0xFFF0605A)
         Provider.GEMINI -> androidx.compose.ui.graphics.Color(0xFF3C82E6)
     }
-    Card(Modifier.fillMaxWidth()) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Provider.entries.forEach { p ->

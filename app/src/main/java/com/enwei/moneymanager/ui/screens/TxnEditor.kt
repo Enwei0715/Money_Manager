@@ -957,10 +957,13 @@ private fun SplitSection(
                 androidx.compose.material3.OutlinedTextField(expr, { onExpr(it.filter { c -> c.isDigit() || c == '.' }) }, singleLine = true,
                     label = { Text("別人的部分") }, modifier = Modifier.weight(1f),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
-                if (total != null) {
-                    androidx.compose.material3.AssistChip({ onExpr(minorToExpr(total / 2)) }, { Text("一半", fontSize = AppText.caption) })
-                    androidx.compose.material3.AssistChip({ onExpr(minorToExpr(total)) }, { Text("全部", fontSize = AppText.caption) })
+            }
+            // 快速分法：對方負擔 1/2、1/3、1/4（幾人平分時他的那一份），或全部是他的；也可以直接輸入任何金額
+            if (total != null) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(2 to "1/2", 3 to "1/3", 4 to "1/4").forEach { (n, l) ->
+                    androidx.compose.material3.AssistChip({ onExpr(minorToExpr(total / n)) }, { Text(l, fontSize = AppText.caption) })
                 }
+                androidx.compose.material3.AssistChip({ onExpr(minorToExpr(total)) }, { Text("全部他的", fontSize = AppText.caption) })
             }
             val split = Calculator.evaluate(expr)?.abs()?.let(Money::toMinor)
             if (total != null && split != null) Text(

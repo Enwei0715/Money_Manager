@@ -88,7 +88,7 @@ fun NoticeSettingsScreen(nav: NavController) {
                 val kinds = NoticeKind.entries.filter { it.group == gid && it.available(s) }
                 if (kinds.isEmpty()) return@forEach
                 Text(glabel, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp))
-                Card(Modifier.fillMaxWidth()) {
+                com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                     Column {
                         kinds.forEachIndexed { i, k ->
                             if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))

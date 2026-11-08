@@ -117,7 +117,7 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
     val mine = trades.filter { it.brokerAccountId == b.id && it.market == Market.TW && (it.side == StockSide.BUY || it.side == StockSide.SELL) }
     val first = mine.minOfOrNull { it.date }
 
-    Card(Modifier.fillMaxWidth()) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

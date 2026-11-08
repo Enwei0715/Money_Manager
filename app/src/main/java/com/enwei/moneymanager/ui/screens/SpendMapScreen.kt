@@ -51,6 +51,16 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 
+/** 線上消費（沒有實體地點）：不標在地圖上、也不用店名找位置。 */
+private val ONLINE = listOf("蝦皮", "Claude", "Firstory", "CapCut", "ElevenLabs", "Endel", "Uber One", "Netflix", "Spotify", "YouTube", "Apple", "Google",
+    "LINE 貼圖", "LINE 主題", "LINE 官方", "MyCard", "Steam", "Chess.com", "傳說對決", "Brawl Stars", "Clash of Clans", "Pixel Survival", "Sky 光遇",
+    "售票網站", "銀行手續費", "對帳調整", "房東", "電費", "保險", "Uber Eats", "foodpanda", "momo", "PChome", "Amazon")
+private val ONLINE_ROOTS = listOf("訂閱", "保險", "金融費用", "居住")
+
+/** 連鎖店：每家分店位置不同，只用付款當下記下的位置（不套用其他分店、不用店名找）。 */
+private val CHAINS = listOf("7-11", "全家", "萊爾富", "OK超商", "全聯", "小北百貨", "麥當勞", "摩斯漢堡", "肯德基", "85度C", "星巴克", "路易莎", "大創", "愛買",
+    "家樂福", "寶雅", "屈臣氏", "康是美", "吉野家", "八方", "可不可", "50嵐", "迷客夏", "中油", "台北捷運", "公車", "YouBike", "台鐵", "台灣高鐵", "Subway", "漢堡王", "Burger King")
+
 /** 地圖上的一個點：同一家店（或同一個位置）在這段期間的支出合計。 */
 private data class SpendSpot(val lat: Double, val lon: Double, val name: String, val total: Long, val count: Int, val cat: String)
 
@@ -80,19 +90,30 @@ fun SpendMapScreen(nav: NavController) {
         else -> "${from.year} 年 ${from.monthValue} 月"
     }
     val samples = remember(all) { PlaceHints.samples(ctx).associateBy { it.txnId } }
+    fun online(t: com.enwei.moneymanager.data.TxnEntity): Boolean {
+        val m = t.merchant?.trim().orEmpty()
+        val root = lk.category(lk.rootId(t.categoryId))?.name.orEmpty()
+        return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) }
+    }
+    fun chain(m: String) = CHAINS.any { m.contains(it, ignoreCase = true) }
     // 同一家店：記過位置的平均位置
     val merchantLoc = remember(all, samples) {
         all.mapNotNull { t -> val s = samples[t.id] ?: return@mapNotNull null; t.merchant?.trim()?.takeIf { it.isNotEmpty() }?.let { it to (s.lat to s.lon) } }
-            .groupBy({ it.first }, { it.second }).mapValues { (_, l) -> l.map { it.first }.average() to l.map { it.second }.average() }
+            .groupBy({ it.first }, { it.second })
+            // 同一個店名在相距 300 公尺以上的地方都記過：當成連鎖店，不套用平均位置
+            .filter { (m, l) -> !chain(m) && l.all { p -> l.all { q -> FloatArray(1).also { r -> android.location.Location.distanceBetween(p.first, p.second, q.first, q.second, r) }[0] < 300f } } }
+            .mapValues { (_, l) -> l.map { it.first }.average() to l.map { it.second }.average() }
     }
     val inRange = all.filter { t ->
         t.type == TxnType.EXPENSE && t.status == TxnStatus.CONFIRMED &&
             java.time.Instant.ofEpochMilli(t.date).atZone(zone).toLocalDate().let { !it.isBefore(from) && !it.isAfter(to) }
     }
     fun locOf(t: com.enwei.moneymanager.data.TxnEntity): Pair<Double, Double>? =
-        samples[t.id]?.let { it.lat to it.lon } ?: t.merchant?.trim()?.let { m -> merchantLoc[m] ?: geo[m] }
-    val placed = inRange.mapNotNull { t -> locOf(t)?.let { t to it } }
-    val unplaced = inRange.filter { locOf(it) == null }
+        samples[t.id]?.let { it.lat to it.lon } ?: t.merchant?.trim()?.takeIf { !chain(it) }?.let { m -> merchantLoc[m] ?: geo[m] }
+    val offline = inRange.filter { !online(it) }
+    val onlineCount = inRange.size - offline.size
+    val placed = offline.mapNotNull { t -> locOf(t)?.let { t to it } }
+    val unplaced = offline.filter { locOf(it) == null }
     val spots = placed.groupBy { (t, l) -> (t.merchant?.trim().orEmpty()) to ("%.4f,%.4f".format(l.first, l.second)) }.map { (k, l) ->
         val total = l.sumOf { lk.fx.convert(it.first.amount, it.first.currency) }
         val cat = l.groupingBy { lk.category(lk.rootId(it.first.categoryId))?.name ?: "" }.eachCount().maxByOrNull { it.value }?.key.orEmpty()
@@ -113,7 +134,7 @@ fun SpendMapScreen(nav: NavController) {
                     }
                     val placedSum = placed.sumOf { lk.fx.convert(it.first.amount, it.first.currency) }
                     Text("地圖上 ${placed.size} 筆 ${Money.withSymbol(placedSum, lk.base)}" +
-                        if (unplaced.isNotEmpty()) "・沒有位置 ${unplaced.size} 筆" else "",
+                        (if (unplaced.isNotEmpty()) "・沒有位置 ${unplaced.size} 筆" else "") + (if (onlineCount > 0) "・線上 $onlineCount 筆" else ""),
                         fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -123,7 +144,7 @@ fun SpendMapScreen(nav: NavController) {
                 else MapView(html, Modifier.fillMaxWidth().height(360.dp).padding(horizontal = 12.dp).clip(RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)))
             }
             // 沒有位置的店：用店名在 OpenStreetMap 找（每秒一家）
-            val missing = unplaced.mapNotNull { it.merchant?.trim()?.takeIf { m -> m.isNotEmpty() && m !in geo } }.distinct()
+            val missing = unplaced.mapNotNull { it.merchant?.trim()?.takeIf { m -> m.isNotEmpty() && m !in geo && !chain(m) } }.distinct()
             if (missing.isNotEmpty()) item {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(progress ?: "${missing.size} 家店還沒有位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
@@ -177,14 +198,15 @@ private fun mapHtml(spots: List<SpendSpot>, dark: Boolean): String {
     }
     val tiles = if (dark) "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" else "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
     return """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>html,body,#m{margin:0;height:100%;background:${if (dark) "#1e1e21" else "#f2f2f2"}}.leaflet-popup-content{font:14px sans-serif}</style></head>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>html,body{margin:0;height:100%}#m{position:absolute;top:0;bottom:0;left:0;right:0;background:${if (dark) "#1e1e21" else "#f2f2f2"}}.leaflet-popup-content{font:14px sans-serif}</style></head>
 <body><div id="m"></div><script>
 var d=[$data];var m=L.map('m',{zoomControl:false,attributionControl:true});
 L.tileLayer('$tiles',{maxZoom:19,attribution:'© OpenStreetMap © CARTO'}).addTo(m);
 var g=[];d.forEach(function(p){var c=L.circleMarker([p.a,p.o],{radius:p.r,color:p.k,weight:2,fillColor:p.k,fillOpacity:0.45}).addTo(m);
 c.bindPopup('<b>'+p.n+'</b><br>'+p.t+' · '+p.c+' 筆'+(p.g?'<br><span style="color:#888">'+p.g+'</span>':''));g.push([p.a,p.o]);});
-if(g.length==1){m.setView(g[0],16);}else{m.fitBounds(g,{padding:[30,30],maxZoom:16});}
+function fit(){m.invalidateSize();if(g.length==1){m.setView(g[0],16);}else if(g.length>1){m.fitBounds(g,{padding:[30,30],maxZoom:16});}}
+fit();setTimeout(fit,300);setTimeout(fit,1000);window.addEventListener('resize',fit);
 </script></body></html>"""
 }

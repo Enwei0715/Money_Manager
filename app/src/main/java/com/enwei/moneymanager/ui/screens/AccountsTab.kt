@@ -128,14 +128,18 @@ fun balanceBefore(
 
 @Composable
 private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {}) {
+    val cards = com.enwei.moneymanager.ui.AppearancePrefs.cards
+    if (!cards) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Row(
-        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 8.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
+            .padding(start = if (cards) 24.dp else 16.dp, end = if (cards) 24.dp else 16.dp, top = if (cards) 20.dp else 14.dp, bottom = if (cards) 8.dp else 10.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
         Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.caption, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
             letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp))
         right()
     }
+    if (!cards) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -312,7 +316,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     itemsIndexed(list, key = { _, it -> "a${it.account.id}" }) { idx, b ->
                         val st = cards[b.account.id]
                         val name = b.account.name + if (b.account.archived) "（隱藏）" else ""
-                        HorizontalDivider(Modifier.padding(horizontal = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                        HorizontalDivider(Modifier.padding(horizontal = if (com.enwei.moneymanager.ui.AppearancePrefs.cards) 12.dp else 0.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                         Column(
                             Modifier.fillMaxWidth().groupCell(false, idx == list.lastIndex)
                                 .clickable { nav.navigate("acct/${b.account.id}") }

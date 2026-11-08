@@ -342,7 +342,7 @@ private fun PendingCard(t: com.enwei.moneymanager.data.TxnEntity, lk: Lookups, n
     val scope = rememberCoroutineScope()
     val cat = lk.catLabel(t.categoryId)
     val dt = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault())
-    androidx.compose.material3.Card(Modifier.fillMaxWidth().clickable { nav.navigate("txn/${t.id}") }) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth().clickable { nav.navigate("txn/${t.id}") }) {
         Column(Modifier.padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(t.merchant?.takeIf { it.isNotBlank() } ?: t.type.label, fontSize = AppText.section, fontWeight = FontWeight.SemiBold,
@@ -373,7 +373,7 @@ private fun PendingCard(t: com.enwei.moneymanager.data.TxnEntity, lk: Lookups, n
 /** 待確認頁的區塊卡片：標題列（可帶右側按鈕）＋內容。 */
 @Composable
 private fun PendingSection(title: String, action: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
-    androidx.compose.material3.Card(Modifier.fillMaxWidth()) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

@@ -794,7 +794,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                         ).chunked(2).forEach { row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 row.forEach { (q, hint) ->
-                                    androidx.compose.material3.Card(Modifier.weight(1f).height(84.dp).clickable(enabled = !busy && GroqAi.enabled) { send(q) }) {
+                                    com.enwei.moneymanager.ui.components.AppCard(Modifier.weight(1f).height(84.dp).clickable(enabled = !busy && GroqAi.enabled) { send(q) }) {
                                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                             Text(q, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, maxLines = 1)
                                             Text(hint, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
@@ -1188,7 +1188,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 }
                 // grid：市場大局（所有題材重點的彙整）
                 if (store.overview.isNotEmpty()) item {
-                    Card(Modifier.fillMaxWidth()) {
+                    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("市場大局", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -1704,7 +1704,7 @@ private fun Section(
 ) {
     val fold = com.enwei.moneymanager.ui.components.rememberFold("advisor." + title.substringBefore('（'), initiallyOpen)
     val open = fold.open
-    Card(Modifier.fillMaxWidth()) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 (if (collapsible) Modifier.clickable { fold.toggle() } else Modifier).fillMaxWidth(),

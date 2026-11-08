@@ -142,6 +142,8 @@ object Themes {
 /** 目前的外觀設定（給少數自己畫形狀的元件讀，例如圓角）。 */
 object AppearancePrefs {
     var corner by mutableStateOf(0)
+    /** 區塊樣式：false 線條（預設，像股票頁）、true 卡片 */
+    var cards by mutableStateOf(false)
     /** 卡片圓角（依圓角設定） */
     val cardRadius get() = when (corner) { 1 -> 6.dp; 2 -> 0.dp; else -> 12.dp }
 }
@@ -174,8 +176,11 @@ fun MoneyTheme(
     corner: Int = 0,
     /** 數字等寬（金額上下對齊） */
     tabular: Boolean = true,
+    /** 區塊樣式：false 線條、true 卡片 */
+    cards: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    AppearancePrefs.cards = cards
     val base = LocalDensity.current
     val p = Themes.of(preset)
     AppearancePrefs.corner = corner

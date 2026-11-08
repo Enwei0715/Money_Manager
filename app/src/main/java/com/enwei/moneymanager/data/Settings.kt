@@ -296,6 +296,8 @@ data class AppSettings(
     val tabularNums: Boolean = true,
     /** 交易列樣式：0 圖示（分類圓形圖示）、1 經典（左邊分類欄） */
     val rowStyle: Int = 0,
+    /** 版面：false 線條分隔（預設）、true 卡片 */
+    val cardStyle: Boolean = false,
     /** 舊版欄位；現行版本固定啟用子分類。 */
     val subcategoryOn: Boolean = true,
     /** 交易頁顯示「新增備註」按鈕 */
@@ -553,6 +555,7 @@ class SettingsStore(context: Context) {
         cornerStyle = prefs.getInt("cornerStyle", 0),
         tabularNums = prefs.getBoolean("tabularNums", true),
         rowStyle = prefs.getInt("rowStyle", 0),
+        cardStyle = prefs.getBoolean("cardStyle", false),
         subcategoryOn = true,
         noteButton = prefs.getBoolean("noteButton", true),
         swipe = prefs.getInt("swipe", 0),
@@ -742,6 +745,7 @@ class SettingsStore(context: Context) {
             .putInt("cornerStyle", s.cornerStyle)
             .putBoolean("tabularNums", s.tabularNums)
             .putInt("rowStyle", s.rowStyle)
+            .putBoolean("cardStyle", s.cardStyle)
             .putBoolean("subcategoryOn", true)
             .putBoolean("noteButton", s.noteButton)
             .putInt("swipe", s.swipe)

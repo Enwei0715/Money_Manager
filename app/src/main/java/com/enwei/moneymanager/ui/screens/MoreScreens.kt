@@ -339,7 +339,7 @@ fun NotificationSettingsScreen(nav: NavController) {
     fun NoteCard(nn: TxnNotificationListener.ActiveNote, ok: Boolean, desc: String) {
         val redacted = repo.isRedacted(nn.text)
         val parsedOk = !redacted && !desc.startsWith("看不出") && !desc.startsWith("LINE 聊天")
-        Card(
+        com.enwei.moneymanager.ui.components.AppCard(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
             colors = CardDefaults.cardColors(
                 containerColor = if (ok) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
@@ -389,7 +389,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                 }
             }
             if (!enabled) item {
-                Card(
+                com.enwei.moneymanager.ui.components.AppCard(
                     Modifier.fillMaxWidth().padding(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
@@ -1041,7 +1041,7 @@ fun SettingsScreen(nav: NavController) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // ① 版本卡：目前版本、狀態標籤、一個主要按鈕
-            Card(Modifier.fillMaxWidth()) {
+            com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)) {
@@ -1093,7 +1093,7 @@ fun SettingsScreen(nav: NavController) {
                 }
             }
             // ② 更新內容：和更新視窗一樣只列最新 3 段
-            if (newer && r!!.notes.isNotBlank()) Card(Modifier.fillMaxWidth()) {
+            if (newer && r!!.notes.isNotBlank()) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("更新內容", fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
                     parseNotes(r.notes).asReversed().take(3).forEach { (title, lines) ->
@@ -1109,7 +1109,7 @@ fun SettingsScreen(nav: NavController) {
                 }
             }
             // ③ 設定：自動檢查開關；GitHub Token 收在進階裡
-            Card(Modifier.fillMaxWidth()) {
+            com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column {
                     Row(Modifier.fillMaxWidth().clickable { repo.settings.update { it.copy(notifyUpdates = !it.notifyUpdates, updateSkipped = 0) } }
                         .padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {

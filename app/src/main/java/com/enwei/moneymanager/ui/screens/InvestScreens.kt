@@ -338,7 +338,7 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
     ) { pad ->
         LazyColumn(Modifier.padding(pad)) {
             if (h != null) item {
-                Card(Modifier.fillMaxWidth().padding(16.dp)) {
+                com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth().padding(16.dp)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             LabelValue("持有股數", formatNum(h.shares, 0))
@@ -364,7 +364,7 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
                     val buy = list.find { it.id == lot.tradeId }
                     val pnl = h.lotPnl[lot.tradeId]
                     val gross = lot.shares * lot.price
-                    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("成交日期 ${LocalDate.ofEpochDay(lot.epochDay)}", style = MaterialTheme.typography.labelLarge)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

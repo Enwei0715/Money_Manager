@@ -136,7 +136,7 @@ fun ReviewContent(
             com.enwei.moneymanager.ui.components.SubTabs(tabNames, rt) { reviewTab = it }
 
             // ① 總覽
-            if (rt == 0) Card(Modifier.fillMaxWidth()) {
+            if (rt == 0) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val netColor = if (d.net >= 0) IncomeColor else ExpenseColor
@@ -184,7 +184,7 @@ fun ReviewContent(
 
             // 預算（每月）：原本在「總計」分頁，移到這裡和檢討一起看
             // 目標與預算：每月的支出上限、各分類上限與儲蓄率目標（可在「預算設定」修改，也可以採用 AI 建議）
-            if (rt == 0 && span == ReviewSpan.MONTH && (settings.budgets.isNotEmpty() || settings.savingsGoal != null)) Card(Modifier.fillMaxWidth()) {
+            if (rt == 0 && span == ReviewSpan.MONTH && (settings.budgets.isNotEmpty() || settings.savingsGoal != null)) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("這個月的目標", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -229,14 +229,14 @@ fun ReviewContent(
             if (rt == 1 && d.expenses.isNotEmpty()) ChangeCards(d, ::m, lk, settings.txnNecessity)
 
             if (rt == 2 && d.expenses.isEmpty()) Text("這期沒有支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (rt == 2 && d.expenses.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+            if (rt == 2 && d.expenses.isNotEmpty()) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     HabitCharts(d, ::m, lk)
                 }
             }
 
             // ④ AI 檢討（固定格式）：設定裡關掉 AI 就不顯示
-            if (rt == 3 && settings.aiEnabled) Card(Modifier.fillMaxWidth()) {
+            if (rt == 3 && settings.aiEnabled) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("AI 建議", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -265,7 +265,7 @@ fun ReviewContent(
             }
 
             // ⑤ 最大幾筆
-            if (rt == 0 && d.top.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+            if (rt == 0 && d.top.isNotEmpty()) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 12.dp)) {
                     Text("最大三筆支出", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp))
                     d.top.take(3).forEach { t -> MmTxnRow(t, lk) { nav.navigate("txn/${t.id}") } }
@@ -543,7 +543,7 @@ private fun NextGoals(r: AiReview, m: (Long) -> String, lk: Lookups, nav: NavCon
 private fun ChangeCards(d: ReviewData, m: (Long) -> String, lk: Lookups, necessity: Map<Long, String>) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     // ① 和過去比：上期、前三期平均、去年同期
-    Card(Modifier.fillMaxWidth()) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("支出和過去比", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             if (d.partial) Text("本${d.span.label}進行中：都只比到第 ${d.days} 天", fontSize = AppText.caption, color = muted)
@@ -566,7 +566,7 @@ private fun ChangeCards(d: ReviewData, m: (Long) -> String, lk: Lookups, necessi
     }
     // ② 分類增減：依變化金額排序，只列變化最大的幾個
     val changes = d.categories.map { it to (it.amount - it.prev) }.filter { it.second != 0L }.sortedByDescending { kotlin.math.abs(it.second) }.take(6)
-    if (changes.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+    if (changes.isNotEmpty()) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("變化最大的分類（和上${d.span.label}${if (d.partial) "同期" else ""}比）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             changes.forEach { (c, diff) ->
@@ -590,7 +590,7 @@ private fun ChangeCards(d: ReviewData, m: (Long) -> String, lk: Lookups, necessi
     }
     val (nums, nec) = zoneTotals
     val (total, fixed, top3) = nums
-    Card(Modifier.fillMaxWidth()) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("支出組成", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             SplitBar("固定／變動", listOf("固定" to fixed, "變動" to (total - fixed)), m)

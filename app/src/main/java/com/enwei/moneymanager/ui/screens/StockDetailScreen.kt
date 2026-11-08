@@ -190,7 +190,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 val chg = last - prev
                 val color = if (chg >= 0) StockUp else StockDown
                 // 報價
-                Card(Modifier.fillMaxWidth()) {
+                com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row {
                             Text("%.2f".format(last), fontSize = AppText.display, color = color, fontWeight = FontWeight.SemiBold)
@@ -241,7 +241,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     com.enwei.moneymanager.core.TradeSignals.scan(b.open, b.high, b.low, b.close, b.volume, sigParams)
                 }
                 var showSignals by remember { mutableStateOf(true) }
-                if (dtab == 0) Card(Modifier.fillMaxWidth()) {
+                if (dtab == 0) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         // 第一列：日 K／60 分 K（分段按鈕）；第二列：顯示區間
                         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).padding(3.dp)) {
@@ -441,7 +441,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                 }
                 // 強弱與階段
-                if (dtab == 0) Card(Modifier.fillMaxWidth()) {
+                if (dtab == 0) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("強弱", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                         val stage = Technicals.stage(c)
@@ -463,7 +463,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 }
                 if (dtab == 1 && market == Market.TW) RevenueCard(symbol)
                 if (dtab == 1) ProjectionCard(b)
-                if (dtab == 1 && held.isNotEmpty() && settings.investPlan.disciplineOn) Card(Modifier.fillMaxWidth()) {
+                if (dtab == 1 && held.isNotEmpty() && settings.investPlan.disciplineOn) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         val shares = held.sumOf { it.shares }
                         val avg = held.sumOf { it.avgCost * it.shares } / shares
@@ -501,7 +501,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 }
             }
             // 除權息
-            if (dtab == 2 && divs.isNotEmpty() && b != null) Card(Modifier.fillMaxWidth()) {
+            if (dtab == 2 && divs.isNotEmpty() && b != null) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("除權息", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                     val today = java.time.LocalDate.now().toEpochDay()
@@ -543,7 +543,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             // 價格提醒
             if (dtab == 2 && b != null) PriceAlertCard(symbol, b.close.last(), held.isNotEmpty())
             // 公司業務（AI 整理；設定裡關掉 AI 就不顯示）
-            if (dtab == 2 && settings.aiEnabled) Card(Modifier.fillMaxWidth()) {
+            if (dtab == 2 && settings.aiEnabled) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("這家公司做什麼", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -576,7 +576,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 }
             }
             // 相關新聞
-            if (dtab == 2 && news.isNotEmpty()) Card(Modifier.fillMaxWidth()) {
+            if (dtab == 2 && news.isNotEmpty()) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     var allNews by remember { mutableStateOf(false) }
                     Text("相關新聞（${news.size}）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
@@ -840,7 +840,7 @@ private fun PriceAlertCard(symbol: String, price: Double, held: Boolean) {
         val pa = com.enwei.moneymanager.data.PriceAlert(target.toDoubleOrNull()?.takeIf { it > 0 }, stop.toDoubleOrNull()?.takeIf { it > 0 })
         st.copy(priceAlerts = if (pa.target == null && pa.stop == null) st.priceAlerts - symbol else st.priceAlerts + (symbol to pa))
     }
-    Card(Modifier.fillMaxWidth()) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("價格提醒", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1057,7 +1057,7 @@ private fun RevenueCard(symbol: String) {
     val show = list.takeLast(13)
     val last = show.last()
     val max = show.maxOf { it.revenue }.takeIf { it > 0 } ?: 1.0
-    Card(Modifier.fillMaxWidth()) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("月營收", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             Text(
@@ -1120,7 +1120,7 @@ private fun ProjectionCard(b: DailyBars) {
     val total = close.size
     val showFrom = (trend?.start?.minus(5) ?: (total - 60)).coerceIn(0, (total - 40).coerceAtLeast(0)).coerceAtLeast(total - 120)
     val endIdx = (total - 1 + ahead).toDouble()
-    Card(Modifier.fillMaxWidth()) {
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("趨勢推估（未來 20 個交易日）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             if (trend != null) {
