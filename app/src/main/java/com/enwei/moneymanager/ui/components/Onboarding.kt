@@ -87,7 +87,7 @@ object Onboarding {
             "輸入金額、選分類與帳戶就完成",
             "上方切換支出／收入／轉帳" + (if ("stocks" in w) "／股票" else ""),
             if ("split" in w) "幫別人付錢：在支出裡點「分帳」，可以分給好幾個人" else null,
-            if ("split" in w) "借錢還錢：上方選「往來」" else null,
+            if ("split" in w) "別人還錢：收入裡填「誰還的」；借錢、還錢：用「轉帳」選往來對象" else null,
         )))
         if ("notif" in w) add(Page(Icons.Outlined.NotificationsActive, "通知自動記帳", "需要允許讀取通知，App 才看得到付款通知。",
             listOf("不確定的放在交易頁上方的「待確認」", "可以選要聽哪些 App 的通知"), "現在去開啟", "notif"))

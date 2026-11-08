@@ -143,7 +143,12 @@ private fun PersonRow(nav: NavController, a: com.enwei.moneymanager.data.Account
             DropdownMenu(menu, { menu = false }) {
                 DropdownMenuItem(text = { Text("記代墊（我幫他付）") }, onClick = { menu = false; nav.navigate("txn/0?type=EXPENSE&split=${a.id}") })
                 DropdownMenuItem(text = { Text("他幫我付") }, onClick = { menu = false; nav.navigate("txn/0?type=EXPENSE&account=${a.id}") })
-                DropdownMenuItem(text = { Text(if (balance >= 0) "收回款項" else "還款") }, onClick = { menu = false; nav.navigate("acct/${a.id}") })
+                // 收回＝從他的往來帳戶轉進來；還款＝轉給他（金額預設為目前差額）
+                DropdownMenuItem(text = { Text(if (balance >= 0) "收回款項" else "還款") }, onClick = {
+                    menu = false
+                    val amt = kotlin.math.abs(balance)
+                    nav.navigate(if (balance >= 0) "txn/0?type=TRANSFER&account=${a.id}&amount=$amt" else "txn/0?type=TRANSFER&to=${a.id}&amount=$amt")
+                })
                 DropdownMenuItem(text = { Text("借貸細節（分期、利息、到期）") }, onClick = { menu = false; nav.navigate("account/${a.id}") })
             }
         }
