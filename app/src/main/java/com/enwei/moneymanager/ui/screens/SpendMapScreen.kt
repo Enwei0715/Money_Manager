@@ -199,7 +199,7 @@ private fun my(lat: Double): Double {
 }
 
 /**
- * 支出地圖（App 自己畫，不靠 WebView）：CARTO 圖磚＋每個地點一個圓（越大花越多、顏色依分類）。
+ * 支出地圖（App 自己畫，不靠 WebView）：OpenStreetMap 圖磚＋每個地點一個圓（越大花越多、顏色依分類）。
  * 手指拖曳移動、兩指縮放、點兩下放大；點圓顯示店名與金額。
  */
 @Composable
@@ -225,7 +225,8 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
         val z = minOf(kotlin.math.log2((sizePx.width - pad * 2) / (dx * tilePx)), kotlin.math.log2((sizePx.height - pad * 2) / (dy * tilePx)))
         zoom = if (spots.size == 1) 16.0 else z.coerceIn(3.0, 16.0)
     }
-    val style = if (dark) "dark_all" else "rastertiles/voyager"
+    // 底圖：OpenStreetMap 官方圖磚（免金鑰）；深色模式在畫的時候反轉顏色
+    val style = "osm"
     fun load(z: Int, x: Int, y: Int) {
         val key = "$style/$z/$x/$y"
         if (TileCache.mem.get(key) != null || key in TileCache.failed || !TileCache.inflight.add(key)) return
@@ -233,8 +234,8 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
             try {
                 TileCache.gate.acquire()
                 try {
-                    val url = "https://${"abcd"[(x + y) and 3]}.basemaps.cartocdn.com/$style/$z/$x/$y@2x.png"
-                    val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Ledgerly/2.1 (Android)").build()
+                    val url = "https://tile.openstreetmap.org/$z/$x/$y.png"
+                    val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Ledgerly/2.1 (Android personal finance app)").build()
                     com.enwei.moneymanager.net.Http.client.newCall(req).execute().use { r ->
                         val bytes = r.body?.bytes()
                         val bmp = if (r.isSuccessful && bytes != null) android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) else null
@@ -249,6 +250,13 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
         }
     }
     val bg = if (dark) androidx.compose.ui.graphics.Color(0xFF1E1E21) else androidx.compose.ui.graphics.Color(0xFFF2F2F2)
+    // 深色模式：反轉亮度並降低飽和，變成暗色底圖
+    val tileFilter = if (!dark) null else androidx.compose.ui.graphics.ColorFilter.colorMatrix(androidx.compose.ui.graphics.ColorMatrix(floatArrayOf(
+        -0.55f, -0.25f, -0.08f, 0f, 235f,
+        -0.20f, -0.60f, -0.08f, 0f, 235f,
+        -0.20f, -0.25f, -0.43f, 0f, 235f,
+        0f, 0f, 0f, 1f, 0f,
+    )))
     val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
     Box(modifier.background(bg).onSizeChanged { sizePx = it }) {
         androidx.compose.foundation.Canvas(
@@ -277,7 +285,8 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
         ) {
             @Suppress("UNUSED_VARIABLE") val v = version
             if (zoom < 0) return@Canvas
-            val z = kotlin.math.round(zoom).toInt().coerceIn(2, 18)
+            // 用高一級的圖磚、畫成一半大小：高解析度螢幕上比較清楚
+            val z = (kotlin.math.round(zoom).toInt() + 1).coerceIn(2, 19)
             val n = 1 shl z
             val world = tilePx * Math.pow(2.0, zoom)
             val t = world / n
@@ -289,7 +298,8 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
                 val img = TileCache.mem.get("$style/$z/$wx/$ty")
                 if (img == null) { load(z, wx, ty); continue }
                 drawImage(img, dstOffset = androidx.compose.ui.unit.IntOffset((tx * t - left).toInt(), (ty * t - top).toInt()),
-                    dstSize = androidx.compose.ui.unit.IntSize(kotlin.math.ceil(t).toInt() + 1, kotlin.math.ceil(t).toInt() + 1))
+                    dstSize = androidx.compose.ui.unit.IntSize(kotlin.math.ceil(t).toInt() + 1, kotlin.math.ceil(t).toInt() + 1),
+                    colorFilter = tileFilter)
             }
             spots.forEach { sp ->
                 val px = ((mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
@@ -299,7 +309,7 @@ private fun SpendMap(spots: List<SpendSpot>, dark: Boolean, modifier: Modifier) 
                 drawCircle(col, r, androidx.compose.ui.geometry.Offset(px, py), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
                 if (sp == picked) drawCircle(androidx.compose.ui.graphics.Color.White, r + 3.dp.toPx(), androidx.compose.ui.geometry.Offset(px, py), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
             }
-            val credit = textMeasurer.measure("© OpenStreetMap © CARTO", androidx.compose.ui.text.TextStyle(fontSize = 9.sp, color = if (dark) androidx.compose.ui.graphics.Color(0xAAFFFFFF) else androidx.compose.ui.graphics.Color(0xAA000000)))
+            val credit = textMeasurer.measure("© OpenStreetMap contributors", androidx.compose.ui.text.TextStyle(fontSize = 9.sp, color = if (dark) androidx.compose.ui.graphics.Color(0xAAFFFFFF) else androidx.compose.ui.graphics.Color(0xAA000000)))
             drawText(credit, topLeft = androidx.compose.ui.geometry.Offset(size.width - credit.size.width - 6.dp.toPx(), size.height - credit.size.height - 4.dp.toPx()))
         }
         // 縮放按鈕
