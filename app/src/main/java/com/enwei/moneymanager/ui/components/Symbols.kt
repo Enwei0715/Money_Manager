@@ -62,60 +62,60 @@ import com.enwei.moneymanager.data.TxnType
  */
 object Symbols {
     private val rules: List<Pair<List<String>, ImageVector>> = listOf(
-        listOf("咖啡", "飲料", "手搖") to Icons.Rounded.LocalCafe,
-        listOf("餐", "食", "飯", "吃", "早午", "宵夜", "food", "meal", "dinner", "lunch") to Icons.Rounded.Restaurant,
-        listOf("超商", "便利", "超市", "雜貨") to Icons.Rounded.Storefront,
-        listOf("日用", "生活用品") to Icons.Rounded.LocalGroceryStore,
-        listOf("油", "停車", "汽車", "機車", "car") to Icons.Rounded.DirectionsCar,
-        listOf("加油") to Icons.Rounded.LocalGasStation,
-        listOf("交通", "捷運", "公車", "高鐵", "計程", "transport") to Icons.Rounded.DirectionsBus,
-        listOf("服飾", "衣", "鞋") to Icons.Rounded.Checkroom,
-        listOf("購物", "網購", "shopping") to Icons.Rounded.ShoppingBag,
-        listOf("娛樂", "遊戲", "電影", "訂閱") to Icons.Rounded.SportsEsports,
-        listOf("房租", "租") to Icons.Rounded.Apartment,
-        listOf("居家", "家", "水電", "瓦斯", "house") to Icons.Rounded.Home,
-        listOf("電信", "網路", "手機", "電話") to Icons.Rounded.Wifi,
-        listOf("醫", "藥", "健康", "health") to Icons.Rounded.LocalHospital,
-        listOf("運動", "健身") to Icons.Rounded.FitnessCenter,
-        listOf("保險") to Icons.Rounded.Shield,
-        listOf("教育", "學", "書", "課", "education") to Icons.Rounded.School,
-        listOf("社交", "禮", "交際", "紅包", "gift") to Icons.Rounded.Redeem,
-        listOf("美容", "美髮", "保養", "beauty") to Icons.Rounded.Face,
-        listOf("寵物", "pet") to Icons.Rounded.Pets,
-        listOf("小孩", "育兒", "孩子") to Icons.Rounded.ChildCare,
-        listOf("旅", "機票", "住宿", "travel") to Icons.Rounded.Flight,
-        listOf("稅", "費", "規費") to Icons.AutoMirrored.Rounded.ReceiptLong,
-        listOf("薪", "salary", "工作") to Icons.Rounded.Work,
-        listOf("獎金", "bonus", "中獎") to Icons.Rounded.EmojiEvents,
-        listOf("投資", "股", "股利", "股息") to Icons.AutoMirrored.Rounded.ShowChart,
-        listOf("利息", "interest") to Icons.Rounded.AccountBalance,
-        listOf("退款", "退費", "refund") to Icons.AutoMirrored.Rounded.Undo,
-        listOf("零用", "收入", "副業") to Icons.Rounded.Savings,
+        listOf("咖啡", "飲料", "手搖") to LineIcons.IcCafe,
+        listOf("餐", "食", "飯", "吃", "早午", "宵夜", "food", "meal", "dinner", "lunch") to LineIcons.IcFood,
+        listOf("超商", "便利", "超市", "雜貨") to LineIcons.IcStore,
+        listOf("日用", "生活用品") to LineIcons.IcBasket,
+        listOf("油", "停車", "汽車", "機車", "car") to LineIcons.IcCar,
+        listOf("加油") to LineIcons.IcFuel,
+        listOf("交通", "捷運", "公車", "高鐵", "計程", "transport") to LineIcons.IcBus,
+        listOf("服飾", "衣", "鞋") to LineIcons.IcShirt,
+        listOf("購物", "網購", "shopping") to LineIcons.IcBag,
+        listOf("娛樂", "遊戲", "電影", "訂閱") to LineIcons.IcGame,
+        listOf("房租", "租") to LineIcons.IcBuilding,
+        listOf("居家", "家", "水電", "瓦斯", "house") to LineIcons.IcHome,
+        listOf("電信", "網路", "手機", "電話") to LineIcons.IcWifi,
+        listOf("醫", "藥", "健康", "health") to LineIcons.IcMedical,
+        listOf("運動", "健身") to LineIcons.IcDumbbell,
+        listOf("保險") to LineIcons.IcShield,
+        listOf("教育", "學", "書", "課", "education") to LineIcons.IcBook,
+        listOf("社交", "禮", "交際", "紅包", "gift") to LineIcons.IcGift,
+        listOf("美容", "美髮", "保養", "beauty") to LineIcons.IcMirror,
+        listOf("寵物", "pet") to LineIcons.IcPaw,
+        listOf("小孩", "育兒", "孩子") to LineIcons.IcSmile,
+        listOf("旅", "機票", "住宿", "travel") to LineIcons.IcPlane,
+        listOf("稅", "費", "規費") to LineIcons.IcReceipt,
+        listOf("薪", "salary", "工作") to LineIcons.IcBriefcase,
+        listOf("獎金", "bonus", "中獎") to LineIcons.IcTrophy,
+        listOf("投資", "股", "股利", "股息") to LineIcons.IcChart,
+        listOf("利息", "interest") to LineIcons.IcBank,
+        listOf("退款", "退費", "refund") to LineIcons.IcRefund,
+        listOf("零用", "收入", "副業") to LineIcons.IcCoins,
     )
 
     fun category(name: String?, kind: TxnType? = null): ImageVector {
-        val n = name?.lowercase() ?: return Icons.Rounded.Category
+        val n = name?.lowercase() ?: return LineIcons.IcShapes
         rules.firstOrNull { (keys, _) -> keys.any { n.contains(it) } }?.let { return it.second }
         return when (kind) {
-            TxnType.INCOME -> Icons.Rounded.Payments
-            TxnType.TRANSFER -> Icons.Rounded.Repeat
-            else -> Icons.Rounded.Category
+            TxnType.INCOME -> LineIcons.IcCash
+            TxnType.TRANSFER -> LineIcons.IcSwap
+            else -> LineIcons.IcShapes
         }
     }
 
     fun account(type: AccountType): ImageVector = when (type) {
-        AccountType.CASH -> Icons.Rounded.Payments
-        AccountType.BANK -> Icons.Rounded.AccountBalance
-        AccountType.CREDIT_CARD -> Icons.Rounded.CreditCard
-        AccountType.EWALLET -> Icons.Rounded.PhoneAndroid
-        AccountType.TRANSIT_CARD -> Icons.Rounded.Contactless
-        AccountType.BROKERAGE -> Icons.AutoMirrored.Rounded.ShowChart
-        AccountType.LOAN -> Icons.Rounded.RequestQuote
-        AccountType.OTHER -> Icons.Rounded.AccountBalanceWallet
+        AccountType.CASH -> LineIcons.IcCash
+        AccountType.BANK -> LineIcons.IcBank
+        AccountType.CREDIT_CARD -> LineIcons.IcCard
+        AccountType.EWALLET -> LineIcons.IcPhone
+        AccountType.TRANSIT_CARD -> LineIcons.IcTap
+        AccountType.BROKERAGE -> LineIcons.IcChart
+        AccountType.LOAN -> LineIcons.IcPeople
+        AccountType.OTHER -> LineIcons.IcWallet
     }
 
-    val transfer: ImageVector get() = Icons.Rounded.Repeat
-    val wallet: ImageVector get() = Icons.Rounded.AccountBalanceWallet
+    val transfer: ImageVector get() = LineIcons.IcSwap
+    val wallet: ImageVector get() = LineIcons.IcWallet
 }
 
 /** 圓角方塊符號（與 App 圖示同一風格）。 */

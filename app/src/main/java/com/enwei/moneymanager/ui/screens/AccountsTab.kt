@@ -400,15 +400,7 @@ private fun AccountLine(
     Column(Modifier.groupCell(first, last)) {
         Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = if (sub != null || note != null) 11.dp else 14.dp), verticalAlignment = Alignment.CenterVertically) {
             if (type != null && com.enwei.moneymanager.ui.AppearancePrefs.icons) {
-                val icon = when (type) {
-                    AccountType.CASH -> Icons.Outlined.Payments
-                    AccountType.BANK -> Icons.Outlined.AccountBalance
-                    AccountType.CREDIT_CARD -> Icons.Outlined.CreditCard
-                    AccountType.EWALLET -> Icons.Outlined.AccountBalanceWallet
-                    AccountType.TRANSIT_CARD -> Icons.Outlined.ConfirmationNumber
-                    AccountType.BROKERAGE -> Icons.Outlined.ShowChart
-                    else -> Icons.Outlined.People
-                }
+                val icon = com.enwei.moneymanager.ui.components.Symbols.account(type)
                 Box(Modifier.size(36.dp).background(MaterialTheme.colorScheme.surfaceVariant, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
                     Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                 }

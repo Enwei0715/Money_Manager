@@ -164,7 +164,7 @@ fun StatsTab(nav: NavController) {
                 }
             },
             actions = {
-                IconButton(onClick = { nav.navigate("spendmap") }, modifier = Modifier.coachTarget("stats.map")) { Icon(androidx.compose.material.icons.Icons.Outlined.Map, "支出地圖") }
+                IconButton(onClick = { nav.navigate("spendmap") }, modifier = Modifier.coachTarget("stats.map")) { Icon(com.enwei.moneymanager.ui.components.LineIcons.IcMap, "支出地圖") }
                 Box(Modifier.padding(end = 8.dp)) {
                     Row(
                         Modifier.border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(8.dp)).clickable { menu = true }

@@ -177,16 +177,16 @@ private data class CfgGroup(
 )
 
 private val cfgGroups = listOf(
-    CfgGroup("accounts", "帳戶與分類", androidx.compose.material.icons.Icons.Outlined.AccountBalanceWallet, listOf("帳戶", "分類與預算")),
-    CfgGroup("entry", "記帳", androidx.compose.material.icons.Icons.Outlined.EditNote, listOf("記帳", "期間", "幣別")),
-    CfgGroup("display", "外觀與顯示", androidx.compose.material.icons.Icons.Outlined.Palette, listOf("外觀", "期間與顯示", "列表")),
-    CfgGroup("features", "功能開關", androidx.compose.material.icons.Icons.Outlined.ToggleOn, listOf("功能開關")),
-    CfgGroup("autorecord", "自動記帳", androidx.compose.material.icons.Icons.Outlined.Sms, listOf("自動記帳"), route = "notif", visible = { it.featureNotif }),
-    CfgGroup("ai", "AI", androidx.compose.material.icons.Icons.Outlined.AutoAwesome, listOf("AI"), visible = { it.aiEnabled }),
-    CfgGroup("stocks", "股票", androidx.compose.material.icons.Icons.Outlined.ShowChart, listOf("股票"), visible = { it.featureStocks }),
-    CfgGroup("notify", "通知", androidx.compose.material.icons.Icons.Outlined.Notifications, listOf("通知"), route = "notices"),
-    CfgGroup("data", "安全與資料", androidx.compose.material.icons.Icons.Outlined.Lock, listOf("安全", "資料")),
-    CfgGroup("update", "App 更新", androidx.compose.material.icons.Icons.Outlined.SystemUpdate, listOf("關於"), route = "settings"),
+    CfgGroup("accounts", "帳戶與分類", com.enwei.moneymanager.ui.components.LineIcons.IcWallet, listOf("帳戶", "分類與預算")),
+    CfgGroup("entry", "記帳", com.enwei.moneymanager.ui.components.LineIcons.IcPencil, listOf("記帳", "期間", "幣別")),
+    CfgGroup("display", "外觀與顯示", com.enwei.moneymanager.ui.components.LineIcons.IcPalette, listOf("外觀", "期間與顯示", "列表")),
+    CfgGroup("features", "功能開關", com.enwei.moneymanager.ui.components.LineIcons.IcToggle, listOf("功能開關")),
+    CfgGroup("autorecord", "自動記帳", com.enwei.moneymanager.ui.components.LineIcons.IcChat, listOf("自動記帳"), route = "notif", visible = { it.featureNotif }),
+    CfgGroup("ai", "AI", com.enwei.moneymanager.ui.components.LineIcons.ToolAi, listOf("AI"), visible = { it.aiEnabled }),
+    CfgGroup("stocks", "股票", com.enwei.moneymanager.ui.components.LineIcons.ToolCandles, listOf("股票"), visible = { it.featureStocks }),
+    CfgGroup("notify", "通知", com.enwei.moneymanager.ui.components.LineIcons.ToolBell, listOf("通知"), route = "notices"),
+    CfgGroup("data", "安全與資料", com.enwei.moneymanager.ui.components.LineIcons.IcLock, listOf("安全", "資料")),
+    CfgGroup("update", "App 更新", com.enwei.moneymanager.ui.components.LineIcons.ToolUpdate, listOf("關於"), route = "settings"),
 )
 
 @Composable

@@ -229,12 +229,12 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 private val EDITOR_PREFIXES = listOf("txn/", "account/", "trade/", "recurring/{", "search")
 
 private val tabs = listOf(
-    Tab("txns", "交易", Icons.AutoMirrored.Outlined.MenuBook),
-    Tab("stats", "統計", Icons.Outlined.BarChart),
-    Tab("accounts", "資產", Icons.Outlined.AccountBalanceWallet),
+    Tab("txns", "交易", com.enwei.moneymanager.ui.components.LineIcons.IcLedger),
+    Tab("stats", "統計", com.enwei.moneymanager.ui.components.LineIcons.ToolBars),
+    Tab("accounts", "資產", com.enwei.moneymanager.ui.components.LineIcons.IcWallet),
     // 股票助理獨立成一個分頁（不再放在帳戶裡）；股票功能關閉時不顯示
-    Tab("assistant", "助理", Icons.Outlined.AutoAwesome),
-    Tab("more", "工具", Icons.Filled.MoreHoriz),
+    Tab("assistant", "助理", com.enwei.moneymanager.ui.components.LineIcons.ToolAi),
+    Tab("more", "工具", com.enwei.moneymanager.ui.components.LineIcons.IcGrid),
 )
 
 @Composable

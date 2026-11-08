@@ -63,10 +63,12 @@ fun DisciplineChart(symbol: String, modifier: Modifier = Modifier) {
     val ma60 = b.close.indices.map { com.enwei.moneymanager.core.Technicals.sma(b.close, 60, it + 1) }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text("$symbol $name · 紀律檢查", fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold)
-        Canvas(Modifier.fillMaxWidth().height(150.dp)) {
+        val labelBg = MaterialTheme.colorScheme.surface
+        Canvas(Modifier.fillMaxWidth().height(170.dp)) {
             val lo = (from until b.close.size).minOf { minOf(b.low[it], ma20[it] ?: b.low[it], ma60[it] ?: b.low[it]) }
             val hi = (from until b.close.size).maxOf { maxOf(b.high[it], ma20[it] ?: b.high[it], ma60[it] ?: b.high[it]) }
-            val pad = (hi - lo) * 0.12
+            // 上下多留空間給買賣圓章與說明，不會壓在 K 棒上
+            val pad = (hi - lo) * 0.22
             val top = hi + pad; val bottom = lo - pad
             val r = (top - bottom).takeIf { it > 0 } ?: 1.0
             val cw = size.width / n
@@ -88,7 +90,7 @@ fun DisciplineChart(symbol: String, modifier: Modifier = Modifier) {
             // 和個股頁一樣：小圓章「買／賣」，只有最新一個寫出理由
             val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f }
             val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                textSize = 18f; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER
+                textSize = 20f; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER
             }
             val shownSig = signals.filter { it.index >= from }
             val latest = shownSig.maxByOrNull { it.index }?.index
@@ -96,16 +98,21 @@ fun DisciplineChart(symbol: String, modifier: Modifier = Modifier) {
                 val i = sg.index - from
                 val cx = i * cw + cw / 2
                 val col = if (sg.buy) StockUp else StockDown
-                val r = 10f
+                val r = 12f
                 val cy = if (sg.buy) (y(b.low[sg.index]) + r + 3f).coerceAtMost(size.height - r) else (y(b.high[sg.index]) - r - 3f).coerceAtLeast(r)
                 drawCircle(col, radius = r, center = Offset(cx, cy))
-                drawContext.canvas.nativeCanvas.drawText(if (sg.buy) "買" else "賣", cx, cy + 6f, badge)
+                drawContext.canvas.nativeCanvas.drawText(if (sg.buy) "買" else "賣", cx, cy + 7f, badge)
                 if (sg.index == latest) {
                     val label = sg.tag.ifBlank { if (sg.buy) "買" else "賣" }
                     paint.color = android.graphics.Color.argb(255, (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt())
                     val tw = paint.measureText(label)
-                    drawContext.canvas.nativeCanvas.drawText(label, (cx - tw / 2).coerceIn(0f, size.width - tw),
-                        if (sg.buy) (cy + r + 22f).coerceAtMost(size.height - 2f) else (cy - r - 5f).coerceAtLeast(20f), paint)
+                    val tx = (cx - tw / 2).coerceIn(4f, size.width - tw - 4f)
+                    val ty = if (sg.buy) (cy + r + 24f).coerceAtMost(size.height - 4f) else (cy - r - 8f).coerceAtLeast(24f)
+                    // 說明底下墊底色與外框，不會和 K 棒、均線疊在一起看不清楚
+                    drawRoundRect(labelBg.copy(alpha = 0.94f), Offset(tx - 5f, ty - 21f), Size(tw + 10f, 28f), androidx.compose.ui.geometry.CornerRadius(6f, 6f))
+                    drawRoundRect(col, Offset(tx - 5f, ty - 21f), Size(tw + 10f, 28f), androidx.compose.ui.geometry.CornerRadius(6f, 6f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f))
+                    drawContext.canvas.nativeCanvas.drawText(label, tx, ty, paint)
                 }
             }
         }

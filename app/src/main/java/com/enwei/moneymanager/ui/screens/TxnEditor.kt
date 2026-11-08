@@ -297,6 +297,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             scope.launch {
                 val shares = splitParts.map { (r, v) -> (r.person ?: repo.debtPerson(r.name)) to v }
                 repo.saveWithSplits(t, shares)
+                TxnScroll.focusDay = date
                 if (again) {
                     expr = ""; merchant = ""; note = ""; splitRaw = SplitRow.encode(listOf(SplitRow(null, "", ""))); splitOn = false
                     snack.showSnackbar(com.enwei.moneymanager.ui.tr("已儲存，繼續記下一筆"))
@@ -310,6 +311,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 t.toAccountId?.takeIf { t.type == TxnType.TRANSFER }?.let { "txn.to" to it.toString() },
             ))
         }
+        // 新記的一筆：回到交易清單時捲到這筆的日期
+        if (original == null) TxnScroll.focusDay = date
         scope.launch {
             val newId = repo.saveTxn(t)
             // 新記的支出、時間在 30 分鐘內：記下目前位置，之後在這裡付款時可推測店家
@@ -374,7 +377,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             BackTopBar(if (debtMode) "往來" else type.label, { nav.popBackStack() }) {
                 // 當天備註（不是交易）：收在右上角
                 if (original == null) androidx.compose.material3.IconButton(onClick = { memoNew = true }) {
-                    Icon(androidx.compose.material.icons.Icons.Outlined.StickyNote2, "當天備註")
+                    Icon(com.enwei.moneymanager.ui.components.LineIcons.IcNote, "當天備註")
                 }
                 // 來源通知收在右上角的通知圖示：點了才看原文，表單保持乾淨
                 if (!original?.rawText.isNullOrBlank()) androidx.compose.material3.IconButton(onClick = { showSource = true }) {
@@ -674,10 +677,10 @@ private fun FormRow(
         // 英文用短標籤，避免和右側內容擠在一起
         val shown = if (english) when (label) { "轉出" -> "From"; "轉入" -> "To"; "轉入金額" -> "Received"; else -> label } else label
         val icon = when (label) {
-            "日期" -> Icons.Outlined.Event; "分類" -> Icons.Outlined.Category; "帳戶", "Account", "轉出" -> Icons.Outlined.AccountBalanceWallet
-            "轉入" -> Icons.Outlined.Login; "內容" -> Icons.Outlined.Storefront; "說明" -> Icons.Outlined.Notes; "手續費" -> Icons.Outlined.Percent
-            "分帳" -> Icons.Outlined.Group; "對象" -> Icons.Outlined.Person
-            "對方付", "誰還的" -> Icons.Outlined.Payments
+            "日期" -> com.enwei.moneymanager.ui.components.LineIcons.IcCalendar; "分類" -> com.enwei.moneymanager.ui.components.LineIcons.IcShapes; "帳戶", "Account", "轉出" -> com.enwei.moneymanager.ui.components.LineIcons.IcWallet
+            "轉入" -> com.enwei.moneymanager.ui.components.LineIcons.IcArrowIn; "內容" -> com.enwei.moneymanager.ui.components.LineIcons.IcStore; "說明" -> com.enwei.moneymanager.ui.components.LineIcons.IcLines; "手續費" -> com.enwei.moneymanager.ui.components.LineIcons.IcPercent
+            "分帳" -> com.enwei.moneymanager.ui.components.LineIcons.IcPeople; "對象" -> com.enwei.moneymanager.ui.components.LineIcons.IcPerson
+            "對方付", "誰還的" -> com.enwei.moneymanager.ui.components.LineIcons.IcCash
             else -> null
         }
         // 列表圖示關閉時，欄位左邊也不顯示圖示

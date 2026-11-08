@@ -269,7 +269,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     if (pendingCount > 0) IconButton(onClick = { nav.navigate("pending") }) {
                         BadgedBox(badge = { Badge { Text("$pendingCount") } }) { Icon(Icons.Filled.NotificationsActive, "待確認") }
                     }
-                    IconButton(onClick = { nav.navigate("search?month=$month") }, modifier = Modifier.coachTarget("txns.search")) { Icon(Icons.Outlined.Search, "搜尋") }
+                    IconButton(onClick = { nav.navigate("search?month=$month") }, modifier = Modifier.coachTarget("txns.search")) { Icon(com.enwei.moneymanager.ui.components.LineIcons.IcSearch, "搜尋") }
                 },
             ) }
         },
@@ -453,6 +453,11 @@ object TxnScroll {
     var toTop = true
     /** 等內容載入完成後要回到最上面（使用者開始捲動就取消） */
     var pendingTop = true
+    /** 離開清單（點進明細、記帳）時停在哪一天、離那天頂端多遠；回來時資料載入完再回到那裡 */
+    var restoreDay: LocalDate? = null
+    var restoreOffset = 0
+    /** 剛記好一筆：回到清單時捲到這筆的日期 */
+    var focusDay: LocalDate? = null
 }
 
 /**
@@ -493,6 +498,28 @@ private fun DailyView(
         if (inRange(next, range) && !next.isBefore(today)) Triple(r, next, if (r.type == TxnType.EXPENSE) -r.amount else r.amount) else null
     }.sortedBy { it.second }
     DailyViewAnchor(range, allDays.size * 31 + list.size + upcoming.size * 7 + memos.size)
+    // 回到清單：剛記好的那天優先，否則回到離開時的那一天（資料晚到也會等到出現再捲過去）
+    val head = (if (upcoming.isNotEmpty()) 1 else 0) + (if (allDays.isEmpty() && carry == 0L) 1 else 0)
+    val dayList = allDays.toList()
+    LaunchedEffect(dayList) {
+        if (TxnScroll.pendingTop) { TxnScroll.restoreDay = null; TxnScroll.focusDay = null; return@LaunchedEffect }
+        TxnScroll.focusDay?.let { d ->
+            val i = dayList.indexOf(d)
+            if (i >= 0) { TxnScroll.state.scrollToItem(head + i); TxnScroll.focusDay = null; TxnScroll.restoreDay = null; return@LaunchedEffect }
+        }
+        TxnScroll.restoreDay?.let { d ->
+            val i = dayList.indexOf(d)
+            if (i >= 0) { TxnScroll.state.scrollToItem(head + i, TxnScroll.restoreOffset); TxnScroll.restoreDay = null }
+        }
+    }
+    // 離開清單時記下目前停在哪一天
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            val first = TxnScroll.state.layoutInfo.visibleItemsInfo.firstOrNull { (it.key as? String)?.startsWith("d") == true }
+            TxnScroll.restoreDay = (first?.key as? String)?.removePrefix("d")?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            TxnScroll.restoreOffset = first?.offset?.let { -it }?.coerceAtLeast(0) ?: 0
+        }
+    }
     LazyColumn(Modifier.fillMaxSize(), state = TxnScroll.state) {
         if (upcoming.isNotEmpty()) item {
             Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("recurring") }) {

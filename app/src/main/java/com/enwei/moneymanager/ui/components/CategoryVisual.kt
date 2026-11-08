@@ -44,28 +44,28 @@ import androidx.compose.ui.unit.dp
  */
 object CategoryVisual {
     private val rules: List<Pair<List<String>, ImageVector>> = listOf(
-        listOf("早餐", "飲料", "咖啡", "點心") to Icons.Outlined.LocalCafe,
-        listOf("飲食", "餐", "食") to Icons.Outlined.Restaurant,
-        listOf("交通", "車", "捷運", "油") to Icons.Outlined.DirectionsBus,
-        listOf("日用", "雜貨", "超市") to Icons.Outlined.ShoppingBasket,
-        listOf("服飾", "衣") to Icons.Outlined.Checkroom,
-        listOf("購物", "3C", "家電") to Icons.Outlined.ShoppingBag,
-        listOf("居住", "房租", "水電", "家") to Icons.Outlined.Home,
-        listOf("娛樂", "遊戲", "電影") to Icons.Outlined.SportsEsports,
-        listOf("訂閱") to Icons.Outlined.Subscriptions,
-        listOf("醫療", "藥", "診所") to Icons.Outlined.LocalHospital,
-        listOf("旅遊", "旅行") to Icons.Outlined.Flight,
-        listOf("運動", "健身") to Icons.Outlined.FitnessCenter,
-        listOf("學習", "課程", "書") to Icons.Outlined.School,
-        listOf("保險") to Icons.Outlined.Shield,
-        listOf("人情", "禮") to Icons.Outlined.CardGiftcard,
-        listOf("工作") to Icons.Outlined.Work,
-        listOf("金融", "手續費", "銀行") to Icons.Outlined.AccountBalance,
-        listOf("薪資", "收入", "獎金") to Icons.Outlined.Payments,
-        listOf("家庭", "支援") to Icons.Outlined.FamilyRestroom,
-        listOf("回饋", "點數") to Icons.Outlined.Redeem,
-        listOf("退款") to Icons.Outlined.Undo,
-        listOf("股", "投資", "股利") to Icons.Outlined.ShowChart,
+        listOf("早餐", "飲料", "咖啡", "點心") to LineIcons.IcCafe,
+        listOf("飲食", "餐", "食") to LineIcons.IcFood,
+        listOf("交通", "車", "捷運", "油") to LineIcons.IcBus,
+        listOf("日用", "雜貨", "超市") to LineIcons.IcBasket,
+        listOf("服飾", "衣") to LineIcons.IcShirt,
+        listOf("購物", "3C", "家電") to LineIcons.IcBag,
+        listOf("居住", "房租", "水電", "家") to LineIcons.IcHome,
+        listOf("娛樂", "遊戲", "電影") to LineIcons.IcGame,
+        listOf("訂閱") to LineIcons.IcPlay,
+        listOf("醫療", "藥", "診所") to LineIcons.IcMedical,
+        listOf("旅遊", "旅行") to LineIcons.IcPlane,
+        listOf("運動", "健身") to LineIcons.IcDumbbell,
+        listOf("學習", "課程", "書") to LineIcons.IcBook,
+        listOf("保險") to LineIcons.IcShield,
+        listOf("人情", "禮") to LineIcons.IcGift,
+        listOf("工作") to LineIcons.IcBriefcase,
+        listOf("金融", "手續費", "銀行") to LineIcons.IcBank,
+        listOf("薪資", "收入", "獎金") to LineIcons.IcCash,
+        listOf("家庭", "支援") to LineIcons.IcPeople,
+        listOf("回饋", "點數") to LineIcons.IcGift,
+        listOf("退款") to LineIcons.IcRefund,
+        listOf("股", "投資", "股利") to LineIcons.IcChart,
     )
     private val palette = listOf(
         Color(0xFFE07A5F), Color(0xFF3D8BBF), Color(0xFF81B29A), Color(0xFFF2B263), Color(0xFF9C89B8),
@@ -73,7 +73,7 @@ object CategoryVisual {
     )
 
     fun icon(name: String?): ImageVector = name?.let { n -> rules.firstOrNull { (keys, _) -> keys.any { n.contains(it, ignoreCase = true) } }?.second }
-        ?: Icons.Outlined.MoreHoriz
+        ?: LineIcons.IcDots
 
     fun color(key: Long?): Color = key?.let { palette[(it % palette.size).toInt().let { i -> if (i < 0) -i else i }] } ?: Color(0xFF9E9E9E)
 }
@@ -83,6 +83,6 @@ object CategoryVisual {
 fun CategoryAvatar(name: String?, colorKey: Long?, size: Dp = 36.dp, transfer: Boolean = false) {
     val c = if (transfer) Color(0xFF8C8C8C) else CategoryVisual.color(colorKey)
     Box(Modifier.size(size).background(c.copy(alpha = 0.14f), CircleShape), contentAlignment = Alignment.Center) {
-        Icon(if (transfer) Icons.Outlined.SwapHoriz else CategoryVisual.icon(name), null, tint = c, modifier = Modifier.size(size * 0.55f))
+        Icon(if (transfer) LineIcons.IcSwap else CategoryVisual.icon(name), null, tint = c, modifier = Modifier.size(size * 0.55f))
     }
 }
