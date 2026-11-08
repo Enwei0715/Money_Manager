@@ -40,18 +40,18 @@ data class ToolItem(val id: String, val label: String, val route: String, val ic
 object ToolCatalog {
     private val L = com.enwei.moneymanager.ui.components.LineIcons
     val items = listOf(
-        ToolItem("pending", "待確認", "pending", L.Inbox),
-        ToolItem("recurring", "週期交易", "recurring", L.Recurring),
-        ToolItem("fx", "匯率", "fx", L.Exchange),
-        ToolItem("backup", "備份", "backup", L.Backup),
-        ToolItem("ai-hub", "AI 中心", "ai-hub", L.Advisor),
-        ToolItem("advisor", "股票助理", "advisor", L.Stocks),
-        ToolItem("review", "收支分析", "review", L.Review),
-        ToolItem("budget", "預算", "budget", L.Review),
-        ToolItem("totalstats", "資產走勢", "totalstats", L.Stocks),
-        ToolItem("notif", "通知記帳", "notif", L.Notification),
-        ToolItem("stockfees", "手續費與月退", "stockfees", L.Stocks),
-        ToolItem("settings", "App 更新", "settings", L.Update),
+        ToolItem("pending", "待確認", "pending", L.ToolPending),
+        ToolItem("recurring", "週期交易", "recurring", L.ToolRecurring),
+        ToolItem("fx", "匯率", "fx", L.ToolFx),
+        ToolItem("backup", "備份", "backup", L.ToolBackup),
+        ToolItem("ai-hub", "AI 中心", "ai-hub", L.ToolAi),
+        ToolItem("advisor", "股票助理", "advisor", L.ToolCandles),
+        ToolItem("review", "收支分析", "review", L.ToolBars),
+        ToolItem("budget", "預算", "budget", L.ToolGauge),
+        ToolItem("totalstats", "資產走勢", "totalstats", L.ToolTrend),
+        ToolItem("notif", "通知記帳", "notif", L.ToolBell),
+        ToolItem("stockfees", "手續費與月退", "stockfees", L.ToolReceipt),
+        ToolItem("settings", "App 更新", "settings", L.ToolUpdate),
     )
 
     /** 工具頁目前顯示的工具（依使用者排的順序）。不在順序裡的工具放在「可加入的工具」。 */

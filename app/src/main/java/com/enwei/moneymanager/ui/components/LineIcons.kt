@@ -23,6 +23,18 @@ object LineIcons {
             }
         }.build()
 
+    /** 細線條＋小實心點綴（dots：圓心 x、y 與半徑），工具頁用的新圖示 */
+    private fun accent(name: String, paths: List<String>, dots: List<Triple<Float, Float, Float>>): ImageVector =
+        ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
+            paths.forEach { d ->
+                addPath(pathData = addPathNodes(d), fill = null, stroke = SolidColor(Color.Black), strokeLineWidth = 1.3f,
+                    strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
+            }
+            dots.forEach { (x, y, r) ->
+                addPath(pathData = addPathNodes("M${x - r} ${y}a$r $r 0 1 0 ${2 * r} 0a$r $r 0 1 0 ${-2 * r} 0z"), fill = SolidColor(Color.Black))
+            }
+        }.build()
+
     /** 收支檢討：清單板 */
     val Review = icon(
         "review",
@@ -103,4 +115,40 @@ object LineIcons {
         "M12 4v10.5 M8 10.5l4 4l4 -4",
         "M4.5 15.5v2.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5 -1.5v-2.5",
     )
+
+    /** 工具：待確認 */
+    val ToolPending = accent("ToolPending", listOf("M4 13l2-6.2A1.5 1.5 0 0 1 7.4 5.8H13", "M4 13v4.7a1.5 1.5 0 0 0 1.5 1.5h13a1.5 1.5 0 0 0 1.5-1.5V13", "M4 13h4.2l1.3 2.2h5l1.3-2.2H20", "M20 13l-0.9-2.8"), listOf(Triple(18f, 6.2f, 1.7f)))
+
+    /** 工具：週期交易 */
+    val ToolRecurring = accent("ToolRecurring", listOf("M18.6 8.6A7.2 7.2 0 1 0 19.2 13.2", "M19.4 4.8v4h-4", "M12 8.6V12l2.4 1.6"), listOf())
+
+    /** 工具：匯率 */
+    val ToolFx = accent("ToolFx", listOf("M3.8 10a5.2 5.2 0 1 0 10.4 0a5.2 5.2 0 1 0 -10.4 0", "M13.9 8.9a5.2 5.2 0 1 1 -4.95 6.85"), listOf(Triple(9f, 10f, 1.1f)))
+
+    /** 工具：備份 */
+    val ToolBackup = accent("ToolBackup", listOf("M8 18.5H7a4.25 4.25 0 0 1 -0.55 -8.46A5.75 5.75 0 0 1 17.6 8.9A4.3 4.3 0 0 1 17 18.5h-1", "M12 19.5v-7.5", "M9.5 14.5L12 12l2.5 2.5"), listOf())
+
+    /** 工具：AI 中心 */
+    val ToolAi = accent("ToolAi", listOf("M11 4c0.55 4.1 2.4 5.95 6.5 6.5c-4.1 0.55 -5.95 2.4 -6.5 6.5c-0.55 -4.1 -2.4 -5.95 -6.5 -6.5c4.1 -0.55 5.95 -2.4 6.5 -6.5z", "M18 15.5v4.5", "M15.75 17.75h4.5"), listOf())
+
+    /** 工具：股票助理 */
+    val ToolCandles = accent("ToolCandles", listOf("M8 3.8v16.4", "M6.2 8h3.6v6.8H6.2z", "M16 5.5v13", "M14.2 9.8h3.6v4.6h-3.6z"), listOf())
+
+    /** 工具：收支分析 */
+    val ToolBars = accent("ToolBars", listOf("M4.5 19.5h15", "M7.5 16.5v-4.5", "M12 16.5V7.5", "M16.5 16.5v-6.5"), listOf(Triple(12f, 4.8f, 1.2f)))
+
+    /** 工具：預算 */
+    val ToolGauge = accent("ToolGauge", listOf("M4.8 16.5a7.2 7.2 0 0 1 14.4 0", "M12 16.5l3.4 -4.2", "M4.5 19.5h15"), listOf(Triple(12f, 16.5f, 1.4f)))
+
+    /** 工具：資產走勢 */
+    val ToolTrend = accent("ToolTrend", listOf("M4 16.5l4.5-4.5 3.5 2.6 5.5-6.1", "M4 19.8h16"), listOf(Triple(18.6f, 7.6f, 1.6f)))
+
+    /** 工具：通知記帳 */
+    val ToolBell = accent("ToolBell", listOf("M6.5 15.5v-4.5a5.5 5.5 0 0 1 11 0v4.5l1.5 2h-14z", "M10.25 20a1.9 1.9 0 0 0 3.5 0"), listOf(Triple(17.6f, 5.4f, 1.6f)))
+
+    /** 工具：手續費 */
+    val ToolReceipt = accent("ToolReceipt", listOf("M6.5 3.8h11v16.4l-1.85-1.2-1.85 1.2-1.8-1.2-1.8 1.2-1.85-1.2-1.85 1.2z", "M9.6 14.4l4.8-4.8"), listOf(Triple(9.9f, 9.9f, 0.95f), Triple(14.1f, 14.1f, 0.95f)))
+
+    /** 工具：App 更新 */
+    val ToolUpdate = accent("ToolUpdate", listOf("M12 4v10.5", "M8 10.5l4 4 4-4", "M4.5 15.5v2.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2.5"), listOf())
 }
