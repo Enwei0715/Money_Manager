@@ -219,7 +219,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
     }
     fun onOff(b: Boolean) = if (b) "ON" else "OFF"
     fun askOnOff(title: String, value: Boolean, description: String?, onPick: (Boolean) -> Unit) =
-        ask(title, listOf(false to "OFF", true to "ON"), value, description, onPick)
+        ask(title, listOf(false to "OFF", true to "ON"), value, description, onPick = onPick)
     val currencies = (listOf("TWD") + FxService.common).distinct()
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar(grp?.title ?: "設定", { nav.popBackStack() }) }) { pad ->

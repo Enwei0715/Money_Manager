@@ -39,6 +39,9 @@ import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Language
@@ -640,8 +643,8 @@ private fun FormRow(
         val icon = when (label) {
             "日期" -> Icons.Outlined.Event; "分類" -> Icons.Outlined.Category; "帳戶", "Account", "轉出" -> Icons.Outlined.AccountBalanceWallet
             "轉入" -> Icons.Outlined.Login; "內容" -> Icons.Outlined.Storefront; "說明" -> Icons.Outlined.Notes; "手續費" -> Icons.Outlined.Percent
-            "分帳" -> androidx.compose.material.icons.Icons.Outlined.Group; "對象" -> androidx.compose.material.icons.Icons.Outlined.Person
-            "對方付" -> androidx.compose.material.icons.Icons.Outlined.Payments
+            "分帳" -> Icons.Outlined.Group; "對象" -> Icons.Outlined.Person
+            "對方付" -> Icons.Outlined.Payments
             else -> null
         }
         if (icon != null) Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 10.dp).size(20.dp))
