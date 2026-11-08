@@ -156,6 +156,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     var splitPerson by rememberSaveable { mutableStateOf(initialSplitPerson) }
     var splitNewName by rememberSaveable { mutableStateOf("") }
     var splitExpr by rememberSaveable { mutableStateOf("") }
+    var debtOpen by remember { mutableStateOf(false) }
     var date by rememberSaveable { mutableStateOf(initialEpochDay?.let(LocalDate::ofEpochDay) ?: LocalDate.now()) }
     var time by rememberSaveable { mutableStateOf(LocalTime.now().withSecond(0).withNano(0)) }
     var panel by rememberSaveable {
@@ -313,6 +314,19 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
 
     var showSource by remember { mutableStateOf(false) }
     if (showSource) original?.let { SourceDialog(it) { showSource = false } }
+    if (debtOpen) DebtPicker({ debtOpen = false }) { person, kind ->
+        debtOpen = false
+        val name = lk.account(person)?.name.orEmpty()
+        when (kind) {
+            // 幫他付：一般支出＋代墊（別人的部分預設全部）
+            0 -> { type = TxnType.EXPENSE; splitOn = true; splitPerson = person; if (amountMinor != null) splitExpr = minorToExpr(amountMinor) }
+            // 借給他、我還他：從我的帳戶轉給他
+            1, 4 -> { type = TxnType.TRANSFER; toAccountId = person; if (accountId == person) accountId = null; merchant = if (kind == 1) "借給 $name" else "還給 $name" }
+            // 他還我、我向他借：從他轉進我的帳戶
+            else -> { type = TxnType.TRANSFER; val mine = accountId?.takeIf { it != person }; accountId = person; toAccountId = mine; merchant = if (kind == 2) "$name 還款" else "向 $name 借" }
+        }
+        categoryId = null
+    }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
@@ -349,6 +363,14 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                             .clickable { memoNew = true },
                         contentAlignment = Alignment.Center,
                     ) { Text("備註", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    // 往來：借給誰、誰還我、幫誰付（代墊）…選好對象與方向就填好轉帳或代墊
+                    if (original == null) Box(
+                        Modifier.weight(1f).height(40.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(6.dp))
+                            .clickable { debtOpen = true },
+                        contentAlignment = Alignment.Center,
+                    ) { Text("往來", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     // 股票交易：換到股票交易編輯（買進、賣出、股利），不另外找入口
                     if (original == null && settings.featureStocks) Box(
                         Modifier.weight(1f).height(40.dp)
@@ -929,4 +951,45 @@ private fun SplitSection(
             )
         }
     }
+}
+
+
+/**
+ * 往來：選對象（或新增名字）與方向。方向：0 幫他付（代墊）、1 借給他、2 他還我、3 我向他借、4 我還他。
+ * 選完回到記帳畫面，金額與帳戶照常填（借貸是轉帳，不算收入或支出）。
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun DebtPicker(onDismiss: () -> Unit, onPick: (Long, Int) -> Unit) {
+    val lk = rememberLookups()
+    val scope = rememberCoroutineScope()
+    val people = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN && !it.archived }
+    var person by remember { mutableStateOf<Long?>(null) }
+    var newName by remember { mutableStateOf("") }
+    var kind by remember { mutableStateOf(0) }
+    val kinds = listOf("幫他付（代墊）", "借給他", "他還我", "我向他借", "我還他")
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("往來") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (people.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    people.forEach { p ->
+                        androidx.compose.material3.FilterChip(person == p.id, { person = if (person == p.id) null else p.id; newName = "" }, label = { Text(p.name, fontSize = AppText.caption) })
+                    }
+                }
+                if (person == null) androidx.compose.material3.OutlinedTextField(newName, { newName = it }, singleLine = true,
+                    label = { Text(if (people.isEmpty()) "對象名字" else "或輸入新的名字") }, modifier = Modifier.fillMaxWidth())
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    kinds.forEachIndexed { i, l -> androidx.compose.material3.FilterChip(kind == i, { kind = i }, label = { Text(l, fontSize = AppText.caption) }) }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = person != null || newName.isNotBlank(), onClick = {
+                scope.launch { onPick(person ?: repo.debtPerson(newName), kind) }
+            }) { Text("下一步") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }

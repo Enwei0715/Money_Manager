@@ -236,7 +236,6 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 }) {
                     Text("結帳日＋$dueOffset 天" + (sDay?.let { s0 -> CardCycle(s0, 1, shift, dueOffset).let { c -> "（本期 ${c.nextDueDate(LocalDate.now().minusDays(1))}）" } } ?: ""), fontSize = AppText.body)
                 } else FormLine("繳款日") { FormInput(dueDay, { dueDay = it.filter(Char::isDigit).take(2) }, "", number = true) }
-                FormLine("扣繳日") { FormInput(autopayDay, { autopayDay = it.filter(Char::isDigit).take(2) }, "銀行實際扣款日，空白＝繳款日", number = true) }
                 FormLine("扣繳帳戶", onClick = { autopayMenu = true }) {
                     Box {
                         Text(lk.account(autopayFrom)?.name ?: "不自動扣繳", fontSize = AppText.body)
@@ -248,11 +247,23 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                         }
                     }
                 }
+                // 扣款日：設了扣繳帳戶才需要；依銀行實際做法選（國泰常在繳款日後一個營業日才扣）
+                if (autopayFrom != null) FormLine("扣款日") {
+                    val mode = when { autopayDay.isBlank() -> 0; autopayDay.startsWith("-") -> 1; else -> 2 }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            androidx.compose.material3.FilterChip(mode == 0, { autopayDay = "" }, label = { Text("繳款日當天", fontSize = AppText.caption) })
+                            androidx.compose.material3.FilterChip(mode == 1, { autopayDay = "-1" }, label = { Text("繳款日後一個營業日", fontSize = AppText.caption) })
+                            androidx.compose.material3.FilterChip(mode == 2, { if (mode != 2) autopayDay = dueDay.ifBlank { "1" } }, label = { Text("固定日", fontSize = AppText.caption) })
+                        }
+                        if (mode == 2) FormInput(autopayDay, { autopayDay = it.filter(Char::isDigit).take(2) }, "每月幾號", number = true)
+                    }
+                }
                 DropdownLine("結帳日遇週末", shift.label, com.enwei.moneymanager.core.StatementShift.entries.map { it to it.label }) { shift = it }
                 if (sDay != null && dDay != null) {
                     val cycle = CardCycle(sDay, dDay, shift, dueOffset)
                     val due = cycle.nextDueDate(LocalDate.now().minusDays(1))
-                    val apDay = autopayDay.toIntOrNull()?.takeIf { it in 1..31 }
+                    val apDay = autopayDay.toIntOrNull()?.takeIf { it in 1..31 || it in -3..-1 }
                     Text(
                         "本期：結帳日 ${cycle.statementDateFor(due)} → 繳款日 $due（遇假日順延）" +
                             if (autopayFrom != null) "\n${cycle.autopayDateFor(due, apDay)} 從「${lk.account(autopayFrom)?.name}」自動扣繳" else "",
@@ -354,7 +365,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                         cardLast4 = last4.ifBlank { null },
                         statementDay = if (isCard) sDay else null, dueDay = if (isCard) dDay else null,
                         autopayFromId = if (isCard) autopayFrom else null,
-                        autopayDay = if (isCard) autopayDay.toIntOrNull()?.takeIf { it in 1..31 } else null,
+                        autopayDay = if (isCard) autopayDay.toIntOrNull()?.takeIf { it in 1..31 || it in -3..-1 } else null,
                         includeInNetWorth = includeNet, archived = archived, description = description.ifBlank { null },
                     )
                     scope.launch {

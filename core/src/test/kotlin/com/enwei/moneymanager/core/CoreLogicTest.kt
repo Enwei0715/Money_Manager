@@ -619,3 +619,13 @@ class ActualMerchantTest {
         assertEquals("LINE Pay", NotificationParser.findMerchant("刷卡台幣410元，商店名稱:LINE Pay"))
     }
 }
+
+class AutopayAfterDueTest {
+    @Test fun oneBusinessDayAfterDue() {
+        val c = CardCycle(17, 3)
+        // 2026/12/03（週四）繳款日 → 隔一個營業日 12/04（週五）
+        assertEquals(LocalDate.of(2026, 12, 4), c.autopayDateFor(LocalDate.of(2026, 12, 3), -1))
+        // 2026/12/04（週五）→ 跳過週末到 12/07（週一）
+        assertEquals(LocalDate.of(2026, 12, 7), c.autopayDateFor(LocalDate.of(2026, 12, 4), -1))
+    }
+}

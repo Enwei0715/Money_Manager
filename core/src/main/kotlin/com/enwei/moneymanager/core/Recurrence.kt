@@ -181,7 +181,13 @@ data class CardCycle(
      * 實際自動扣繳日：同一期帳單、指定日（[autopayDay]，空白則等於繳款日）。
      * 若指定日落在繳款日之後超過 10 天，視為前一個月（例如繳款日 3 號、扣繳日 28 號）。
      */
+    /** [autopayDay]：null＝繳款日（依銀行規則順延）；1～31＝每月固定日；負數 −N＝繳款日後第 N 個營業日。 */
     fun autopayDateFor(dueDate: LocalDate, autopayDay: Int?): LocalDate {
+        if (autopayDay != null && autopayDay < 0) {
+            var d = dueDate
+            repeat(-autopayDay) { d = TaiwanHolidays.nextBusinessDay(d.plusDays(1)) }
+            return d
+        }
         if (autopayDay == null) {
             // 只有截止日因假日順延過，才再延後扣款
             val rolled = autopayLagBusinessDays > 0 && rawDueFor(statementDateFor(dueDate)) != dueDate
