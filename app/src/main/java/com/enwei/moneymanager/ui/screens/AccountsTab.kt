@@ -1,5 +1,8 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.groupCell
+import androidx.compose.foundation.lazy.itemsIndexed
+
 import androidx.compose.material.icons.outlined.People
 
 import androidx.compose.material.icons.outlined.ShowChart
@@ -126,14 +129,13 @@ fun balanceBefore(
 @Composable
 private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {}) {
     Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 10.dp),
+        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 8.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
         Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.caption, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
             letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp))
         right()
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -240,7 +242,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                 val owed = people.filter { it.balance > 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
                 val owe = -people.filter { it.balance < 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
                 Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("debts") }
+                    Modifier.fillMaxWidth().padding(top = 12.dp).groupCell(true, true).clickable { nav.navigate("debts") }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -257,7 +259,6 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                         if (owed == 0L && owe == 0L) Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
             // 借貸：7 天內要收付款、快到期或已逾期
             if (loanNotes.isNotEmpty()) item(key = "loanNotes") {
@@ -295,12 +296,9 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     item(key = "g${type.name}") {
                         val payable = list.sumOf { cards[it.account.id]?.payable ?: 0 }
                         val outst = list.sumOf { cards[it.account.id]?.outstanding ?: 0 }
-                        Column(
-                            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
-                                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 10.dp),
-                        ) {
-                            Text(st.groupLabel(type), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                            Column(Modifier.padding(top = 8.dp)) {
+                        GrayHeader(st.groupLabel(type))
+                        Column(Modifier.fillMaxWidth().groupCell(true, false).padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Column {
                                 CreditCardMetrics(
                                     listOf(
                                         Triple("應繳餘額", Money.withSymbol(payable, lk.base), ExpenseColor),
@@ -310,13 +308,13 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                                 )
                             }
                         }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
-                    items(list, key = { "a${it.account.id}" }) { b ->
+                    itemsIndexed(list, key = { _, it -> "a${it.account.id}" }) { idx, b ->
                         val st = cards[b.account.id]
                         val name = b.account.name + if (b.account.archived) "（隱藏）" else ""
+                        HorizontalDivider(Modifier.padding(horizontal = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                         Column(
-                            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
+                            Modifier.fillMaxWidth().groupCell(false, idx == list.lastIndex)
                                 .clickable { nav.navigate("acct/${b.account.id}") }
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -330,7 +328,6 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                                 ),
                             )
                         }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 } else {
                     val isBroker = type == AccountType.BROKERAGE
@@ -340,7 +337,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                         }
                         GrayHeader(st.groupLabel(type)) { Text(Money.withSymbol(total, lk.base), color = balanceColor(total, MaterialTheme.colorScheme.onSurface)) }
                     }
-                    items(list, key = { "a${it.account.id}" }) { b ->
+                    itemsIndexed(list, key = { _, it -> "a${it.account.id}" }) { idx, b ->
                         val a = b.account
                         val sub = when (a.type) {
                             AccountType.BROKERAGE -> {
@@ -367,7 +364,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                             "股票損益 ${if (pnl > 0) "+" else ""}${Money.full(pnl)}（${"%+.2f".format(pct)}%）" to
                                 (if (pnl >= 0) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown)
                         } else null
-                        AccountLine(a.name + if (a.archived) "（隱藏）" else "", { nav.navigate("acct/${a.id}") }, sub, pnlNote, type = a.type) {
+                        AccountLine(a.name + if (a.archived) "（隱藏）" else "", { nav.navigate("acct/${a.id}") }, sub, pnlNote, type = a.type, first = idx == 0, last = idx == list.lastIndex) {
                             if (isBroker) {
                                 val v = lk.fx.convert(b.balance, a.currency) + stockOf(a.id)
                                 Text(Money.withSymbol(v, lk.base), color = balanceColor(v, MaterialTheme.colorScheme.onSurface))
@@ -391,9 +388,10 @@ private fun AccountLine(
     note: Pair<String, Color>? = null,
     /** 帳戶類型：左邊顯示對應的小圖示 */
     type: AccountType? = null,
+    first: Boolean = true, last: Boolean = true,
     right: @Composable RowScope.() -> Unit,
 ) {
-    Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+    Column(Modifier.groupCell(first, last)) {
         Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = if (sub != null || note != null) 11.dp else 14.dp), verticalAlignment = Alignment.CenterVertically) {
             if (type != null) {
                 val icon = when (type) {
@@ -417,7 +415,7 @@ private fun AccountLine(
             }
             right()
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        if (!last) HorizontalDivider(Modifier.padding(start = if (type != null) 64.dp else 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
     }
 }
 

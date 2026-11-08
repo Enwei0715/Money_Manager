@@ -45,6 +45,14 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Login
+import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.Notes
+import androidx.compose.material.icons.outlined.Percent
+import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -157,6 +165,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     var splitNewName by rememberSaveable { mutableStateOf("") }
     var splitExpr by rememberSaveable { mutableStateOf("") }
     var debtOpen by remember { mutableStateOf(false) }
+    // 往來模式：類型列選「往來」時，在頁面上直接選對象與方向（底層仍是支出＋代墊或轉帳）
+    var debtMode by rememberSaveable { mutableStateOf(false) }
+    var debtPerson by rememberSaveable { mutableStateOf<Long?>(null) }
+    var debtNewName by rememberSaveable { mutableStateOf("") }
+    var debtKind by rememberSaveable { mutableStateOf(-1) }
     var date by rememberSaveable { mutableStateOf(initialEpochDay?.let(LocalDate::ofEpochDay) ?: LocalDate.now()) }
     var time by rememberSaveable { mutableStateOf(LocalTime.now().withSecond(0).withNano(0)) }
     var panel by rememberSaveable {
@@ -314,8 +327,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
 
     var showSource by remember { mutableStateOf(false) }
     if (showSource) original?.let { SourceDialog(it) { showSource = false } }
-    if (debtOpen) DebtPicker({ debtOpen = false }) { person, kind ->
-        debtOpen = false
+    fun applyDebt(person: Long, kind: Int) {
         val name = lk.account(person)?.name.orEmpty()
         when (kind) {
             // 幫他付：一般支出＋代墊（別人的部分預設全部）
@@ -327,10 +339,21 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         }
         categoryId = null
     }
+    if (debtOpen) DebtPicker({ debtOpen = false }) { person, kind -> debtOpen = false; debtMode = true; debtPerson = person; debtKind = kind; applyDebt(person, kind) }
+    // 往來：選好對象與方向就套用（新名字先建立對象）
+    LaunchedEffect(debtMode, debtPerson, debtKind) {
+        if (!debtMode || debtKind < 0) return@LaunchedEffect
+        val p = debtPerson ?: return@LaunchedEffect
+        applyDebt(p, debtKind)
+    }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            BackTopBar(type.label, { nav.popBackStack() }) {
+            BackTopBar(if (debtMode) "往來" else type.label, { nav.popBackStack() }) {
+                // 當天備註（不是交易）：收在右上角
+                if (original == null) androidx.compose.material3.IconButton(onClick = { memoNew = true }) {
+                    Icon(androidx.compose.material.icons.Icons.Outlined.StickyNote2, "當天備註")
+                }
                 // 來源通知收在右上角的通知圖示：點了才看原文，表單保持乾淨
                 if (!original?.rawText.isNullOrBlank()) androidx.compose.material3.IconButton(onClick = { showSource = true }) {
                     androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge(containerColor = MaterialTheme.colorScheme.primary) }) {
@@ -343,36 +366,53 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).imePadding()) {
-                // 第一列：收入／支出／轉帳（分段選擇，選中的填色）；第二列：往來、股票、備註等其他記錄方式（小膠囊）
+                // 類型：支出／收入／轉帳／往來（＋股票），一條分段選擇，選中的填色
+                val segs = buildList {
+                    TxnType.entries.forEach { t -> add(Triple(t.label, !debtMode && type == t, typeColor(t)) to { debtMode = false; if (type != t) { type = t; categoryId = null } }) }
+                    if (original == null || debtMode) add(Triple("往來", debtMode, MaterialTheme.colorScheme.primary) to { debtMode = true })
+                    if (original == null && settings.featureStocks) add(Triple("股票", false, MaterialTheme.colorScheme.onSurfaceVariant) to { nav.popBackStack(); nav.navigate("trade/0") })
+                }
                 Row(
                     Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)
-                        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), MaterialTheme.shapes.small),
+                        .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small).padding(3.dp),
                 ) {
-                    TxnType.entries.forEach { t ->
-                        val sel = t == type
-                        val c = typeColor(t)
+                    segs.forEach { (info, onClick) ->
+                        val (label, sel, c) = info
                         Box(
-                            Modifier.weight(1f).height(40.dp)
-                                .background(if (sel) c.copy(alpha = 0.14f) else Color.Transparent, MaterialTheme.shapes.small)
-                                .clickable { if (type != t) { type = t; categoryId = null } },
+                            Modifier.weight(1f).height(36.dp)
+                                .background(if (sel) MaterialTheme.colorScheme.surface else Color.Transparent, MaterialTheme.shapes.small)
+                                .clickable(onClick = onClick),
                             contentAlignment = Alignment.Center,
-                        ) { Text(t.label, color = if (sel) c else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
+                        ) { Text(label, fontSize = AppText.secondary, color = if (sel) c else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
                     }
                 }
-                if (original == null) Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                // 往來：在頁面上選對象與方向（不跳視窗）
+                if (debtMode) DebtInline(debtPerson, { debtPerson = it }, debtNewName, { debtNewName = it }, debtKind, { k ->
+                    debtKind = k
+                    if (debtPerson == null && debtNewName.isNotBlank()) scope.launch { debtPerson = repo.debtPerson(debtNewName) }
+                })
+                // 金額：這頁的主角，獨立成一塊大字；點一下開計算機
+                Column(
+                    Modifier.fillMaxWidth().clickable { focusManager.clearFocus(); panel = Panel.AMOUNT }.padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
                 ) {
-                    @Composable fun pill(label: String, onClick: () -> Unit) = Box(
-                        Modifier.border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(50)).clickable(onClick = onClick)
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
-                    ) { Text(label, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    // 往來：借給誰、誰還我、幫誰付（代墊）
-                    pill("往來") { debtOpen = true }
-                    // 股票交易：換到股票交易編輯（買進、賣出、股利）
-                    if (settings.featureStocks) pill("股票") { nav.popBackStack(); nav.navigate("trade/0") }
-                    // 備註：寫在當天，每日列表與日曆會顯示
-                    pill("備註") { memoNew = true }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("金額", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                        if (type == TxnType.TRANSFER && !debtMode) Text(if (showFee) "手續費 ✓" else "＋手續費", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { showFee = !showFee; if (showFee) panel = Panel.FEE }.padding(4.dp))
+                    }
+                    Text(
+                        (if (currency != lk.base) Money.symbolOf(currency) else "$ ") + expr.ifEmpty { "0" },
+                        fontSize = androidx.compose.ui.unit.TextUnit(34f, androidx.compose.ui.unit.TextUnitType.Sp), fontWeight = FontWeight.SemiBold,
+                        color = if (expr.isEmpty()) MaterialTheme.colorScheme.outlineVariant else if (debtMode) MaterialTheme.colorScheme.onSurface else color,
+                    )
+                    if (Calculator.hasOperator(expr)) Calculator.evaluate(expr)?.let {
+                        Text("= ${Calculator.format(it)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (currency != lk.base && amountMinor != null && lk.fx.hasRate(currency)) {
+                        Text("≈ ${Money.withSymbol(lk.fx.convert(amountMinor, currency), lk.base)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    HorizontalDivider(Modifier.padding(top = 8.dp), thickness = if (panel == Panel.AMOUNT) 2.dp else 1.dp,
+                        color = if (panel == Panel.AMOUNT) color else MaterialTheme.colorScheme.outlineVariant)
                 }
                 FormRow("日期", color, active = false, onClick = { panel = Panel.NONE; showDate = true }, trailing = {
                     Column(
@@ -387,30 +427,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     Row {
                         Text("${date.year % 100}/${date.monthValue}/${date.dayOfMonth} (${Recurrence.weekdayName(date.dayOfWeek)})")
                         if (settings.showTime) Text("   %02d:%02d".format(time.hour, time.minute), modifier = Modifier.clickable { showTime = true })
-                    }
-                }
-                FormRow("金額", color, active = panel == Panel.AMOUNT, onClick = { focusManager.clearFocus(); panel = Panel.AMOUNT }, trailing = {
-                    if (type == TxnType.TRANSFER) OutlinedButton(
-                        onClick = { showFee = !showFee; if (showFee) panel = Panel.FEE },
-                        shape = RoundedCornerShape(6.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
-                        modifier = Modifier.height(36.dp),
-                    ) { Text("手續費", color = MaterialTheme.colorScheme.onSurface) }
-                }) {
-                    Column {
-                        // 金額是這頁的主角：大字、依收支上色；還沒輸入時淡色 0
-                        Text(
-                            (if (currency != lk.base) Money.symbolOf(currency) else "$ ") + expr.ifEmpty { "0" },
-                            fontSize = AppText.display, fontWeight = FontWeight.SemiBold,
-                            color = if (expr.isEmpty()) MaterialTheme.colorScheme.outlineVariant else color,
-                            modifier = Modifier.padding(vertical = 4.dp),
-                        )
-                        if (Calculator.hasOperator(expr)) Calculator.evaluate(expr)?.let {
-                            Text("= ${Calculator.format(it)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        if (currency != lk.base && amountMinor != null && lk.fx.hasRate(currency)) {
-                            Text("≈ ${Money.withSymbol(lk.fx.convert(amountMinor, currency), lk.base)}",
-                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
                     }
                 }
                 // 依金額推測的分類與內容：點一下套用
@@ -621,8 +637,14 @@ private fun FormRow(
         val english = com.enwei.moneymanager.ui.I18n.english
         // 英文用短標籤，避免和右側內容擠在一起
         val shown = if (english) when (label) { "轉出" -> "From"; "轉入" -> "To"; "轉入金額" -> "Received"; else -> label } else label
-        Text(shown, Modifier.width(if (english) 96.dp else 76.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyLarge, maxLines = 1, softWrap = false)
+        val icon = when (label) {
+            "日期" -> Icons.Outlined.Event; "分類" -> Icons.Outlined.Category; "帳戶", "Account", "轉出" -> Icons.Outlined.AccountBalanceWallet
+            "轉入" -> Icons.Outlined.Login; "內容" -> Icons.Outlined.Storefront; "說明" -> Icons.Outlined.Notes; "手續費" -> Icons.Outlined.Percent
+            else -> null
+        }
+        if (icon != null) Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 10.dp).size(20.dp))
+        Text(shown, Modifier.width(if (english) 84.dp else 56.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = AppText.secondary, maxLines = 1, softWrap = false)
         Column(Modifier.weight(1f)) {
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { content() }
@@ -989,4 +1011,34 @@ private fun DebtPicker(onDismiss: () -> Unit, onPick: (Long, Int) -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
+}
+
+
+/** 往來：對象（既有或新名字）＋方向，直接放在記帳頁上。方向：0 幫他付、1 借給他、2 他還我、3 我向他借、4 我還他。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun DebtInline(person: Long?, onPerson: (Long?) -> Unit, newName: String, onNewName: (String) -> Unit, kind: Int, onKind: (Int) -> Unit) {
+    val lk = rememberLookups()
+    val people = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN && !it.archived }
+    val kinds = listOf("幫他付", "借給他", "他還我", "我向他借", "我還他")
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("對象", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            people.forEach { p ->
+                androidx.compose.material3.FilterChip(person == p.id, { onPerson(if (person == p.id) null else p.id); onNewName("") }, label = { Text(p.name, fontSize = AppText.caption) })
+            }
+        }
+        if (person == null) UnderlineField(newName, onNewName, if (people.isEmpty()) "輸入對象名字" else "或輸入新的名字")
+        Text("方向", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        Row(Modifier.fillMaxWidth().border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), MaterialTheme.shapes.small)) {
+            kinds.forEachIndexed { i, l ->
+                val on = i == kind
+                Box(
+                    Modifier.weight(1f).height(34.dp).background(if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent, MaterialTheme.shapes.small)
+                        .clickable { onKind(i) },
+                    contentAlignment = Alignment.Center,
+                ) { Text(l, fontSize = AppText.label, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
+            }
+        }
+    }
 }
