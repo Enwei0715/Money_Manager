@@ -65,7 +65,13 @@ class FxConverter(private val base: String, private val rates: Map<String, Doubl
         if (from.equals(to, ignoreCase = true)) return minor
         val fromRate = rateOf(from) ?: return minor
         val toRate = rateOf(to) ?: return minor
-        return Math.round(minor / fromRate * toRate)
+        val v = minor / fromRate * toRate
+        // 換成新台幣、日圓這類平常不用小數的幣別時取整數（元），不出現 1,234.57 這種零頭
+        return if (to.uppercase() in WHOLE) Math.round(v / 100.0) * 100 else Math.round(v)
+    }
+
+    private companion object {
+        val WHOLE = setOf("TWD", "JPY", "KRW", "VND", "IDR", "HUF", "CLP", "ISK")
     }
 
     fun hasRate(currency: String) = rateOf(currency) != null

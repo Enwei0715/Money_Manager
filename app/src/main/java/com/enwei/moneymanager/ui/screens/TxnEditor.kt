@@ -530,7 +530,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         onFieldFocus = { panel = Panel.NONE })
 
                 }
-                FormRow("內容", color, merchantFocused, onClick = {}) {
+                FormRow("商家", color, merchantFocused, onClick = {}) {
                     UnderlineField(merchant, { merchant = it; merchantAuto = false }, "",
                         Modifier.onFocusChanged { merchantFocused = it.isFocused; if (it.isFocused) panel = Panel.NONE })
                 }
@@ -679,7 +679,7 @@ private fun FormRow(
         val shown = if (english) when (label) { "轉出" -> "From"; "轉入" -> "To"; "轉入金額" -> "Received"; else -> label } else label
         val icon = when (label) {
             "日期" -> com.enwei.moneymanager.ui.components.LineIcons.IcCalendar; "分類" -> com.enwei.moneymanager.ui.components.LineIcons.IcShapes; "帳戶", "Account", "轉出" -> com.enwei.moneymanager.ui.components.LineIcons.IcWallet
-            "轉入" -> com.enwei.moneymanager.ui.components.LineIcons.IcArrowIn; "內容" -> com.enwei.moneymanager.ui.components.LineIcons.IcStore; "說明" -> com.enwei.moneymanager.ui.components.LineIcons.IcLines; "手續費" -> com.enwei.moneymanager.ui.components.LineIcons.IcPercent
+            "轉入" -> com.enwei.moneymanager.ui.components.LineIcons.IcArrowIn; "商家" -> com.enwei.moneymanager.ui.components.LineIcons.IcStore; "說明" -> com.enwei.moneymanager.ui.components.LineIcons.IcLines; "手續費" -> com.enwei.moneymanager.ui.components.LineIcons.IcPercent
             "分帳" -> com.enwei.moneymanager.ui.components.LineIcons.IcPeople; "對象" -> com.enwei.moneymanager.ui.components.LineIcons.IcPerson
             "對方付", "誰還的" -> com.enwei.moneymanager.ui.components.LineIcons.IcCash
             else -> null
@@ -1046,7 +1046,8 @@ private fun SplitSection(
         val manual = rows.filter { !it.auto }.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L }
         val autos = rows.count { it.auto }
         if (autos == 0) return@LaunchedEffect
-        val each = ((total - manual).coerceAtLeast(0)) / (autos + if (includeMe) 1 else 0)
+        // 每人取整數（元），除不盡的零頭算在自己那份
+        val each = ((total - manual).coerceAtLeast(0)) / (autos + if (includeMe) 1 else 0) / 100 * 100
         val next = rows.map { if (it.auto) it.copy(expr = minorToExpr(each)) else it }
         if (next != rows) onRows(next)
     }
