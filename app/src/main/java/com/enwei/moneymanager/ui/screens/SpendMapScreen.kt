@@ -181,16 +181,21 @@ fun SpendMapScreen(nav: NavController) {
                         IconButton(onClick = { anchor = when (span) { 0 -> anchor.plusDays(1); 1 -> anchor.plusWeeks(1); else -> anchor.plusMonths(1) } }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                     }
                     val placedSum = placed.sumOf { lk.fx.convert(it.first.amount, it.first.currency) }
-                    Text("地圖上 ${placed.size} 筆 ${Money.withSymbol(placedSum, lk.base)}" +
-                        (if (unplaced.isNotEmpty()) "・沒有位置 ${unplaced.size} 筆" else "") + (if (onlineCount > 0) "・線上 $onlineCount 筆" else ""),
+                    // 摘要只留一句；點一下才看沒有位置、線上的筆數
+                    var more by remember { mutableStateOf(false) }
+                    val extra = (unplaced.isNotEmpty() || onlineCount > 0)
+                    Row(Modifier.clickable(enabled = extra) { more = !more }, verticalAlignment = Alignment.CenterVertically) {
+                        Text("地圖上 ${placed.size} 筆 ${Money.withSymbol(placedSum, lk.base)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (extra) Text(if (more) "  ︿" else "  ﹀", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (more) Text(listOfNotNull(unplaced.size.takeIf { it > 0 }?.let { "沒有位置 $it 筆" }, onlineCount.takeIf { it > 0 }?.let { "線上 $it 筆" }).joinToString("・"),
                         fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    snapping?.let { Text(it, fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary) }
                 }
             }
             item {
                 if (spots.isEmpty()) Text("這段期間沒有可以標在地圖上的支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
-                else SpendMap(spots, dark, Modifier.fillMaxWidth().height(380.dp).clipToBounds(), selKey, focusTick,
+                else SpendMap(spots, dark, Modifier.fillMaxWidth().height(380.dp).clipToBounds(), selKey, focusTick, status = snapping,
                     onSelect = { selKey = it?.key },
                     onMove = { sp, la, lo -> PlaceHints.setSpotFix(sp.key, la, lo); fixes = PlaceHints.spotFixes() },
                     onReset = { sp -> PlaceHints.clearSpotFix(sp.key); fixes = PlaceHints.spotFixes() },
@@ -283,7 +288,7 @@ private fun my(lat: Double): Double {
  */
 @Composable
 private fun SpendMap(
-    spots: List<SpendSpot>, dark: Boolean, modifier: Modifier, selKey: String?, focusTick: Int,
+    spots: List<SpendSpot>, dark: Boolean, modifier: Modifier, selKey: String?, focusTick: Int, status: String? = null,
     onSelect: (SpendSpot?) -> Unit, onMove: (SpendSpot, Double, Double) -> Unit, onReset: (SpendSpot) -> Unit,
     onGoogle: (SpendSpot) -> Unit = {},
 ) {
@@ -458,6 +463,12 @@ private fun SpendMap(
             val credit = textMeasurer.measure(if (style == "emap") "© 內政部國土測繪中心" else "© OpenStreetMap contributors", androidx.compose.ui.text.TextStyle(fontSize = 9.sp, color = if (dark) androidx.compose.ui.graphics.Color(0xAAFFFFFF) else androidx.compose.ui.graphics.Color(0xAA000000)))
             drawText(credit, topLeft = androidx.compose.ui.geometry.Offset(size.width - credit.size.width - 6.dp.toPx(), size.height - credit.size.height - 4.dp.toPx()))
         }
+        // 對準店家的進度：地圖右下角一行小字
+        status?.let {
+            Text(it, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 22.dp)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
+        }
         // 底圖切換：通用電子地圖／OpenStreetMap
         androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), shape = RoundedCornerShape(6.dp),
             modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).clickable {
@@ -482,13 +493,16 @@ private fun SpendMap(
                     Text("${Money.withSymbol(sp.total, "TWD")}・${sp.count} 筆" + (if (sp.cat.isNotBlank()) "・${sp.cat}" else ""), fontSize = AppText.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (moving) Text("在地圖上點正確的位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 4.dp)) {
-                        Text(if (moving) "取消" else "點地圖修正", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable { moving = !moving })
-                        if (!moving) Text("用 Google 地圖找", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable { onGoogle(sp) })
-                        if (sp.fixed && !moving) Text("還原", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.clickable { onReset(sp) })
+                    // 只有一個「修正位置」，點了才列出方式
+                    var fixMenu by remember(sp.key) { mutableStateOf(false) }
+                    Box(Modifier.padding(top = 4.dp)) {
+                        Text(if (moving) "取消" else "修正位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { if (moving) moving = false else fixMenu = true })
+                        androidx.compose.material3.DropdownMenu(fixMenu, { fixMenu = false }) {
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("在地圖上點正確位置") }, onClick = { fixMenu = false; moving = true })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("用 Google 地圖找") }, onClick = { fixMenu = false; onGoogle(sp) })
+                            if (sp.fixed) androidx.compose.material3.DropdownMenuItem(text = { Text("還原") }, onClick = { fixMenu = false; onReset(sp) })
+                        }
                     }
                 }
             }

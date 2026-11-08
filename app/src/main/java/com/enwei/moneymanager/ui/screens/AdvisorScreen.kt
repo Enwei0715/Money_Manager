@@ -346,6 +346,20 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
     if (rtab == 1 && r.picks.isEmpty()) Text("這份報告沒有推薦個股。", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (rtab == 2 && r.holdings.isEmpty()) Text("這份報告沒有持股動作。", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (rtab == 3 && r.keyNews.isEmpty()) Text("這份報告沒有標出必看新聞。", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // 提醒：不再是一張勾選清單，收成最上方一行淡色提示，點一下展開全部（含原本的檢查項目）
+    if (rtab == 0 && (r.warnings.isNotEmpty() || r.checklist.isNotEmpty())) {
+        var open by remember { mutableStateOf(false) }
+        val all = r.warnings + r.checklist
+        Column(Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("提醒", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 8.dp))
+                Text(all.first(), fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = if (open) 3 else 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (all.size > 1 && !open) Text("＋${all.size - 1}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (open) all.drop(1).forEach { Text("・$it", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 36.dp, top = 2.dp)) }
+        }
+    }
     // ① 重點摘要：階段、展望、題材，摘要拆成條列（前三點，其餘可展開）
     if (rtab == 0) Section("重點摘要") {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -439,10 +453,6 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
             }
         }
         if (r.allocation.isNotBlank()) PointList(r.allocation, r.cites, newsById, foldKey = "alloc")
-    }
-    if (rtab == 0 && (r.checklist.isNotEmpty() || r.warnings.isNotEmpty())) Section("下單前檢查") {
-        r.checklist.forEach { Text("☐ $it", fontSize = AppText.secondary) }
-        r.warnings.forEach { Text("! $it", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.error) }
     }
 }
 

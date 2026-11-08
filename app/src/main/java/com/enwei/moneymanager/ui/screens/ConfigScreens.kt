@@ -179,7 +179,7 @@ private data class CfgGroup(
 private val cfgGroups = listOf(
     CfgGroup("accounts", "帳戶與分類", com.enwei.moneymanager.ui.components.LineIcons.IcWallet, listOf("帳戶", "分類與預算")),
     CfgGroup("entry", "記帳", com.enwei.moneymanager.ui.components.LineIcons.IcPencil, listOf("記帳", "期間", "幣別")),
-    CfgGroup("display", "外觀與顯示", com.enwei.moneymanager.ui.components.LineIcons.IcPalette, listOf("外觀", "期間與顯示", "列表")),
+    CfgGroup("display", "外觀與顯示", com.enwei.moneymanager.ui.components.LineIcons.IcPalette, listOf("外觀", "顯示")),
     CfgGroup("features", "功能開關", com.enwei.moneymanager.ui.components.LineIcons.IcToggle, listOf("功能開關")),
     CfgGroup("autorecord", "自動記帳", com.enwei.moneymanager.ui.components.LineIcons.IcChat, listOf("自動記帳"), route = "notif", visible = { it.featureNotif }),
     CfgGroup("ai", "AI", com.enwei.moneymanager.ui.components.LineIcons.ToolAi, listOf("AI"), visible = { it.aiEnabled }),
@@ -291,7 +291,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 cfg("自動完成", onOff(s.autocomplete)) {
                     askOnOff("自動完成", s.autocomplete, null) { v -> repo.settings.update { it.copy(autocomplete = v) } }
                 }
-                sec("期間與顯示")
+                sec("顯示")
                 cfg("日曆標示", if (s.calendarDots) "顏色小點" else "文字") {
                     ask("日曆標示", listOf(false to "文字", true to "顏色小點"), s.calendarDots, preview = { v -> CalendarMarkPreview(v) }) { v -> repo.settings.update { it.copy(calendarDots = v) } }
                 }
@@ -299,6 +299,10 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                     ask("搜尋的篩選方式", listOf(0 to "圖表勾選", 1 to "欄位篩選"), s.filterStyle, preview = { v -> FilterStylePreview(v == 1) }) { v ->
                         repo.settings.update { it.copy(filterStyle = v) }
                     }
+                }
+                cfg("滑動切換", if (s.swipe == 1) "切換期間" else "無") {
+                    ask("滑動切換", listOf(0 to "無", 1 to "切換期間"), s.swipe,
+                        preview = { v -> TextLinePreview(if (v == 1) "在交易列表左右滑動 → 切到上個月／下個月" else "左右滑動不做任何事，只能按標題的箭頭換月") }) { v -> repo.settings.update { it.copy(swipe = v) } }
                 }
                 sec("期間")
                 cfg("每月起始日", "每月 ${s.monthStartDay} 日") {
@@ -309,12 +313,6 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 cfg("每週起始日", if (s.weekStartDay == 7) "週日" else "週一") {
                     ask("每週起始日", listOf(7 to "週日", 1 to "週一"), s.weekStartDay) { v -> repo.settings.update { it.copy(weekStartDay = v) } }
                 }
-                sec("列表")
-                cfg("滑動切換", if (s.swipe == 1) "切換期間" else "無") {
-                    ask("滑動切換", listOf(0 to "無", 1 to "切換期間"), s.swipe,
-                        preview = { v -> TextLinePreview(if (v == 1) "在交易列表左右滑動 → 切到上個月／下個月" else "左右滑動不做任何事，只能按標題的箭頭換月") }) { v -> repo.settings.update { it.copy(swipe = v) } }
-                }
-
                 sec("幣別")
                 cfg("主幣別", "${s.baseCurrency} (${Money.symbolOf(s.baseCurrency).trim()})") {
                     ask("主幣別", currencies.map { it to it }, s.baseCurrency) { c -> repo.settings.update { it.copy(baseCurrency = c) } }

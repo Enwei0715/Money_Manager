@@ -150,8 +150,6 @@ fun MoreScreen(nav: NavController) {
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 title = { Text("工具") },
                 actions = {
-                    // 測試用：重播新手導覽（之後會拿掉）
-                    TextButton(onClick = { com.enwei.moneymanager.ui.components.Onboarding.show.value = true }) { Text("導覽測試") }
                     TextButton(onClick = { editing = !editing }) { Text(if (editing) "完成" else "編輯") }
                     IconButton(onClick = { nav.navigate("config") }, modifier = Modifier.coachTarget("more.settings")) { Icon(Icons.Outlined.Settings, "設定") }
                 },
