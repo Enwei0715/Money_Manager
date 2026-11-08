@@ -609,3 +609,13 @@ class PartialFillTest {
         assertEquals(null, NotificationParser.parseStockFillPartial("ETtoday財經雲", "愈跌愈買！00406A刷史上新低 爆百萬張成交量"))
     }
 }
+
+class ActualMerchantTest {
+    @Test fun bankNoticeWithActualStore() {
+        // 永豐：商店名稱是支付工具，實際商店名稱才是店家
+        val t = "永豐貴賓您好，末四碼5908感謝11/04 19:41刷卡台幣410元，商店名稱:LINE Pay，實際商店名稱:路易莎咖啡"
+        assertEquals("路易莎咖啡", NotificationParser.findMerchant(t))
+        // 只有支付工具名稱時仍回傳它
+        assertEquals("LINE Pay", NotificationParser.findMerchant("刷卡台幣410元，商店名稱:LINE Pay"))
+    }
+}

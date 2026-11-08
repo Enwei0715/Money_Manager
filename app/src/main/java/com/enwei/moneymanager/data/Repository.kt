@@ -1224,9 +1224,15 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             )
             return merged(other, updated, "${type.label} $amountText ${name.orEmpty()}（和${if (other.source == TxnSource.SCREEN) "錢包畫面" else "手動記帳"}的同一筆合併）")
         }
-        // 多個 App 同時通知同一筆消費（例如信用卡 + 支付 App）
-        if (nearby.any { it.type == type && kotlin.math.abs(it.date - occurred) <= 3 * 60_000 }) {
-            log.insert(logAs("DUPLICATE", nearby.first().id))
+        // 多個 App 同時通知同一筆消費（例如信用卡 + 支付 App）：不重複記帳，
+        // 但先記的那筆只有支付工具名稱（LINE Pay）、這則有真正的店名（銀行通知的「實際商店名稱」）時，補上店名與分類
+        nearby.firstOrNull { it.type == type && kotlin.math.abs(it.date - occurred) <= 3 * 60_000 }?.let { other ->
+            if (weakMerchant(other.merchant) && !weakMerchant(p.merchant)) {
+                val cat = suggestCategory(p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId ?: other.categoryId
+                return merged(other, other.copy(merchant = p.merchant, categoryId = cat),
+                    "${type.label} $amountText ${p.merchant}（同一筆，從另一則通知補上店名）")
+            }
+            log.insert(logAs("DUPLICATE", other.id))
             return null
         }
         val tagged = if (p.kind == ParsedKind.TRANSFER_OUT || p.kind == ParsedKind.TRANSFER_IN) "$TRANSFER_TAG\n$raw" else raw

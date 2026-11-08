@@ -109,6 +109,8 @@ object NotificationParser {
     private val cardLast4Regex = Regex("(?:末四碼|末4碼|尾號|末碼|後四碼|卡號末四碼|末五碼|末5碼)\\s*[:：]?\\s*\\*{0,4}(\\d{4,5})")
 
     private val merchantPatterns = listOf(
+        // 「商店名稱:LINE Pay，實際商店名稱:XX 咖啡」：實際商店優先
+        Regex("實際(?:商店|消費|交易)?(?:商店|特店|店家|商家)?(?:名稱)?\\s*[:：]\\s*([^，,。\\n]{2,30})"),
         // 支援「於 2025/03/15 16:22 在合成商店 刷卡」格式，店名可含空白
         Regex("在\\s*([^，,。！!\\n]{2,40}?)\\s*(?:刷卡|消費|付款)"),
         Regex("(?:於|在)\\s*([^，,。\\s]{2,30}?)\\s*(?:消費|刷卡|付款|支付|交易|扣款)"),
@@ -276,6 +278,8 @@ object NotificationParser {
     }
 
     internal fun findMerchant(text: String): String? {
+        // 只寫支付工具（LINE Pay、街口…）的先記著，有真正的店名就用店名
+        var generic: String? = null
         for (p in merchantPatterns) {
             for (m in p.findAll(text)) {
                 val candidate = m.groupValues[1].trim().trim('「', '」', '【', '】', '(', ')', '（', '）')
@@ -284,11 +288,11 @@ object NotificationParser {
                 if (candidate.length >= 2 && !dateLike.matches(candidate) &&
                     !candidate.startsWith("NT") && !candidate.contains("$")
                 ) {
-                    return candidate
+                    if (CategoryGuesser.isGenericMerchant(candidate)) { if (generic == null) generic = candidate } else return candidate
                 }
             }
         }
-        return null
+        return generic
     }
 
     private val sideRegex = Regex("(買進|賣出|現股買進|現股賣出|買入|賣|買)")
