@@ -101,8 +101,10 @@ fun RecurringScreen(nav: NavController) {
                     Frequency.MONTHLY -> " ${r.dayOfMonth ?: LocalDate.ofEpochDay(r.anchorDate).dayOfMonth} 日"
                     else -> ""
                 }
+                // 列表圖示關閉時不顯示左邊的圖示
+                val badge: @Composable () -> Unit = { SymbolBadge(if (r.type == TxnType.TRANSFER) Symbols.transfer else Symbols.category(cat?.name, r.type)) }
                 ListItem(
-                    leadingContent = { SymbolBadge(if (r.type == TxnType.TRANSFER) Symbols.transfer else Symbols.category(cat?.name, r.type)) },
+                    leadingContent = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) badge else null,
                     headlineContent = { Text(r.name + if (!r.enabled) "（停用）" else "") },
                     supportingContent = {
                         Text("$every$dayText · ${lk.account(r.accountId)?.name ?: "未指定帳戶"} · 下次 ${repo.nextOccurrence(r)}")
