@@ -246,7 +246,31 @@ object PlaceHints {
         }.getOrNull()
     }
 
-    /** 已經試過對準的點（不管有沒有找到），避免每次打開地圖都重查 */
+    /**
+     * Photon（OpenStreetMap 資料的模糊搜尋，不用金鑰）：名字差一點也找得到（例如「天佑」對到「天佑小吃」）。
+     * 以 [lat],[lon] 為中心找，回傳 [radius] 公尺內最近、名字相符的那個。
+     */
+    suspend fun photonNear(name: String, lat: Double, lon: Double, radius: Int = 600): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+        runCatching {
+            val key = name.replace(Regex("[（(].*?[)）]"), "").trim().take(20).ifBlank { return@runCatching null }
+            val url = "https://photon.komoot.io/api/?q=" + java.net.URLEncoder.encode(key, "UTF-8") + "&lat=$lat&lon=$lon&limit=8&location_bias_scale=0.5"
+            val body = com.enwei.moneymanager.net.Http.getJson(url, mapOf("User-Agent" to UA)) as? kotlinx.serialization.json.JsonObject ?: return@runCatching null
+            val feats = body["features"] as? kotlinx.serialization.json.JsonArray ?: return@runCatching null
+            val core = key.split(' ', '　').first().take(6)
+            feats.mapNotNull { f ->
+                val o = f as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                val coords = ((o["geometry"] as? kotlinx.serialization.json.JsonObject)?.get("coordinates") as? kotlinx.serialization.json.JsonArray) ?: return@mapNotNull null
+                val lo = (coords.getOrNull(0) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
+                val la = (coords.getOrNull(1) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
+                val nm = ((o["properties"] as? kotlinx.serialization.json.JsonObject)?.get("name") as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+                // 名字要對得上（互相包含），避免對到旁邊不相干的店
+                if (nm.isBlank() || !(nm.contains(core, true) || core.contains(nm.take(4), true))) return@mapNotNull null
+                Triple(la, lo, dist(lat, lon, la, lo))
+            }.filter { it.third <= radius }.minByOrNull { it.third }?.let { it.first to it.second }
+        }.getOrNull()
+    }
+
+    /** 已經試過對準的點（不管有沒有找到）    /** 已經試過對準的點（不管有沒有找到），避免每次打開地圖都重查 */
     private val snapPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("spot_snap", Context.MODE_PRIVATE) }
     fun snapTried(key: String) = snapPrefs.contains(key)
     fun markSnapTried(key: String) = snapPrefs.edit().putBoolean(key, true).apply()

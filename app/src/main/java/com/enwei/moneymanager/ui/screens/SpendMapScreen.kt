@@ -141,7 +141,9 @@ fun SpendMapScreen(nav: NavController) {
         val todo = spots.filter { !it.fixed && it.key.isNotBlank() && !it.name.startsWith("（") && !PlaceHints.snapTried(it.key) }.take(20)
         todo.forEachIndexed { i, sp ->
             snapping = "對準店家位置 ${i + 1}/${todo.size}…"
-            PlaceHints.snapToStore(sp.name, sp.lat, sp.lon)?.let { (la, lo) -> PlaceHints.setSpotFix(sp.key, la, lo); fixes = PlaceHints.spotFixes() }
+            // 先找附近同名的店（OpenStreetMap），找不到再用 Photon 模糊搜尋
+            (PlaceHints.snapToStore(sp.name, sp.lat, sp.lon) ?: PlaceHints.photonNear(sp.name, sp.lat, sp.lon))
+                ?.let { (la, lo) -> PlaceHints.setSpotFix(sp.key, la, lo); fixes = PlaceHints.spotFixes() }
             PlaceHints.markSnapTried(sp.key)
             kotlinx.coroutines.delay(1100)
         }
@@ -311,8 +313,9 @@ private fun SpendMap(
         val z = minOf(kotlin.math.log2((sizePx.width - pad * 2) / (dx * tilePx)), kotlin.math.log2((sizePx.height - pad * 2) / (dy * tilePx)))
         zoom = if (spots.size == 1) 16.0 else z.coerceIn(3.0, 16.0)
     }
-    // 底圖：OpenStreetMap 官方圖磚（免金鑰）；深色模式在畫的時候反轉顏色
-    val style = "osm"
+    // 底圖：預設「臺灣通用電子地圖」（國土測繪中心，免金鑰、中文清楚）；可切換成 OpenStreetMap。深色模式在畫的時候轉暗
+    val mapPrefs = remember { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("map_prefs", android.content.Context.MODE_PRIVATE) }
+    var style by remember { mutableStateOf(mapPrefs.getString("style", "emap") ?: "emap") }
     fun load(z: Int, x: Int, y: Int) {
         val key = "$style/$z/$x/$y"
         if (TileCache.mem.get(key) != null || key in TileCache.failed || !TileCache.inflight.add(key)) return
@@ -320,13 +323,23 @@ private fun SpendMap(
             try {
                 TileCache.gate.acquire()
                 try {
-                    val url = "https://tile.openstreetmap.org/$z/$x/$y.png"
-                    val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Ledgerly/2.1 (Android personal finance app)").build()
-                    TileCache.client.newCall(req).execute().use { r ->
-                        val bytes = r.body?.bytes()
-                        val bmp = if (r.isSuccessful && bytes != null) android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) else null
-                        if (bmp != null) TileCache.mem.put(key, bmp.asImageBitmap()) else TileCache.failed.add(key)
+                    // 依序試：通用電子地圖 → OpenStreetMap（這一格載不到就換下一個，不會一片空白）
+                    val urls = buildList {
+                        if (key.startsWith("emap/")) add("https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/$z/$y/$x")
+                        add("https://tile.openstreetmap.org/$z/$x/$y.png")
                     }
+                    var bmp: android.graphics.Bitmap? = null
+                    for (url in urls) {
+                        val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Ledgerly/2.1 (Android personal finance app)").build()
+                        bmp = runCatching {
+                            TileCache.client.newCall(req).execute().use { r ->
+                                val bytes = r.body?.bytes()
+                                if (r.isSuccessful && bytes != null) android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) else null
+                            }
+                        }.getOrNull()
+                        if (bmp != null) break
+                    }
+                    bmp?.let { TileCache.mem.put(key, it.asImageBitmap()) } ?: TileCache.failed.add(key)
                 } finally { TileCache.gate.release() }
             } catch (_: Exception) {
             } finally {
@@ -442,8 +455,15 @@ private fun SpendMap(
                     androidx.compose.ui.geometry.Size(lay.size.width + 8.dp.toPx(), lay.size.height + 2.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
                 drawText(lay, topLeft = androidx.compose.ui.geometry.Offset(lx, ly))
             }
-            val credit = textMeasurer.measure("© OpenStreetMap contributors", androidx.compose.ui.text.TextStyle(fontSize = 9.sp, color = if (dark) androidx.compose.ui.graphics.Color(0xAAFFFFFF) else androidx.compose.ui.graphics.Color(0xAA000000)))
+            val credit = textMeasurer.measure(if (style == "emap") "© 內政部國土測繪中心" else "© OpenStreetMap contributors", androidx.compose.ui.text.TextStyle(fontSize = 9.sp, color = if (dark) androidx.compose.ui.graphics.Color(0xAAFFFFFF) else androidx.compose.ui.graphics.Color(0xAA000000)))
             drawText(credit, topLeft = androidx.compose.ui.geometry.Offset(size.width - credit.size.width - 6.dp.toPx(), size.height - credit.size.height - 4.dp.toPx()))
+        }
+        // 底圖切換：通用電子地圖／OpenStreetMap
+        androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), shape = RoundedCornerShape(6.dp),
+            modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).clickable {
+                style = if (style == "emap") "osm" else "emap"; mapPrefs.edit().putString("style", style).apply(); version++
+            }) {
+            Text(if (style == "emap") "通用電子地圖" else "OpenStreetMap", fontSize = AppText.label, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
         }
         // 縮放按鈕
         Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
