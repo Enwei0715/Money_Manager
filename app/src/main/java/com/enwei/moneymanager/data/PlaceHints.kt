@@ -220,6 +220,55 @@ object PlaceHints {
         }.minByOrNull { it.third }?.takeIf { it.third <= r + loc.accuracy.coerceAtMost(40f) }?.let { Place(it.first, it.second) }
     }.getOrNull()
 
+    /**
+     * 對準店家：在 [lat],[lon] 附近 [radius] 公尺內找名稱相符的店（OpenStreetMap），回傳最近那間的座標。
+     * 連鎖店（萊爾富、7-11…）也是找離付款位置最近的那間分店。找不到回傳 null。
+     */
+    suspend fun snapToStore(name: String, lat: Double, lon: Double, radius: Int = 300): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+        runCatching {
+            // 店名去掉分店、括號等，只用主要名稱比對（例如「萊爾富 永和店」→「萊爾富」）
+            val key = name.replace(Regex("[（(].*?[)）]"), "").split(' ', '　', '-', '－').firstOrNull { it.length >= 2 }?.take(12) ?: return@runCatching null
+            val esc = Regex.escape(key).replace("\\Q", "").replace("\\E", "").replace("\"", "")
+            val q = "[out:json][timeout:12];(" +
+                "node(around:$radius,$lat,$lon)[\"name\"~\"$esc\",i];" +
+                "way(around:$radius,$lat,$lon)[\"name\"~\"$esc\",i];" +
+                ");out center 20;"
+            val body = com.enwei.moneymanager.net.Http.getJson("https://overpass-api.de/api/interpreter?data=" + java.net.URLEncoder.encode(q, "UTF-8"), mapOf("User-Agent" to UA))
+            val els = (body as? kotlinx.serialization.json.JsonObject)?.get("elements") as? kotlinx.serialization.json.JsonArray ?: return@runCatching null
+            els.mapNotNull { e ->
+                val o = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                fun num(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                    ?: ((o["center"] as? kotlinx.serialization.json.JsonObject)?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                val la = num("lat") ?: return@mapNotNull null
+                val lo = num("lon") ?: return@mapNotNull null
+                Triple(la, lo, dist(lat, lon, la, lo))
+            }.minByOrNull { it.third }?.let { it.first to it.second }
+        }.getOrNull()
+    }
+
+    /** 已經試過對準的點（不管有沒有找到），避免每次打開地圖都重查 */
+    private val snapPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("spot_snap", Context.MODE_PRIVATE) }
+    fun snapTried(key: String) = snapPrefs.contains(key)
+    fun markSnapTried(key: String) = snapPrefs.edit().putBoolean(key, true).apply()
+
+    /**
+     * 從 Google 地圖的分享連結讀出座標：短網址（maps.app.goo.gl）先跟著轉址拿到完整網址，
+     * 再找「!3d緯度!4d經度」（地點本身）、「@緯度,經度」或「q=緯度,經度」。
+     */
+    suspend fun coordsFromMapsLink(text: String): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+        val url = Regex("https?://\\S+").find(text)?.value ?: return@withContext null
+        if (!url.contains("goo.gl") && !url.contains("google.") && !url.contains("g.co")) return@withContext null
+        val full = runCatching {
+            val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Linux; Android 14)").build()
+            com.enwei.moneymanager.net.Http.client.newCall(req).execute().use { r -> r.request.url.toString() + "\n" + (r.body?.string()?.take(200_000) ?: "") }
+        }.getOrNull() ?: url
+        fun pair(m: MatchResult?) = m?.let { it.groupValues[1].toDoubleOrNull()?.let { a -> it.groupValues[2].toDoubleOrNull()?.let { b -> a to b } } }
+        val dec = runCatching { java.net.URLDecoder.decode(full, "UTF-8") }.getOrDefault(full)
+        pair(Regex("!3d(-?\\d+\\.\\d+)!4d(-?\\d+\\.\\d+)").find(dec))
+            ?: pair(Regex("@(-?\\d+\\.\\d+),(-?\\d+\\.\\d+)").find(dec))
+            ?: pair(Regex("[?&](?:q|ll|query|center)=(-?\\d+\\.\\d+),\\s*(-?\\d+\\.\\d+)").find(dec))
+    }
+
     /** OpenStreetMap 類型 → 分類名稱關鍵字（在使用者的分類裡找名稱含這些字的）。 */
     fun categoryWords(kind: String?): List<String> = when (kind) {
         "restaurant", "fast_food", "cafe", "food_court", "bakery", "ice_cream", "bar", "pub", "biergarten", "deli", "confectionery", "beverages", "tea", "coffee" ->

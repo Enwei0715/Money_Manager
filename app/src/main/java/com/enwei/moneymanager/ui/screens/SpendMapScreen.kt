@@ -135,6 +135,36 @@ fun SpendMapScreen(nav: NavController) {
     }.sortedByDescending { it.total }
     var selKey by remember { mutableStateOf<String?>(null) }
     var focusTick by remember { mutableStateOf(0) }
+    // 自動對準店家：GPS 有誤差，在原本位置附近 300 公尺找同名的店（連鎖店找最近的分店），找到就用店的座標
+    var snapping by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(spots.map { it.key }) {
+        val todo = spots.filter { !it.fixed && it.key.isNotBlank() && !it.name.startsWith("（") && !PlaceHints.snapTried(it.key) }.take(20)
+        todo.forEachIndexed { i, sp ->
+            snapping = "對準店家位置 ${i + 1}/${todo.size}…"
+            PlaceHints.snapToStore(sp.name, sp.lat, sp.lon)?.let { (la, lo) -> PlaceHints.setSpotFix(sp.key, la, lo); fixes = PlaceHints.spotFixes() }
+            PlaceHints.markSnapTried(sp.key)
+            kotlinx.coroutines.delay(1100)
+        }
+        snapping = null
+    }
+    // Google 地圖：開啟搜尋 → 使用者按分享、複製連結 → 回到這裡自動讀剪貼簿裡的連結
+    var googleFor by remember { mutableStateOf<String?>(null) }
+    var googleHit by remember { mutableStateOf<Pair<String, Pair<Double, Double>>?>(null) }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) googleFor?.let { key ->
+                scope.launch {
+                    kotlinx.coroutines.delay(400)
+                    val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                    val text = runCatching { cm?.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString() }.getOrNull().orEmpty()
+                    PlaceHints.coordsFromMapsLink(text)?.let { googleHit = key to it }
+                }
+            }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.4f
 
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -152,6 +182,7 @@ fun SpendMapScreen(nav: NavController) {
                     Text("地圖上 ${placed.size} 筆 ${Money.withSymbol(placedSum, lk.base)}" +
                         (if (unplaced.isNotEmpty()) "・沒有位置 ${unplaced.size} 筆" else "") + (if (onlineCount > 0) "・線上 $onlineCount 筆" else ""),
                         fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    snapping?.let { Text(it, fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary) }
                 }
             }
             item {
@@ -160,7 +191,28 @@ fun SpendMapScreen(nav: NavController) {
                 else SpendMap(spots, dark, Modifier.fillMaxWidth().height(380.dp).clipToBounds(), selKey, focusTick,
                     onSelect = { selKey = it?.key },
                     onMove = { sp, la, lo -> PlaceHints.setSpotFix(sp.key, la, lo); fixes = PlaceHints.spotFixes() },
-                    onReset = { sp -> PlaceHints.clearSpotFix(sp.key); fixes = PlaceHints.spotFixes() })
+                    onReset = { sp -> PlaceHints.clearSpotFix(sp.key); fixes = PlaceHints.spotFixes() },
+                    onGoogle = { sp ->
+                        googleFor = sp.key
+                        val q = android.net.Uri.encode(sp.name)
+                        val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("geo:${sp.lat},${sp.lon}?q=$q"))
+                        val web = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=$q"))
+                        runCatching { ctx.startActivity(geo.setPackage("com.google.android.apps.maps")) }.recoverCatching { ctx.startActivity(web) }
+                        android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("在 Google 地圖找到店家後按「分享」→「複製連結」，再回到帳理"), android.widget.Toast.LENGTH_LONG).show()
+                    })
+                googleHit?.let { (key, ll) ->
+                    val name = spots.firstOrNull { it.key == key }?.name.orEmpty()
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { googleHit = null; googleFor = null },
+                        title = { Text("套用 Google 地圖的位置？") },
+                        text = { Text("「$name」改用剛複製的 Google 地圖位置") },
+                        confirmButton = { androidx.compose.material3.TextButton(onClick = {
+                            PlaceHints.setSpotFix(key, ll.first, ll.second); fixes = PlaceHints.spotFixes(); selKey = key; focusTick++
+                            googleHit = null; googleFor = null
+                        }) { Text("套用") } },
+                        dismissButton = { androidx.compose.material3.TextButton(onClick = { googleHit = null; googleFor = null }) { Text("取消") } },
+                    )
+                }
             }
             // 沒有位置的店：用店名在 OpenStreetMap 找（每秒一家）
             val missing = unplaced.mapNotNull { it.merchant?.trim()?.takeIf { m -> m.isNotEmpty() && m !in geo && !chain(m) } }.distinct()
@@ -199,6 +251,9 @@ fun SpendMapScreen(nav: NavController) {
     }
 }
 
+/** 地圖針頭的半徑（dp）：金額越大越大，但差距不誇張 */
+private fun pinR(sp: SpendSpot, maxTotal: Long) = 7.0 + 5.0 * kotlin.math.sqrt(sp.total.toDouble() / maxTotal)
+
 /** 地圖圖磚的記憶體快取（最近用過的 120 張）。 */
 private object TileCache {
     val mem = object : android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(120) {}
@@ -228,6 +283,7 @@ private fun my(lat: Double): Double {
 private fun SpendMap(
     spots: List<SpendSpot>, dark: Boolean, modifier: Modifier, selKey: String?, focusTick: Int,
     onSelect: (SpendSpot?) -> Unit, onMove: (SpendSpot, Double, Double) -> Unit, onReset: (SpendSpot) -> Unit,
+    onGoogle: (SpendSpot) -> Unit = {},
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val tilePx = with(density) { 256.dp.toPx() }
@@ -313,7 +369,9 @@ private fun SpendMap(
                                     onMove(sp, Math.toDegrees(kotlin.math.atan(kotlin.math.sinh(Math.PI * (1 - 2 * wy)))), wx * 360 - 180)
                                     moving = false
                                 } else {
-                                    fun dist(p: SpendSpot) = kotlin.math.hypot((mx(p.lon) - cx) * world + sizePx.width / 2 - o.x, (my(p.lat) - cy) * world + sizePx.height / 2 - o.y)
+                                    // 點針頭（在位置上方）也算點到
+                                    fun dist(p: SpendSpot) = kotlin.math.hypot((mx(p.lon) - cx) * world + sizePx.width / 2 - o.x,
+                                        (my(p.lat) - cy) * world + sizePx.height / 2 - pinR(p, maxTotal).dp.toPx() * 2.1f - o.y)
                                     onSelect(spots.minByOrNull { dist(it) }?.takeIf { dist(it) < 30.dp.toPx() })
                                 }
                             }
@@ -351,13 +409,25 @@ private fun SpendMap(
                     dstSize = androidx.compose.ui.unit.IntSize(kotlin.math.ceil(t).toInt() + 1, kotlin.math.ceil(t).toInt() + 1),
                     colorFilter = tileFilter)
             }
-            spots.forEach { sp ->
+            // 地圖針：針尖指在位置上，針頭顏色＝分類、大小＝金額；選中的針頭描白邊
+            spots.sortedBy { if (it == picked) 1 else 0 }.forEach { sp ->
                 val px = ((mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
-                val r = (6 + 16 * kotlin.math.sqrt(sp.total.toDouble() / maxTotal)).dp.toPx()
+                val r = pinR(sp, maxTotal).dp.toPx()
+                val hy = py - r * 2.1f
                 val col = androidx.compose.ui.graphics.Color(palette[cats.indexOf(sp.cat).coerceAtLeast(0) % palette.size])
-                drawCircle(col.copy(alpha = 0.45f), r, androidx.compose.ui.geometry.Offset(px, py))
-                drawCircle(col, r, androidx.compose.ui.geometry.Offset(px, py), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
-                if (sp == picked) drawCircle(androidx.compose.ui.graphics.Color.White, r + 3.dp.toPx(), androidx.compose.ui.geometry.Offset(px, py), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                // 地上的小陰影點
+                drawCircle(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.25f), 2.5.dp.toPx(), androidx.compose.ui.geometry.Offset(px, py))
+                val pin = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(px, py)
+                    cubicTo(px - r * 0.35f, hy + r * 1.1f, px - r, hy + r * 0.6f, px - r, hy)
+                    arcTo(androidx.compose.ui.geometry.Rect(px - r, hy - r, px + r, hy + r), 180f, 180f, false)
+                    cubicTo(px + r, hy + r * 0.6f, px + r * 0.35f, hy + r * 1.1f, px, py)
+                    close()
+                }
+                drawPath(pin, col)
+                drawPath(pin, if (sp == picked) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.35f),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(if (sp == picked) 2.dp.toPx() else 1.dp.toPx()))
+                drawCircle(androidx.compose.ui.graphics.Color.White, r * 0.38f, androidx.compose.ui.geometry.Offset(px, hy))
             }
             // 店名標籤：金額最大的前 8 個與選中的那個，寫在圓圈右邊，底下墊底色
             val labelBg = if (dark) androidx.compose.ui.graphics.Color(0xE6202024) else androidx.compose.ui.graphics.Color(0xF0FFFFFF)
@@ -365,9 +435,9 @@ private fun SpendMap(
             (spots.take(8) + listOfNotNull(picked)).distinct().forEach { sp ->
                 val px = ((mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
                 if (px < -40 || px > size.width + 40 || py < -20 || py > size.height + 20) return@forEach
-                val r = (6 + 16 * kotlin.math.sqrt(sp.total.toDouble() / maxTotal)).dp.toPx()
+                val r = pinR(sp, maxTotal).dp.toPx()
                 val lay = textMeasurer.measure(sp.name.take(10), androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = labelFg))
-                val lx = px + r + 4.dp.toPx(); val ly = py - lay.size.height / 2f
+                val lx = px + r + 4.dp.toPx(); val ly = py - r * 2.1f - lay.size.height / 2f
                 drawRoundRect(labelBg, androidx.compose.ui.geometry.Offset(lx - 4.dp.toPx(), ly - 1.dp.toPx()),
                     androidx.compose.ui.geometry.Size(lay.size.width + 8.dp.toPx(), lay.size.height + 2.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
                 drawText(lay, topLeft = androidx.compose.ui.geometry.Offset(lx, ly))
@@ -393,8 +463,10 @@ private fun SpendMap(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (moving) Text("在地圖上點正確的位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 4.dp)) {
-                        Text(if (moving) "取消" else "位置不對？", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                        Text(if (moving) "取消" else "點地圖修正", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.clickable { moving = !moving })
+                        if (!moving) Text("用 Google 地圖找", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { onGoogle(sp) })
                         if (sp.fixed && !moving) Text("還原", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.clickable { onReset(sp) })
                     }
