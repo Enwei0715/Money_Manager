@@ -118,12 +118,26 @@ object Themes {
     fun of(key: String) = all.firstOrNull { it.key == key } ?: all.first()
 
     /** 字體：0 系統、1 黑體、2 明體（襯線） */
-    val fonts = listOf("系統字體", "黑體", "明體")
-    fun family(i: Int): androidx.compose.ui.text.font.FontFamily? = when (i) {
-        1 -> androidx.compose.ui.text.font.FontFamily.SansSerif
-        2 -> androidx.compose.ui.text.font.FontFamily.Serif
-        else -> null
+    /** 字體：系統字體不用下載；其他從 Google Fonts 下載真正的中文字形（下載前先用系統字體） */
+    val fonts = listOf("系統字體", "黑體", "明體", "楷體")
+    private val gfProvider by lazy {
+        androidx.compose.ui.text.googlefonts.GoogleFont.Provider(
+            providerAuthority = "com.google.android.gms.fonts",
+            providerPackage = "com.google.android.gms",
+            certificates = com.enwei.moneymanager.R.array.com_google_android_gms_fonts_certs,
+        )
     }
+    private fun gf(name: String, vararg weights: androidx.compose.ui.text.font.FontWeight): androidx.compose.ui.text.font.FontFamily {
+        val g = androidx.compose.ui.text.googlefonts.GoogleFont(name)
+        return androidx.compose.ui.text.font.FontFamily(weights.map { w -> androidx.compose.ui.text.googlefonts.Font(googleFont = g, fontProvider = gfProvider, weight = w) })
+    }
+    private val families by lazy {
+        val n = androidx.compose.ui.text.font.FontWeight.Normal
+        val m = androidx.compose.ui.text.font.FontWeight.Medium
+        val b = androidx.compose.ui.text.font.FontWeight.Bold
+        listOf(null, gf("Noto Sans TC", n, m, b), gf("Noto Serif TC", n, m, b), gf("LXGW WenKai TC", n, b))
+    }
+    fun family(i: Int): androidx.compose.ui.text.font.FontFamily? = families.getOrNull(i)
     /** 圓角：0 圓潤、1 細緻、2 直角 */
     val corners = listOf("圓潤", "細緻", "直角")
     fun shapes(i: Int) = when (i) {
@@ -144,6 +158,8 @@ object AppearancePrefs {
     var corner by mutableStateOf(0)
     /** 區塊樣式：false 線條（預設，像股票頁）、true 卡片 */
     var cards by mutableStateOf(false)
+    /** 列表圖示：交易列、帳戶列左邊的圓形圖示（外觀 → 圖示） */
+    var icons by mutableStateOf(true)
     /** 卡片圓角（依圓角設定） */
     val cardRadius get() = when (corner) { 1 -> 6.dp; 2 -> 0.dp; else -> 12.dp }
 }
@@ -178,9 +194,12 @@ fun MoneyTheme(
     tabular: Boolean = true,
     /** 區塊樣式：false 線條、true 卡片 */
     cards: Boolean = false,
+    /** 列表圖示 */
+    icons: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     AppearancePrefs.cards = cards
+    AppearancePrefs.icons = icons
     val base = LocalDensity.current
     val p = Themes.of(preset)
     AppearancePrefs.corner = corner

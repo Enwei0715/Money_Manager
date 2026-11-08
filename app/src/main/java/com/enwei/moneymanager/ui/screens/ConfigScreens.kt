@@ -266,9 +266,6 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 cfg("滑動切換", if (s.swipe == 1) "切換期間" else "無") {
                     ask("滑動切換", listOf(0 to "無", 1 to "切換期間"), s.swipe) { v -> repo.settings.update { it.copy(swipe = v) } }
                 }
-                cfg("顯示說明", onOff(s.showDescription)) {
-                    askOnOff("顯示說明", s.showDescription, null) { v -> repo.settings.update { it.copy(showDescription = v) } }
-                }
 
                 sec("幣別")
                 cfg("主幣別", "${s.baseCurrency} (${Money.symbolOf(s.baseCurrency).trim()})") {
@@ -280,10 +277,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 cfg("即時匯率") { nav.navigate("fx") }
 
                 sec("外觀")
-                cfg("主題、字體與大小", com.enwei.moneymanager.ui.Themes.of(s.themePreset).label + "・" + com.enwei.moneymanager.ui.Themes.fonts[s.fontChoice.coerceIn(0, 2)]) { nav.navigate("appearance") }
-                cfg("明暗", listOf("跟隨系統", "淺色", "深色")[s.themeMode.coerceIn(0, 2)]) {
-                    ask("主題", listOf(0 to "跟隨系統", 1 to "淺色", 2 to "深色"), s.themeMode) { v -> repo.settings.update { it.copy(themeMode = v) } }
-                }
+                cfg("主題、字體與版面", com.enwei.moneymanager.ui.Themes.of(s.themePreset).label + "・" + com.enwei.moneymanager.ui.Themes.fonts.getOrElse(s.fontChoice) { "系統字體" }) { nav.navigate("appearance") }
                 cfg("語言", listOf("跟隨系統", "繁體中文", "English")[s.language.coerceIn(0, 2)]) {
                     ask("語言", listOf(0 to "跟隨系統", 1 to "繁體中文", 2 to "English"), s.language) { v ->
                         repo.settings.update { it.copy(language = v) }
@@ -291,17 +285,6 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                         com.enwei.moneymanager.ui.applyAppLocale(ctx, v)
                     }
                 }
-                cfg("介面大小", uiScaleLabel(s.uiScale)) {
-                    ask("介面大小", listOf(0.85f to "較小（85%）", 0.92f to "小（92%）", 1f to "標準（100%）", 1.1f to "大（110%）", 1.2f to "特大（120%）"), s.uiScale) { v ->
-                        repo.settings.update { it.copy(uiScale = v) }
-                    }
-                }
-                cfg("收支顏色", if (s.colorSetB) "收入紅、支出藍" else "收入藍、支出紅") {
-                    ask(
-                        "收支顏色", listOf(false to "收入藍、支出紅", true to "收入紅、支出藍"), s.colorSetB,
-                    ) { v -> repo.settings.update { it.copy(colorSetB = v) } }
-                }
-
                 sec("功能開關")
                 cfg("通知自動記帳", onOff(s.featureNotif)) {
                     askOnOff("通知自動記帳", s.featureNotif, null) { v -> repo.settings.update { it.copy(featureNotif = v) } }
@@ -478,7 +461,7 @@ fun BudgetScreen(nav: NavController) {
     val today = java.time.LocalDate.now()
     val daysLeft = month?.let { java.time.temporal.ChronoUnit.DAYS.between(today, it.end) + 1 }?.takeIf { it > 0 }
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("預算設定", { nav.popBackStack() }) }) { pad ->
-        LazyColumn(Modifier.padding(pad).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(Modifier.padding(pad).padding(horizontal = 12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // ① 總預算＋儲蓄率目標（點一下修改）
             item {
                 com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth().padding(top = 8.dp)) {

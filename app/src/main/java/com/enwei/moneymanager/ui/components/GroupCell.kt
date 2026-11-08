@@ -35,12 +35,7 @@ fun Modifier.blockSurface(color: androidx.compose.ui.graphics.Color = MaterialTh
         val shape = RoundedCornerShape(AppearancePrefs.cardRadius)
         return this.clip(shape).background(color, shape)
     }
-    val line = MaterialTheme.colorScheme.outlineVariant
-    return this.background(MaterialTheme.colorScheme.surface).drawBehind {
-        val w = 0.6.dp.toPx()
-        drawLine(line, Offset(0f, 0f), Offset(size.width, 0f), w)
-        drawLine(line, Offset(0f, size.height - w), Offset(size.width, size.height - w), w)
-    }
+    return this.bleedBlock(MaterialTheme.colorScheme.surface)
 }
 
 /** 清單裡的一列：線條樣式＝整排＋底線、列與列相接；卡片樣式＝左右留白的圓角小卡。 */
@@ -50,9 +45,5 @@ fun Modifier.listRow(color: androidx.compose.ui.graphics.Color = MaterialTheme.c
         val shape = RoundedCornerShape(AppearancePrefs.cardRadius)
         return this.padding(horizontal = 12.dp, vertical = 3.dp).clip(shape).background(color, shape)
     }
-    val line = MaterialTheme.colorScheme.outlineVariant
-    return this.background(MaterialTheme.colorScheme.surface).drawBehind {
-        val w = 0.6.dp.toPx()
-        drawLine(line, Offset(16.dp.toPx(), size.height - w), Offset(size.width, size.height - w), w)
-    }
+    return this.bleedBlock(MaterialTheme.colorScheme.surface, top = false, lineInset = 16.dp)
 }

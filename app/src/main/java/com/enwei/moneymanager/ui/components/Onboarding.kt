@@ -1,6 +1,11 @@
 package com.enwei.moneymanager.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,15 +58,26 @@ object Onboarding {
     /** 要不要顯示導覽（設定頁可以手動打開） */
     val show = mutableStateOf(false)
 
-    private data class Page(val icon: ImageVector, val title: String, val body: String, val action: String? = null, val route: String? = null)
+    /** 一頁導覽：標題、一句說明、2～3 個步驟；可附一個「現在去設定」按鈕。appearance 頁直接在導覽裡選外觀。 */
+    private data class Page(
+        val icon: ImageVector, val title: String, val body: String, val steps: List<String> = emptyList(),
+        val action: String? = null, val route: String? = null, val appearance: Boolean = false,
+    )
 
     private val pages = listOf(
-        Page(Icons.Outlined.Savings, "歡迎使用帳理", "記帳、預算、資產與投資，集中在一個 App。"),
-        Page(Icons.Outlined.EditNote, "記一筆", "交易頁右下的「＋」：輸入金額、選分類就完成。記過的店家會自動帶出分類。"),
-        Page(Icons.Outlined.NotificationsActive, "通知自動記帳", "銀行、信用卡與支付 App 的付款通知會自動記帳；不確定的放在「待確認」。", "開啟通知記帳", "notif"),
-        Page(Icons.Outlined.PieChart, "預算與分析", "設定每月預算，快超過時提醒；「分析」看每月變化與消費習慣。", "設定預算", "budget"),
-        Page(Icons.Outlined.AccountBalanceWallet, "資產", "帳戶、信用卡、借貸與股票都在「資產」；信用卡依每期帳單計算應繳與未出帳。", "新增帳戶", "account/0"),
-        Page(Icons.Outlined.AutoAwesome, "AI 助理", "填入 Groq 或 Gemini 的免費金鑰，就能自動判讀通知、檢討收支、產生投資報告。", "設定 AI", "ai"),
+        Page(Icons.Outlined.Savings, "歡迎使用帳理", "記帳、預算、資產、往來與股票，集中在一個 App。",
+            listOf("下方五個分頁：交易、統計、資產、助理、工具", "每個畫面的右上角都有該頁的設定與更多功能")),
+        Page(Icons.Outlined.Palette, "先挑一個順眼的樣子", "之後隨時可以在「設定 → 外觀與顯示」調整。", appearance = true),
+        Page(Icons.Outlined.EditNote, "記一筆", "交易頁右下的「＋」。",
+            listOf("輸入金額、選分類與帳戶就完成", "上方切換「支出／收入／轉帳／往來／股票」", "幫朋友代墊、分帳選「往來」，會記在對方名下")),
+        Page(Icons.Outlined.NotificationsActive, "通知自動記帳", "銀行、信用卡、支付 App 的付款通知會自動記成一筆。",
+            listOf("不確定的放在交易頁上方的「待確認」", "開啟定位後會記下消費地點，統計頁可看支出地圖"), "開啟通知記帳", "notif"),
+        Page(Icons.Outlined.PieChart, "統計與預算", "看錢花在哪、每月有沒有超支。",
+            listOf("統計：分類圓餅、每月比較、支出地圖", "預算：快超過時提醒"), "設定預算", "budget"),
+        Page(Icons.Outlined.AccountBalanceWallet, "資產與往來", "帳戶、信用卡、借貸與代墊都在「資產」。",
+            listOf("信用卡依每期帳單算應繳與未出帳", "往來：誰欠你、你欠誰，一眼看清楚"), "新增帳戶", "account/0"),
+        Page(Icons.Outlined.AutoAwesome, "AI 助理（選用）", "填入 Groq 或 Gemini 的免費金鑰後啟用。",
+            listOf("判讀看不懂的通知、檢討收支", "股票助理：每日報告、新聞整理、問 AI"), "設定 AI", "ai"),
     )
 
     /** 第一次開啟（還沒看過導覽）時顯示；[onOpen] 開啟某個畫面。 */
@@ -83,36 +99,95 @@ object Onboarding {
                         Spacer(Modifier.weight(1f))
                         if (pager.currentPage < pages.size - 1) TextButton(onClick = { finish() }) { Text("略過") }
                     }
+                    // 進度條
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = { (pager.currentPage + 1f) / pages.size }, modifier = Modifier.fillMaxWidth().height(3.dp),
+                        color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.outlineVariant,
+                    )
                     HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth()) { i ->
                         val p = pages[i]
-                        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Box(Modifier.size(112.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-                                Icon(p.icon, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
+                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 32.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                            Box(Modifier.size(64.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
+                                Icon(p.icon, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
                             }
-                            Spacer(Modifier.height(28.dp))
-                            Text(p.title, fontSize = AppText.display, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
-                            Spacer(Modifier.height(12.dp))
-                            Text(p.body, fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
-                                modifier = Modifier.widthIn(max = 360.dp))
+                            Spacer(Modifier.height(24.dp))
+                            Text(p.title, fontSize = AppText.display, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(8.dp))
+                            Text(p.body, fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(max = 420.dp))
+                            if (p.steps.isNotEmpty()) {
+                                Spacer(Modifier.height(20.dp))
+                                androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                p.steps.forEachIndexed { n, st ->
+                                    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.Top) {
+                                        Text("${n + 1}", fontSize = AppText.body, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.widthIn(min = 28.dp))
+                                        Text(st, fontSize = AppText.body)
+                                    }
+                                    androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                }
+                            }
+                            if (p.appearance) {
+                                Spacer(Modifier.height(20.dp))
+                                AppearanceQuick()
+                            }
                             if (p.action != null && p.route != null) {
                                 Spacer(Modifier.height(20.dp))
                                 OutlinedButton(onClick = { finish(); onOpen(p.route) }) { Text(p.action) }
                             }
                         }
                     }
-                    // 頁面指示點
-                    Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.Center) {
-                        repeat(pages.size) { i ->
-                            val on = i == pager.currentPage
-                            Box(Modifier.padding(horizontal = 4.dp).size(if (on) 10.dp else 8.dp)
-                                .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(5.dp)))
+                    Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (pager.currentPage > 0) OutlinedButton(onClick = { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } },
+                            modifier = Modifier.height(48.dp)) { Text("上一步") }
+                        Button(onClick = {
+                            if (pager.currentPage < pages.size - 1) scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } else finish()
+                        }, modifier = Modifier.weight(1f).height(48.dp)) {
+                            Text(if (pager.currentPage < pages.size - 1) "下一步（${pager.currentPage + 1}/${pages.size}）" else "開始使用", fontSize = AppText.section)
                         }
                     }
-                    Button(onClick = {
-                        if (pager.currentPage < pages.size - 1) scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } else finish()
-                    }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                        Text(if (pager.currentPage < pages.size - 1) "下一步" else "開始使用", fontSize = AppText.section)
+                }
+            }
+        }
+    }
+
+    /** 導覽裡的快速外觀設定：主題色、區塊樣式、字體大小（改了整個 App 立刻套用，導覽本身就是預覽）。 */
+    @Composable
+    private fun AppearanceQuick() {
+        val st by MoneyApp.repo.settings.flow.collectAsStateWithLifecycle()
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("主題色", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                com.enwei.moneymanager.ui.Themes.all.forEach { t ->
+                    val on = st.themePreset == t.key
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { MoneyApp.repo.settings.update { it.copy(themePreset = t.key) } }) {
+                        Box(Modifier.size(36.dp).background(t.swatch, CircleShape)
+                            .border(if (on) 2.dp else 1.dp, if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant, CircleShape))
+                        Text(t.label, fontSize = AppText.label, modifier = Modifier.padding(top = 4.dp),
+                            color = if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
+            }
+            Text("區塊", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Choice(listOf("線條分隔", "卡片"), if (st.cardStyle) 1 else 0) { v -> MoneyApp.repo.settings.update { it.copy(cardStyle = v == 1) } }
+            Text("字體大小", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val sizes = listOf(1.0f to "小", 1.1f to "標準", 1.2f to "大", 1.3f to "特大")
+            Choice(sizes.map { it.second }, sizes.indexOfFirst { kotlin.math.abs(it.first - st.textScale) < 0.01f }.let { if (it < 0) 1 else it }) { i ->
+                MoneyApp.repo.settings.update { it.copy(textScale = sizes[i].first) }
+            }
+            Text("字體", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Choice(com.enwei.moneymanager.ui.Themes.fonts, st.fontChoice) { v -> MoneyApp.repo.settings.update { it.copy(fontChoice = v) } }
+        }
+    }
+
+    @Composable
+    private fun Choice(options: List<String>, selected: Int, onPick: (Int) -> Unit) {
+        val shape = MaterialTheme.shapes.small
+        Row(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
+            options.forEachIndexed { i, l ->
+                val on = i == selected
+                Box(Modifier.weight(1f).background(if (on) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent, shape)
+                    .clickable { onPick(i) }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
+                    Text(l, fontSize = AppText.secondary, maxLines = 1, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
                 }
             }
         }

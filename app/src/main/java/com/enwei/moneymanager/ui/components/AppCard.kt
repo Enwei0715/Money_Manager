@@ -30,17 +30,9 @@ fun AppCard(
         Card(modifier, colors = colors, content = content)
         return
     }
-    val line = MaterialTheme.colorScheme.outlineVariant
-    // 有指定特別底色（例如提醒用的紅、藍底）時保留，沒有就用表面色
+    // 有指定特別底色（例如提醒用的紅、藍底）時保留，沒有就用表面色；底色與線條延伸到螢幕兩邊
     val bg = colors.containerColor.takeIf { it != CardDefaults.cardColors().containerColor } ?: MaterialTheme.colorScheme.surface
-    Column(
-        modifier.background(bg).drawBehind {
-            val w = 0.6.dp.toPx()
-            drawLine(line, Offset(0f, 0f), Offset(size.width, 0f), w)
-            drawLine(line, Offset(0f, size.height - w), Offset(size.width, size.height - w), w)
-        },
-        content = content,
-    )
+    Column(modifier.bleedBlock(bg), content = content)
 }
 
 /** 給沒有 Composable 環境的地方用：目前是否為卡片樣式。 */

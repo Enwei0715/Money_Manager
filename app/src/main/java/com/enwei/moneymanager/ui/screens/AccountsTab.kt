@@ -397,7 +397,7 @@ private fun AccountLine(
 ) {
     Column(Modifier.groupCell(first, last)) {
         Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = if (sub != null || note != null) 11.dp else 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (type != null) {
+            if (type != null && com.enwei.moneymanager.ui.AppearancePrefs.icons) {
                 val icon = when (type) {
                     AccountType.CASH -> Icons.Outlined.Payments
                     AccountType.BANK -> Icons.Outlined.AccountBalance
@@ -419,7 +419,7 @@ private fun AccountLine(
             }
             right()
         }
-        if (!last) HorizontalDivider(Modifier.padding(start = if (type != null) 64.dp else 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+        if (!last) HorizontalDivider(Modifier.padding(start = if (type != null && com.enwei.moneymanager.ui.AppearancePrefs.icons) 64.dp else 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
     }
 }
 
