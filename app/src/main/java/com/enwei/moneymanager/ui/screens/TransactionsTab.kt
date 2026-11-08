@@ -433,9 +433,10 @@ fun SummaryBar(t: Totals, base: String) {
 
 @Composable
 private fun SummaryCell(label: String, value: String, color: Color, modifier: Modifier) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = AppText.caption)
-        Text(value, color = color, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Column(modifier.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = androidx.compose.ui.unit.TextUnit(1f, androidx.compose.ui.unit.TextUnitType.Sp))
+        Text(value, color = color, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -542,16 +543,19 @@ fun DayBlock(
     onMemo: (Memo) -> Unit = {},
 ) {
     val t = if (ledger != null) Totals(ledger.sumOf { maxOf(0, it.delta) }, -ledger.sumOf { minOf(0, it.delta) }) else totalsOf(txns, lk.fx)
-    Column(Modifier.padding(top = 8.dp).background(MaterialTheme.colorScheme.surface)) {
+    Column(Modifier.padding(top = 10.dp).background(MaterialTheme.colorScheme.surface)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 5.dp, bottom = 5.dp)) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp)) {
             val compact = maxWidth < 400.dp
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("${day.dayOfMonth}", fontSize = AppText.section, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(6.dp))
-                val chip = when (day.dayOfWeek) { DayOfWeek.SUNDAY -> SundayColor; DayOfWeek.SATURDAY -> SaturdayColor; else -> Color(0xFF8C8C8C) }
-                Surface(color = chip, shape = RoundedCornerShape(3.dp)) {
-                    Text("週${Recurrence.weekdayName(day.dayOfWeek)}", color = Color.White, fontSize = AppText.caption, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                // 日期：大的日、旁邊小字「週六・11月」；週末用顏色字，不用色塊
+                Text("${day.dayOfMonth}", fontSize = AppText.title, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(8.dp))
+                val wk = when (day.dayOfWeek) { DayOfWeek.SUNDAY -> SundayColor; DayOfWeek.SATURDAY -> SaturdayColor; else -> MaterialTheme.colorScheme.onSurfaceVariant }
+                Column {
+                    Text("週${Recurrence.weekdayName(day.dayOfWeek)}", color = wk, fontSize = AppText.caption, fontWeight = FontWeight.Medium)
+                    Text(if (day == LocalDate.now()) "今天" else if (day == LocalDate.now().minusDays(1)) "昨天" else "${day.monthValue} 月",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.label)
                 }
                 Spacer(Modifier.weight(1f))
                 Text(Money.withSymbol(t.income, lk.base), color = IncomeColor, fontSize = if (compact) AppText.label else AppText.secondary,
@@ -568,7 +572,8 @@ fun DayBlock(
         // 交易之間加細分隔線，左邊的分類、中間內容與右邊金額比較好對齊
         val divider = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
         var first = true
-        @Composable fun sep() { if (!first) HorizontalDivider(Modifier.padding(start = 14.dp), thickness = 0.5.dp, color = divider); first = false }
+        val inset = if (repo.settings.flow.collectAsStateWithLifecycle().value.rowStyle == 0) 64.dp else 14.dp
+        @Composable fun sep() { if (!first) HorizontalDivider(Modifier.padding(start = inset), thickness = 0.5.dp, color = divider); first = false }
         if (ledger != null) ledger.forEach { e ->
             e.txn?.let { sep(); MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
             e.trade?.let { tr -> sep(); TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
@@ -626,10 +631,12 @@ fun TradeRow(tr: com.enwei.moneymanager.data.StockTradeEntity, lk: Lookups, acco
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () -> Unit) {
+    val st = repo.settings.flow.collectAsStateWithLifecycle().value
+    if (st.rowStyle == 0) { IconTxnRow(t, lk, balanceAfter, st.showDescription, onClick); return }
     val cat = lk.category(t.categoryId)
     val acc = lk.account(t.accountId)
     val gray = MaterialTheme.colorScheme.onSurfaceVariant
-    val showDesc = repo.settings.flow.collectAsStateWithLifecycle().value.showDescription
+    val showDesc = st.showDescription
     val color = when (t.type) { TxnType.INCOME -> IncomeColor; TxnType.EXPENSE -> ExpenseColor; TxnType.TRANSFER -> MaterialTheme.colorScheme.onSurface }
     val title = t.merchant?.takeIf { it.isNotBlank() }
     val accountText = if (t.type == TxnType.TRANSFER) "${acc?.name ?: "?"} → ${lk.account(t.toAccountId)?.name ?: "?"}" else acc?.name.orEmpty()
@@ -661,6 +668,51 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
             Text(Money.withSymbol(t.amount, t.currency), color = color, fontSize = AppText.body)
             if (t.status == TxnStatus.PENDING) Text("待確認", color = MaterialTheme.colorScheme.primary, fontSize = AppText.label)
             if (balanceAfter != null) Text("(${Money.full(balanceAfter)})", fontSize = AppText.label, color = gray)
+            else if (t.currency != lk.base && lk.fx.hasRate(t.currency)) Text("≈" + Money.full(lk.fx.convert(t.amount, t.currency)), fontSize = AppText.label, color = gray)
+        }
+    }
+}
+
+/**
+ * 圖示樣式的交易列：左邊分類圓形圖示，中間店名（沒有店名用分類）與「子分類・帳戶」，右邊金額。
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun IconTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long?, showDesc: Boolean, onClick: () -> Unit) {
+    val cat = lk.category(t.categoryId)
+    val root = cat?.parentId?.let { lk.category(it) } ?: cat
+    val gray = MaterialTheme.colorScheme.onSurfaceVariant
+    val transfer = t.type == TxnType.TRANSFER
+    val color = when (t.type) { TxnType.INCOME -> IncomeColor; TxnType.EXPENSE -> ExpenseColor; TxnType.TRANSFER -> MaterialTheme.colorScheme.onSurface }
+    val catName = if (transfer) "轉帳" else listOfNotNull(root?.name, cat?.name?.takeIf { cat.parentId != null }).joinToString("／").ifBlank { "未分類" }
+    val title = t.merchant?.takeIf { it.isNotBlank() } ?: catName
+    val accountText = if (transfer) "${lk.account(t.accountId)?.name ?: "?"} → ${lk.account(t.toAccountId)?.name ?: "?"}" else lk.account(t.accountId)?.name.orEmpty()
+    val sub = listOfNotNull(catName.takeIf { t.merchant?.isNotBlank() == true && !transfer }, accountText.ifBlank { null }).joinToString(" · ")
+    val selecting = TxnSelect.active
+    val picked = selecting && t.id in TxnSelect.ids
+    Row(
+        Modifier.fillMaxWidth()
+            .background(if (picked) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .combinedClickable(
+                onClick = { if (selecting) TxnSelect.toggle(t.id) else onClick() },
+                onLongClick = if (TxnSelect.enabled) ({ TxnSelect.toggle(t.id) }) else null,
+            )
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        com.enwei.moneymanager.ui.components.CategoryAvatar(root?.name, root?.id, transfer = transfer)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = AppText.body, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (sub.isNotBlank()) Text(sub, color = gray, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(horizontalAlignment = Alignment.End) {
+            Text((if (t.type == TxnType.EXPENSE) "−" else if (t.type == TxnType.INCOME) "+" else "") + Money.withSymbol(t.amount, t.currency),
+                color = color, fontSize = AppText.body, fontWeight = FontWeight.Medium)
+            if (t.status == TxnStatus.PENDING) Text("待確認", color = MaterialTheme.colorScheme.primary, fontSize = AppText.label)
+            if (balanceAfter != null) Text(Money.full(balanceAfter), fontSize = AppText.label, color = gray)
             else if (t.currency != lk.base && lk.fx.hasRate(t.currency)) Text("≈" + Money.full(lk.fx.convert(t.amount, t.currency)), fontSize = AppText.label, color = gray)
         }
     }

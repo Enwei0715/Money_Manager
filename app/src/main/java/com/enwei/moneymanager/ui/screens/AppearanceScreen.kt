@@ -107,6 +107,7 @@ fun AppearanceScreen(nav: NavController) {
                 }
                 Text("字體大小只放大文字；介面大小連同間距、按鈕一起縮放", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
             }
+            Group("交易列樣式") { Segments(listOf("圖示", "經典（左邊分類欄）"), s.rowStyle) { v -> repo.settings.update { it.copy(rowStyle = v) } } }
             Group("圓角") { Segments(Themes.corners, s.cornerStyle) { v -> repo.settings.update { it.copy(cornerStyle = v) } } }
             Group("收支顏色") {
                 Segments(listOf("收入藍、支出紅", "收入紅、支出藍"), if (s.colorSetB) 1 else 0) { v -> repo.settings.update { it.copy(colorSetB = v == 1) } }

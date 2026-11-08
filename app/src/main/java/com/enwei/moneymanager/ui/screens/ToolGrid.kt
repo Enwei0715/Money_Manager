@@ -246,7 +246,8 @@ fun ToolGrid(
 /** 一格的內容：依大小顯示圖示、名稱與摘要。 */
 @Composable
 private fun TileContent(t: ToolItem, w: Int, h: Int, summary: String?) {
-    val tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+    // 圖示用主題色，格子看起來有重點
+    val tint = MaterialTheme.colorScheme.primary
     Box(Modifier.fillMaxSize().padding(10.dp), contentAlignment = Alignment.Center) {
         when {
             w == 1 && h == 1 -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {

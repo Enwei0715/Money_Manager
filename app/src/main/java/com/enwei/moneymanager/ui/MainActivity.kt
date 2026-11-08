@@ -250,8 +250,12 @@ private fun BottomTabs(current: String?, onSelect: (String) -> Unit) = ChromeSca
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
                 ) {
-                    Icon(t.icon, t.label, tint = color, modifier = Modifier.size(26.dp))
-                    Text(t.label, color = color, fontSize = AppText.caption, maxLines = 1)
+                    androidx.compose.foundation.layout.Box(
+                        Modifier.background(if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else androidx.compose.ui.graphics.Color.Transparent, androidx.compose.foundation.shape.RoundedCornerShape(50))
+                            .padding(horizontal = 16.dp, vertical = 3.dp),
+                    ) { Icon(t.icon, t.label, tint = color, modifier = Modifier.size(24.dp)) }
+                    Text(t.label, color = color, fontSize = AppText.label, maxLines = 1,
+                        fontWeight = if (sel) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal)
                 }
             }
         }

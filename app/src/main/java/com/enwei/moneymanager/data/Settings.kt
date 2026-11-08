@@ -294,6 +294,8 @@ data class AppSettings(
     val textScale: Float = 1f,
     val cornerStyle: Int = 0,
     val tabularNums: Boolean = true,
+    /** 交易列樣式：0 圖示（分類圓形圖示）、1 經典（左邊分類欄） */
+    val rowStyle: Int = 0,
     /** 舊版欄位；現行版本固定啟用子分類。 */
     val subcategoryOn: Boolean = true,
     /** 交易頁顯示「新增備註」按鈕 */
@@ -550,6 +552,7 @@ class SettingsStore(context: Context) {
         textScale = prefs.getFloat("textScale", 1f),
         cornerStyle = prefs.getInt("cornerStyle", 0),
         tabularNums = prefs.getBoolean("tabularNums", true),
+        rowStyle = prefs.getInt("rowStyle", 0),
         subcategoryOn = true,
         noteButton = prefs.getBoolean("noteButton", true),
         swipe = prefs.getInt("swipe", 0),
@@ -738,6 +741,7 @@ class SettingsStore(context: Context) {
             .putFloat("textScale", s.textScale)
             .putInt("cornerStyle", s.cornerStyle)
             .putBoolean("tabularNums", s.tabularNums)
+            .putInt("rowStyle", s.rowStyle)
             .putBoolean("subcategoryOn", true)
             .putBoolean("noteButton", s.noteButton)
             .putInt("swipe", s.swipe)

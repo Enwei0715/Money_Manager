@@ -1,5 +1,17 @@
 package com.enwei.moneymanager.ui.screens
 
+import androidx.compose.material.icons.outlined.People
+
+import androidx.compose.material.icons.outlined.ShowChart
+
+import androidx.compose.material.icons.outlined.ConfirmationNumber
+
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+
+import androidx.compose.material.icons.outlined.CreditCard
+
+import androidx.compose.material.icons.outlined.AccountBalance
+
 import com.enwei.moneymanager.ui.AppText
 
 import androidx.compose.foundation.background
@@ -117,7 +129,8 @@ private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
-        Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.caption, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp))
         right()
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -354,7 +367,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                             "股票損益 ${if (pnl > 0) "+" else ""}${Money.full(pnl)}（${"%+.2f".format(pct)}%）" to
                                 (if (pnl >= 0) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown)
                         } else null
-                        AccountLine(a.name + if (a.archived) "（隱藏）" else "", { nav.navigate("acct/${a.id}") }, sub, pnlNote) {
+                        AccountLine(a.name + if (a.archived) "（隱藏）" else "", { nav.navigate("acct/${a.id}") }, sub, pnlNote, type = a.type) {
                             if (isBroker) {
                                 val v = lk.fx.convert(b.balance, a.currency) + stockOf(a.id)
                                 Text(Money.withSymbol(v, lk.base), color = balanceColor(v, MaterialTheme.colorScheme.onSurface))
@@ -376,10 +389,27 @@ private fun AccountLine(
     name: String, onClick: () -> Unit, sub: String? = null,
     /** 第二行的小字（例如股票損益，可自訂顏色） */
     note: Pair<String, Color>? = null,
+    /** 帳戶類型：左邊顯示對應的小圖示 */
+    type: AccountType? = null,
     right: @Composable RowScope.() -> Unit,
 ) {
     Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = if (sub != null || note != null) 12.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = if (sub != null || note != null) 11.dp else 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (type != null) {
+                val icon = when (type) {
+                    AccountType.CASH -> Icons.Outlined.Payments
+                    AccountType.BANK -> Icons.Outlined.AccountBalance
+                    AccountType.CREDIT_CARD -> Icons.Outlined.CreditCard
+                    AccountType.EWALLET -> Icons.Outlined.AccountBalanceWallet
+                    AccountType.TRANSIT_CARD -> Icons.Outlined.ConfirmationNumber
+                    AccountType.BROKERAGE -> Icons.Outlined.ShowChart
+                    else -> Icons.Outlined.People
+                }
+                Box(Modifier.size(36.dp).background(MaterialTheme.colorScheme.surfaceVariant, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+            }
             Column(Modifier.weight(1f)) {
                 Text(name, style = MaterialTheme.typography.bodyLarge)
                 if (!sub.isNullOrEmpty()) Text(sub, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -108,7 +108,9 @@ private fun ConfigRow(title: String, value: String? = null, sub: String? = null,
             Text(title, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (sub != null) Text(sub, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (value != null) Text(value, color = MaterialTheme.colorScheme.primary, fontSize = AppText.body)
+        if (value != null) Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.secondary, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp))
+        Text("›", color = MaterialTheme.colorScheme.outline, fontSize = AppText.title, modifier = Modifier.padding(start = 8.dp))
     }
 }
 
@@ -132,7 +134,7 @@ private data class CfgGroup(
 private val cfgGroups = listOf(
     CfgGroup("accounts", "帳戶與分類", androidx.compose.material.icons.Icons.Outlined.AccountBalanceWallet, listOf("帳戶", "分類與預算")),
     CfgGroup("entry", "記帳", androidx.compose.material.icons.Icons.Outlined.EditNote, listOf("記帳", "期間", "幣別")),
-    CfgGroup("display", "顯示", androidx.compose.material.icons.Icons.Outlined.Palette, listOf("外觀", "期間與顯示", "列表")),
+    CfgGroup("display", "外觀與顯示", androidx.compose.material.icons.Icons.Outlined.Palette, listOf("外觀", "期間與顯示", "列表")),
     CfgGroup("features", "功能開關", androidx.compose.material.icons.Icons.Outlined.ToggleOn, listOf("功能開關")),
     CfgGroup("autorecord", "自動記帳", androidx.compose.material.icons.Icons.Outlined.Sms, listOf("自動記帳"), route = "notif", visible = { it.featureNotif }),
     CfgGroup("ai", "AI", androidx.compose.material.icons.Icons.Outlined.AutoAwesome, listOf("AI"), visible = { it.aiEnabled }),
@@ -193,11 +195,22 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                     if (!searching) cfgGroups.filter { it.visible(s) }.chunked(2).forEach { rowGroups ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             rowGroups.forEach { g ->
-                                androidx.compose.material3.Card(Modifier.weight(1f).height(64.dp).clickable { nav.navigate(g.route ?: "config?g=${g.id}") }) {
-                                    Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        androidx.compose.material3.Icon(g.icon, null, tint = MaterialTheme.colorScheme.primary)
-                                        Text(g.title, fontSize = AppText.section, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp))
+                                // 分類卡：淡色圓形圖示＋名稱＋一行說明
+                                val desc = when (g.id) {
+                                    "accounts" -> "帳戶、分類、預算"; "entry" -> "記帳方式、期間、幣別"; "display" -> "主題、字體、列表"
+                                    "features" -> "開關各項功能"; "autorecord" -> "通知、錢包畫面"; "ai" -> "金鑰、模型、語氣"
+                                    "stocks" -> "手續費、紀律"; "notify" -> "七種通知"; "data" -> "密碼、備份還原"; else -> "版本與更新"
+                                }
+                                androidx.compose.material3.Card(Modifier.weight(1f).height(72.dp).clickable { nav.navigate(g.route ?: "config?g=${g.id}") }) {
+                                    Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        androidx.compose.foundation.layout.Box(
+                                            Modifier.size(36.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), androidx.compose.foundation.shape.CircleShape),
+                                            contentAlignment = Alignment.Center,
+                                        ) { androidx.compose.material3.Icon(g.icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp)) }
+                                        Column(Modifier.padding(start = 10.dp)) {
+                                            Text(g.title, fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(desc, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
                                     }
                                 }
                             }

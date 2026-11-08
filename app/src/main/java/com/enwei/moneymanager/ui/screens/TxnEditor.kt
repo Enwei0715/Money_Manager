@@ -343,42 +343,36 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).imePadding()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // 第一列：收入／支出／轉帳（分段選擇，選中的填色）；第二列：往來、股票、備註等其他記錄方式（小膠囊）
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)
+                        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), MaterialTheme.shapes.small),
+                ) {
                     TxnType.entries.forEach { t ->
                         val sel = t == type
                         val c = typeColor(t)
                         Box(
                             Modifier.weight(1f).height(40.dp)
-                                .background(if (sel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-                                .border(BorderStroke(if (sel) 1.5.dp else 1.dp, if (sel) c else MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(6.dp))
+                                .background(if (sel) c.copy(alpha = 0.14f) else Color.Transparent, MaterialTheme.shapes.small)
                                 .clickable { if (type != t) { type = t; categoryId = null } },
                             contentAlignment = Alignment.Center,
-                        ) { Text(t.label, color = if (sel) c else MaterialTheme.colorScheme.onSurfaceVariant) }
+                        ) { Text(t.label, color = if (sel) c else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
                     }
-                    // 備註也從這裡新增：寫在當天，每日列表與日曆會顯示
-                    if (original == null) Box(
-                        Modifier.weight(1f).height(40.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-                            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(6.dp))
-                            .clickable { memoNew = true },
-                        contentAlignment = Alignment.Center,
-                    ) { Text("備註", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    // 往來：借給誰、誰還我、幫誰付（代墊）…選好對象與方向就填好轉帳或代墊
-                    if (original == null) Box(
-                        Modifier.weight(1f).height(40.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-                            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(6.dp))
-                            .clickable { debtOpen = true },
-                        contentAlignment = Alignment.Center,
-                    ) { Text("往來", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    // 股票交易：換到股票交易編輯（買進、賣出、股利），不另外找入口
-                    if (original == null && settings.featureStocks) Box(
-                        Modifier.weight(1f).height(40.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-                            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(6.dp))
-                            .clickable { nav.popBackStack(); nav.navigate("trade/0") },
-                        contentAlignment = Alignment.Center,
-                    ) { Text("股票", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+                if (original == null) Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    @Composable fun pill(label: String, onClick: () -> Unit) = Box(
+                        Modifier.border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(50)).clickable(onClick = onClick)
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                    ) { Text(label, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    // 往來：借給誰、誰還我、幫誰付（代墊）
+                    pill("往來") { debtOpen = true }
+                    // 股票交易：換到股票交易編輯（買進、賣出、股利）
+                    if (settings.featureStocks) pill("股票") { nav.popBackStack(); nav.navigate("trade/0") }
+                    // 備註：寫在當天，每日列表與日曆會顯示
+                    pill("備註") { memoNew = true }
                 }
                 FormRow("日期", color, active = false, onClick = { panel = Panel.NONE; showDate = true }, trailing = {
                     Column(
@@ -403,9 +397,12 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     ) { Text("手續費", color = MaterialTheme.colorScheme.onSurface) }
                 }) {
                     Column {
+                        // 金額是這頁的主角：大字、依收支上色；還沒輸入時淡色 0
                         Text(
-                            (if (currency != lk.base) Money.symbolOf(currency) else "") + expr,
-                            fontSize = AppText.section, color = MaterialTheme.colorScheme.onSurface,
+                            (if (currency != lk.base) Money.symbolOf(currency) else "$ ") + expr.ifEmpty { "0" },
+                            fontSize = AppText.display, fontWeight = FontWeight.SemiBold,
+                            color = if (expr.isEmpty()) MaterialTheme.colorScheme.outlineVariant else color,
+                            modifier = Modifier.padding(vertical = 4.dp),
                         )
                         if (Calculator.hasOperator(expr)) Calculator.evaluate(expr)?.let {
                             Text("= ${Calculator.format(it)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

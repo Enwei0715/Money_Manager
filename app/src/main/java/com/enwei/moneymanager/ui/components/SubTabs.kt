@@ -24,12 +24,14 @@ import androidx.compose.ui.unit.sp
  */
 @Composable
 fun SubTabs(options: List<String>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) = com.enwei.moneymanager.ui.ChromeScale {
-    Row(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).padding(3.dp)) {
+    val outer = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)
+    val inner = RoundedCornerShape((com.enwei.moneymanager.ui.AppearancePrefs.cardRadius - 3.dp).coerceAtLeast(0.dp))
+    Row(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, outer).padding(3.dp)) {
         options.forEachIndexed { i, label ->
             val sel = i == selected
             Box(
                 Modifier.weight(1f)
-                    .background(if (sel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                    .background(if (sel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant, inner)
                     .clickable { onSelect(i) }.padding(vertical = 7.dp),
                 contentAlignment = Alignment.Center,
             ) {
