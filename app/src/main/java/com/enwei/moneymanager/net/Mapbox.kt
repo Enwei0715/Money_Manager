@@ -50,10 +50,14 @@ object Mapbox {
         }
     }
 
+    /** 最近一次呼叫是否成功連上（金鑰有效） */
+    @Volatile var lastOk: Boolean = false
+
     private suspend fun get(url: String): kotlinx.serialization.json.JsonElement? = withContext(Dispatchers.IO) {
         runCatching { Http.getJson(url, quick = true) }
             .onFailure { lastError = (it.message ?: it.javaClass.simpleName).substringBefore(": http").let { m -> if (m.contains("401")) "金鑰無效（HTTP 401）" else m } }
-            .onSuccess { lastError = "" }
+            .onSuccess { lastError = ""; lastOk = true }
+            .onFailure { lastOk = false }
             .getOrNull()
     }
 
@@ -66,11 +70,13 @@ object Mapbox {
         if (!enabled || q.isBlank()) return emptyList()
         val k = "s|${q.trim().lowercase()}|${near?.let { "%.3f,%.3f".format(it.first, it.second) }}|$limit|$poi"
         cached(k)?.let { return it }
-        val url = "https://api.mapbox.com/search/searchbox/v1/forward?q=" + URLEncoder.encode(q.trim(), "UTF-8") +
-            "&language=zh-Hant&country=TW&limit=$limit" + (if (poi) "&types=poi" else "") +
+        fun url(lang: Boolean, types: Boolean) = "https://api.mapbox.com/search/searchbox/v1/forward?q=" + URLEncoder.encode(q.trim(), "UTF-8") +
+            (if (lang) "&language=zh" else "") + "&country=TW&limit=$limit" + (if (poi && types) "&types=poi" else "") +
             (near?.let { "&proximity=${it.second},${it.first}" } ?: "") + "&access_token=" + token
-        val root = get(url) ?: return emptyList()
-        return parse(root, near).sortedBy { it.meters ?: 0f }.also { cache.put(k, System.currentTimeMillis() to it) }
+        // 先找店家（中文名稱）；沒有結果再放寬（不限語言、不限類型）
+        var res = get(url(lang = true, types = true))?.let { parse(it, near) }.orEmpty()
+        if (res.isEmpty() && lastOk) res = get(url(lang = false, types = false))?.let { parse(it, near) }.orEmpty()
+        return res.sortedBy { it.meters ?: 0f }.also { if (lastOk) cache.put(k, System.currentTimeMillis() to it) }
     }
 
     /** 這個位置附近的店（由近到遠） */
@@ -78,7 +84,7 @@ object Mapbox {
         if (!enabled) return emptyList()
         val k = "n|%.3f,%.3f|$limit".format(lat, lon)
         cached(k)?.let { return it }
-        val url = "https://api.mapbox.com/search/searchbox/v1/reverse?longitude=$lon&latitude=$lat&types=poi&language=zh-Hant&limit=$limit&access_token=$token"
+        val url = "https://api.mapbox.com/search/searchbox/v1/reverse?longitude=$lon&latitude=$lat&types=poi&language=zh&limit=$limit&access_token=$token"
         val root = get(url) ?: return emptyList()
         return parse(root, lat to lon).sortedBy { it.meters ?: 0f }.also { cache.put(k, System.currentTimeMillis() to it) }
     }
@@ -89,7 +95,9 @@ object Mapbox {
     /** 測試金鑰：成功回傳 null，失敗回傳原因 */
     suspend fun test(): String? {
         if (!token.startsWith("pk.")) return "金鑰應該是 pk. 開頭的公開金鑰"
-        val r = search("7-ELEVEN", 25.0136 to 121.5414, 1)
-        return if (r.isNotEmpty()) null else lastError.ifBlank { "查不到結果" }
+        // 金鑰有效＝Mapbox 回應成功（有沒有搜到店不影響）
+        cache.evictAll()
+        search("台北車站", 25.0478 to 121.5170, 1, poi = false)
+        return if (lastOk) null else lastError.ifBlank { "連不上 Mapbox" }
     }
 }

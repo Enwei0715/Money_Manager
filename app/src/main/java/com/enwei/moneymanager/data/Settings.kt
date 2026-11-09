@@ -316,7 +316,7 @@ data class AppSettings(
     val widgetTheme: Int = 0,
     val widgetOpacity: Int = 100,
     /** 工具首頁的顯示順序（僅保存入口 id，不影響工具資料）。 */
-    val toolOrder: List<String> = listOf("pending", "recurring", "fx", "backup", "ai-hub"),
+    val toolOrder: List<String> = listOf("pending", "recurring", "fx", "backup", "ai-hub", "merchants"),
     /** 工具首頁隱藏的入口 id。 */
     val hiddenTools: Set<String> = emptySet(),
     /** 工具頁用寬格（兩格寬、顯示摘要）的工具 */
@@ -570,8 +570,12 @@ class SettingsStore(context: Context) {
         lockDelaySec = prefs.getInt("lockDelaySec", 0),
         widgetTheme = prefs.getInt("widgetTheme", 0),
         widgetOpacity = prefs.getInt("widgetOpacity", 100),
-        toolOrder = if (prefs.contains("toolOrder")) prefs.getString("toolOrder", "")!!.split(',').filter { it.isNotBlank() }
-            else AppSettings().toolOrder,
+        toolOrder = (if (prefs.contains("toolOrder")) prefs.getString("toolOrder", "")!!.split(',').filter { it.isNotBlank() }
+            else AppSettings().toolOrder).let { o ->
+                // 店家位置搬到工具頁：舊使用者也自動加上一次
+                if (prefs.getBoolean("toolMerchantsAdded", false) || "merchants" in o) o
+                else { prefs.edit().putBoolean("toolMerchantsAdded", true).apply(); o + "merchants" }
+            },
         hiddenTools = prefs.getStringSet("hiddenTools", emptySet())!!.toSet(),
         wideTools = prefs.getStringSet("wideTools", null)?.toSet() ?: AppSettings().wideTools,
         toolSizes = prefs.getStringSet("toolSizes", emptySet()).orEmpty().mapNotNull { e -> e.split('=').takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap(),

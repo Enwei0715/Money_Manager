@@ -52,6 +52,11 @@ object ToolCatalog {
         ToolItem("notif", "通知記帳", "notif", L.ToolBell),
         ToolItem("stockfees", "手續費與月退", "stockfees", L.ToolReceipt),
         ToolItem("settings", "App 更新", "settings", L.ToolUpdate),
+        ToolItem("merchants", "店家位置", "merchants", L.IcStore),
+        ToolItem("spendmap", "支出地圖", "spendmap", L.IcMap),
+        ToolItem("debts", "往來", "debts", L.IcPeople),
+        ToolItem("stocksearch", "找股票", "stocksearch", L.IcSearch),
+        ToolItem("accounts-cfg", "帳戶設定", "accountsettings", L.IcWallet),
     )
 
     /** 工具頁目前顯示的工具（依使用者排的順序）。不在順序裡的工具放在「可加入的工具」。 */

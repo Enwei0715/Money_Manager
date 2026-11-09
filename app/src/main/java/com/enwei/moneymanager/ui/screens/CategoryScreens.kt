@@ -102,16 +102,6 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
             }
             // 已學習的清單只留目前交易裡還有的店名（舊名字、改過名的自動清掉）
             androidx.compose.runtime.LaunchedEffect(Unit) { repo.pruneRules() }
-            // 店家位置：自動找、手動指定
-            Row(
-                Modifier.fillMaxWidth().padding(top = 16.dp).background(MaterialTheme.colorScheme.surface)
-                    .clickable { nav.navigate("merchants") }.padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("店家位置", Modifier.weight(1f))
-                Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             val myRules = rules.filter { r -> lk.category(r.categoryId)?.kind == kind }
             if (myRules.isNotEmpty()) {
                 // 已學習的商家：點一下勾選（可多選），按「刪除」再確認一次才刪

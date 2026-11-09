@@ -269,6 +269,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             val mb = com.enwei.moneymanager.net.Mapbox.nearby(loc.latitude, loc.longitude)
             placeLocs = placeLocs + mb.associate { it.name to (it.lat to it.lon) }
             nearby = (hist + known + mb.map { it.name }).distinct().take(10)
+            if (mb.isEmpty()) nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
         } else nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
     }
     LaunchedEffect(merchant, merchantFocused) {

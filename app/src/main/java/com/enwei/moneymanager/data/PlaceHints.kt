@@ -118,6 +118,7 @@ object PlaceHints {
                     near.take(1).flatMap { c -> com.enwei.moneymanager.net.Mapbox.search(n, c, 5) }
                         .filter { it.name.lowercase().contains(core) && (it.meters ?: 0f) <= 5000f }
                         .minByOrNull { it.meters ?: 0f }?.let { it.lat to it.lon }
+                        ?: near.mapNotNull { (la, lo) -> snapToStore(n, la, lo, 2000)?.let { h -> h to dist(la, lo, h.first, h.second) } }.minByOrNull { it.second }?.first
                 } else {
                     near.mapNotNull { (la, lo) -> snapToStore(n, la, lo, 2000)?.let { h -> h to dist(la, lo, h.first, h.second) } }
                         .minByOrNull { it.second }?.first

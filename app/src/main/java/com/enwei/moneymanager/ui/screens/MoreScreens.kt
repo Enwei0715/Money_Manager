@@ -1036,7 +1036,6 @@ fun SettingsScreen(nav: NavController) {
     val r = release
     val newer = r != null && Updater.isNewer(r)
     val checking = updateStatus == "檢查中…"
-    val tokenFold = com.enwei.moneymanager.ui.components.rememberFold("update.token", false)
     Scaffold(topBar = { BackTopBar("App 更新", { nav.popBackStack() }) }) { pad ->
         Column(
             Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()
@@ -1111,7 +1110,7 @@ fun SettingsScreen(nav: NavController) {
                     }
                 }
             }
-            // ③ 設定：自動檢查開關；GitHub Token 收在進階裡
+            // ③ 設定：自動檢查開關
             com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column {
                     Row(Modifier.fillMaxWidth().clickable { repo.settings.update { it.copy(notifyUpdates = !it.notifyUpdates, updateSkipped = 0) } }
@@ -1121,20 +1120,7 @@ fun SettingsScreen(nav: NavController) {
                         }
                         androidx.compose.material3.Switch(settings.notifyUpdates, { v -> repo.settings.update { it.copy(notifyUpdates = v, updateSkipped = 0) } })
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                    Row(Modifier.fillMaxWidth().clickable { tokenFold.toggle() }.padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("GitHub Token", fontSize = AppText.section)
-                            Text(if (token.isBlank()) "未設定（公開儲存庫不需要）" else "已設定", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        com.enwei.moneymanager.ui.components.FoldToggle(tokenFold.open)
-                    }
-                    if (tokenFold.open) OutlinedTextField(
-                        token, { v -> token = v; repo.settings.update { it.copy(githubToken = v.trim()) } }, label = { Text("GitHub Token") }, singleLine = true,
-                        supportingText = { Text("私人儲存庫才需要（權限 Contents: Read-only）") },
-                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                    )
+
                 }
             }
         }
