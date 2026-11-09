@@ -88,6 +88,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -119,7 +121,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 
-private enum class Panel { NONE, AMOUNT, FEE, CATEGORY, ACCOUNT, TO_ACCOUNT }
+private enum class Panel { NONE, AMOUNT, FEE, SPLIT, CATEGORY, ACCOUNT, TO_ACCOUNT }
 
 private val PanelHeader = Color(0xFF111111)
 private val CurrencyBar = Color(0xFF3F4570)
@@ -146,6 +148,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     val focusManager = LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val history by repo.transactions.collectAsStateWithLifecycle(emptyList())
     var original by remember { mutableStateOf<TxnEntity?>(null) }
@@ -169,6 +172,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     // 平攤時算不算自己一份（「平攤」＝含我、「他們全付」＝不含我）
     var splitMe by rememberSaveable { mutableStateOf(true) }
     val splitRows = SplitRow.decode(splitRaw)
+    // 正在用 App 內鍵盤輸入哪一個人的分帳金額
+    var splitIdx by rememberSaveable { mutableStateOf(-1) }
     var debtOpen by remember { mutableStateOf(false) }
     // 收入：別人還我錢時選對象 → 存成「從他的往來帳戶轉進來」，不算收入
     var repayPerson by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -207,6 +212,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         if (original == null) lk.account(accountId)?.let { currency = it.currency }
     }
     BackHandler(enabled = panel != Panel.NONE) { panel = Panel.NONE }
+    // 打開 App 內的鍵盤或選單時，系統鍵盤一定收起來
+    LaunchedEffect(panel) { if (panel != Panel.NONE) { focusManager.clearFocus(); keyboard?.hide() } }
 
     val color = typeColor(type)
     val amountMinor = Calculator.evaluate(expr)?.abs()?.let(Money::toMinor)?.takeIf { it > 0 }
@@ -444,7 +451,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         snackbarHost = { SnackbarHost(snack) },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).imePadding()) {
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).imePadding()
+                .then(Modifier.pointerInput(Unit) { detectTapGestures { focusManager.clearFocus(); keyboard?.hide() } })) {
                 // 類型：支出／收入／轉帳（＋股票），一條分段選擇，選中的填色
                 val segs = buildList {
                     TxnType.entries.forEach { t -> add(Triple(t.label, !debtMode && type == t, typeColor(t)) to { debtMode = false; if (type != t) { type = t; categoryId = null } }) }
@@ -574,6 +582,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     }
                     if (!debtMode && type == TxnType.EXPENSE && (original == null || original?.type == TxnType.EXPENSE)) SplitSection(
                         splitMe, { splitMe = it }, paidBy, { paidBy = it },
+                        editing = if (panel == Panel.SPLIT) splitIdx else -1,
+                        onEditAmount = { i -> splitIdx = i; panel = Panel.SPLIT },
                         splitRows, { splitRaw = SplitRow.encode(it) }, amountMinor, currency, color,
                         onFieldFocus = { panel = Panel.NONE },
                     )
@@ -658,15 +668,31 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 }
             }
             if (panel != Panel.NONE) BottomPanel(
-                panel = panel, lk = lk, type = type, expr = if (panel == Panel.FEE) feeExpr else expr,
+                panel = panel, lk = lk, type = type, expr = when (panel) { Panel.FEE -> feeExpr; Panel.SPLIT -> splitRows.getOrNull(splitIdx)?.expr.orEmpty(); else -> expr },
                 currency = currency, currencies = listOf(settings.baseCurrency, settings.subCurrency).distinct(),
                 allCurrencies = currencyOptions(lk), calcMode = calcMode,
                 selectedCategory = categoryId, selectedAccount = if (panel == Panel.TO_ACCOUNT) toAccountId else accountId,
                 excludeAccount = if (panel == Panel.TO_ACCOUNT) accountId else null,
-                onExpr = { if (panel == Panel.FEE) feeExpr = it else expr = it },
+                onExpr = { v ->
+                    when (panel) {
+                        Panel.FEE -> feeExpr = v
+                        Panel.SPLIT -> splitRows.getOrNull(splitIdx)?.let { r ->
+                            splitRaw = SplitRow.encode(splitRows.toMutableList().also { it[splitIdx] = r.copy(expr = v, auto = false) })
+                        }
+                        else -> expr = v
+                    }
+                },
                 onCurrency = { currency = it },
                 onToggleCalc = { calcMode = !calcMode },
                 onDoneAmount = {
+                    if (panel == Panel.SPLIT) {
+                        splitRows.getOrNull(splitIdx)?.let { r ->
+                            val v = Calculator.evaluate(r.expr)?.let(Calculator::format) ?: r.expr
+                            splitRaw = SplitRow.encode(splitRows.toMutableList().also { it[splitIdx] = r.copy(expr = v, auto = false) })
+                        }
+                        panel = Panel.NONE; splitIdx = -1
+                        return@BottomPanel
+                    }
                     val current = if (panel == Panel.FEE) feeExpr else expr
                     if (Calculator.hasOperator(current)) Calculator.evaluate(current)?.let {
                         if (panel == Panel.FEE) feeExpr = Calculator.format(it) else expr = Calculator.format(it)
@@ -771,10 +797,14 @@ private fun PlaceholderText(value: String?, placeholder: String) {
 
 @Composable
 private fun UnderlineField(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier, singleLine: Boolean = true, numeric: Boolean = false) {
+    val focus = LocalFocusManager.current
+    val kb = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     BasicTextField(
         value = value, onValueChange = onChange, singleLine = singleLine,
-        keyboardOptions = if (numeric) androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)
-            else androidx.compose.foundation.text.KeyboardOptions.Default,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = if (numeric) androidx.compose.ui.text.input.KeyboardType.Decimal else androidx.compose.ui.text.input.KeyboardType.Text,
+            imeAction = if (singleLine) androidx.compose.ui.text.input.ImeAction.Done else androidx.compose.ui.text.input.ImeAction.Default),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { focus.clearFocus(); kb?.hide() }),
         textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         modifier = modifier.fillMaxWidth(),
@@ -802,12 +832,12 @@ private fun BottomPanel(
         Row(Modifier.fillMaxWidth().background(PanelHeader).height(46.dp).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 when (panel) {
-                    Panel.AMOUNT -> "金額"; Panel.FEE -> "手續費"; Panel.CATEGORY -> "分類"; Panel.TO_ACCOUNT -> "轉入帳戶"; else -> "帳戶"
+                    Panel.AMOUNT -> "金額"; Panel.FEE -> "手續費"; Panel.SPLIT -> "分帳"; Panel.CATEGORY -> "分類"; Panel.TO_ACCOUNT -> "轉入帳戶"; else -> "帳戶"
                 },
                 color = Color.White, fontSize = AppText.body, modifier = Modifier.weight(1f),
             )
             when (panel) {
-                Panel.AMOUNT, Panel.FEE -> Box {
+                Panel.AMOUNT, Panel.FEE, Panel.SPLIT -> Box {
                     IconButton(onClick = { currencyMenu = true }) { Icon(Icons.Outlined.Language, "幣別", tint = Color.White) }
                     DropdownMenu(currencyMenu, { currencyMenu = false }) {
                         allCurrencies.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { onCurrency(c); currencyMenu = false }) }
@@ -819,7 +849,7 @@ private fun BottomPanel(
             IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "關閉", tint = Color.White) }
         }
         when (panel) {
-            Panel.AMOUNT, Panel.FEE -> {
+            Panel.AMOUNT, Panel.FEE, Panel.SPLIT -> {
                 Row(Modifier.fillMaxWidth().background(CurrencyBar).height(48.dp)) {
                     (currencies + listOfNotNull(currency.takeIf { it !in currencies })).forEach { c ->
                         Box(
@@ -1132,6 +1162,7 @@ private data class SplitRow(val person: Long?, val name: String, val expr: Strin
 @Composable
 private fun SplitSection(
     includeMe: Boolean, onIncludeMe: (Boolean) -> Unit, paidBy: Boolean, onPaidBy: (Boolean) -> Unit,
+    editing: Int, onEditAmount: (Int) -> Unit,
     rows: List<SplitRow>, onRows: (List<SplitRow>) -> Unit, total: Long?, currency: String, color: Color,
     onFieldFocus: () -> Unit,
 ) {
@@ -1181,9 +1212,12 @@ private fun SplitSection(
         FormRow("", color, false, onClick = {}, trailing = del) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(nameOf(r), fontSize = AppText.body, maxLines = 1, modifier = Modifier.weight(1f))
-                Box(Modifier.width(88.dp)) {
-                    UnderlineField(r.expr, { v -> onRows(rows.toMutableList().also { it[i] = r.copy(expr = v.filter { c -> c.isDigit() || c == '.' }, auto = false) }) },
-                        "0", Modifier.onFocusChanged { if (it.isFocused) onFieldFocus() }, numeric = true)
+                // 金額用 App 內的計算機鍵盤輸入（不跳系統鍵盤）
+                Column(Modifier.width(88.dp).clickable { onEditAmount(i) }) {
+                    Text(r.expr.ifEmpty { "0" }, fontSize = AppText.body, maxLines = 1,
+                        color = if (r.expr.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(vertical = 4.dp))
+                    HorizontalDivider(thickness = if (editing == i) 2.dp else 1.dp, color = if (editing == i) color else MaterialTheme.colorScheme.outlineVariant)
                 }
             }
         }

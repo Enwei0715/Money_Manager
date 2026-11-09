@@ -175,6 +175,18 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         super.startActivityForResult(intent, requestCode, options)
     }
 
+    /** 對話框關掉、回到主畫面時：主畫面沒有正在輸入的欄位就把鍵盤收起來（Compose 對話框關掉後鍵盤常會留著）。 */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) return
+        window.decorView.postDelayed({
+            // 主畫面有欄位正在輸入（Compose 的輸入框會讓畫面回報為文字編輯器）就不收
+            val editing = currentFocus?.onCheckIsTextEditor() == true
+            if (!editing) getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                ?.hideSoftInputFromWindow(window.decorView.windowToken, 0)
+        }, 120)
+    }
+
     override fun onStop() {
         super.onStop()
         if (!isChangingConfigurations) stoppedAt.longValue = System.currentTimeMillis()
