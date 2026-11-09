@@ -55,6 +55,7 @@ fun MerchantPlacesScreen(nav: NavController) {
     var tick by remember { mutableStateOf(0) }
     var progress by remember { mutableStateOf<String?>(null) }
     var open by remember { mutableStateOf<Place?>(null) }
+    var picking by remember { mutableStateOf<Place?>(null) }
 
     fun chain(m: String) = CHAINS.any { m.contains(it, ignoreCase = true) }
     fun branchy(m: String) = chain(m) && m.trim().contains(' ')
@@ -68,7 +69,7 @@ fun MerchantPlacesScreen(nav: NavController) {
     val txns = all.filter { t ->
         val m = t.merchant?.trim().orEmpty()
         t.type == TxnType.EXPENSE && t.status == TxnStatus.CONFIRMED && m.isNotEmpty() && m !in people &&
-            listOf("退款", "回饋", "分攤", "轉帳", "還款", "代墊").none { m.contains(it) }
+            NOT_PLACE.none { m.contains(it, ignoreCase = true) }
     }
     val current = remember(txns) { txns.mapNotNull { it.merchant?.trim() }.toSet() }
     // 舊店名的位置一併清掉，只留目前還有的
@@ -185,6 +186,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                     Text(p.loc?.let { "${p.source}・%.5f, %.5f".format(it.first, it.second) } ?: p.source.ifBlank { "沒有位置" },
                         fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
                     val action: @Composable (String, () -> Unit) -> Unit = { label, onClick -> ActionLine(label) { open = null; onClick() } }
+                    action("在地圖上點選") { picking = p }
                     action("自動找") { autoFind(listOf(p.name)) }
                     action("在 Google 地圖找") {
                         googleFor = p.name
@@ -206,6 +208,14 @@ fun MerchantPlacesScreen(nav: NavController) {
             },
             confirmButton = { TextButton(onClick = { open = null }) { Text("關閉") } },
         )
+    }
+
+    picking?.let { p ->
+        val start = p.loc ?: PlaceHints.anchors(ctx).firstOrNull() ?: (25.0136 to 121.5414)
+        MapPicker(p.name, start) { ll ->
+            if (ll != null) { PlaceHints.setMerchantPin(p.name, ll.first, ll.second); tick++ }
+            picking = null
+        }
     }
 
     linkFor?.let { n ->

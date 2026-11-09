@@ -67,6 +67,9 @@ internal val ONLINE = listOf("蝦皮", "Claude", "Firstory", "CapCut", "ElevenLa
 internal val ONLINE_ROOTS = listOf("訂閱", "保險", "金融費用", "居住")
 
 /** 連鎖店：每家分店位置不同，只用付款當下記下的位置（不套用其他分店、不用店名找）。 */
+/** 不是一個地點的「店名」：交通、調整、手續費、房租等，不放上地圖 */
+internal val NOT_PLACE = listOf("調整", "未記錄", "手續費", "對帳", "房東", "公車", "捷運", "鐵路", "高鐵", "YouBike", "還款", "退款", "回饋", "分攤", "代墊", "轉帳")
+
 internal val CHAINS = listOf("7-11", "7-ELEVEN", "全家", "萊爾富", "OK超商", "全聯", "小北百貨", "麥當勞", "摩斯漢堡", "肯德基", "85度C", "星巴克", "路易莎", "大創", "愛買",
     "家樂福", "寶雅", "屈臣氏", "康是美", "吉野家", "八方", "可不可", "50嵐", "迷客夏", "中油", "台北捷運", "公車", "YouBike", "台鐵", "台灣高鐵", "Subway", "漢堡王", "Burger King")
 
@@ -102,7 +105,7 @@ fun SpendMapScreen(nav: NavController) {
     fun online(t: com.enwei.moneymanager.data.TxnEntity): Boolean {
         val m = t.merchant?.trim().orEmpty()
         val root = lk.category(lk.rootId(t.categoryId))?.name.orEmpty()
-        return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) }
+        return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) } || NOT_PLACE.any { m.contains(it, ignoreCase = true) }
     }
     fun chain(m: String) = CHAINS.any { m.contains(it, ignoreCase = true) }
     // 連鎖店名稱帶分店（例如「萊爾富 永和貞寧店」）：可以用名稱找到那一間
@@ -254,7 +257,7 @@ fun SpendMapScreen(nav: NavController) {
                     .clickable { selKey = s.key; focusTick++; scope.launch { listState.animateScrollToItem(0) } }
                     .padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(s.name + if (s.fixed) "（已修正位置）" else "", fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(s.name, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${s.cat.ifBlank { "—" }}・${s.count} 筆", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(Money.withSymbol(s.total, lk.base), fontSize = AppText.body, color = com.enwei.moneymanager.ui.ExpenseColor)
@@ -307,17 +310,20 @@ private fun SpendMap(
     spots: List<SpendSpot>, dark: Boolean, modifier: Modifier, selKey: String?, focusTick: Int, status: String? = null,
     onSelect: (SpendSpot?) -> Unit, onMove: (SpendSpot, Double, Double) -> Unit, onReset: (SpendSpot) -> Unit,
     onGoogle: (SpendSpot) -> Unit = {},
+    /** 選位置模式：點地圖就是新位置，畫面不重新對焦、不顯示資訊卡 */
+    pickOnly: Boolean = false,
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val tilePx = with(density) { 256.dp.toPx() }
     val scope = rememberCoroutineScope()
     var version by remember { mutableStateOf(0) }
     var sizePx by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-    var zoom by remember(spots) { mutableStateOf(-1.0) }
-    var cx by remember(spots) { mutableStateOf(0.5) }
-    var cy by remember(spots) { mutableStateOf(0.5) }
+    val viewKey: Any = if (pickOnly) Unit else spots
+    var zoom by remember(viewKey) { mutableStateOf(-1.0) }
+    var cx by remember(viewKey) { mutableStateOf(0.5) }
+    var cy by remember(viewKey) { mutableStateOf(0.5) }
     val picked = spots.firstOrNull { it.key == selKey }
-    var moving by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf(pickOnly) }
     // 從下方清單點地點：地圖移過去並放大
     androidx.compose.runtime.LaunchedEffect(focusTick) {
         if (focusTick > 0) picked?.let { cx = mx(it.lon); cy = my(it.lat); if (zoom < 16.0) zoom = 16.0 }
@@ -430,7 +436,7 @@ private fun SpendMap(
                                 if (moving && sp != null) {
                                     // 修正位置：點的地方就是正確位置
                                     onMove(sp, Math.toDegrees(kotlin.math.atan(kotlin.math.sinh(Math.PI * (1 - 2 * wy)))), wx * 360 - 180)
-                                    moving = false
+                                    moving = pickOnly
                                 } else {
                                     // 點針頭（在位置上方）也算點到
                                     fun dist(p: SpendSpot) = kotlin.math.hypot((mx(p.lon) - cx) * world + sizePx.width / 2 - o.x,
@@ -546,7 +552,7 @@ private fun SpendMap(
                 }
             }
         }
-        picked?.let { sp ->
+        if (!pickOnly) picked?.let { sp ->
             androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp), shadowElevation = 2.dp,
                 modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -567,6 +573,29 @@ private fun SpendMap(
                     }
                 }
             }
+        }
+    }
+}
+
+
+/**
+ * 在地圖上點選店家位置：一開始對準目前的位置（沒有就用常活動的區域），點一下就把針移過去，按「設定」存成這家店的位置。
+ */
+@Composable
+internal fun MapPicker(name: String, start: Pair<Double, Double>, onDone: (Pair<Double, Double>?) -> Unit) {
+    var at by remember { mutableStateOf(start) }
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.4f
+    val spot = SpendSpot(at.first, at.second, name, 1, 1, "", "pick")
+    androidx.compose.ui.window.Dialog(onDismissRequest = { onDone(null) },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(name, fontSize = AppText.body, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                androidx.compose.material3.TextButton(onClick = { onDone(null) }) { Text("取消") }
+                androidx.compose.material3.TextButton(onClick = { onDone(at) }) { Text("設定") }
+            }
+            SpendMap(listOf(spot), dark, Modifier.fillMaxWidth().height(460.dp).clipToBounds(), "pick", 0,
+                status = "點地圖上的正確位置", onSelect = {}, onMove = { _, la, lo -> at = la to lo }, onReset = {}, pickOnly = true)
         }
     }
 }

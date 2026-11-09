@@ -64,12 +64,20 @@ object PlaceHints {
 
     /** 使用者手動指定的店家位置（店名 → 座標）：優先於自動找到的與記帳時的定位 */
     private val pinPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("merchant_pin", Context.MODE_PRIVATE) }
-    fun merchantPins(): Map<String, Pair<Double, Double>> = pinPrefs.all.mapNotNull { (k, v) ->
-        val p = (v as? String)?.split(',')?.takeIf { it.size == 2 } ?: return@mapNotNull null
-        val la = p[0].toDoubleOrNull() ?: return@mapNotNull null
-        val lo = p[1].toDoubleOrNull() ?: return@mapNotNull null
-        k to (la to lo)
-    }.toMap()
+    fun merchantPins(): Map<String, Pair<Double, Double>> {
+        val all = pinPrefs.all.mapNotNull { (k, v) ->
+            val p = (v as? String)?.split(',')?.takeIf { it.size == 2 } ?: return@mapNotNull null
+            val la = p[0].toDoubleOrNull() ?: return@mapNotNull null
+            val lo = p[1].toDoubleOrNull() ?: return@mapNotNull null
+            k to (la to lo)
+        }.toMap()
+        // 舊版讀地圖連結的錯誤：好幾家店被設成一模一樣的座標（地圖預設中心）→ 清掉這些
+        val dup = all.values.groupingBy { "%.5f,%.5f".format(it.first, it.second) }.eachCount().filter { it.value >= 3 }.keys
+        if (dup.isEmpty()) return all
+        val bad = all.filter { "%.5f,%.5f".format(it.value.first, it.value.second) in dup }.keys
+        pinPrefs.edit().also { e -> bad.forEach { e.remove(it) } }.apply()
+        return all - bad
+    }
     fun setMerchantPin(name: String, lat: Double, lon: Double) = pinPrefs.edit().putString(name, "$lat,$lon").apply()
     fun clearMerchantPin(name: String) = pinPrefs.edit().remove(name).apply()
 
@@ -468,9 +476,12 @@ object PlaceHints {
             val dec = runCatching { java.net.URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
             return pair(Regex("!3d(-?\\d+\\.\\d+)!4d(-?\\d+\\.\\d+)").find(dec))
                 ?: pair(Regex("@(-?\\d+\\.\\d+),(-?\\d+\\.\\d+)").find(dec))
-                ?: pair(Regex("[?&](?:q|ll|query|center|daddr|markers)=(?:[^&]*?)(-?\\d{1,2}\\.\\d{4,}),\\s*(-?\\d{1,3}\\.\\d{4,})").find(dec))
-                ?: pair(Regex("APP_INITIALIZATION_STATE=\\[\\[\\[[\\d.]+,(-?\\d+\\.\\d+),(-?\\d+\\.\\d+)\\]").find(dec), swap = true)
-                ?: pair(Regex("\\[null,null,(-?\\d{1,2}\\.\\d{4,}),(-?\\d{1,3}\\.\\d{4,})\\]").find(dec))
+                ?: pair(Regex("[?&](?:q|ll|query|daddr)=(-?\\d{1,2}\\.\\d{4,}),\\s*(-?\\d{1,3}\\.\\d{4,})").find(dec))
+        }
+        // 頁面內容只信「!3d…!4d…」（地點本身的座標）；其他數字常是預設的地圖中心，會讓每家店都跑到同一個點
+        fun placeOnly(s: String): Pair<Double, Double>? {
+            val dec = runCatching { java.net.URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
+            return pair(Regex("!3d(-?\\d+\\.\\d+)!4d(-?\\d+\\.\\d+)").find(dec))
         }
         parse(url)?.let { return@withContext it }
         // 短網址：跟著轉址拿到完整網址與頁面內容（用桌機的瀏覽器標頭，避免被導到 App）
@@ -482,7 +493,7 @@ object PlaceHints {
             client.newCall(req).execute().use { r -> r.request.url.toString() to (r.body?.string()?.take(400_000) ?: "") }
         }.getOrNull() ?: return@withContext null
         parse(finalUrl)?.let { return@withContext it }
-        parse(body)?.let { return@withContext it }
+        placeOnly(body)?.let { return@withContext it }
         // 網址只有店名（/maps/place/店名/…）：用店名在附近找
         val name = Regex("/maps/place/([^/?]+)").find(finalUrl)?.groupValues?.get(1)
             ?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrDefault(it) }?.replace('+', ' ')?.trim()
