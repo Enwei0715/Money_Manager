@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -161,7 +162,7 @@ object PlaceHints {
                     })
                 }.onFailure { if (c.isActive) c.resumeWith(Result.success(emptyList())) }
             } else kotlinx.coroutines.coroutineScope {
-                kotlinx.coroutines.async(Dispatchers.IO) { runCatching { g.getFromLocationName(q, 6, s, w, n, e).orEmpty() }.getOrDefault(emptyList()) }.await()
+                async(Dispatchers.IO) { runCatching { g.getFromLocationName(q, 6, s, w, n, e).orEmpty() }.getOrDefault(emptyList()) }.await()
             }
         }.orEmpty()
     }
@@ -178,7 +179,7 @@ object PlaceHints {
                     })
                 }.onFailure { if (c.isActive) c.resumeWith(Result.success(emptyList())) }
             } else kotlinx.coroutines.coroutineScope {
-                kotlinx.coroutines.async(Dispatchers.IO) { runCatching { g.getFromLocation(lat, lon, max).orEmpty() }.getOrDefault(emptyList()) }.await()
+                async(Dispatchers.IO) { runCatching { g.getFromLocation(lat, lon, max).orEmpty() }.getOrDefault(emptyList()) }.await()
             }
         }.orEmpty()
     }
