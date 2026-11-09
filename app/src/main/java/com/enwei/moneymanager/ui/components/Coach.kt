@@ -64,9 +64,9 @@ object Coach {
         Step("tab.txns", "交易", "每天的收入、支出都在這裡，依日期排好。", tab = "txns"),
         Step("txns.summary", "本月總覽", "這個月的收入、支出與結餘；設了預算的話，下方會看到用了多少、每天還能花多少。", tab = "txns"),
         Step("fab.add", "記一筆", "按這裡記帳：輸入金額、選分類與帳戶就好。上方可以切換支出／收入／轉帳／股票。", tab = "txns"),
+        Step("txns.map", "支出地圖", "記帳時有定位的話，可以在地圖上看每天、每週、每月在哪裡花錢。", tab = "txns"),
         Step("txns.search", "搜尋與篩選", "找某家店、某個分類或某段期間的交易，也能看篩選後的圖表。", tab = "txns"),
         Step("tab.stats", "統計", "錢花在哪：分類圓餅、每月比較、收支趨勢。", tab = "stats"),
-        Step("stats.map", "支出地圖", "記帳時有定位的話，可以在地圖上看每天、每週、每月在哪裡花錢。", tab = "stats"),
         Step("tab.accounts", "資產", "所有帳戶、信用卡（依每期帳單算應繳）、往來（誰欠你、你欠誰）與股票。", tab = "accounts"),
         Step("tab.assistant", "股票助理", "每日報告、新聞整理、問 AI 與資金紀律。需要先在設定裡填 AI 金鑰。", tab = "assistant"),
         Step("tab.more", "工具", "預算、週期交易、備份、通知記帳等工具都在這；可以按「編輯」調整排列。", tab = "more"),
@@ -82,7 +82,7 @@ object Coach {
         active = steps.filter { st ->
             when (st.target) {
                 "tab.assistant" -> s?.featureStocks != false
-                "stats.map" -> s?.locationHints != false
+                "txns.map" -> s?.locationHints != false
                 else -> true
             }
         }.map { st ->
