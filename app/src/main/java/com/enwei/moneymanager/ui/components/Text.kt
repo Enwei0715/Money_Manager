@@ -30,7 +30,8 @@ fun Text(
     textDecoration: TextDecoration? = null,
     textAlign: TextAlign? = null,
     lineHeight: TextUnit = TextUnit.Unspecified,
-    overflow: TextOverflow = TextOverflow.Clip,
+    /** 沒指定時：有行數上限就用「…」結尾（全 App 一致，不會直接截斷） */
+    overflow: TextOverflow? = null,
     softWrap: Boolean = true,
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
@@ -39,6 +40,6 @@ fun Text(
 ) = M3Text(
     text = I18n.tr(text), modifier = modifier, color = color, fontSize = fontSize, fontStyle = fontStyle, fontWeight = fontWeight,
     fontFamily = fontFamily, letterSpacing = letterSpacing, textDecoration = textDecoration, textAlign = textAlign,
-    lineHeight = lineHeight, overflow = overflow, softWrap = softWrap, maxLines = maxLines, minLines = minLines,
+    lineHeight = lineHeight, overflow = overflow ?: if (maxLines != Int.MAX_VALUE || !softWrap) TextOverflow.Ellipsis else TextOverflow.Clip, softWrap = softWrap, maxLines = maxLines, minLines = minLines,
     onTextLayout = onTextLayout, style = style,
 )
