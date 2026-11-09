@@ -313,6 +313,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     }
                 }
             } }
+            // 已開啟的功能少了必要設定（例如通知存取被關掉）：提醒一行，點一下補設定
+            SetupBanner(nav)
             if (tab < 2) androidx.compose.foundation.layout.Box(Modifier.coachTarget("txns.summary")) { SummaryBar(totals, lk.base) }
             // 每日：這個月的總預算進度（有設定總預算、看的是這個月時）
             val budget = settings.budgets[0L]

@@ -363,7 +363,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     }
                     Row {
                         // 不用電腦：用 Shizuku 一鍵開啟
-                        TextButton(onClick = { nav.navigate("smart") }) { Text("一鍵開啟（不用電腦）") }
+                        TextButton(onClick = { nav.navigate("setup") }) { Text("一鍵開啟（不用電腦）") }
                         TextButton(onClick = {
                             clip.setText(androidx.compose.ui.text.AnnotatedString(repo.SENSITIVE_ADB))
                             testMsg = "已複製指令"

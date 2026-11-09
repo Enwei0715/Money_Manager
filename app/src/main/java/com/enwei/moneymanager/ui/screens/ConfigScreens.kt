@@ -333,7 +333,11 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 }
                 sec("功能開關")
                 cfg("通知自動記帳", onOff(s.featureNotif)) {
-                    askOnOff("通知自動記帳", s.featureNotif, null) { v -> repo.settings.update { it.copy(featureNotif = v) } }
+                    askOnOff("通知自動記帳", s.featureNotif, null) { v ->
+                        repo.settings.update { it.copy(featureNotif = v) }
+                        // 打開功能就接著做它需要的設定
+                        if (v) nav.navigate("setup")
+                    }
                 }
                 cfg("股票與投資助理", onOff(s.featureStocks)) {
                     askOnOff("股票與投資助理", s.featureStocks, null) { v ->
@@ -346,6 +350,8 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                         if (v && !s.hasAiKey) nav.navigate("ai")
                     }
                 }
+                // 已開啟的功能需要的權限與金鑰，一頁看完；少了的也能在這裡補
+                cfg("功能設定檢查") { nav.navigate("setup") }
 
                 if (s.featureNotif) {
                     sec("自動記帳")

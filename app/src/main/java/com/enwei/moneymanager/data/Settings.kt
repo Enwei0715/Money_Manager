@@ -572,10 +572,9 @@ class SettingsStore(context: Context) {
         widgetOpacity = prefs.getInt("widgetOpacity", 100),
         toolOrder = (if (prefs.contains("toolOrder")) prefs.getString("toolOrder", "")!!.split(',').filter { it.isNotBlank() }
             else AppSettings().toolOrder).let { o ->
-                // 新加入的工具（店家位置、智慧功能）：舊使用者也自動加上一次
+                // 新加入的工具（店家位置）：舊使用者也自動加上一次
                 var out = o
                 if (!prefs.getBoolean("toolMerchantsAdded", false) && "merchants" !in out) { prefs.edit().putBoolean("toolMerchantsAdded", true).apply(); out = out + "merchants" }
-                if (!prefs.getBoolean("toolSmartAdded", false) && "smart" !in out) { prefs.edit().putBoolean("toolSmartAdded", true).apply(); out = out + "smart" }
                 out
             },
         hiddenTools = prefs.getStringSet("hiddenTools", emptySet())!!.toSet(),

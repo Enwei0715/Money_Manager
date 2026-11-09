@@ -383,7 +383,8 @@ private fun AppScaffold(nav: NavHostController) {
             composable("appearance") { com.enwei.moneymanager.ui.screens.AppearanceScreen(nav) }
             composable("spendmap") { com.enwei.moneymanager.ui.screens.SpendMapScreen(nav) }
             composable("merchants") { com.enwei.moneymanager.ui.screens.MerchantPlacesScreen(nav) }
-            composable("smart") { com.enwei.moneymanager.ui.screens.SmartScreen(nav) }
+            composable("setup") { com.enwei.moneymanager.ui.screens.SetupScreen(nav) }
+            composable("smart") { com.enwei.moneymanager.ui.screens.SetupScreen(nav) }
             composable("debts") { com.enwei.moneymanager.ui.screens.DebtsScreen(nav) }
             composable("config?g={g}", arguments = listOf(navArgument("g") { type = NavType.StringType; defaultValue = "" })) { e ->
                 ConfigScreen(nav, e.arguments?.getString("g")?.takeIf { it.isNotBlank() })

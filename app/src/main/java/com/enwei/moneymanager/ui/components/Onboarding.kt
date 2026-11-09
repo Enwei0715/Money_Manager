@@ -90,16 +90,19 @@ object Onboarding {
             if ("split" in w) "幫別人付錢：在支出裡點「分帳」，可以分給好幾個人" else null,
             if ("split" in w) "別人還錢：收入裡填「誰還的」；借錢、還錢：用「轉帳」選往來對象" else null,
         )))
-        if ("notif" in w) add(Page(Icons.Outlined.NotificationsActive, "通知自動記帳", "需要允許讀取通知，App 才看得到付款通知。",
-            listOf("不確定的放在交易頁上方的「待確認」", "可以選要聽哪些 App 的通知"), "現在去開啟", "notif"))
+        if ("notif" in w) add(Page(Icons.Outlined.NotificationsActive, "通知自動記帳", "付款通知自動記成一筆。",
+            listOf("不確定的放在交易頁上方的「待確認」", "可以選要聽哪些 App 的通知")))
         add(Page(Icons.Outlined.PieChart, "統計與預算", "看錢花在哪、每月有沒有超支。", listOfNotNull(
-            "統計：分類圓餅、每月比較", if ("map" in w) "支出地圖：統計頁右上的地圖圖示" else null, "預算：快超過時提醒"), "設定預算", "budget"))
+            "統計：分類圓餅、每月比較", if ("map" in w) "支出地圖：交易頁右上的地圖圖示" else null, "預算：快超過時提醒"), "設定預算", "budget"))
         add(Page(Icons.Outlined.AccountBalanceWallet, "資產", "帳戶、信用卡" + (if ("split" in w) "、往來" else "") + "都在這裡。", listOfNotNull(
             "信用卡依每期帳單算應繳與未出帳", if ("split" in w) "往來：誰欠你、你欠誰，一眼看清楚" else null), "新增帳戶", "account/0"))
         if ("stocks" in w || "ai" in w) add(Page(Icons.Outlined.AutoAwesome, if ("ai" in w) "股票與 AI 助理" else "股票", "底部「助理」分頁。", listOfNotNull(
             if ("stocks" in w) "記錄股票買賣，看持股損益、K 線與除權息" else null,
             if ("ai" in w) "填入 Groq 或 Gemini 的免費金鑰後，可產生每日報告、問 AI" else null),
-            if ("ai" in w) "設定 AI 金鑰" else null, if ("ai" in w) "ai" else null))
+            null, null))
+        // 最後一頁：選了的功能需要的設定，一項一項按掉（之後少了會在交易頁上方提醒）
+        if (w.any { it in setOf("notif", "map", "ai") }) add(Page(Icons.Outlined.Checklist, "把選的功能設定好",
+            "按一下就會帶你去設定，回來會自動打勾。之後在「設定 → 功能設定檢查」也看得到。", kind = 3))
     }
 
     /** 第一次開啟（還沒看過導覽）時顯示；[onOpen] 開啟某個畫面。整頁蓋在 App 上（不用對話框，底部按鈕不會被導覽列擋住）。 */
@@ -149,6 +152,7 @@ object Onboarding {
                             when (p.kind) {
                                 1 -> { Spacer(Modifier.height(16.dp)); Survey(w) }
                                 2 -> { Spacer(Modifier.height(20.dp)); AppearanceQuick() }
+                                3 -> { Spacer(Modifier.height(12.dp)); com.enwei.moneymanager.ui.screens.SetupList(w.intersect(setOf("notif", "map", "ai"))) { r -> finish(); onOpen(r) } }
                             }
                             if (p.steps.isNotEmpty()) {
                                 Spacer(Modifier.height(20.dp))
