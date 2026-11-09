@@ -221,7 +221,9 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     val toAcc = lk.account(toAccountId)
     val crossCurrency = type == TxnType.TRANSFER && toAcc != null && toAcc.currency != currency
     val payer = if (type == TxnType.EXPENSE && paidBy && !debtMode) splitRows.firstOrNull() else null
-    val canSave = amountMinor != null && (accountId != null || payer != null) && (type != TxnType.TRANSFER || toAccountId != null)
+    // 編輯舊的一筆：原本就沒有帳戶（例如匯入的資料）也可以直接存，不強迫補帳戶
+    val accountOk = accountId != null || payer != null || (original != null && original?.accountId == null && type != TxnType.TRANSFER)
+    val canSave = amountMinor != null && accountOk && (type != TxnType.TRANSFER || toAccountId != null)
     // 自動分類：依內容（商家）、過去紀錄、金額與帳戶建議分類；新交易還沒選分類時直接帶入
     var memoNew by remember { mutableStateOf(false) }
     var catSuggest by remember { mutableStateOf<com.enwei.moneymanager.core.CategorySuggester.Suggestion?>(null) }
@@ -412,6 +414,16 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 panel = if (settings.inputFromCategory && type != TxnType.TRANSFER) Panel.CATEGORY else Panel.AMOUNT
                 snack.showSnackbar(com.enwei.moneymanager.ui.tr("已儲存，繼續記下一筆"))
             } else nav.popBackStack()
+        }
+    }
+
+    /** 按儲存時還缺什麼：直接打開那一欄並提示，而不是讓按鈕灰掉不能按 */
+    fun trySave(again: Boolean) {
+        when {
+            amountMinor == null -> { panel = Panel.AMOUNT; scope.launch { snack.showSnackbar("請輸入金額") } }
+            !accountOk -> { panel = Panel.ACCOUNT; scope.launch { snack.showSnackbar("請選帳戶") } }
+            type == TxnType.TRANSFER && toAccountId == null -> { panel = Panel.TO_ACCOUNT; scope.launch { snack.showSnackbar("請選轉入帳戶") } }
+            else -> save(again)
         }
     }
 
@@ -678,17 +690,17 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 if (original == null) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
-                            onClick = { save(again = false) }, enabled = canSave, modifier = Modifier.weight(2f).height(48.dp),
+                            onClick = { trySave(again = false) }, modifier = Modifier.weight(2f).height(48.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(6.dp),
                         ) { Text("儲存") }
                         OutlinedButton(
-                            onClick = { save(again = true) }, enabled = canSave, modifier = Modifier.weight(1f).height(48.dp),
+                            onClick = { trySave(again = true) }, modifier = Modifier.weight(1f).height(48.dp),
                             shape = RoundedCornerShape(6.dp),
                         ) { Text("繼續", color = MaterialTheme.colorScheme.onSurface) }
                     }
                 } else {
                     Button(
-                        onClick = { save(again = false) }, enabled = canSave, modifier = Modifier.fillMaxWidth().padding(16.dp).height(48.dp),
+                        onClick = { trySave(again = false) }, modifier = Modifier.fillMaxWidth().padding(16.dp).height(48.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(6.dp),
                     ) { Text(if (original?.status == TxnStatus.PENDING) "確認入帳" else "儲存") }
                     val smallPad = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp)
