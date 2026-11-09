@@ -270,7 +270,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         BadgedBox(badge = { Badge { Text("$pendingCount") } }) { Icon(Icons.Filled.NotificationsActive, "待確認") }
                     }
                     // 支出地圖：在哪裡花錢（跟交易放在一起）
-                    IconButton(onClick = { nav.navigate("spendmap") }, modifier = Modifier.coachTarget("txns.map")) { Icon(com.enwei.moneymanager.ui.components.LineIcons.IcMap, "支出地圖") }
+                    if (settings.locationHints) IconButton(onClick = { nav.navigate("spendmap") }, modifier = Modifier.coachTarget("txns.map")) { Icon(com.enwei.moneymanager.ui.components.LineIcons.IcMap, "支出地圖") }
                     IconButton(onClick = { nav.navigate("search?month=$month") }, modifier = Modifier.coachTarget("txns.search")) { Icon(com.enwei.moneymanager.ui.components.LineIcons.IcSearch, "搜尋") }
                 },
             ) }

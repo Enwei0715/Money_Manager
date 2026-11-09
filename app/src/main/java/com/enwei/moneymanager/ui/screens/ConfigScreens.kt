@@ -339,6 +339,16 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                         if (v) nav.navigate("setup")
                     }
                 }
+                cfg("往來與分帳", onOff(s.featureSplit)) {
+                    askOnOff("往來與分帳", s.featureSplit, null) { v -> repo.settings.update { it.copy(featureSplit = v) } }
+                }
+                cfg("定位與支出地圖", onOff(s.locationHints)) {
+                    askOnOff("定位與支出地圖", s.locationHints, null) { v ->
+                        repo.settings.update { it.copy(locationHints = v) }
+                        // 打開時接著授予位置權限
+                        if (v) nav.navigate("setup")
+                    }
+                }
                 cfg("股票與投資助理", onOff(s.featureStocks)) {
                     askOnOff("股票與投資助理", s.featureStocks, null) { v ->
                         repo.settings.update { it.copy(featureStocks = v) }

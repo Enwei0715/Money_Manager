@@ -215,10 +215,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     }
     BackHandler(enabled = panel != Panel.NONE) { panel = Panel.NONE }
     // 第一次記帳：簡短介紹這頁幾個重點
-    if (id == 0L) com.enwei.moneymanager.ui.components.PageTour("editor", listOf(
+    if (id == 0L) com.enwei.moneymanager.ui.components.PageTour("editor", listOfNotNull(
         com.enwei.moneymanager.ui.components.Coach.Step("ed.amount", "金額", "點選此處以計算機輸入，可輸入算式；右上角可加入手續費。"),
-        com.enwei.moneymanager.ui.components.Coach.Step("ed.people", "往來", "與他人分帳、由他人代付或收回欠款時，點選對象即可。"),
-        com.enwei.moneymanager.ui.components.Coach.Step("ed.merchant", "商家", "輸入時會推薦附近及曾記錄的店家，選取後將一併記錄位置。"),
+        if (settings.featureSplit) com.enwei.moneymanager.ui.components.Coach.Step("ed.people", "往來", "與他人分帳、由他人代付或收回欠款時，點選對象即可。") else null,
+        com.enwei.moneymanager.ui.components.Coach.Step("ed.merchant", "商家",
+            if (settings.locationHints) "輸入時會推薦附近及曾記錄的店家，選取後將一併記錄位置。" else "輸入時會推薦曾記錄的店家，並帶入上次使用的分類與帳戶。"),
     ))
     // 打開 App 內的鍵盤或選單時，系統鍵盤一定收起來
     LaunchedEffect(panel) { if (panel != Panel.NONE) { focusManager.clearFocus(); keyboard?.hide() } }
@@ -285,7 +286,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     }
     LaunchedEffect(merchant, merchantFocused) {
         // 打字停下來 0.6 秒、至少 2 個字才查；剛從清單選好的店不再查（減少 API 呼叫）
-        if (!merchantFocused || merchant.trim().length < 2 || merchantAt != null || !com.enwei.moneymanager.net.PlaceSearch.online) { mbResults = emptyList(); return@LaunchedEffect }
+        if (!settings.locationHints || !merchantFocused || merchant.trim().length < 2 || merchantAt != null || !com.enwei.moneymanager.net.PlaceSearch.online) { mbResults = emptyList(); return@LaunchedEffect }
         kotlinx.coroutines.delay(600)
         val c = hereLoc?.let { it.latitude to it.longitude } ?: com.enwei.moneymanager.data.PlaceHints.anchors(com.enwei.moneymanager.MoneyApp.instance).firstOrNull()
         mbResults = com.enwei.moneymanager.net.PlaceSearch.search(merchant, c, 6).filter { it.name != merchant }
@@ -655,7 +656,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 }
                 // 店家位置預覽：點一下修改位置
                 val at = merchantAt ?: knownPlaces[merchant.trim()]
-                if (at != null && merchant.isNotBlank() && !merchantFocused && type != TxnType.TRANSFER) {
+                if (settings.locationHints && at != null && merchant.isNotBlank() && !merchantFocused && type != TxnType.TRANSFER) {
                     MapPreview(merchant.trim(), at, Modifier.fillMaxWidth().height(130.dp).padding(start = placeIndent, end = 16.dp, top = 6.dp)) { pickMap = true }
                 }
                 if (pickMap) MapPicker(merchant.trim(), at ?: hereLoc?.let { it.latitude to it.longitude } ?: (25.0136 to 121.5414)) { ll ->
@@ -713,7 +714,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     }
                 }
                 // 往來（分帳、別人先付、還款）：放在表單最後，主要欄位一路填下來不被打斷
-                if (type != TxnType.TRANSFER) {
+                // 往來功能關閉時不顯示（編輯原本就有往來資料的交易仍保留，避免無法修改）
+                if (type != TxnType.TRANSFER && (settings.featureSplit || splitRows.isNotEmpty() || paidBy)) {
                     if (!debtMode && type == TxnType.EXPENSE && (original == null || original?.type == TxnType.EXPENSE)) SplitSection(
                         splitMe, { splitMe = it }, paidBy, { paidBy = it },
                         editing = if (panel == Panel.SPLIT) splitIdx else -1,

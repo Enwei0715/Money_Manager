@@ -417,6 +417,8 @@ data class AppSettings(
     /** 讀到付款通知時用手機位置推測店家（預設關閉） */
     val locationHints: Boolean = false,
     val featureStocks: Boolean = true,
+    /** 往來與分帳（關閉時記帳表單、資產頁與工具都不顯示往來） */
+    val featureSplit: Boolean = true,
     /** 已通知過的提醒（「代號:種類」→ 日期 epochDay），同一天不重複 */
     val alertsFired: Map<String, Long> = emptyMap(),
     /** 有新版本時通知 */
@@ -626,6 +628,7 @@ class SettingsStore(context: Context) {
         featureNotif = prefs.getBoolean("featureNotif", true),
         locationHints = prefs.getBoolean("locationHints", false),
         featureStocks = prefs.getBoolean("featureStocks", true),
+        featureSplit = prefs.getBoolean("featureSplit", true),
         alertsFired = runCatching { json.decodeFromString(MapSerializer(String.serializer(), Long.serializer()), prefs.getString("alertsFired", "{}")!!) }.getOrDefault(emptyMap()),
         notifyUpdates = prefs.getBoolean("notifyUpdates", true),
         updateNotified = prefs.getInt("updateNotified", 0),
@@ -824,6 +827,7 @@ class SettingsStore(context: Context) {
             .putBoolean("featureNotif", s.featureNotif)
             .putBoolean("locationHints", s.locationHints)
             .putBoolean("featureStocks", s.featureStocks)
+            .putBoolean("featureSplit", s.featureSplit)
             .putString("alertsFired", json.encodeToString(MapSerializer(String.serializer(), Long.serializer()), s.alertsFired))
             .putBoolean("notifyUpdates", s.notifyUpdates)
             .putInt("updateNotified", s.updateNotified)

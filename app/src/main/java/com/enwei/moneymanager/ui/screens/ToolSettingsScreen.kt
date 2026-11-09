@@ -71,8 +71,9 @@ object ToolCatalog {
 @Composable
 fun ToolSettingsScreen(nav: NavController) {
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
-    val visible = ToolCatalog.shown(settings.toolOrder, settings.hiddenTools)
-    val hidden = ToolCatalog.available(settings.toolOrder, settings.hiddenTools)
+    val off = settings.offTools()
+    val visible = ToolCatalog.shown(settings.toolOrder, settings.hiddenTools).filter { it.id !in off }
+    val hidden = ToolCatalog.available(settings.toolOrder, settings.hiddenTools).filter { it.id !in off }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -82,7 +83,7 @@ fun ToolSettingsScreen(nav: NavController) {
             Text("首頁顯示與排序", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
             ReorderableColumn(visible, { it.id }, { reordered ->
                 repo.settings.update { current ->
-                    val hiddenOrder = current.toolOrder.filter { it in current.hiddenTools }
+                    val hiddenOrder = current.toolOrder.filter { it in current.hiddenTools || it in off }
                     current.copy(toolOrder = (reordered.map { it.id } + hiddenOrder).distinct())
                 }
             }) { item, handle ->
@@ -132,4 +133,13 @@ fun ToolSettingsScreen(nav: NavController) {
             )
         }
     }
+}
+
+/** 「設定 → 功能開關」關掉的功能，對應的工具一律不顯示 */
+fun com.enwei.moneymanager.data.AppSettings.offTools(): Set<String> = buildSet {
+    if (!featureStocks) addAll(listOf("advisor", "stockfees", "stocksearch"))
+    if (!featureNotif) add("notif")
+    if (!aiEnabled) add("ai-hub")
+    if (!locationHints) addAll(listOf("spendmap", "merchants"))
+    if (!featureSplit) add("debts")
 }

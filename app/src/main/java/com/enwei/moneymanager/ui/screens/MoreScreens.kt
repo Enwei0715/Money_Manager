@@ -126,17 +126,14 @@ private val timeFmt = SimpleDateFormat("M/d HH:mm", Locale.TAIWAN)
 fun MoreScreen(nav: NavController) {
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     // 設定裡關掉的功能，對應的工具也不顯示
-    val off = buildSet {
-        if (!settings.featureStocks) addAll(listOf("advisor", "stockfees", "stocksearch"))
-        if (!settings.featureNotif) add("notif")
-        if (!settings.aiEnabled) add("ai-hub")
-    }
+    val off = settings.offTools()
     val shown = ToolCatalog.shown(settings.toolOrder, settings.hiddenTools).filter { it.id !in off }
     val available = ToolCatalog.available(settings.toolOrder, settings.hiddenTools).filter { it.id !in off }
     // 編輯模式：長按任一格或按右上「編輯」進入；可以移動、切換寬窄、隱藏、從清單加入
     var editing by remember { mutableStateOf(false) }
     val summary = rememberToolSummaries()
-    fun setOrder(ids: List<String>) = repo.settings.update { it.copy(toolOrder = ids, hiddenTools = it.hiddenTools - ids.toSet()) }
+    // 關掉的功能的工具保留在順序裡，重新打開功能時回到原位
+    fun setOrder(ids: List<String>) = repo.settings.update { it.copy(toolOrder = (ids + it.toolOrder.filter { t -> t in off }).distinct(), hiddenTools = it.hiddenTools - ids.toSet()) }
     fun move(id: String, by: Int) {
         val ids = shown.map { it.id }.toMutableList()
         val i = ids.indexOf(id); val j = (i + by).coerceIn(0, ids.lastIndex)

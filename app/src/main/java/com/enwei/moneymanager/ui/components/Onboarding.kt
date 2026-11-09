@@ -76,7 +76,7 @@ object Onboarding {
         Want("stocks", "股票與投資", "記錄股票交易，檢視持股損益與 K 線"),
         Want("ai", "AI 助理", "判讀通知、分析收支與產生每日投資報告（需要金鑰或自架伺服器）"),
     )
-    /** 這次導覽勾了哪些（代墊沒有對應的設定，只影響導覽內容） */
+    /** 這次導覽勾了哪些（每一項都對應「設定 → 功能開關」） */
     private val picked = androidx.compose.runtime.mutableStateOf<Set<String>?>(null)
 
     private fun pagesFor(w: Set<String>) = buildList {
@@ -113,7 +113,7 @@ object Onboarding {
         // 問卷預設：依目前的設定
         val w = picked.value ?: buildSet {
             if (settings.featureNotif) add("notif"); if (settings.locationHints) add("map")
-            if (settings.featureStocks) add("stocks"); if (settings.aiEnabled) add("ai"); add("split")
+            if (settings.featureStocks) add("stocks"); if (settings.aiEnabled) add("ai"); if (settings.featureSplit) add("split")
         }.also { picked.value = it }
         val pages = pagesFor(w)
         fun finish(tour: Boolean = false) {
@@ -215,6 +215,7 @@ object Onboarding {
                             "map" -> it.copy(locationHints = !on)
                             "stocks" -> it.copy(featureStocks = !on)
                             "ai" -> it.copy(aiEnabled = !on)
+                            "split" -> it.copy(featureSplit = !on)
                             else -> it
                         }
                     }

@@ -152,7 +152,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                     DropdownMenu(typeMenu, { typeMenu = false }) {
                         // 股票功能關閉時不提供「證券交割」（已是證券帳戶的仍保留，避免無法編輯）
                         val stocksOn = repo.settings.value.featureStocks
-                        AccountType.entries.filter { stocksOn || it != AccountType.BROKERAGE || type == AccountType.BROKERAGE }.forEach { t -> DropdownMenuItem(text = { Text(t.label) }, onClick = { type = t; typeMenu = false }) }
+                        AccountType.entries.filter { (stocksOn || it != AccountType.BROKERAGE) && (repo.settings.value.featureSplit || it != AccountType.LOAN) || it == type }.forEach { t -> DropdownMenuItem(text = { Text(t.label) }, onClick = { type = t; typeMenu = false }) }
                     }
                 }
             }
@@ -203,7 +203,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
             }
             FormLine("說明") { FormInput(description, { description = it }) }
             if (isCard) {
-                FormLine("末四碼") { FormInput(last4, { s -> last4 = s.filter(Char::isDigit).take(4) }, "用於辨識刷卡通知", number = true) }
+                FormLine("末四碼") { FormInput(last4, { s -> last4 = s.filter(Char::isDigit).take(4) }, if (repo.settings.value.featureNotif) "用於辨識刷卡通知" else "卡號末四碼", number = true) }
                 FormLine("信用額度") { FormInput(limit, { limit = it }, "", number = true) }
                 FormLine("發卡銀行") {
                     FormInput(bankQuery, { q ->
@@ -293,7 +293,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 DropdownLine("儲值來源", lk.account(linkedId)?.name ?: "未設定",
                     listOf<Pair<Long?, String>>(null to "未設定") + lk.accounts.filter { it.type != type && !it.archived }.map { it.id to it.name }) { linkedId = it }
                 Text(
-                    "自動儲值的扣款帳戶；該帳戶的儲值扣款通知會記成轉帳到這個錢包。",
+                    if (repo.settings.value.featureNotif) "自動儲值的扣款帳戶；該帳戶的儲值扣款通知會記成轉帳到這個錢包。" else "自動儲值的扣款帳戶。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )

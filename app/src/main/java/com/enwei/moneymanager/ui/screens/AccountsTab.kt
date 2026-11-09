@@ -147,12 +147,13 @@ private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {
 @Composable
 fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int = 0) {
     // 第一次打開這頁：介紹帳戶、信用卡、往來與股票
-    com.enwei.moneymanager.ui.components.PageTour("accounts", listOf(
+    run { val fs = repo.settings.value
+    com.enwei.moneymanager.ui.components.PageTour("accounts", listOfNotNull(
         com.enwei.moneymanager.ui.components.Coach.Step("ac.tab0", "帳戶", "所有帳戶依群組列出，頂端為淨資產；點選帳戶可查看交易紀錄與餘額走勢，長按可調整排序。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "信用卡", "依帳單週期計算本期應繳與未出帳金額；設定自動扣款帳戶後，繳款日會自動記錄轉帳。"),
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "往來", "與他人的借貸、代墊與分帳集中於「往來」，列出每位對象的應收與應付。"),
-        com.enwei.moneymanager.ui.components.Coach.Step("ac.tab1", "股票", "持股、成本與損益；可新增交易、設定價格提醒，點選個股查看 K 線與分析。"),
-    ))
+        if (fs.featureSplit) com.enwei.moneymanager.ui.components.Coach.Step(null, "往來", "與他人的借貸、代墊與分帳集中於「往來」，列出每位對象的應收與應付。") else null,
+        if (fs.featureStocks) com.enwei.moneymanager.ui.components.Coach.Step("ac.tab1", "股票", "持股、成本與損益；可新增交易、設定價格提醒，點選個股查看 K 線與分析。") else null,
+    )) }
     // 往下捲時標題列與分頁列收起，內容用滿畫面；往上捲立刻出現
     val topScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
     var section by com.enwei.moneymanager.ui.components.rememberTab("accounts.section", initialTab)
@@ -254,7 +255,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                 )
             }
             // 往來：別人欠我、我欠別人（借貸與代墊），點進去看每個人
-            item(key = "debts") {
+            if (st.featureSplit) item(key = "debts") {
                 val owed = people.filter { it.balance > 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
                 val owe = -people.filter { it.balance < 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
                 Row(

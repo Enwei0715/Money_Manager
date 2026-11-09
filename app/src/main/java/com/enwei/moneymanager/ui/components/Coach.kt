@@ -82,7 +82,7 @@ object Coach {
         S(null, Step("tool.recurring", "週期交易", "房租、訂閱、薪資等固定收支，設定週期後於到期日自動記錄。", tab = "more")),
         S("notif", Step("tool.notif", "通知記帳設定", "選擇要讀取哪些 App 的通知、查看通知紀錄並測試辨識結果。Android 15 會隱藏部分付款通知，可依頁面中的步驟以 Shizuku 開啟讀取。", tab = "more")),
         S("ai", Step("tool.ai-hub", "AI 中心", "設定 AI 金鑰或自架伺服器並測試連線；AI 用於判讀通知、收支分析與每日投資報告。", tab = "more")),
-        S("ai", Step("tool.review", "收支分析", "由 AI 檢視近期支出，整理支出結構並指出可調整之處。", tab = "more")),
+        S(null, Step("tool.review", "收支分析", "依期間整理支出總覽、與前期的變化及消費習慣" + (if (ai) "；AI 建議分頁會指出可調整之處。" else "。"), tab = "more")),
         S("map", Step("tool.merchants", "店家位置", "管理已記錄的店家位置；設定 Google Places 或 Mapbox 金鑰可提高店家搜尋的準確度，未設定時使用 OpenStreetMap。", tab = "more")),
         S(null, Step("tool.backup", "備份", "所有資料只存在這支手機；建議設定自動備份到雲端硬碟，換手機時在新手機還原即可。", tab = "more")),
         S(null, Step("more.settings", "設定", "外觀、記帳方式、通知與 AI 等設定。「功能開關」可隨時開啟或關閉上述功能，「功能設定檢查」列出尚未完成的設定。", tab = "more")),
@@ -115,13 +115,16 @@ object Coach {
         resetPages()
         val w = picks ?: buildSet {
             if (s?.featureNotif != false) add("notif"); if (s?.locationHints == true) add("map")
-            if (s?.featureStocks != false) add("stocks"); if (s?.aiEnabled == true) add("ai"); add("split")
+            if (s?.featureStocks != false) add("stocks"); if (s?.aiEnabled == true) add("ai"); if (s?.featureSplit != false) add("split")
         }
         // 功能開關以實際設定為準（問卷勾了但之後關掉的不介紹）
         val on = w.filter { k ->
             when (k) {
                 "notif" -> s?.featureNotif != false
                 "stocks" -> s?.featureStocks != false
+                "split" -> s?.featureSplit != false
+                "map" -> s?.locationHints != false
+                "ai" -> s?.aiEnabled != false
                 else -> true
             }
         }.toSet()
