@@ -56,6 +56,10 @@ fun MerchantPlacesScreen(nav: NavController) {
     var progress by remember { mutableStateOf<String?>(null) }
     var open by remember { mutableStateOf<Place?>(null) }
     var picking by remember { mutableStateOf<Place?>(null) }
+    // Mapbox 金鑰（只存在這支手機）與搜尋
+    var tokenOpen by remember { mutableStateOf(false) }
+    var mbOn by remember { mutableStateOf(com.enwei.moneymanager.net.Mapbox.enabled) }
+    var searching by remember { mutableStateOf<Place?>(null) }
 
     fun chain(m: String) = CHAINS.any { m.contains(it, ignoreCase = true) }
     fun branchy(m: String) = chain(m) && m.trim().contains(' ')
@@ -151,6 +155,15 @@ fun MerchantPlacesScreen(nav: NavController) {
     Scaffold(topBar = { BackTopBar("店家位置", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             item {
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { tokenOpen = true }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Mapbox", Modifier.weight(1f))
+                    Text(if (mbOn) "已設定" else "未設定", fontSize = AppText.caption,
+                        color = if (mbOn) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(progress ?: "${places.size} 家・${missing.size} 家沒有位置", fontSize = AppText.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
@@ -186,6 +199,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                     Text(p.loc?.let { "${p.source}・%.5f, %.5f".format(it.first, it.second) } ?: p.source.ifBlank { "沒有位置" },
                         fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
                     val action: @Composable (String, () -> Unit) -> Unit = { label, onClick -> ActionLine(label) { open = null; onClick() } }
+                    if (mbOn) action("搜尋店家") { searching = p }
                     action("在地圖上點選") { picking = p }
                     action("自動找") { autoFind(listOf(p.name)) }
                     action("在 Google 地圖找") {
@@ -208,6 +222,14 @@ fun MerchantPlacesScreen(nav: NavController) {
             },
             confirmButton = { TextButton(onClick = { open = null }) { Text("關閉") } },
         )
+    }
+
+    if (tokenOpen) MapboxTokenDialog { tokenOpen = false; mbOn = com.enwei.moneymanager.net.Mapbox.enabled; tick++ }
+    searching?.let { p ->
+        MapboxSearchDialog(p.name, p.loc ?: PlaceHints.anchors(ctx).firstOrNull() ?: (25.0136 to 121.5414)) { ll ->
+            if (ll != null) { PlaceHints.setMerchantPin(p.name, ll.first, ll.second); tick++ }
+            searching = null
+        }
     }
 
     picking?.let { p ->
@@ -244,4 +266,75 @@ private fun ActionLine(label: String, onClick: () -> Unit) {
     Text(label, fontSize = AppText.body, color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp))
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+/** 設定 Mapbox 公開金鑰（pk. 開頭），存檔前先測試一次。 */
+@Composable
+private fun MapboxTokenDialog(onClose: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf(com.enwei.moneymanager.net.Mapbox.token) }
+    var msg by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Mapbox 金鑰") },
+        text = {
+            Column {
+                androidx.compose.material3.OutlinedTextField(text, { text = it.trim() }, placeholder = { Text("pk.…") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (msg.isNotBlank()) Text(msg, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy, onClick = {
+                val old = com.enwei.moneymanager.net.Mapbox.token
+                com.enwei.moneymanager.net.Mapbox.token = text
+                if (text.isBlank()) { onClose(); return@TextButton }
+                busy = true; msg = "測試中…"
+                scope.launch {
+                    val err = com.enwei.moneymanager.net.Mapbox.test()
+                    busy = false
+                    if (err == null) onClose() else { msg = err; com.enwei.moneymanager.net.Mapbox.token = old }
+                }
+            }) { Text(if (busy) "測試中…" else "儲存") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("取消") } },
+    )
+}
+
+/** 用 Mapbox 搜尋店家：預設用店名，可以改關鍵字；列出名稱、地址與距離，點一下設定位置。 */
+@Composable
+private fun MapboxSearchDialog(name: String, near: Pair<Double, Double>, onDone: (Pair<Double, Double>?) -> Unit) {
+    var q by remember { mutableStateOf(name) }
+    var results by remember { mutableStateOf<List<com.enwei.moneymanager.net.Mapbox.Place>?>(null) }
+    LaunchedEffect(q) {
+        if (q.isBlank()) { results = emptyList(); return@LaunchedEffect }
+        kotlinx.coroutines.delay(350)
+        results = com.enwei.moneymanager.net.Mapbox.search(q, near, 10)
+    }
+    AlertDialog(
+        onDismissRequest = { onDone(null) },
+        title = { Text(name) },
+        text = {
+            Column {
+                androidx.compose.material3.OutlinedTextField(q, { q = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                val r = results
+                when {
+                    r == null -> Text("搜尋中…", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
+                    r.isEmpty() -> Text(com.enwei.moneymanager.net.Mapbox.lastError.ifBlank { "沒有結果，換個關鍵字試試" }, fontSize = AppText.caption,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
+                    else -> LazyColumn(Modifier.padding(top = 6.dp).height(320.dp)) {
+                        items(r) { p ->
+                            Column(Modifier.fillMaxWidth().clickable { onDone(p.lat to p.lon) }.padding(vertical = 8.dp)) {
+                                Text(p.name, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(listOfNotNull(p.meters?.let { if (it < 1000) "${it.toInt()} 公尺" else "%.1f 公里".format(it / 1000) }, p.address.ifBlank { null }).joinToString("・"),
+                                    fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onDone(null) }) { Text("取消") } },
+    )
 }

@@ -113,6 +113,13 @@ object PlaceHints {
             if (geoPrefs.contains(n)) return@forEachIndexed
             // 每家店最多等 12 秒：先用手機內建的 Google 定位服務，找不到再用 Photon（OpenStreetMap）
             val hit = kotlinx.coroutines.withTimeoutOrNull(12_000) {
+                // 有 Mapbox 金鑰：先用 Mapbox 的店家搜尋（名稱要對得上、5 公里內）
+                if (com.enwei.moneymanager.net.Mapbox.enabled) {
+                    val core = matchKey(n)
+                    near.flatMap { c -> com.enwei.moneymanager.net.Mapbox.search(n, c, 5) }
+                        .filter { it.name.lowercase().contains(core) && (it.meters ?: 0f) <= 5000f }
+                        .minByOrNull { it.meters ?: 0f }?.let { return@withTimeoutOrNull it.lat to it.lon }
+                }
                 val g = near.mapNotNull { (la, lo) -> geocoderNear(n, la, lo)?.let { h -> h to dist(la, lo, h.first, h.second) } }
                 g.ifEmpty {
                     near.mapNotNull { (la, lo) -> (photonNear(n, la, lo, 2500) ?: nominatimNear(n, la, lo, 2500))?.let { h -> h to dist(la, lo, h.first, h.second) } }

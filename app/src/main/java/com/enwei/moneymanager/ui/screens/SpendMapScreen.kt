@@ -312,6 +312,8 @@ private fun SpendMap(
     onGoogle: (SpendSpot) -> Unit = {},
     /** 選位置模式：點地圖就是新位置，畫面不重新對焦、不顯示資訊卡 */
     pickOnly: Boolean = false,
+    /** 顯示右上角的縮放按鈕（小預覽圖不顯示） */
+    controls: Boolean = true,
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val tilePx = with(density) { 256.dp.toPx() }
@@ -340,8 +342,8 @@ private fun SpendMap(
         val z = minOf(kotlin.math.log2((sizePx.width - pad * 2) / (dx * tilePx)), kotlin.math.log2((sizePx.height - pad * 2) / (dy * tilePx)))
         zoom = if (spots.size == 1) 16.0 else z.coerceIn(3.0, 16.0)
     }
-    // 底圖：OpenStreetMap（深色模式在畫的時候轉暗）
-    val style = "osm"
+    // 底圖：有 Mapbox 金鑰用 Mapbox Streets，否則 OpenStreetMap（深色模式在畫的時候轉暗）
+    val style = if (com.enwei.moneymanager.net.Mapbox.enabled) "mb" else "osm"
     fun load(z: Int, x: Int, y: Int, pre: Boolean = false) {
         if (z < 0 || y < 0 || y >= (1 shl z)) return
         val key = "$style/$z/$x/$y"
@@ -361,7 +363,7 @@ private fun SpendMap(
                     fetched = true
                     // 依序試：通用電子地圖 → OpenStreetMap（這一格載不到就換下一個，不會一片空白）
                     val urls = buildList {
-                        if (key.startsWith("emap/")) add("https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/$z/$y/$x")
+                        if (key.startsWith("mb/")) add(com.enwei.moneymanager.net.Mapbox.tileUrl(z, x, y))
                         add("https://tile.openstreetmap.org/$z/$x/$y.png")
                     }
                     var bmp: android.graphics.Bitmap? = null
@@ -534,7 +536,7 @@ private fun SpendMap(
                     androidx.compose.ui.geometry.Size(lay.size.width + 8.dp.toPx(), lay.size.height + 2.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
                 drawText(lay, topLeft = androidx.compose.ui.geometry.Offset(lx, ly))
             }
-            val credit = textMeasurer.measure("© OpenStreetMap contributors", androidx.compose.ui.text.TextStyle(fontSize = 9.sp, color = if (dark) androidx.compose.ui.graphics.Color(0xAAFFFFFF) else androidx.compose.ui.graphics.Color(0xAA000000)))
+            val credit = textMeasurer.measure(if (style == "mb") "© Mapbox © OpenStreetMap" else "© OpenStreetMap contributors", androidx.compose.ui.text.TextStyle(fontSize = 9.sp, color = if (dark) androidx.compose.ui.graphics.Color(0xAAFFFFFF) else androidx.compose.ui.graphics.Color(0xAA000000)))
             drawText(credit, topLeft = androidx.compose.ui.geometry.Offset(size.width - credit.size.width - 6.dp.toPx(), size.height - credit.size.height - 4.dp.toPx()))
         }
         // 對準店家的進度：地圖右下角一行小字
@@ -544,7 +546,7 @@ private fun SpendMap(
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
         }
         // 縮放按鈕
-        Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (controls) Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("+" to 1.0, "−" to -1.0).forEach { (l, d) ->
                 androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), shape = androidx.compose.foundation.shape.CircleShape,
                     modifier = Modifier.size(36.dp).clickable { if (zoom >= 0) zoom = (zoom + d).coerceIn(2.0, 18.0) }) {
@@ -597,5 +599,18 @@ internal fun MapPicker(name: String, start: Pair<Double, Double>, onDone: (Pair<
             SpendMap(listOf(spot), dark, Modifier.fillMaxWidth().height(460.dp).clipToBounds(), "pick", 0,
                 status = "點地圖上的正確位置", onSelect = {}, onMove = { _, la, lo -> at = la to lo }, onReset = {}, pickOnly = true)
         }
+    }
+}
+
+
+/** 小地圖預覽：顯示一個位置，點一下打開選位置的地圖修改。 */
+@Composable
+internal fun MapPreview(name: String, at: Pair<Double, Double>, modifier: Modifier, onClick: () -> Unit) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.4f
+    val spot = SpendSpot(at.first, at.second, name, 1, 1, "", "preview")
+    androidx.compose.foundation.layout.Box(modifier.clipToBounds()) {
+        SpendMap(listOf(spot), dark, Modifier.fillMaxSize(), null, 0, onSelect = {}, onMove = { _, _, _ -> }, onReset = {}, controls = false)
+        // 蓋一層：整塊只當按鈕用（不拖動地圖，也不擋住頁面捲動）
+        androidx.compose.foundation.layout.Box(Modifier.matchParentSize().clickable(onClick = onClick))
     }
 }

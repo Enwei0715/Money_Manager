@@ -246,6 +246,13 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     // 記新的一筆：一打開就讀目前位置，推薦附近的店名（這附近記過的店在前，再來是地圖上離你最近的店）
     var nearby by remember { mutableStateOf<List<String>>(emptyList()) }
     var hereLoc by remember { mutableStateOf<android.location.Location?>(null) }
+    // 店家的位置：搜尋結果、附近的店帶的座標；選了店就記下它的位置（儲存時存成這家店的位置）
+    var placeLocs by remember { mutableStateOf<Map<String, Pair<Double, Double>>>(emptyMap()) }
+    var merchantAt by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    var pickMap by remember { mutableStateOf(false) }
+    val knownPlaces = remember { com.enwei.moneymanager.data.PlaceHints.merchantGeo().mapNotNull { (k, v) -> v?.let { k to it } }.toMap() + com.enwei.moneymanager.data.PlaceHints.merchantPins() }
+    // Mapbox：打字時搜尋附近的店
+    var mbResults by remember { mutableStateOf<List<com.enwei.moneymanager.net.Mapbox.Place>>(emptyList()) }
     LaunchedEffect(Unit) {
         if (id != 0L || !settings.locationHints) return@LaunchedEffect
         val appCtx = com.enwei.moneymanager.MoneyApp.instance
@@ -259,7 +266,17 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         nearby = (hist + known).distinct().take(8)
         val g = ph.geocoderHere(loc)
         nearby = (hist + known + g).distinct().take(8)
-        nearby = (hist + known + g + ph.nearbyStores(loc)).distinct().take(8)
+        if (com.enwei.moneymanager.net.Mapbox.enabled) {
+            val mb = com.enwei.moneymanager.net.Mapbox.nearby(loc.latitude, loc.longitude)
+            placeLocs = placeLocs + mb.associate { it.name to (it.lat to it.lon) }
+            nearby = (hist + known + mb.map { it.name } + g).distinct().take(10)
+        } else nearby = (hist + known + g + ph.nearbyStores(loc)).distinct().take(8)
+    }
+    LaunchedEffect(merchant, merchantFocused) {
+        if (!merchantFocused || merchant.isBlank() || !com.enwei.moneymanager.net.Mapbox.enabled) { mbResults = emptyList(); return@LaunchedEffect }
+        kotlinx.coroutines.delay(400)
+        val c = hereLoc?.let { it.latitude to it.longitude } ?: com.enwei.moneymanager.data.PlaceHints.anchors(com.enwei.moneymanager.MoneyApp.instance).firstOrNull()
+        mbResults = com.enwei.moneymanager.net.Mapbox.search(merchant, c, 6).filter { it.name != merchant }
     }
     data class Guess(val categoryId: Long, val merchant: String?, val score: Double, val count: Int)
     val guesses = remember(amountMinor, type, history, accountId) {
@@ -324,6 +341,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
 
     fun save(again: Boolean) {
         val t0 = build() ?: return
+        // 選了店家位置（搜尋結果、附近的店或在地圖上修改）：存成這家店的位置
+        merchantAt?.let { ll -> merchant.trim().takeIf { it.isNotEmpty() }?.let { com.enwei.moneymanager.data.PlaceHints.setMerchantPin(it, ll.first, ll.second) } }
         if (payer != null) {
             scope.launch {
                 val pid = payer.person ?: repo.debtPerson(payer.name)
@@ -593,7 +612,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
 
                 }
                 FormRow("商家", color, merchantFocused, onClick = {}) {
-                    UnderlineField(merchant, { merchant = it; merchantAuto = false }, "",
+                    UnderlineField(merchant, { merchant = it; merchantAuto = false; merchantAt = null }, "",
                         Modifier.onFocusChanged { merchantFocused = it.isFocused; if (it.isFocused) panel = Panel.NONE })
                 }
                 // 附近的店：還沒填商家（或正在填）時，點一下帶入
@@ -604,8 +623,31 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 ) {
                     nearby.forEach { n ->
                         Text(n, fontSize = AppText.secondary, maxLines = 1, color = if (merchant == n) color else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable { merchant = n; merchantAuto = false; focusManager.clearFocus() }.padding(vertical = 4.dp))
+                            modifier = Modifier.clickable { merchant = n; merchantAuto = false; merchantAt = placeLocs[n]; focusManager.clearFocus() }.padding(vertical = 4.dp))
                     }
+                }
+                val placeIndent = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp
+                // Mapbox 搜尋結果：店名＋地址與距離，點一下帶入店名與位置
+                if (merchantFocused && mbResults.isNotEmpty() && type != TxnType.TRANSFER) Column(Modifier.fillMaxWidth().padding(start = placeIndent, end = 16.dp, top = 4.dp)) {
+                    mbResults.take(5).forEach { r ->
+                        Column(Modifier.fillMaxWidth().clickable {
+                            merchant = r.name; merchantAuto = false; merchantAt = r.lat to r.lon; mbResults = emptyList(); focusManager.clearFocus()
+                        }.padding(vertical = 6.dp)) {
+                            Text(r.name, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                            Text(listOfNotNull(r.meters?.let { if (it < 1000) "${it.toInt()} 公尺" else "%.1f 公里".format(it / 1000) }, r.address.ifBlank { null }).joinToString("・"),
+                                fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+                // 店家位置預覽：點一下修改位置
+                val at = merchantAt ?: knownPlaces[merchant.trim()]
+                if (at != null && merchant.isNotBlank() && !merchantFocused && type != TxnType.TRANSFER) {
+                    MapPreview(merchant.trim(), at, Modifier.fillMaxWidth().height(130.dp).padding(start = placeIndent, end = 16.dp, top = 6.dp)) { pickMap = true }
+                }
+                if (pickMap) MapPicker(merchant.trim(), at ?: hereLoc?.let { it.latitude to it.longitude } ?: (25.0136 to 121.5414)) { ll ->
+                    if (ll != null) merchantAt = ll
+                    pickMap = false
                 }
                 // 自動完成：依過去紀錄建議，點選時一併帶入分類與帳戶
                 if (settings.autocomplete && merchantFocused && merchant.isNotBlank()) {
