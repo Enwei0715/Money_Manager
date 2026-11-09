@@ -209,7 +209,8 @@ fun SpendMapScreen(nav: NavController) {
                 if (spots.isEmpty()) Text("這段期間沒有可以標在地圖上的支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
                 else SpendMap(spots, dark, Modifier.fillMaxWidth().height(380.dp).clipToBounds(), selKey, focusTick, status = snapping,
-                    onSelect = { selKey = it?.key },
+                    // 點地圖上的點：下方清單同時展開那個地點的紀錄
+                    onSelect = { selKey = it?.key; it?.key?.let { k -> expanded = expanded + k } },
                     onOpenTxn = { nav.navigate("txn/$it") },
                     // 修正位置：記成這家店的位置（這家店所有支出都用這個點）
                     onMove = { sp, la, lo -> PlaceHints.setMerchantPin(sp.name, la, lo); pins = PlaceHints.merchantPins() },
@@ -579,14 +580,14 @@ private fun SpendMap(
                 }
             }
         }
-        // 點地點：下方資訊卡——店名、分類、總額、筆數、平均、上次去的日期、最近幾筆（點一下打開），以及導航與修正位置
+        // 點地點：地圖下緣的小卡——店名、總額、分類、筆數、平均、上次去的日期，以及導航與修正位置（紀錄在下方清單展開）
         if (!pickOnly) picked?.let { sp ->
             val ctx = androidx.compose.ui.platform.LocalContext.current
             val muted = MaterialTheme.colorScheme.onSurfaceVariant
             fun day(ms: Long) = java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
             androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(10.dp), shadowElevation = 3.dp,
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(8.dp)) {
-                Column(Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 6.dp)) {
+                Column(Modifier.padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(sp.name, fontSize = AppText.body, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -597,29 +598,20 @@ private fun SpendMap(
                         Text(Money.withSymbol(sp.total, "TWD"), fontSize = AppText.body, fontWeight = FontWeight.SemiBold, color = com.enwei.moneymanager.ui.ExpenseColor)
                         Text("✕", color = muted, modifier = Modifier.clickable { onSelect(null) }.padding(horizontal = 10.dp, vertical = 4.dp))
                     }
-                    if (moving) Text("在地圖上點正確的位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
-                    else {
-                        HorizontalDivider(Modifier.padding(top = 8.dp, end = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                        sp.txns.take(3).forEach { t ->
-                            val d = day(t.date)
-                            Row(Modifier.fillMaxWidth().clickable { onOpenTxn(t.id) }.padding(top = 6.dp, bottom = 6.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("${d.monthValue}/${d.dayOfMonth}", fontSize = AppText.caption, color = muted, modifier = Modifier.width(44.dp))
-                                Text(t.note?.takeIf { it.isNotBlank() } ?: sp.cat.ifBlank { "—" }, fontSize = AppText.secondary, maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                Text(Money.withSymbol(t.amount, t.currency), fontSize = AppText.secondary)
-                            }
-                        }
-                        if (sp.txns.size > 3) Text("還有 ${sp.txns.size - 3} 筆", fontSize = AppText.label, color = muted, modifier = Modifier.padding(bottom = 2.dp))
-                    }
-                    // 動作：導航、修正位置（點了才列出方式）
+                    // 動作：導航、修正位置（點了才列出方式）；紀錄在下方清單看，卡片只佔兩行
                     var fixMenu by remember(sp.key) { mutableStateOf(false) }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (!moving) androidx.compose.material3.TextButton(onClick = {
-                            val uri = android.net.Uri.parse("geo:${sp.lat},${sp.lon}?q=${sp.lat},${sp.lon}(" + android.net.Uri.encode(sp.name) + ")")
-                            runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
-                        }) { Text("導航") }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                        if (moving) Text("在地圖上點正確的位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                        else {
+                            Text("導航", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable {
+                                val uri = android.net.Uri.parse("geo:${sp.lat},${sp.lon}?q=${sp.lat},${sp.lon}(" + android.net.Uri.encode(sp.name) + ")")
+                                runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
+                            }.padding(end = 18.dp, top = 4.dp, bottom = 4.dp))
+                            Spacer(Modifier.weight(1f))
+                        }
                         Box {
-                            androidx.compose.material3.TextButton(onClick = { if (moving) moving = false else fixMenu = true }) { Text(if (moving) "取消" else "修正位置") }
+                            Text(if (moving) "取消" else "修正位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { if (moving) moving = false else fixMenu = true }.padding(start = 12.dp, end = 10.dp, top = 4.dp, bottom = 4.dp))
                             androidx.compose.material3.DropdownMenu(fixMenu, { fixMenu = false }) {
                                 androidx.compose.material3.DropdownMenuItem(text = { Text("在地圖上點正確位置") }, onClick = { fixMenu = false; moving = true })
                                 androidx.compose.material3.DropdownMenuItem(text = { Text("用 Google 地圖找") }, onClick = { fixMenu = false; onGoogle(sp) })
