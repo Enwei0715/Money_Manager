@@ -111,47 +111,44 @@ fun SpendMapScreen(nav: NavController) {
     val merchantLoc = remember(all, samples) {
         all.mapNotNull { t -> val s = samples[t.id] ?: return@mapNotNull null; t.merchant?.trim()?.takeIf { it.isNotEmpty() }?.let { it to (s.lat to s.lon) } }
             .groupBy({ it.first }, { it.second })
-            // 同一個店名在相距 300 公尺以上的地方都記過：當成連鎖店，不套用平均位置
-            .filter { (m, l) -> !chain(m) && l.all { p -> l.all { q -> FloatArray(1).also { r -> android.location.Location.distanceBetween(p.first, p.second, q.first, q.second, r) }[0] < 300f } } }
+            // 同一家店（不是沒寫分店的連鎖店）：所有記過的位置平均成一個點
+            .filter { (m, _) -> !chain(m) || branchy(m) }
             .mapValues { (_, l) -> l.map { it.first }.average() to l.map { it.second }.average() }
     }
     val inRange = all.filter { t ->
         t.type == TxnType.EXPENSE && t.status == TxnStatus.CONFIRMED &&
             java.time.Instant.ofEpochMilli(t.date).atZone(zone).toLocalDate().let { !it.isBefore(from) && !it.isAfter(to) }
     }
-    val pins = remember(all) { PlaceHints.merchantPins() }
-    fun locOf(t: com.enwei.moneymanager.data.TxnEntity): Pair<Double, Double>? =
-        t.merchant?.trim()?.let { pins[it] } ?: samples[t.id]?.let { it.lat to it.lon } ?: t.merchant?.trim()?.takeIf { !chain(it) || branchy(it) }?.let { m -> (if (branchy(m)) null else merchantLoc[m]) ?: geo[m] }
+    var pins by remember { mutableStateOf(PlaceHints.merchantPins()) }
+    /**
+     * 一筆支出的位置：手動指定 → 用店名找到的 → 這家店記過的位置平均（同一家店一定是同一個點）；
+     * 沒寫分店的連鎖店才用這一筆自己記下的位置。
+     */
+    fun locOf(t: com.enwei.moneymanager.data.TxnEntity): Pair<Double, Double>? {
+        val m = t.merchant?.trim().orEmpty()
+        if (m.isNotEmpty()) {
+            pins[m]?.let { return it }
+            if (!chain(m) || branchy(m)) { geo[m]?.let { return it }; merchantLoc[m]?.let { return it } }
+        }
+        return samples[t.id]?.let { it.lat to it.lon }
+    }
     val offline = inRange.filter { !online(it) }
     val onlineCount = inRange.size - offline.size
     val placed = offline.mapNotNull { t -> locOf(t)?.let { t to it } }
     val unplaced = offline.filter { locOf(it) == null }
-    var fixes by remember { mutableStateOf(PlaceHints.spotFixes()) }
-    val spots = placed.groupBy { (t, l) -> (t.merchant?.trim().orEmpty()) to ("%.4f,%.4f".format(l.first, l.second)) }.map { (k, l) ->
+    // 同一家店合成一個點；沒寫分店的連鎖店依位置（約 300 公尺內算同一間）分開
+    val spots = placed.groupBy { (t, l) ->
+        val m = t.merchant?.trim().orEmpty()
+        if (m.isNotEmpty() && (!chain(m) || branchy(m) || m in pins)) m to "" else m to "%.3f,%.3f".format(Math.round(l.first / 0.003) * 0.003, Math.round(l.second / 0.003) * 0.003)
+    }.map { (k, l) ->
         val total = l.sumOf { lk.fx.convert(it.first.amount, it.first.currency) }
         val cat = l.groupingBy { lk.category(lk.rootId(it.first.categoryId))?.name ?: "" }.eachCount().maxByOrNull { it.value }?.key.orEmpty()
-        val key = "${k.first}|${k.second}"
-        // 使用者在地圖上修正過的位置優先
-        val fix = fixes[key]
-        SpendSpot(fix?.first ?: l.map { it.second.first }.average(), fix?.second ?: l.map { it.second.second }.average(),
-            k.first.ifBlank { "（未命名）" }, total, l.size, cat, key, fix != null)
+        SpendSpot(l.map { it.second.first }.average(), l.map { it.second.second }.average(),
+            k.first.ifBlank { "（未命名）" }, total, l.size, cat, "${k.first}|${k.second}", k.first in pins)
     }.sortedByDescending { it.total }
     var selKey by remember { mutableStateOf<String?>(null) }
     var focusTick by remember { mutableStateOf(0) }
-    // 自動對準店家：GPS 有誤差，在原本位置附近 300 公尺找同名的店（連鎖店找最近的分店），找到就用店的座標
-    var snapping by remember { mutableStateOf<String?>(null) }
-    androidx.compose.runtime.LaunchedEffect(spots.map { it.key }) {
-        val todo = spots.filter { !it.fixed && it.key.isNotBlank() && !it.name.startsWith("（") && !PlaceHints.snapTried(it.key) }.take(20)
-        todo.forEachIndexed { i, sp ->
-            snapping = "對準店家位置 ${i + 1}/${todo.size}…"
-            // 先找附近同名的店（OpenStreetMap），找不到再用 Photon 模糊搜尋
-            (PlaceHints.snapToStore(sp.name, sp.lat, sp.lon) ?: PlaceHints.photonNear(sp.name, sp.lat, sp.lon))
-                ?.let { (la, lo) -> PlaceHints.setSpotFix(sp.key, la, lo); fixes = PlaceHints.spotFixes() }
-            PlaceHints.markSnapTried(sp.key)
-            kotlinx.coroutines.delay(1100)
-        }
-        snapping = null
-    }
+    val snapping: String? = null
     // Google 地圖：開啟搜尋 → 使用者按分享、複製連結 → 回到這裡自動讀剪貼簿裡的連結
     var googleFor by remember { mutableStateOf<String?>(null) }
     var googleHit by remember { mutableStateOf<Pair<String, Pair<Double, Double>>?>(null) }
@@ -200,8 +197,9 @@ fun SpendMapScreen(nav: NavController) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
                 else SpendMap(spots, dark, Modifier.fillMaxWidth().height(380.dp).clipToBounds(), selKey, focusTick, status = snapping,
                     onSelect = { selKey = it?.key },
-                    onMove = { sp, la, lo -> PlaceHints.setSpotFix(sp.key, la, lo); fixes = PlaceHints.spotFixes() },
-                    onReset = { sp -> PlaceHints.clearSpotFix(sp.key); fixes = PlaceHints.spotFixes() },
+                    // 修正位置：記成這家店的位置（這家店所有支出都用這個點）
+                    onMove = { sp, la, lo -> PlaceHints.setMerchantPin(sp.name, la, lo); pins = PlaceHints.merchantPins() },
+                    onReset = { sp -> PlaceHints.clearMerchantPin(sp.name); pins = PlaceHints.merchantPins() },
                     onGoogle = { sp ->
                         googleFor = sp.key
                         val q = android.net.Uri.encode(sp.name)
@@ -217,7 +215,7 @@ fun SpendMapScreen(nav: NavController) {
                         title = { Text("套用 Google 地圖的位置？") },
                         text = { Text("「$name」改用剛複製的 Google 地圖位置") },
                         confirmButton = { androidx.compose.material3.TextButton(onClick = {
-                            PlaceHints.setSpotFix(key, ll.first, ll.second); fixes = PlaceHints.spotFixes(); selKey = key; focusTick++
+                            PlaceHints.setMerchantPin(name, ll.first, ll.second); pins = PlaceHints.merchantPins(); selKey = "$name|"; focusTick++
                             googleHit = null; googleFor = null
                         }) { Text("套用") } },
                         dismissButton = { androidx.compose.material3.TextButton(onClick = { googleHit = null; googleFor = null }) { Text("取消") } },
@@ -515,12 +513,17 @@ private fun SpendMap(
             // 店名標籤：金額最大的前 8 個與選中的那個，寫在圓圈右邊，底下墊底色
             val labelBg = if (dark) androidx.compose.ui.graphics.Color(0xE6202024) else androidx.compose.ui.graphics.Color(0xF0FFFFFF)
             val labelFg = if (dark) androidx.compose.ui.graphics.Color(0xFFEDEDED) else androidx.compose.ui.graphics.Color(0xFF222222)
-            (spots.take(8) + listOfNotNull(picked)).distinct().forEach { sp ->
+            // 標籤互相重疊時只畫金額大的（選中的一定畫）
+            val taken = mutableListOf<androidx.compose.ui.geometry.Rect>()
+            (listOfNotNull(picked) + spots.take(8)).distinct().forEach { sp ->
                 val px = ((mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
                 if (px < -40 || px > size.width + 40 || py < -20 || py > size.height + 20) return@forEach
                 val r = pinR(sp, maxTotal).dp.toPx()
                 val lay = textMeasurer.measure(sp.name.take(10), androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = labelFg))
                 val lx = px + r + 4.dp.toPx(); val ly = py - r * 2.1f - lay.size.height / 2f
+                val rect = androidx.compose.ui.geometry.Rect(lx - 4.dp.toPx(), ly - 1.dp.toPx(), lx + lay.size.width + 4.dp.toPx(), ly + lay.size.height + 1.dp.toPx())
+                if (taken.any { it.overlaps(rect) }) return@forEach
+                taken += rect
                 drawRoundRect(labelBg, androidx.compose.ui.geometry.Offset(lx - 4.dp.toPx(), ly - 1.dp.toPx()),
                     androidx.compose.ui.geometry.Size(lay.size.width + 8.dp.toPx(), lay.size.height + 2.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
                 drawText(lay, topLeft = androidx.compose.ui.geometry.Offset(lx, ly))

@@ -48,7 +48,7 @@ object PlaceHints {
     fun samples(ctx: Context): List<Sample> = load(ctx)
 
     /** 用店名找到的位置（店名 → 緯度、經度；查不到存 null，之後不再查）。 */
-    private val geoPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("merchant_geo2", Context.MODE_PRIVATE) }
+    private val geoPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("merchant_geo3", Context.MODE_PRIVATE) }
     fun merchantGeo(): Map<String, Pair<Double, Double>?> = geoPrefs.all.mapNotNull { (k, v) ->
         val s = v as? String ?: return@mapNotNull null
         k to s.split(',').takeIf { it.size == 2 }?.let { (a, b) -> a.toDoubleOrNull()?.let { la -> b.toDoubleOrNull()?.let { lo -> la to lo } } }
@@ -195,10 +195,17 @@ object PlaceHints {
      * 用店名在 [lat],[lon] 附近 [radius] 公尺內找（Google 的資料，透過手機內建服務）。
      * 結果的名稱要對得上店名，避免只對到路名或行政區中心。
      */
+    /** 比對用的關鍵字：連鎖店帶分店時用分店名（「7-ELEVEN 安福門市」→「安福」），否則用店名開頭 */
+    private fun matchKey(name: String): String {
+        val parts = name.replace(Regex("[（(].*?[)）]"), "").trim().split(' ', '　').filter { it.isNotBlank() }
+        val branch = parts.drop(1).lastOrNull()?.replace(Regex("(門市|分店|店)$"), "")?.takeIf { it.length >= 2 }
+        return (branch ?: parts.firstOrNull().orEmpty()).take(4).lowercase()
+    }
+
     suspend fun geocoderNear(name: String, lat: Double, lon: Double, radius: Int = 3000): Pair<Double, Double>? = withContext(Dispatchers.IO) {
         if (geocoder() == null) return@withContext null
         val key = name.replace(Regex("[（(].*?[)）]"), "").trim().ifBlank { return@withContext null }
-        val core = key.split(' ', '　').first().take(4).lowercase()
+        val core = matchKey(name)
         val d = radius / 111_000.0
         val dl = d / kotlin.math.cos(Math.toRadians(lat))
         val area = areaName(lat, lon)
@@ -427,7 +434,7 @@ object PlaceHints {
             val url = "https://photon.komoot.io/api/?q=" + java.net.URLEncoder.encode(key, "UTF-8") + "&lat=$lat&lon=$lon&limit=8&location_bias_scale=0.5"
             val body = com.enwei.moneymanager.net.Http.getJson(url, mapOf("User-Agent" to UA)) as? kotlinx.serialization.json.JsonObject ?: return@runCatching null
             val feats = body["features"] as? kotlinx.serialization.json.JsonArray ?: return@runCatching null
-            val core = key.split(' ', '　').first().take(6)
+            val core = matchKey(name)
             feats.mapNotNull { f ->
                 val o = f as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
                 val coords = ((o["geometry"] as? kotlinx.serialization.json.JsonObject)?.get("coordinates") as? kotlinx.serialization.json.JsonArray) ?: return@mapNotNull null
