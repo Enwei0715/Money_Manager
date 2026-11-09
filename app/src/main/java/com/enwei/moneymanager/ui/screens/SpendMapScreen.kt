@@ -185,69 +185,68 @@ fun SpendMapScreen(nav: NavController) {
 
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     Scaffold(topBar = { BackTopBar("支出地圖", { nav.popBackStack() }) }) { pad ->
-        LazyColumn(Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background), state = listState) {
-            item {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    com.enwei.moneymanager.ui.components.SubTabs(listOf("每日", "每週", "每月"), span) { span = it }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { anchor = when (span) { 0 -> anchor.minusDays(1); 1 -> anchor.minusWeeks(1); else -> anchor.minusMonths(1) } }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
-                        Text(label, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                        IconButton(onClick = { anchor = when (span) { 0 -> anchor.plusDays(1); 1 -> anchor.plusWeeks(1); else -> anchor.plusMonths(1) } }) { Icon(Icons.Filled.ChevronRight, "下一期") }
-                    }
-                    val placedSum = placed.sumOf { lk.fx.convert(it.first.amount, it.first.currency) }
-                    // 摘要只留一句；點一下才看沒有位置、線上的筆數
-                    var more by remember { mutableStateOf(false) }
-                    val extra = (unplaced.isNotEmpty() || onlineCount > 0)
-                    Row(Modifier.clickable(enabled = extra) { more = !more }, verticalAlignment = Alignment.CenterVertically) {
-                        Text("地圖上 ${placed.size} 筆 ${Money.withSymbol(placedSum, lk.base)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (extra) Text(if (more) "  ︿" else "  ﹀", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (more) Text(listOfNotNull(unplaced.size.takeIf { it > 0 }?.let { "沒有位置 $it 筆" }, onlineCount.takeIf { it > 0 }?.let { "線上 $it 筆" }).joinToString("・"),
-                        fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // 上方（期間、摘要、地圖）固定不動，只有下方的地點清單捲動；地圖高度約螢幕的三分之一，清單有足夠空間
+        val mapH = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.34f).coerceAtLeast(220f).dp
+        Column(Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                com.enwei.moneymanager.ui.components.SubTabs(listOf("每日", "每週", "每月"), span) { span = it }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { anchor = when (span) { 0 -> anchor.minusDays(1); 1 -> anchor.minusWeeks(1); else -> anchor.minusMonths(1) } }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
+                    Text(label, fontSize = AppText.body, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    IconButton(onClick = { anchor = when (span) { 0 -> anchor.plusDays(1); 1 -> anchor.plusWeeks(1); else -> anchor.plusMonths(1) } }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                 }
-            }
-            item {
-                if (spots.isEmpty()) Text("這段期間沒有可以標在地圖上的支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
-                else SpendMap(spots, dark, Modifier.fillMaxWidth().height(380.dp).clipToBounds(), selKey, focusTick, status = snapping,
-                    // 點地圖上的點：下方清單同時展開那個地點的紀錄
-                    onSelect = { sp ->
-                        selKey = sp?.key
-                        sp?.key?.let { k ->
-                            expanded = setOf(k)
-                            // 那個地點不在畫面上時，清單捲過去（地圖往上收一點）
-                            val idx = spots.indexOfFirst { it.key == k }
-                            val target = idx + listState.layoutInfo.totalItemsCount - spots.size - 1
-                            if (idx >= 0 && listState.layoutInfo.visibleItemsInfo.none { it.index == target }) scope.launch { listState.animateScrollToItem(target, -400) }
-                        }
-                    },
-                    moveRequest = moveKey != null && moveKey == selKey, onMoveEnd = { moveKey = null },
-                    onOpenTxn = { nav.navigate("txn/$it") },
-                    // 修正位置：記成這家店的位置（這家店所有支出都用這個點）
-                    onMove = { sp, la, lo -> PlaceHints.setMerchantPin(sp.name, la, lo); pins = PlaceHints.merchantPins() },
-                    onReset = { sp -> PlaceHints.clearMerchantPin(sp.name); pins = PlaceHints.merchantPins() },
-                    onGoogle = { sp ->
-                        googleFor = sp.key
-                        val q = android.net.Uri.encode(sp.name)
-                        val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("geo:${sp.lat},${sp.lon}?q=$q"))
-                        val web = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=$q"))
-                        runCatching { ctx.startActivity(geo.setPackage("com.google.android.apps.maps")) }.recoverCatching { ctx.startActivity(web) }
-                        android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("在 Google 地圖找到店家後按「分享」→「複製連結」，再回到帳理"), android.widget.Toast.LENGTH_LONG).show()
-                    })
-                googleHit?.let { (key, ll) ->
-                    val name = spots.firstOrNull { it.key == key }?.name.orEmpty()
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { googleHit = null; googleFor = null },
-                        title = { Text("套用 Google 地圖的位置？") },
-                        text = { Text("「$name」改用剛複製的 Google 地圖位置") },
-                        confirmButton = { androidx.compose.material3.TextButton(onClick = {
-                            PlaceHints.setMerchantPin(name, ll.first, ll.second, "連結"); pins = PlaceHints.merchantPins(); selKey = "$name|"; focusTick++
-                            googleHit = null; googleFor = null
-                        }) { Text("套用") } },
-                        dismissButton = { androidx.compose.material3.TextButton(onClick = { googleHit = null; googleFor = null }) { Text("取消") } },
-                    )
+                val placedSum = placed.sumOf { lk.fx.convert(it.first.amount, it.first.currency) }
+                // 摘要只留一句；點一下才看沒有位置、線上的筆數
+                var more by remember { mutableStateOf(false) }
+                val extra = (unplaced.isNotEmpty() || onlineCount > 0)
+                Row(Modifier.clickable(enabled = extra) { more = !more }, verticalAlignment = Alignment.CenterVertically) {
+                    Text("地圖上 ${placed.size} 筆 ${Money.withSymbol(placedSum, lk.base)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (extra) Text(if (more) "  ︿" else "  ﹀", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                if (more) Text(listOfNotNull(unplaced.size.takeIf { it > 0 }?.let { "沒有位置 $it 筆" }, onlineCount.takeIf { it > 0 }?.let { "線上 $it 筆" }).joinToString("・"),
+                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            if (spots.isEmpty()) Text("這段期間沒有可以標在地圖上的支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
+            else SpendMap(spots, dark, Modifier.fillMaxWidth().height(mapH).clipToBounds(), selKey, focusTick, status = snapping,
+                // 點地圖上的點：下方清單同時展開那個地點的紀錄
+                onSelect = { sp ->
+                    selKey = sp?.key
+                    sp?.key?.let { k ->
+                        expanded = setOf(k)
+                        // 那個地點不在清單可見範圍時，清單捲過去（地圖固定不動）
+                        val idx = spots.indexOfFirst { it.key == k }
+                        val target = idx + listState.layoutInfo.totalItemsCount - spots.size - 1
+                        if (idx >= 0 && listState.layoutInfo.visibleItemsInfo.none { it.index == target }) scope.launch { listState.animateScrollToItem(target) }
+                    }
+                },
+                moveRequest = moveKey != null && moveKey == selKey, onMoveEnd = { moveKey = null },
+                onOpenTxn = { nav.navigate("txn/$it") },
+                // 修正位置：記成這家店的位置（這家店所有支出都用這個點）
+                onMove = { sp, la, lo -> PlaceHints.setMerchantPin(sp.name, la, lo); pins = PlaceHints.merchantPins() },
+                onReset = { sp -> PlaceHints.clearMerchantPin(sp.name); pins = PlaceHints.merchantPins() },
+                onGoogle = { sp ->
+                    googleFor = sp.key
+                    val q = android.net.Uri.encode(sp.name)
+                    val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("geo:${sp.lat},${sp.lon}?q=$q"))
+                    val web = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=$q"))
+                    runCatching { ctx.startActivity(geo.setPackage("com.google.android.apps.maps")) }.recoverCatching { ctx.startActivity(web) }
+                    android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("在 Google 地圖找到店家後按「分享」→「複製連結」，再回到帳理"), android.widget.Toast.LENGTH_LONG).show()
+                })
+            googleHit?.let { (key, ll) ->
+                val name = spots.firstOrNull { it.key == key }?.name.orEmpty()
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { googleHit = null; googleFor = null },
+                    title = { Text("套用 Google 地圖的位置？") },
+                    text = { Text("「$name」改用剛複製的 Google 地圖位置") },
+                    confirmButton = { androidx.compose.material3.TextButton(onClick = {
+                        PlaceHints.setMerchantPin(name, ll.first, ll.second, "連結"); pins = PlaceHints.merchantPins(); selKey = "$name|"; focusTick++
+                        googleHit = null; googleFor = null
+                    }) { Text("套用") } },
+                    dismissButton = { androidx.compose.material3.TextButton(onClick = { googleHit = null; googleFor = null }) { Text("取消") } },
+                )
+            }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
             // 沒有位置的店：用店名在 OpenStreetMap 找（每秒一家）
             val missing = unplaced.mapNotNull { it.merchant?.trim()?.takeIf { m -> m.isNotEmpty() && m !in geo && (!chain(m) || branchy(m)) } }.distinct()
             if (missing.isNotEmpty()) item {
@@ -302,7 +301,7 @@ fun SpendMapScreen(nav: NavController) {
                             androidx.compose.material3.TextButton(onClick = { fixMenu = true }) { Text("修正位置") }
                             androidx.compose.material3.DropdownMenu(fixMenu, { fixMenu = false }) {
                                 androidx.compose.material3.DropdownMenuItem(text = { Text("在地圖上點正確位置") }, onClick = {
-                                    fixMenu = false; selKey = s.key; moveKey = s.key; focusTick++; scope.launch { listState.animateScrollToItem(0) }
+                                    fixMenu = false; selKey = s.key; moveKey = s.key; focusTick++
                                 })
                                 androidx.compose.material3.DropdownMenuItem(text = { Text("用 Google 地圖找") }, onClick = {
                                     fixMenu = false
@@ -334,6 +333,7 @@ fun SpendMapScreen(nav: NavController) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             }
             item { Spacer(Modifier.height(32.dp)) }
+        }
         }
     }
 }
