@@ -29,6 +29,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.enwei.moneymanager.data.geminiKeys
+import com.enwei.moneymanager.data.groqKeys
 import com.enwei.moneymanager.data.hasAiKey
 import com.enwei.moneymanager.net.GooglePlaces
 import com.enwei.moneymanager.net.LocalAi
