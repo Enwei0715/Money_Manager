@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.coachTarget
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -160,6 +161,11 @@ fun MerchantPlacesScreen(nav: NavController) {
     }
 
     Scaffold(topBar = { BackTopBar("店家位置", { nav.popBackStack() }) }) { pad ->
+        com.enwei.moneymanager.ui.components.PageTour("merchants", listOfNotNull(
+            com.enwei.moneymanager.ui.components.Coach.Step("mp.google", "店家搜尋", "設定 Google Places 金鑰後，找店最準（台灣小店最完整）。點這裡有申請步驟。"),
+            if (missing.isNotEmpty()) com.enwei.moneymanager.ui.components.Coach.Step("mp.auto", "自動找", "一次幫還沒有位置的店找位置；有好幾個結果的會標「選擇」讓你挑。") else null,
+            com.enwei.moneymanager.ui.components.Coach.Step(null, "每一家店", "點一家店可以搜尋正確的店、改名，或在地圖上點選位置。"),
+        ))
         LazyColumn(Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             item {
                 Row(
@@ -173,7 +179,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 // Google Places：店家搜尋（台灣小店最完整）
                 Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { gOpen = true }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { gOpen = true }.coachTarget("mp.google").padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("Google Places", Modifier.weight(1f))
@@ -184,7 +190,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(progress ?: "${places.size} 家・${missing.size} 家沒有位置", fontSize = AppText.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    if (missing.isNotEmpty()) OutlinedButton(enabled = progress == null, onClick = { autoFind(missing.map { it.name }.take(40)) }) { Text("自動找") }
+                    if (missing.isNotEmpty()) OutlinedButton(enabled = progress == null, onClick = { autoFind(missing.map { it.name }.take(40)) }, modifier = Modifier.coachTarget("mp.auto")) { Text("自動找") }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
@@ -271,7 +277,14 @@ fun MerchantPlacesScreen(nav: NavController) {
     }
 
     if (gOpen) KeyDialog("Google Places 金鑰", "AIza…", { com.enwei.moneymanager.net.GooglePlaces.key }, { com.enwei.moneymanager.net.GooglePlaces.key = it },
-        { com.enwei.moneymanager.net.GooglePlaces.test() }) { gOpen = false; gOn = com.enwei.moneymanager.net.GooglePlaces.enabled; tick++ }
+        { com.enwei.moneymanager.net.GooglePlaces.test() },
+        steps = listOf(
+            "登入 Google Cloud，開啟帳單（每月有免費額度，個人使用通常不會收費）" to "https://console.cloud.google.com/billing",
+            "啟用「Places API (New)」" to "https://console.cloud.google.com/apis/library/places.googleapis.com",
+            "建立 API 金鑰（建議限制只能用 Places API）" to "https://console.cloud.google.com/apis/credentials",
+            "（建議）把每日用量上限設為 200" to "https://console.cloud.google.com/apis/api/places.googleapis.com/quotas",
+            "把 AIza 開頭的金鑰貼在下面" to null,
+        )) { gOpen = false; gOn = com.enwei.moneymanager.net.GooglePlaces.enabled; tick++ }
     if (tokenOpen) MapboxTokenDialog { tokenOpen = false; mbOn = com.enwei.moneymanager.net.Mapbox.enabled; tick++ }
     searching?.let { p ->
         MapboxSearchDialog(p.name, p.loc ?: PlaceHints.anchors(ctx).firstOrNull() ?: (25.0136 to 121.5414)) { hit ->
@@ -351,11 +364,19 @@ private fun ActionLine(label: String, onClick: () -> Unit) {
 /** 設定 Mapbox 公開金鑰（pk. 開頭），存檔前先測試一次。 */
 @Composable
 private fun MapboxTokenDialog(onClose: () -> Unit) = KeyDialog("Mapbox 金鑰", "pk.…", { com.enwei.moneymanager.net.Mapbox.token },
-    { com.enwei.moneymanager.net.Mapbox.token = it }, { com.enwei.moneymanager.net.Mapbox.test() }, onClose)
+    { com.enwei.moneymanager.net.Mapbox.token = it }, { com.enwei.moneymanager.net.Mapbox.test() },
+    steps = listOf(
+        "登入 Mapbox（免費帳號）" to "https://account.mapbox.com/",
+        "到 Access tokens 複製 Default public token（pk. 開頭）" to "https://account.mapbox.com/access-tokens/",
+        "貼在下面" to null,
+    ), onClose = onClose)
 
 /** 金鑰設定視窗：存檔前先測試，失敗就還原並顯示原因；留空＝刪除金鑰。 */
 @Composable
-private fun KeyDialog(title: String, hint: String, get: () -> String, set: (String) -> Unit, test: suspend () -> String?, onClose: () -> Unit) {
+private fun KeyDialog(title: String, hint: String, get: () -> String, set: (String) -> Unit, test: suspend () -> String?,
+    /** 怎麼申請：步驟與可以直接打開的網址 */
+    steps: List<Pair<String, String?>> = emptyList(), onClose: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf(get()) }
     var msg by remember { mutableStateOf("") }
@@ -365,6 +386,17 @@ private fun KeyDialog(title: String, hint: String, get: () -> String, set: (Stri
         title = { Text(title) },
         text = {
             Column {
+                // 申請步驟：每一步一行，有網址的可以直接打開
+                if (steps.isNotEmpty() && get().isBlank()) Column(Modifier.padding(bottom = 10.dp)) {
+                    steps.forEachIndexed { i, (label, url) ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Text("${i + 1}. $label", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
+                            if (url != null) TextButton(onClick = {
+                                runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                            }) { Text("打開") }
+                        }
+                    }
+                }
                 androidx.compose.material3.OutlinedTextField(text, { text = it.trim() }, placeholder = { Text(hint) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (msg.isNotBlank()) Text(msg, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
             }

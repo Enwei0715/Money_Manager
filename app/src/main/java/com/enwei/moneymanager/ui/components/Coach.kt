@@ -78,7 +78,23 @@ object Coach {
     var active by androidx.compose.runtime.mutableStateOf(steps)
         private set
 
+    /** 頁面導覽（第一次打開某個頁面時的簡短介紹）：不切換分頁，跳過就只是關掉 */
+    var pageMode by androidx.compose.runtime.mutableStateOf(false)
+        private set
+    private val seen by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("page_tours", android.content.Context.MODE_PRIVATE) }
+
+    /** 第一次來到 [id] 這個頁面時走一次 [steps]；看過就不再出現 */
+    fun page(id: String, steps: List<Step>) {
+        if (step >= 0 || seen.getBoolean(id, false) || steps.isEmpty()) return
+        seen.edit().putBoolean(id, true).apply()
+        active = steps; pageMode = true; step = 0
+    }
+    /** 重看導覽時：各頁面的介紹也重新出現 */
+    fun resetPages() = seen.edit().clear().apply()
+
     fun start(s: com.enwei.moneymanager.data.AppSettings? = null, split: Boolean = true) {
+        pageMode = false
+        resetPages()
         active = steps.filter { st ->
             when (st.target) {
                 "tab.assistant" -> s?.featureStocks != false
@@ -143,12 +159,22 @@ fun CoachOverlay(onTab: (String) -> Unit) {
                 }
                 Text(st.body, fontSize = AppText.body)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    if (i < steps.lastIndex) TextButton(onClick = { Coach.stop(); onTab("txns") }) { Text("跳過全部") }
+                    if (i < steps.lastIndex) TextButton(onClick = { Coach.stop(); if (!Coach.pageMode) onTab("txns") }) { Text(if (Coach.pageMode) "略過" else "跳過全部") }
                     Spacer(Modifier.weight(1f))
                     if (i > 0) TextButton(onClick = { Coach.prev() }) { Text("上一步") }
-                    Button(onClick = { Coach.next() }) { Text(if (i < steps.lastIndex) "下一步" else "開始使用") }
+                    Button(onClick = { Coach.next() }) { Text(if (i < steps.lastIndex) "下一步" else if (Coach.pageMode) "知道了" else "開始使用") }
                 }
             }
         }
+    }
+}
+
+
+/** 頁面第一次打開時的簡短導覽（等畫面排好再開始，才找得到要亮的位置）。 */
+@Composable
+fun PageTour(id: String, steps: List<Coach.Step>) {
+    LaunchedEffect(id) {
+        kotlinx.coroutines.delay(700)
+        Coach.page(id, steps)
     }
 }

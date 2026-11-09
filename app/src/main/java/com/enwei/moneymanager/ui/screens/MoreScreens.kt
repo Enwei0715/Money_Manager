@@ -511,7 +511,7 @@ fun NotificationSettingsScreen(nav: NavController) {
             // 「進階」分頁本身就是收起來的地方，測試區直接展開
             if (settings.locationHints) {
                 item { SectionTitle("地點測試") }
-                item { LocationTest() }
+                item { LocationTest(onSetup = { nav.navigate("merchants") }) }
             }
             item { SectionTitle("測試通知辨識") }
             run {
@@ -1188,11 +1188,13 @@ private fun LocationHintRow(on: Boolean) {
 
 /** 地點測試：權限、目前位置、這裡的過去紀錄與附近店家，以及上一次讀通知時的推測結果。 */
 @Composable
-private fun LocationTest() {
+private fun LocationTest(onSetup: () -> Unit = {}) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var running by remember { mutableStateOf(false) }
-    var lines by remember { mutableStateOf<List<Pair<String, Boolean>>>(emptyList()) }
+    // 每一行：true＝正常、false＝有問題、null＝只是說明（不算錯）
+    var lines by remember { mutableStateOf<List<Pair<String, Boolean?>>>(emptyList()) }
+    var suggestKey by remember { mutableStateOf(false) }
     val ph = com.enwei.moneymanager.data.PlaceHints
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("已記下 ${ph.sampleCount(ctx)} 個付款地點", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1201,7 +1203,8 @@ private fun LocationTest() {
             running = true; lines = emptyList()
             scope.launch {
                 // 一步一步顯示結果；每一步都有時間上限，不會卡在「測試中」
-                fun add(t: String, ok: Boolean) { lines = lines + (t to ok) }
+                fun add(t: String, ok: Boolean?) { lines = lines + (t to ok) }
+                suggestKey = false
                 try {
                     add("定位權限：" + (if (ph.hasPermission(ctx)) "已允許" else "未允許"), ph.hasPermission(ctx))
                     add("背景位置：" + (if (ph.hasBackground(ctx)) "一律允許" else "未設為一律允許（App 沒開著時讀不到）"), ph.hasBackground(ctx))
@@ -1212,7 +1215,7 @@ private fun LocationTest() {
                         val age = (System.currentTimeMillis() - loc.time) / 1000
                         add("目前位置：${"%.5f".format(loc.latitude)}, ${"%.5f".format(loc.longitude)}（誤差約 ${loc.accuracy.toInt()} 公尺，${age} 秒前）", true)
                         val g = ph.fromHistory(ctx, loc, repo.transactions.first())
-                        add(g?.let { "過去紀錄：常在這裡記「${it.merchant}」" } ?: "過去紀錄：這附近還沒有", g != null)
+                        add(g?.let { "過去紀錄：常在這裡記「${it.merchant}」" } ?: "過去紀錄：這附近還沒有", if (g != null) true else null)
                         // Google（手機內建）：這個位置的店名
                         add("查附近店家中…", true)
                         val txns = repo.transactions.first()
@@ -1224,20 +1227,27 @@ private fun LocationTest() {
                         val src = com.enwei.moneymanager.net.PlaceSearch.source
                         val err = if (mbOn) com.enwei.moneymanager.net.PlaceSearch.lastError else ph.lastNearbyError
                         lines = lines.dropLast(1)
-                        add(if (known.isNotEmpty()) "已知位置的店（200 公尺內）：${known.joinToString("、")}" else "已知位置的店：200 公尺內沒有（到「店家位置」按自動找）", known.isNotEmpty())
-                        add(when {
-                            osm == null -> "$src：20 秒內沒有回應"
-                            osm.isEmpty() && err.isNotBlank() -> "$src：連不上（$err）"
-                            osm.isEmpty() -> "$src：附近沒有登錄的店"
-                            else -> "$src 附近的店：${osm.take(6).joinToString("、")}"
-                        }, !osm.isNullOrEmpty())
+                        add(if (known.isNotEmpty()) "已知位置的店（200 公尺內）：${known.joinToString("、")}" else "已知位置的店：200 公尺內沒有", if (known.isNotEmpty()) true else null)
+                        when {
+                            !osm.isNullOrEmpty() -> add("$src 附近的店：${osm.take(6).joinToString("、")}", true)
+                            // 沒設定金鑰時用的是免費的公共伺服器，常常忙不過來：不當成錯誤，建議改用 Google Places
+                            !mbOn -> { add("OpenStreetMap 的公共伺服器目前很忙，查不到附近的店", null); suggestKey = true }
+                            osm == null -> add("$src：20 秒內沒有回應", false)
+                            err.isNotBlank() -> add("$src：$err", false)
+                            else -> add("$src：附近沒有登錄的店", null)
+                        }
                     }
                 } catch (e: Exception) {
                     add("測試失敗：${e.message ?: e.javaClass.simpleName}", false)
                 } finally { running = false }
             }
         }) { Text(if (running) "測試中…" else "測試目前位置") }
-        lines.forEach { (t, ok) -> Text((if (ok) "✓ " else "✗ ") + t, fontSize = AppText.secondary,
-            color = if (ok) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error) }
+        lines.forEach { (t, ok) -> Text((when (ok) { true -> "✓ "; false -> "✗ "; null -> "・ " }) + t, fontSize = AppText.secondary,
+            color = when (ok) { true -> MaterialTheme.colorScheme.onSurface; false -> MaterialTheme.colorScheme.error; null -> MaterialTheme.colorScheme.onSurfaceVariant }) }
+        // 建議設定 Google Places：附近的店、店名搜尋都會準很多
+        if (suggestKey && !running) Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("設定 Google Places 金鑰，找店更準", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
+            androidx.compose.material3.TextButton(onClick = onSetup) { Text("前往設定") }
+        }
     }
 }

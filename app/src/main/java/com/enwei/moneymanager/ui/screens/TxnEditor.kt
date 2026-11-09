@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.coachTarget
 import com.enwei.moneymanager.ui.AppText
 
 import androidx.activity.compose.BackHandler
@@ -213,6 +214,12 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         if (original == null) lk.account(accountId)?.let { currency = it.currency }
     }
     BackHandler(enabled = panel != Panel.NONE) { panel = Panel.NONE }
+    // 第一次記帳：簡短介紹這頁幾個重點
+    if (id == 0L) com.enwei.moneymanager.ui.components.PageTour("editor", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step("ed.amount", "金額", "點這裡用 App 的計算機輸入，可以打算式；右上角可以加手續費。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("ed.people", "往來", "跟別人分帳、別人先幫你付、或收到還款，點對象就好。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("ed.merchant", "商家", "打字會推薦附近的店與以前記過的店，選了會一起記下位置。"),
+    ))
     // 打開 App 內的鍵盤或選單時，系統鍵盤一定收起來
     LaunchedEffect(panel) { if (panel != Panel.NONE) { focusManager.clearFocus(); keyboard?.hide() } }
 
@@ -514,7 +521,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 })
                 // 金額：這頁的主角，獨立成一塊大字；點一下開計算機
                 Column(
-                    Modifier.fillMaxWidth().clickable { focusManager.clearFocus(); panel = Panel.AMOUNT }.padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
+                    Modifier.fillMaxWidth().clickable { focusManager.clearFocus(); panel = Panel.AMOUNT }.coachTarget("ed.amount").padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("金額", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
@@ -628,7 +635,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 }
                 FormRow("商家", color, merchantFocused, onClick = {}) {
                     UnderlineField(merchant, { merchant = it; merchantAuto = false; merchantAt = null }, "",
-                        Modifier.onFocusChanged { merchantFocused = it.isFocused; if (it.isFocused) panel = Panel.NONE })
+                        Modifier.onFocusChanged { merchantFocused = it.isFocused; if (it.isFocused) panel = Panel.NONE }.coachTarget("ed.merchant"))
                 }
                 // 附近的店：還沒填商家（或正在填）時，點一下帶入
                 if (nearby.isNotEmpty() && type != TxnType.TRANSFER && (merchant.isBlank() || merchantFocused)) Row(
@@ -1177,7 +1184,7 @@ private fun PeopleRow(selected: (Long) -> Boolean, extra: List<String>, color: C
     var adding by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
     FormRow("往來", color, false, onClick = {}) {
-        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp).coachTarget("ed.people")) {
             items(extra.size) { k -> PersonChip(extra[k], true, color) { onExtra(extra[k]) } }
             items(people.size) { k -> val p = people[k]; PersonChip(p.name, selected(p.id), color) { onToggle(p.id) } }
             item {

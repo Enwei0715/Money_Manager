@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.coachTarget
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -211,7 +212,7 @@ fun SpendMapScreen(nav: NavController) {
             }
             if (spots.isEmpty()) Text("這段期間沒有可以標在地圖上的支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
-            else SpendMap(spots, dark, Modifier.fillMaxWidth().height(mapH).clipToBounds(), selKey, focusTick, status = snapping,
+            else SpendMap(spots, dark, Modifier.fillMaxWidth().height(mapH).clipToBounds().coachTarget("map.view"), selKey, focusTick, status = snapping,
                 // 點地圖上的點：下方清單同時展開那個地點的紀錄
                 onSelect = { sp ->
                     selKey = sp?.key
@@ -249,7 +250,11 @@ fun SpendMapScreen(nav: NavController) {
                     dismissButton = { androidx.compose.material3.TextButton(onClick = { googleHit = null; googleFor = null }) { Text("取消") } },
                 )
             }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
+        if (spots.isNotEmpty()) com.enwei.moneymanager.ui.components.PageTour("spendmap", listOf(
+            com.enwei.moneymanager.ui.components.Coach.Step("map.view", "支出地圖", "每個圓點是一家店：越大代表花越多，顏色是分類。兩指縮放、拖曳移動。"),
+            com.enwei.moneymanager.ui.components.Coach.Step("map.list", "地點清單", "點一個地點展開它的每一筆紀錄，也可以導航或修正位置；點地圖上的圓點會跳到這裡。"),
+        ))
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().coachTarget("map.list"), state = listState) {
             // 沒有位置的店：用店名在 OpenStreetMap 找（每秒一家）
             val missing = unplaced.mapNotNull { it.merchant?.trim()?.takeIf { m -> m.isNotEmpty() && m !in geo && (!chain(m) || branchy(m)) } }.distinct()
             if (missing.isNotEmpty()) item {
