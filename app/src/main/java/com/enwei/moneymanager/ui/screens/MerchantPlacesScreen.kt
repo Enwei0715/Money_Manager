@@ -107,7 +107,7 @@ fun MerchantPlacesScreen(nav: NavController) {
     }
     fun applyLink(name: String, text: String) = scope.launch {
         linkBusy = true
-        val ll = PlaceHints.coordsFromMapsLink(text, PlaceHints.anchors(ctx).firstOrNull())
+        val ll = PlaceHints.coordsFromMapsLink(text, PlaceHints.anchors(ctx).firstOrNull(), name)
         linkBusy = false
         if (ll != null) {
             PlaceHints.setMerchantPin(name, ll.first, ll.second); tick++; linkFor = null
@@ -223,8 +223,13 @@ fun MerchantPlacesScreen(nav: NavController) {
             onDismissRequest = { if (!linkBusy) linkFor = null },
             title = { Text(n) },
             text = {
-                androidx.compose.material3.OutlinedTextField(linkText, { linkText = it }, placeholder = { Text("Google 地圖連結") },
-                    modifier = Modifier.fillMaxWidth(), maxLines = 4)
+                Column {
+                    androidx.compose.material3.OutlinedTextField(linkText, { linkText = it }, placeholder = { Text("Google 地圖連結") },
+                        modifier = Modifier.fillMaxWidth(), maxLines = 4)
+                    // 讀不到時顯示讀到了什麼，方便判斷
+                    if (!linkBusy && PlaceHints.lastLinkDebug.isNotBlank()) Text(PlaceHints.lastLinkDebug, fontSize = AppText.label,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp), maxLines = 6)
+                }
             },
             confirmButton = {
                 TextButton(enabled = !linkBusy && linkText.isNotBlank(), onClick = { applyLink(n, linkText) }) { Text(if (linkBusy) "讀取中…" else "設定") }

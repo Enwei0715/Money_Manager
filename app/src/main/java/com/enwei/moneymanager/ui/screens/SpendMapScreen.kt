@@ -163,7 +163,7 @@ fun SpendMapScreen(nav: NavController) {
                     kotlinx.coroutines.delay(400)
                     val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
                     val text = runCatching { cm?.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString() }.getOrNull().orEmpty()
-                    PlaceHints.coordsFromMapsLink(text, PlaceHints.anchors(ctx).firstOrNull())?.let { googleHit = key to it }
+                    PlaceHints.coordsFromMapsLink(text, PlaceHints.anchors(ctx).firstOrNull(), key.substringBefore('|'))?.let { googleHit = key to it }
                 }
             }
         }

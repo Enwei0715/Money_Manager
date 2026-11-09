@@ -72,7 +72,7 @@ object PlaceHints {
             k to (la to lo)
         }.toMap()
         // 舊版讀地圖連結的錯誤：好幾家店被設成一模一樣的座標（地圖預設中心）→ 清掉這些
-        val dup = all.values.groupingBy { "%.5f,%.5f".format(it.first, it.second) }.eachCount().filter { it.value >= 3 }.keys
+        val dup = all.values.groupingBy { "%.5f,%.5f".format(it.first, it.second) }.eachCount().filter { it.value >= 2 }.keys
         if (dup.isEmpty()) return all
         val bad = all.filter { "%.5f,%.5f".format(it.value.first, it.value.second) in dup }.keys
         pinPrefs.edit().also { e -> bad.forEach { e.remove(it) } }.apply()
@@ -465,7 +465,28 @@ object PlaceHints {
      * 從 Google 地圖的分享連結讀出座標：短網址（maps.app.goo.gl）先跟著轉址拿到完整網址，
      * 再找「!3d緯度!4d經度」（地點本身）、「@緯度,經度」或「q=緯度,經度」。
      */
-    suspend fun coordsFromMapsLink(text: String, near: Pair<Double, Double>? = null): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+    /** 最近一次讀連結讀到什麼（讀不到時顯示給使用者看） */
+    @Volatile var lastLinkDebug: String = ""
+
+    /**
+     * 讀 Google 地圖連結的座標。不同店讀出一模一樣的座標（通常是 Google 預設的地圖中心）就當作讀不到，
+     * 不會再讓每家店都跑到同一個點。
+     */
+    suspend fun coordsFromMapsLink(text: String, near: Pair<Double, Double>? = null, forName: String = ""): Pair<Double, Double>? {
+        lastLinkDebug = ""
+        val ll = linkCoords(text, near) ?: return null
+        val k = "%.4f,%.4f".format(ll.first, ll.second)
+        val prev = linkPrefs.getString(k, null)
+        if (prev != null && forName.isNotBlank() && prev != forName) {
+            lastLinkDebug = "讀到的位置和「$prev」一模一樣，可能是地圖預設位置，不採用"
+            return null
+        }
+        if (forName.isNotBlank()) linkPrefs.edit().putString(k, forName).apply()
+        return ll
+    }
+    private val linkPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("link_coords", Context.MODE_PRIVATE) }
+
+    private suspend fun linkCoords(text: String, near: Pair<Double, Double>? = null): Pair<Double, Double>? = withContext(Dispatchers.IO) {
         val url = Regex("https?://[^\\s]+").find(text)?.value?.trimEnd('.', ',', '。', '）', ')') ?: return@withContext null
         if (!url.contains("goo.gl") && !url.contains("google.") && !url.contains("g.co")) return@withContext null
         fun pair(m: MatchResult?, swap: Boolean = false) = m?.let {
@@ -504,9 +525,7 @@ object PlaceHints {
             }
         }
         placeOnly(body)?.let { return@withContext it }
-        // 頁面的預覽圖（staticmap）以地點為中心
-        pair(Regex("staticmap\\?center=(-?\\d{1,2}\\.\\d{3,})(?:%2C|,)(-?\\d{1,3}\\.\\d{3,})").find(body))?.let { return@withContext it }
-        pair(Regex("markers=(-?\\d{1,2}\\.\\d{3,})(?:%2C|,)(-?\\d{1,3}\\.\\d{3,})").find(body))?.let { return@withContext it }
+        lastLinkDebug = hops.last().take(300)
         // 從網址取出「店名, 地址」：先用地址找（最準），再用店名在附近找
         fun dec(x: String) = runCatching { java.net.URLDecoder.decode(x, "UTF-8") }.getOrDefault(x)
         val q = hops.asReversed().firstNotNullOfOrNull { h ->
@@ -520,6 +539,7 @@ object PlaceHints {
         val parts = text0.split(Regex(",\\s*|，|\\s·\\s"), limit = 2)
         val name = parts.first().trim()
         val addr = parts.getOrNull(1)?.trim()?.takeIf { a -> a.any { it.isDigit() } || Regex("[市縣區鄉鎮路街]").containsMatchIn(a) }
+        lastLinkDebug = "店名：$name" + (addr?.let { "\n地址：$it" } ?: "\n（連結裡沒有地址）")
         if (addr != null) geocodeAddress(addr)?.let { return@withContext it }
         val center = near ?: (25.0136 to 121.5414)
         geocoderNear(name, center.first, center.second, 30_000)
