@@ -160,6 +160,7 @@ fun SpendMapScreen(nav: NavController) {
     }.sortedByDescending { it.total }
     var selKey by remember { mutableStateOf<String?>(null) }
     var expanded by remember { mutableStateOf(setOf<String>()) }
+    var moveKey by remember { mutableStateOf<String?>(null) }
     var focusTick by remember { mutableStateOf(0) }
     val snapping: String? = null
     // Google 地圖：開啟搜尋 → 使用者按分享、複製連結 → 回到這裡自動讀剪貼簿裡的連結
@@ -210,7 +211,17 @@ fun SpendMapScreen(nav: NavController) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
                 else SpendMap(spots, dark, Modifier.fillMaxWidth().height(380.dp).clipToBounds(), selKey, focusTick, status = snapping,
                     // 點地圖上的點：下方清單同時展開那個地點的紀錄
-                    onSelect = { selKey = it?.key; it?.key?.let { k -> expanded = expanded + k } },
+                    onSelect = { sp ->
+                        selKey = sp?.key
+                        sp?.key?.let { k ->
+                            expanded = expanded + k
+                            // 那個地點不在畫面上時，清單捲過去（地圖往上收一點）
+                            val idx = spots.indexOfFirst { it.key == k }
+                            val target = idx + listState.layoutInfo.totalItemsCount - spots.size - 1
+                            if (idx >= 0 && listState.layoutInfo.visibleItemsInfo.none { it.index == target }) scope.launch { listState.animateScrollToItem(target, -400) }
+                        }
+                    },
+                    moveRequest = moveKey != null && moveKey == selKey, onMoveEnd = { moveKey = null },
                     onOpenTxn = { nav.navigate("txn/$it") },
                     // 修正位置：記成這家店的位置（這家店所有支出都用這個點）
                     onMove = { sp, la, lo -> PlaceHints.setMerchantPin(sp.name, la, lo); pins = PlaceHints.merchantPins() },
@@ -279,6 +290,32 @@ fun SpendMapScreen(nav: NavController) {
                     Text(Money.withSymbol(s.total, lk.base), fontSize = AppText.body, color = com.enwei.moneymanager.ui.ExpenseColor)
                 }
                 if (open) Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+                    // 這個地點的動作：導航、修正位置
+                    var fixMenu by remember(s.key) { mutableStateOf(false) }
+                    Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.TextButton(onClick = {
+                            val uri = android.net.Uri.parse("geo:${s.lat},${s.lon}?q=${s.lat},${s.lon}(" + android.net.Uri.encode(s.name) + ")")
+                            runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
+                        }) { Text("導航") }
+                        Box {
+                            androidx.compose.material3.TextButton(onClick = { fixMenu = true }) { Text("修正位置") }
+                            androidx.compose.material3.DropdownMenu(fixMenu, { fixMenu = false }) {
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("在地圖上點正確位置") }, onClick = {
+                                    fixMenu = false; selKey = s.key; moveKey = s.key; focusTick++; scope.launch { listState.animateScrollToItem(0) }
+                                })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("用 Google 地圖找") }, onClick = {
+                                    fixMenu = false
+                                    googleFor = s.key
+                                    val q = android.net.Uri.encode(s.name)
+                                    val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("geo:${s.lat},${s.lon}?q=$q"))
+                                    runCatching { ctx.startActivity(geo) }
+                                })
+                                if (s.fixed) androidx.compose.material3.DropdownMenuItem(text = { Text("還原") }, onClick = {
+                                    fixMenu = false; PlaceHints.clearMerchantPin(s.name); pins = PlaceHints.merchantPins()
+                                })
+                            }
+                        }
+                    }
                     s.txns.forEach { t ->
                         val d = java.time.Instant.ofEpochMilli(t.date).atZone(zone).toLocalDate()
                         HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -343,6 +380,9 @@ private fun SpendMap(
     onGoogle: (SpendSpot) -> Unit = {},
     /** 點資訊卡裡的一筆交易 */
     onOpenTxn: (Long) -> Unit = {},
+    /** 外面要求「在地圖上點正確位置」（下方清單的修正位置） */
+    moveRequest: Boolean = false,
+    onMoveEnd: () -> Unit = {},
     /** 選位置模式：點地圖就是新位置，畫面不重新對焦、不顯示資訊卡 */
     pickOnly: Boolean = false,
     /** 顯示右上角的縮放按鈕（小預覽圖不顯示） */
@@ -358,7 +398,7 @@ private fun SpendMap(
     var cx by remember(viewKey) { mutableStateOf(0.5) }
     var cy by remember(viewKey) { mutableStateOf(0.5) }
     val picked = spots.firstOrNull { it.key == selKey }
-    var moving by remember { mutableStateOf(pickOnly) }
+    val moving = pickOnly || moveRequest
     // 從下方清單點地點：地圖移過去並放大
     androidx.compose.runtime.LaunchedEffect(focusTick) {
         if (focusTick > 0) picked?.let { cx = mx(it.lon); cy = my(it.lat); if (zoom < 16.0) zoom = 16.0 }
@@ -471,7 +511,7 @@ private fun SpendMap(
                                 if (moving && sp != null) {
                                     // 修正位置：點的地方就是正確位置
                                     onMove(sp, Math.toDegrees(kotlin.math.atan(kotlin.math.sinh(Math.PI * (1 - 2 * wy)))), wx * 360 - 180)
-                                    moving = pickOnly
+                                    onMoveEnd()
                                 } else {
                                     // 點針頭（在位置上方）也算點到
                                     fun dist(p: SpendSpot) = kotlin.math.hypot((mx(p.lon) - cx) * world + sizePx.width / 2 - o.x,
@@ -580,70 +620,13 @@ private fun SpendMap(
                 }
             }
         }
-        // 點地點：地圖下緣的小卡——店名、總額、分類、筆數、平均、上次去的日期，以及導航與修正位置（紀錄在下方清單展開）
-        if (!pickOnly) picked?.let { sp ->
-            val ctx = androidx.compose.ui.platform.LocalContext.current
-            val muted = MaterialTheme.colorScheme.onSurfaceVariant
-            fun day(ms: Long) = java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-            androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(10.dp), shadowElevation = 3.dp,
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(8.dp)) {
-                Column(Modifier.padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(sp.name, fontSize = AppText.body, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            val last = sp.txns.firstOrNull()?.let { day(it.date) }
-                            Text(listOfNotNull(sp.cat.ifBlank { null }, "${sp.count} 筆", if (sp.count > 1) "平均 ${Money.withSymbol(sp.total / sp.count, "TWD")}" else null,
-                                last?.let { "上次 ${it.monthValue}/${it.dayOfMonth}" }).joinToString("・"), fontSize = AppText.caption, color = muted, maxLines = 1)
-                        }
-                        Text(Money.withSymbol(sp.total, "TWD"), fontSize = AppText.body, fontWeight = FontWeight.SemiBold, color = com.enwei.moneymanager.ui.ExpenseColor)
-                        Text("✕", color = muted, modifier = Modifier.clickable { onSelect(null) }.padding(horizontal = 10.dp, vertical = 4.dp))
-                    }
-                    // 動作：導航、修正位置（點了才列出方式）；紀錄在下方清單看，卡片只佔兩行
-                    var fixMenu by remember(sp.key) { mutableStateOf(false) }
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                        if (moving) Text("在地圖上點正確的位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                        else {
-                            Text("導航", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable {
-                                val uri = android.net.Uri.parse("geo:${sp.lat},${sp.lon}?q=${sp.lat},${sp.lon}(" + android.net.Uri.encode(sp.name) + ")")
-                                runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
-                            }.padding(end = 18.dp, top = 4.dp, bottom = 4.dp))
-                            Spacer(Modifier.weight(1f))
-                        }
-                        Box {
-                            Text(if (moving) "取消" else "修正位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.clickable { if (moving) moving = false else fixMenu = true }.padding(start = 12.dp, end = 10.dp, top = 4.dp, bottom = 4.dp))
-                            androidx.compose.material3.DropdownMenu(fixMenu, { fixMenu = false }) {
-                                androidx.compose.material3.DropdownMenuItem(text = { Text("在地圖上點正確位置") }, onClick = { fixMenu = false; moving = true })
-                                androidx.compose.material3.DropdownMenuItem(text = { Text("用 Google 地圖找") }, onClick = { fixMenu = false; onGoogle(sp) })
-                                if (sp.fixed) androidx.compose.material3.DropdownMenuItem(text = { Text("還原") }, onClick = { fixMenu = false; onReset(sp) })
-                            }
-                        }
-                    }
-                }
+        // 修正位置中：地圖下緣一行提示＋取消（地點資訊與動作都在下方清單，不在地圖上重複）
+        if (!pickOnly && moveRequest) androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(16.dp), shadowElevation = 2.dp,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(10.dp)) {
+            Row(Modifier.padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("點地圖上正確的位置", fontSize = AppText.caption)
+                androidx.compose.material3.TextButton(onClick = onMoveEnd) { Text("取消") }
             }
-        }
-    }
-}
-
-
-/**
- * 在地圖上點選店家位置：一開始對準目前的位置（沒有就用常活動的區域），點一下就把針移過去，按「設定」存成這家店的位置。
- */
-@Composable
-internal fun MapPicker(name: String, start: Pair<Double, Double>, onDone: (Pair<Double, Double>?) -> Unit) {
-    var at by remember { mutableStateOf(start) }
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.4f
-    val spot = SpendSpot(at.first, at.second, name, 1, 1, "", "pick")
-    androidx.compose.ui.window.Dialog(onDismissRequest = { onDone(null) },
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
-        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(name, fontSize = AppText.body, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                androidx.compose.material3.TextButton(onClick = { onDone(null) }) { Text("取消") }
-                androidx.compose.material3.TextButton(onClick = { onDone(at) }) { Text("設定") }
-            }
-            SpendMap(listOf(spot), dark, Modifier.fillMaxWidth().height(460.dp).clipToBounds(), "pick", 0,
-                status = "點地圖上的正確位置", onSelect = {}, onMove = { _, la, lo -> at = la to lo }, onReset = {}, pickOnly = true)
         }
     }
 }
