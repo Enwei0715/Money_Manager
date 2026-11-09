@@ -214,7 +214,7 @@ fun SpendMapScreen(nav: NavController) {
                     onSelect = { sp ->
                         selKey = sp?.key
                         sp?.key?.let { k ->
-                            expanded = expanded + k
+                            expanded = setOf(k)
                             // 那個地點不在畫面上時，清單捲過去（地圖往上收一點）
                             val idx = spots.indexOfFirst { it.key == k }
                             val target = idx + listState.layoutInfo.totalItemsCount - spots.size - 1
@@ -279,7 +279,8 @@ fun SpendMapScreen(nav: NavController) {
                 val open = s.key in expanded
                 Row(Modifier.fillMaxWidth().background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
                     .clickable {
-                        expanded = if (open) expanded - s.key else expanded + s.key
+                        // 一次只展開一個：點別的地點時原本的收起來
+                        expanded = if (open) emptySet() else setOf(s.key)
                         selKey = s.key; focusTick++
                     }
                     .padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
