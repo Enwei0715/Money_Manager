@@ -63,7 +63,13 @@ fun MerchantPlacesScreen(nav: NavController) {
         return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) }
     }
 
-    val txns = all.filter { (it.type == TxnType.EXPENSE || it.type == TxnType.INCOME) && it.status == TxnStatus.CONFIRMED && !it.merchant.isNullOrBlank() }
+    // 只列支出的店；往來對象（人名）、退款回饋這類不是店家的不列
+    val people = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN }.map { it.name.trim() }.toSet()
+    val txns = all.filter { t ->
+        val m = t.merchant?.trim().orEmpty()
+        t.type == TxnType.EXPENSE && t.status == TxnStatus.CONFIRMED && m.isNotEmpty() && m !in people &&
+            listOf("退款", "回饋", "分攤", "轉帳", "還款", "代墊").none { m.contains(it) }
+    }
     val current = remember(txns) { txns.mapNotNull { it.merchant?.trim() }.toSet() }
     // 舊店名的位置一併清掉，只留目前還有的
     LaunchedEffect(current) { if (current.isNotEmpty()) PlaceHints.pruneMerchantGeo(current) }

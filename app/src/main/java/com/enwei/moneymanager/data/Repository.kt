@@ -1374,7 +1374,12 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             // 分類是 AI 依那個編出來的店名猜的：位置推測可以蓋過
             val catGuessed = categoryId == null || (weak && aiNote.contains("分類由 AI 推測"))
             if (weak || categoryId == null) {
-                val g = PlaceHints.fromHistory(appCtx, here, db.txns().all())
+                val allTx = db.txns().all()
+                val g = PlaceHints.fromHistory(appCtx, here, allTx)
+                    // 已知位置的店（手動指定或用店名找到的）：離得夠近就直接用
+                    ?: PlaceHints.knownNear(here, allTx.mapNotNull { it.merchant?.trim() }.toSet(), 80f).firstOrNull()?.let { m ->
+                        PlaceHints.Guess(m, allTx.lastOrNull { it.merchant?.trim() == m && it.categoryId != null }?.categoryId, true)
+                    }
                     ?: if (weak) PlaceHints.nearbyPlace(here)?.let { pl -> PlaceHints.Guess(pl.name, placeCategory(pl.kind), false, pl.kind) } else null
                 if (g != null) {
                     if (weak) merchant = g.merchant

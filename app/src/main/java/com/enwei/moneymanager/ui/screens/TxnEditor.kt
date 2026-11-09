@@ -244,9 +244,15 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         val appCtx = com.enwei.moneymanager.MoneyApp.instance
         val loc = kotlinx.coroutines.withTimeoutOrNull(8000) { com.enwei.moneymanager.data.PlaceHints.current(appCtx) } ?: return@LaunchedEffect
         hereLoc = loc
-        val hist = com.enwei.moneymanager.data.PlaceHints.historyNear(appCtx, loc, repo.allTxns())
-        nearby = hist
-        nearby = (hist + com.enwei.moneymanager.data.PlaceHints.nearbyStores(loc)).distinct().take(8)
+        val ph = com.enwei.moneymanager.data.PlaceHints
+        val txns = repo.allTxns()
+        // 先列這附近記過的店、已知位置的店（馬上有），再補 Google 反查與地圖上的店
+        val hist = ph.historyNear(appCtx, loc, txns)
+        val known = ph.knownNear(loc, txns.mapNotNull { it.merchant?.trim() }.toSet())
+        nearby = (hist + known).distinct().take(8)
+        val g = ph.geocoderHere(loc)
+        nearby = (hist + known + g).distinct().take(8)
+        nearby = (hist + known + g + ph.nearbyStores(loc)).distinct().take(8)
     }
     data class Guess(val categoryId: Long, val merchant: String?, val score: Double, val count: Int)
     val guesses = remember(amountMinor, type, history, accountId) {

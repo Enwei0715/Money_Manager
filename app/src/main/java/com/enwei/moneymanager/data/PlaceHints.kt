@@ -101,13 +101,17 @@ object PlaceHints {
         names.forEachIndexed { i, n ->
             onProgress(i, names.size)
             if (geoPrefs.contains(n)) return@forEachIndexed
-            val hits = anchors.flatMap { (la, lo) ->
-                listOfNotNull(snapToStore(n, la, lo, 2000), photonNear(n, la, lo, 2000)).map { h -> h to dist(la, lo, h.first, h.second) }
+            // 先用手機內建的 Google 定位服務（資料最完整、不用金鑰），找不到再用 OpenStreetMap
+            val g = anchors.mapNotNull { (la, lo) -> geocoderNear(n, la, lo)?.let { h -> h to dist(la, lo, h.first, h.second) } }
+            val hits = g.ifEmpty {
+                kotlinx.coroutines.delay(1100)
+                anchors.flatMap { (la, lo) ->
+                    listOfNotNull(snapToStore(n, la, lo, 2000), photonNear(n, la, lo, 2000)).map { h -> h to dist(la, lo, h.first, h.second) }
+                }
             }
             val hit = hits.minByOrNull { it.second }?.first
             geoPrefs.edit().putString(n, hit?.let { "${it.first},${it.second}" } ?: "").apply()
             if (hit != null) found++
-            kotlinx.coroutines.delay(1100)
         }
         onProgress(names.size, names.size)
         found
@@ -122,8 +126,7 @@ object PlaceHints {
                 "way(around:$radius,${loc.latitude},${loc.longitude})[name][shop];" +
                 "way(around:$radius,${loc.latitude},${loc.longitude})[name][amenity];" +
                 ");out center 40;"
-            val body = com.enwei.moneymanager.net.Http.getJson("https://overpass-api.de/api/interpreter?data=" + java.net.URLEncoder.encode(q, "UTF-8"), mapOf("User-Agent" to UA))
-            val els = (body as? kotlinx.serialization.json.JsonObject)?.get("elements") as? kotlinx.serialization.json.JsonArray ?: return@runCatching emptyList()
+            val els = overpassPost(q) ?: return@runCatching emptyList()
             els.mapNotNull { e ->
                 val o = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
                 fun num(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
@@ -142,6 +145,89 @@ object PlaceHints {
     }
 
     /** 這附近記過的店（[radius] 公尺內，次數多的在前）：記帳時推薦店名用。 */
+    /** 手機內建的地理編碼（Google Play 服務提供，不用金鑰）。 */
+    private fun geocoder(): android.location.Geocoder? =
+        if (android.location.Geocoder.isPresent()) android.location.Geocoder(com.enwei.moneymanager.MoneyApp.instance, java.util.Locale.TAIWAN) else null
+
+    private val areaCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    /** 座標所在的行政區（例如「永和區」），店名加上它搜尋比較準。 */
+    @Suppress("DEPRECATION")
+    private fun areaName(lat: Double, lon: Double): String? {
+        val k = "%.2f,%.2f".format(lat, lon)
+        areaCache[k]?.let { return it.ifEmpty { null } }
+        val a = runCatching { geocoder()?.getFromLocation(lat, lon, 1)?.firstOrNull() }.getOrNull()
+        val name = a?.locality ?: a?.subAdminArea ?: a?.subLocality
+        areaCache[k] = name.orEmpty()
+        return name
+    }
+
+    /**
+     * 用店名在 [lat],[lon] 附近 [radius] 公尺內找（Google 的資料，透過手機內建服務）。
+     * 結果的名稱要對得上店名，避免只對到路名或行政區中心。
+     */
+    @Suppress("DEPRECATION")
+    suspend fun geocoderNear(name: String, lat: Double, lon: Double, radius: Int = 3000): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+        val g = geocoder() ?: return@withContext null
+        val key = name.replace(Regex("[（(].*?[)）]"), "").trim().ifBlank { return@withContext null }
+        val core = key.split(' ', '　').first().take(4).lowercase()
+        val d = radius / 111_000.0
+        val dl = d / kotlin.math.cos(Math.toRadians(lat))
+        val area = areaName(lat, lon)
+        for (q in listOfNotNull(area?.let { "$key $it" }, key)) {
+            val res = runCatching { g.getFromLocationName(q, 6, lat - d, lon - dl, lat + d, lon + dl) }.getOrNull().orEmpty()
+            val hit = res.filter { it.hasLatitude() && it.hasLongitude() }.filter { a ->
+                val text = listOfNotNull(a.featureName, a.premises, a.getAddressLine(0)).joinToString(" ").lowercase()
+                text.contains(core)
+            }.map { Triple(it.latitude, it.longitude, dist(lat, lon, it.latitude, it.longitude)) }
+                .filter { it.third <= radius }.minByOrNull { it.third }
+            if (hit != null) return@withContext hit.first to hit.second
+        }
+        null
+    }
+
+    /** 這個位置的店名（Google 反查，常常只回地址；看起來是店名才採用）。 */
+    @Suppress("DEPRECATION")
+    suspend fun geocoderHere(loc: Location): List<String> = withContext(Dispatchers.IO) {
+        val res = runCatching { geocoder()?.getFromLocation(loc.latitude, loc.longitude, 8) }.getOrNull().orEmpty()
+        res.mapNotNull { a -> (a.premises ?: a.featureName)?.trim() }
+            .filter { n -> n.length >= 2 && !n.any { it.isDigit() } && !Regex("(路|街|段|巷|弄|號|區|里|市|縣|道)$").containsMatchIn(n) }
+            .distinct()
+    }
+
+    /** 最近一次查附近店家的錯誤（測試頁顯示用） */
+    @Volatile var lastNearbyError: String = ""
+
+    /** Overpass 查詢：主站忙時換鏡像站（用 POST，查詢字串不會太長被擋）。 */
+    private suspend fun overpassPost(q: String): kotlinx.serialization.json.JsonArray? = withContext(Dispatchers.IO) {
+        val hosts = listOf("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter")
+        val client = com.enwei.moneymanager.net.Http.client.newBuilder().callTimeout(12, java.util.concurrent.TimeUnit.SECONDS).build()
+        val errs = mutableListOf<String>()
+        for (h in hosts) {
+            val r = runCatching {
+                val req = okhttp3.Request.Builder().url(h).header("User-Agent", UA)
+                    .post(okhttp3.FormBody.Builder().add("data", q).build()).build()
+                client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) error("HTTP ${resp.code}")
+                    val body = resp.body?.string().orEmpty()
+                    (kotlinx.serialization.json.Json.parseToJsonElement(body) as? kotlinx.serialization.json.JsonObject)?.get("elements") as? kotlinx.serialization.json.JsonArray
+                }
+            }
+            r.getOrNull()?.let { lastNearbyError = ""; return@withContext it }
+            errs += "${h.substringAfter("//").substringBefore('/')}：${r.exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName } ?: "沒有資料"}"
+        }
+        lastNearbyError = errs.joinToString("；")
+        null
+    }
+
+    /** 已知位置的店（手動指定、用店名找到的）在 [radius] 公尺內的，由近到遠。 */
+    fun knownNear(loc: Location, names: Set<String>, radius: Float = 200f): List<String> {
+        val all = merchantGeo().mapNotNull { (k, v) -> v?.let { k to it } }.toMap() + merchantPins()
+        return all.filter { it.key in names }
+            .map { (k, v) -> k to dist(loc.latitude, loc.longitude, v.first, v.second) }
+            .filter { it.second <= radius + loc.accuracy.coerceAtMost(60f) }
+            .sortedBy { it.second }.map { it.first }.take(6)
+    }
+
     fun historyNear(ctx: Context, loc: Location, txns: List<TxnEntity>, radius: Float = 150f): List<String> {
         val byId = txns.associateBy { it.id }
         return load(ctx).mapNotNull { s ->
@@ -255,15 +341,14 @@ object PlaceHints {
     }.getOrNull()
 
     private suspend fun overpass(loc: Location): Place? = runCatching {
-        val r = 50
+        val r = 80
         val q = "[out:json][timeout:12];(" +
             "node(around:$r,${loc.latitude},${loc.longitude})[name][shop];" +
             "node(around:$r,${loc.latitude},${loc.longitude})[name][amenity];" +
             "way(around:$r,${loc.latitude},${loc.longitude})[name][shop];" +
             "way(around:$r,${loc.latitude},${loc.longitude})[name][amenity];" +
             ");out center 30;"
-        val body = com.enwei.moneymanager.net.Http.getJson("https://overpass-api.de/api/interpreter?data=" + java.net.URLEncoder.encode(q, "UTF-8"), mapOf("User-Agent" to UA))
-        val els = (body as? kotlinx.serialization.json.JsonObject)?.get("elements") as? kotlinx.serialization.json.JsonArray ?: return@runCatching null
+        val els = overpassPost(q) ?: return@runCatching null
         els.mapNotNull { e ->
             val o = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
             fun num(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
@@ -292,8 +377,7 @@ object PlaceHints {
                 "node(around:$radius,$lat,$lon)[\"name\"~\"$esc\",i];" +
                 "way(around:$radius,$lat,$lon)[\"name\"~\"$esc\",i];" +
                 ");out center 20;"
-            val body = com.enwei.moneymanager.net.Http.getJson("https://overpass-api.de/api/interpreter?data=" + java.net.URLEncoder.encode(q, "UTF-8"), mapOf("User-Agent" to UA))
-            val els = (body as? kotlinx.serialization.json.JsonObject)?.get("elements") as? kotlinx.serialization.json.JsonArray ?: return@runCatching null
+            val els = overpassPost(q) ?: return@runCatching null
             els.mapNotNull { e ->
                 val o = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
                 fun num(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()

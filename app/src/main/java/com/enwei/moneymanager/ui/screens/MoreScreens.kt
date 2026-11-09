@@ -1227,12 +1227,25 @@ private fun LocationTest() {
                         add("目前位置：${"%.5f".format(loc.latitude)}, ${"%.5f".format(loc.longitude)}（誤差約 ${loc.accuracy.toInt()} 公尺，${age} 秒前）", true)
                         val g = ph.fromHistory(ctx, loc, repo.transactions.first())
                         add(g?.let { "過去紀錄：常在這裡記「${it.merchant}」" } ?: "過去紀錄：這附近還沒有", g != null)
-                        add("查附近店家中…（OpenStreetMap，最多 15 秒）", true)
-                        // 在獨立的工作裡查，逾時就不等（網路卡住也不會拖住畫面）
-                        val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).async { runCatching { ph.nearbyPlace(loc) }.getOrNull() }
-                        val near = kotlinx.coroutines.withTimeoutOrNull(15_000) { job.await() }
+                        // Google（手機內建）：這個位置的店名
+                        add("查附近店家中…", true)
+                        val gHere = kotlinx.coroutines.withTimeoutOrNull(10_000) { runCatching { ph.geocoderHere(loc) }.getOrNull() }
+                        val txns = repo.transactions.first()
+                        val known = ph.knownNear(loc, txns.mapNotNull { it.merchant?.trim() }.toSet())
+                        val osm = kotlinx.coroutines.withTimeoutOrNull(20_000) { runCatching { ph.nearbyStores(loc) }.getOrNull() }
                         lines = lines.dropLast(1)
-                        add(near?.let { "附近店家（OpenStreetMap）：${it.name}" + (it.kind?.let { k -> "（$k）" } ?: "") } ?: "附近店家：50 公尺內查不到，或地圖服務太慢", near != null)
+                        add(if (known.isNotEmpty()) "已知位置的店（200 公尺內）：${known.joinToString("、")}" else "已知位置的店：200 公尺內沒有（到「店家位置」按自動找）", known.isNotEmpty())
+                        add(when {
+                            gHere == null -> "Google 反查：10 秒內沒有回應"
+                            gHere.isEmpty() -> "Google 反查：這裡只查到地址，沒有店名"
+                            else -> "Google 反查：${gHere.take(5).joinToString("、")}"
+                        }, !gHere.isNullOrEmpty())
+                        add(when {
+                            osm == null -> "OpenStreetMap：20 秒內沒有回應"
+                            osm.isEmpty() && ph.lastNearbyError.isNotBlank() -> "OpenStreetMap：連不上（${ph.lastNearbyError}）"
+                            osm.isEmpty() -> "OpenStreetMap：150 公尺內沒有登錄的店"
+                            else -> "OpenStreetMap（150 公尺內）：${osm.take(6).joinToString("、")}"
+                        }, !osm.isNullOrEmpty())
                     }
                 } catch (e: Exception) {
                     add("測試失敗：${e.message ?: e.javaClass.simpleName}", false)
