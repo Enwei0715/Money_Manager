@@ -161,9 +161,7 @@ object PlaceHints {
                         override fun onError(errorMessage: String?) { if (c.isActive) c.resumeWith(Result.success(emptyList())) }
                     })
                 }.onFailure { if (c.isActive) c.resumeWith(Result.success(emptyList())) }
-            } else kotlinx.coroutines.coroutineScope {
-                async(Dispatchers.IO) { runCatching { g.getFromLocationName(q, 6, s, w, n, e).orEmpty() }.getOrDefault(emptyList()) }.await()
-            }
+            } else kotlinx.coroutines.CoroutineScope(Dispatchers.IO).async { runCatching { g.getFromLocationName(q, 6, s, w, n, e).orEmpty() }.getOrDefault(emptyList()) }.await()
         }.orEmpty()
     }
 
@@ -178,9 +176,7 @@ object PlaceHints {
                         override fun onError(errorMessage: String?) { if (c.isActive) c.resumeWith(Result.success(emptyList())) }
                     })
                 }.onFailure { if (c.isActive) c.resumeWith(Result.success(emptyList())) }
-            } else kotlinx.coroutines.coroutineScope {
-                async(Dispatchers.IO) { runCatching { g.getFromLocation(lat, lon, max).orEmpty() }.getOrDefault(emptyList()) }.await()
-            }
+            } else kotlinx.coroutines.CoroutineScope(Dispatchers.IO).async { runCatching { g.getFromLocation(lat, lon, max).orEmpty() }.getOrDefault(emptyList()) }.await()
         }.orEmpty()
     }
 
