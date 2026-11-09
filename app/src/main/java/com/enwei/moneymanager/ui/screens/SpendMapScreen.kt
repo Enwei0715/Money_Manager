@@ -16,6 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -288,11 +291,18 @@ fun SpendMapScreen(nav: NavController) {
                         Text("${s.cat.ifBlank { "—" }}・${s.count} 筆", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(Money.withSymbol(s.total, lk.base), fontSize = AppText.body, color = com.enwei.moneymanager.ui.ExpenseColor)
+                    // 展開／收起的方向提示
+                    Icon(if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 6.dp).size(20.dp))
                 }
-                if (open) Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+                // 展開的內容：底色較深、左邊一條色線、往右縮排，看得出是這個地點底下的子項目
+                if (open) Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).background(MaterialTheme.colorScheme.background)) {
+                    Spacer(Modifier.width(16.dp))
+                    Box(Modifier.width(2.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)))
+                Column(Modifier.weight(1f)) {
                     // 這個地點的動作：導航、修正位置
                     var fixMenu by remember(s.key) { mutableStateOf(false) }
-                    Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         androidx.compose.material3.TextButton(onClick = {
                             val uri = android.net.Uri.parse("geo:${s.lat},${s.lon}?q=${s.lat},${s.lon}(" + android.net.Uri.encode(s.name) + ")")
                             runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
@@ -318,8 +328,8 @@ fun SpendMapScreen(nav: NavController) {
                     }
                     s.txns.forEach { t ->
                         val d = java.time.Instant.ofEpochMilli(t.date).atZone(zone).toLocalDate()
-                        HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        Row(Modifier.fillMaxWidth().clickable { nav.navigate("txn/${t.id}") }.padding(start = 28.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),
+                        HorizontalDivider(Modifier.padding(start = 14.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        Row(Modifier.fillMaxWidth().clickable { nav.navigate("txn/${t.id}") }.padding(start = 14.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Text("${d.monthValue}/${d.dayOfMonth}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(48.dp))
                             Column(Modifier.weight(1f)) {
@@ -329,6 +339,7 @@ fun SpendMapScreen(nav: NavController) {
                             Text(Money.withSymbol(t.amount, t.currency), fontSize = AppText.secondary)
                         }
                     }
+                }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             }
