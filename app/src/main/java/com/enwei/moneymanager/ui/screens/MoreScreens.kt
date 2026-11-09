@@ -361,10 +361,14 @@ fun NotificationSettingsScreen(nav: NavController) {
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                    TextButton(onClick = {
-                        clip.setText(androidx.compose.ui.text.AnnotatedString(repo.SENSITIVE_ADB))
-                        testMsg = "已複製指令"
-                    }) { Text("複製指令") }
+                    Row {
+                        // 不用電腦：用 Shizuku 一鍵開啟
+                        TextButton(onClick = { nav.navigate("smart") }) { Text("一鍵開啟（不用電腦）") }
+                        TextButton(onClick = {
+                            clip.setText(androidx.compose.ui.text.AnnotatedString(repo.SENSITIVE_ADB))
+                            testMsg = "已複製指令"
+                        }) { Text("複製 adb 指令") }
+                    }
                 } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (parsedOk) OutlinedButton(onClick = {
                         testScope.launch {

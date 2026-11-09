@@ -572,9 +572,11 @@ class SettingsStore(context: Context) {
         widgetOpacity = prefs.getInt("widgetOpacity", 100),
         toolOrder = (if (prefs.contains("toolOrder")) prefs.getString("toolOrder", "")!!.split(',').filter { it.isNotBlank() }
             else AppSettings().toolOrder).let { o ->
-                // 店家位置搬到工具頁：舊使用者也自動加上一次
-                if (prefs.getBoolean("toolMerchantsAdded", false) || "merchants" in o) o
-                else { prefs.edit().putBoolean("toolMerchantsAdded", true).apply(); o + "merchants" }
+                // 新加入的工具（店家位置、智慧功能）：舊使用者也自動加上一次
+                var out = o
+                if (!prefs.getBoolean("toolMerchantsAdded", false) && "merchants" !in out) { prefs.edit().putBoolean("toolMerchantsAdded", true).apply(); out = out + "merchants" }
+                if (!prefs.getBoolean("toolSmartAdded", false) && "smart" !in out) { prefs.edit().putBoolean("toolSmartAdded", true).apply(); out = out + "smart" }
+                out
             },
         hiddenTools = prefs.getStringSet("hiddenTools", emptySet())!!.toSet(),
         wideTools = prefs.getStringSet("wideTools", null)?.toSet() ?: AppSettings().wideTools,
@@ -914,7 +916,7 @@ object HolidayCache {
 
 
 /** 至少填了一把 AI 金鑰（Groq 或 Gemini）。 */
-val AppSettings.hasAiKey: Boolean get() = groqKeys.isNotEmpty() || geminiKeys.isNotEmpty()
+val AppSettings.hasAiKey: Boolean get() = groqKeys.isNotEmpty() || geminiKeys.isNotEmpty() || com.enwei.moneymanager.net.LocalAi.enabled
 
 /** 所有 Groq 金鑰（主要＋額外，去掉空白與重複）。 */
 val AppSettings.groqKeys: List<String> get() = (listOf(groqKey) + groqKeysExtra.lines()).map { it.trim() }.filter { it.isNotEmpty() }.distinct()

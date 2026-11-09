@@ -98,6 +98,9 @@ dependencies {
     ksp(libs.room.compiler)
     implementation(libs.work.runtime)
     implementation(libs.okhttp)
+    // Shizuku：不用電腦取得 adb 權限（一鍵開啟讀取敏感通知）
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation(libs.serialization.json)
     implementation(libs.coroutines.android)
     testImplementation(libs.junit)

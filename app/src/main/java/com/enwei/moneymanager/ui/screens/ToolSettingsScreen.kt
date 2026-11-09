@@ -52,6 +52,7 @@ object ToolCatalog {
         ToolItem("notif", "通知記帳", "notif", L.ToolBell),
         ToolItem("stockfees", "手續費與月退", "stockfees", L.ToolReceipt),
         ToolItem("settings", "App 更新", "settings", L.ToolUpdate),
+        ToolItem("smart", "智慧功能", "smart", L.IcToggle),
         ToolItem("merchants", "店家位置", "merchants", L.IcStore),
         ToolItem("spendmap", "支出地圖", "spendmap", L.IcMap),
         ToolItem("debts", "往來", "debts", L.IcPeople),

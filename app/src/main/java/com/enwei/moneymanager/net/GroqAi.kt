@@ -41,7 +41,7 @@ object GroqAi {
     val enabled: Boolean
         get() = MoneyApp.repo.settings.value.let { it.aiEnabled && it.hasAiKey }
 
-    enum class Provider(val label: String) { GROQ("Groq"), GEMINI("Gemini") }
+    enum class Provider(val label: String) { GROQ("Groq"), GEMINI("Gemini"), LOCAL("自架伺服器") }
 
     /** 每家平台最近一次成功與失敗（AI 設定頁顯示，看得出哪家沒在運作） */
     object ProviderLog {
@@ -132,7 +132,9 @@ object GroqAi {
         // 每個模型依序用每一把金鑰：第一把額度滿了，同一個模型改用下一把
         val nGroq = s.groqKeys.size
         val nGem = s.geminiKeys.size
-        return order.flatMap { r -> (0 until if (r.provider == Provider.GROQ) nGroq else nGem).map { r.copy(key = it) } }
+        // 自架伺服器（例如 Ollama）：設定了就排第一（免費、不限額度），失敗再交給雲端
+        val local = if (LocalAi.enabled) listOf(Route(Provider.LOCAL, LocalAi.model, false)) else emptyList()
+        return local + order.flatMap { r -> (0 until if (r.provider == Provider.GROQ) nGroq else nGem).map { r.copy(key = it) } }
     }
 
     /** 這項工作會先送到 Gemini（可以一次送大量資料），用來決定要送完整資料還是精簡版。 */
@@ -170,7 +172,7 @@ object GroqAi {
         // 依每個模型自己的額度排序：還有空間的先用（照原本的優先順序），快滿的排後面，今天用完的跳過
         val estTokens = ((system.length + user.length) * 1.1).toInt() + maxTokens
         val quota = com.enwei.moneymanager.work.AiQuota
-        val ready = ready0.mapNotNull { r -> quota.waitMs(r.qid, r.provider == Provider.GEMINI, estTokens)?.let { r to it } }
+        val ready = ready0.mapNotNull { r -> (if (r.provider == Provider.LOCAL) 0L else quota.waitMs(r.qid, r.provider == Provider.GEMINI, estTokens))?.let { r to it } }
             .sortedBy { (_, w) -> if (w <= 3_000) 0L else w }
         if (ready.isEmpty()) lastError = "所有模型今天的免費額度都用完了：" + quota.todaySummary(all.map { it.qid to (it.provider == Provider.GEMINI) }).joinToString("；")
         for ((r, w0) in ready) {
@@ -179,13 +181,13 @@ object GroqAi {
             lastBody = null
             val gem = r.provider == Provider.GEMINI
             // 這個模型的每分鐘額度快滿：等到有空間再送（對話最多等 8 秒，否則換下一個模型）
-            val w = quota.waitMs(r.qid, gem, estTokens) ?: continue
+            val w = (if (r.provider == Provider.LOCAL) 0L else quota.waitMs(r.qid, gem, estTokens)) ?: continue
             if (w > 0) {
                 if (task == AiTask.CHAT && w > 8_000 && r != ready.last().first) continue
                 kotlinx.coroutines.delay(minOf(w, 65_000L))
             } else if (task != AiTask.CHAT) com.enwei.moneymanager.work.AiHealth.pace(r.provider.name,
-                when (r.provider) { Provider.GEMINI -> 1_000; Provider.GROQ -> 800 })
-            quota.record(r.qid, gem, estTokens)
+                when (r.provider) { Provider.GEMINI -> 1_000; Provider.GROQ -> 800; Provider.LOCAL -> 0 })
+            if (r.provider != Provider.LOCAL) quota.record(r.qid, gem, estTokens)
             // 資料越多，模型讀得越久：依輸入長度給時間（大模型最多 170 秒）
             val geminiTimeout = if (r.big) 170L else (60L + (system.length + user.length) / 1000 * 2).coerceAtMost(150L)
             val out = when (r.provider) {
@@ -194,6 +196,7 @@ object GroqAi {
                     maxOf(2048, maxTokens * 4).let { if (r.big) maxOf(it, 12_000) else it }, timeoutSec = geminiTimeout)
                 // 不加全域鎖：鎖不能重複取得，外層若已持有就會永遠卡住；限流交給下面的暫停機制與各工作的批次間隔
                 Provider.GROQ -> groqJson(s, system, user, maxTokens, r.big || hard, cap, if (r.big) effort else "low", forceModel = r.model, key = s.groqKeys.getOrNull(r.key) ?: continue)
+                Provider.LOCAL -> LocalAi.chat(system, user, maxTokens) { parseLoose(it) }.also { if (it == null) lastError = "自架伺服器：" + LocalAi.lastError }
             }
             // Groq 讀不下這麼多資料是預期中的（只是跳過），不算失敗、不記錄
             if (out == null && r.provider == Provider.GROQ && lastError?.contains("資料超過") == true) { skippedGroq = true; continue }
@@ -425,6 +428,7 @@ object GroqAi {
             Provider.GROQ -> get("https://api.groq.com/openai/v1/models", "Authorization" to "Bearer ${s.groqKeys.firstOrNull().orEmpty()}")
                 ?.let { (it["data"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e -> (e as? JsonObject)?.let { o ->
                     str(o, "id")?.takeIf { id -> listOf("whisper", "tts", "guard", "playai").none { id.contains(it, true) } }?.let { it to num(o, "context_window") } } } }
+            Provider.LOCAL -> LocalAi.models().map { it to 0 }.ifEmpty { lastError = "自架伺服器：" + LocalAi.lastError; null }
             Provider.GEMINI -> get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", "x-goog-api-key" to s.geminiKeys.firstOrNull().orEmpty())
                 ?.let { (it["models"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e -> (e as? JsonObject)?.let { o ->
                     val methods = (o["supportedGenerationMethods"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { m -> (m as? JsonPrimitive)?.contentOrNull }.orEmpty()
@@ -450,12 +454,14 @@ object GroqAi {
     /** 設定頁：測試這家的每一把金鑰。回傳 null 表示全部成功，否則列出失敗的金鑰。 */
     suspend fun testProvider(p: Provider): String? = withContext(Dispatchers.IO) {
         val s = MoneyApp.repo.settings.value
+        if (p == Provider.LOCAL) return@withContext LocalAi.test { parseLoose(it) }
         val keys = if (p == Provider.GROQ) s.groqKeys else s.geminiKeys
         if (keys.isEmpty()) return@withContext "還沒填 ${p.label} 金鑰"
         val bad = keys.mapIndexedNotNull { i, k ->
             val r = when (p) {
                 Provider.GROQ -> groqJson(s, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 20, false, 6000, "low", key = k)
                 Provider.GEMINI -> callGemini(k, s.geminiLiteModel.trim().ifBlank { "gemini-flash-lite-latest" }, "Reply with JSON only.", "Return {\"ok\": true} as JSON.", 256)
+                Provider.LOCAL -> null
             }
             if (r != null) null else (if (keys.size > 1) "金鑰 ${i + 1}：" else "") + (lastError ?: "沒有回應")
         }

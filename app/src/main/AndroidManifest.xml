@@ -27,7 +27,8 @@
         android:label="@string/app_name"
         android:localeConfig="@xml/locales_config"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MoneyManager">
+        android:theme="@style/Theme.MoneyManager"
+        android:networkSecurityConfig="@xml/network_security">
 
         <receiver
             android:name=".notify.QuickActions$TxnActionReceiver"
@@ -136,5 +137,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- Shizuku：不用電腦取得 adb 權限，一鍵開啟讀取敏感通知 -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
     </application>
 </manifest>

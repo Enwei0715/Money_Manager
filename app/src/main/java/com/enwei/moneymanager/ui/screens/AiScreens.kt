@@ -97,6 +97,9 @@ fun AiSettingsScreen(nav: NavController) {
                 ModelField("輕量模型（新聞標註、錢包畫面）", s.geminiLiteModel) { v -> repo.settings.update { it.copy(geminiLiteModel = v) } }
             }
 
+            // 自架伺服器（Ollama 等）：免費、不用金鑰
+            LocalServerCard()
+
             Text(
                 "可填多把金鑰：一把的額度用完，自動換下一把。金鑰只存在這支手機、不放進備份",
                 fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -193,6 +196,7 @@ private fun RouteOverview() {
     fun color(p: Provider) = when (p) {
         Provider.GROQ -> androidx.compose.ui.graphics.Color(0xFFF0605A)
         Provider.GEMINI -> androidx.compose.ui.graphics.Color(0xFF3C82E6)
+        Provider.LOCAL -> androidx.compose.ui.graphics.Color(0xFF2A9D8F)
     }
     com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -264,4 +268,59 @@ private fun ModelListDialog(p: Provider, onPick: (String) -> Unit, onDismiss: ()
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
     )
+}
+
+
+/**
+ * 自架 AI 伺服器：家裡電腦跑 Ollama／LM Studio，手機連同一個 Wi-Fi 就能用（免費、不用金鑰）。
+ * 設定了會排在最前面，失敗才用雲端。
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun LocalServerCard() {
+    val scope = rememberCoroutineScope()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var url by remember { mutableStateOf(com.enwei.moneymanager.net.LocalAi.url) }
+    var model by remember { mutableStateOf(com.enwei.moneymanager.net.LocalAi.model) }
+    var models by remember { mutableStateOf<List<String>>(emptyList()) }
+    var result by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("自架伺服器", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            Text("家裡電腦跑 Ollama，手機連同一個 Wi-Fi 就能用；免費、資料不出家門", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            androidx.compose.material3.OutlinedTextField(url, { url = it; com.enwei.moneymanager.net.LocalAi.url = it }, singleLine = true,
+                label = { Text("伺服器網址") }, placeholder = { Text("http://192.168.1.10:11434") }, modifier = Modifier.fillMaxWidth())
+            androidx.compose.material3.OutlinedTextField(model, { model = it; com.enwei.moneymanager.net.LocalAi.model = it }, singleLine = true,
+                label = { Text("模型") }, placeholder = { Text("例如 qwen2.5:7b") }, modifier = Modifier.fillMaxWidth())
+            if (models.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                models.forEach { m ->
+                    androidx.compose.material3.FilterChip(m == model, { model = m; com.enwei.moneymanager.net.LocalAi.model = m }, label = { Text(m, fontSize = AppText.caption) })
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(enabled = !busy && url.startsWith("http"), onClick = {
+                    busy = true
+                    scope.launch {
+                        models = com.enwei.moneymanager.net.LocalAi.models()
+                        result = if (models.isEmpty()) "連不上：${com.enwei.moneymanager.net.LocalAi.lastError}" else "找到 ${models.size} 個模型，點一個使用"
+                        busy = false
+                    }
+                }) { Text("讀取模型") }
+                TextButton(enabled = !busy && com.enwei.moneymanager.net.LocalAi.enabled, onClick = {
+                    busy = true; result = "測試中…"
+                    scope.launch {
+                        result = GroqAi.testProvider(Provider.LOCAL)?.let { "失敗：$it" } ?: "可以使用"
+                        busy = false
+                    }
+                }) { Text("測試") }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = {
+                    runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://ollama.com/download"))) }
+                }) { Text("下載 Ollama") }
+            }
+            result?.let { Text(it, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Text("電腦上要讓 Ollama 接受區網連線（設定 OLLAMA_HOST=0.0.0.0）。", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }

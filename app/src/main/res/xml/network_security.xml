@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自架 AI 伺服器（家裡電腦的 Ollama）通常是區網的 http://192.168.x.x，網址無法逐一列出，所以允許 http；
+  App 內建連到的服務（報價、AI、地圖、店家搜尋）全部是 https。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
