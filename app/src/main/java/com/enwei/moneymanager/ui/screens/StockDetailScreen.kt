@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.coachTarget
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.outlined.Notifications
 import com.enwei.moneymanager.ui.AppText
@@ -81,10 +82,12 @@ import kotlinx.coroutines.launch
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun StockDetailScreen(nav: NavController, symbol: String) {
-    // 第一次打開這頁：簡短介紹
+    // 第一次打開這頁：介紹分頁、K 線與價格提醒
     com.enwei.moneymanager.ui.components.PageTour("stock", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "個股", "K 線可用兩指縮放、左右拖曳，點選 K 棒可查看當日開高低收。"),
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "分析與資訊", "「分析」包含營收與趨勢推估，「資訊」包含除權息、新聞與公司簡介；右上角可設定價格提醒。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("sd.tabs", "三個分頁", "「走勢」為 K 線與技術指標；「分析」為營收、趨勢推估與持股紀律；「資訊」為除權息、新聞與公司簡介。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "K 線操作", "兩指縮放、左右拖曳；點選 K 棒顯示當日開高低收；上方可切換 60 分、日、週、月 K 與顯示區間。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "均線與指標", "下方可加入或移除均線、布林通道，並切換成交量、RSI、MACD 或 KD 指標。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("sd.alert", "價格提醒", "設定目標價與停損價，盤中每 15 分鐘檢查一次，到價時發出通知。"),
     ))
     // 英文字母開頭的代號是美股（沒有月營收；大盤比較改用 S&P 500）
     val market = com.enwei.moneymanager.core.marketOf(symbol)
@@ -177,7 +180,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
         BackTopBar("$symbol ${name.orEmpty()}", { nav.popBackStack() }) {
             // 🔔 價格提醒：放在右上角，任何分頁都按得到；已設定時亮起
-            androidx.compose.material3.IconButton(onClick = { alertOpen = true }) {
+            androidx.compose.material3.IconButton(onClick = { alertOpen = true }, modifier = Modifier.coachTarget("sd.alert")) {
                 androidx.compose.material3.Icon(
                     if (alertSet) androidx.compose.material.icons.Icons.Filled.Notifications else androidx.compose.material.icons.Icons.Outlined.Notifications,
                     "價格提醒", tint = if (alertSet) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -239,7 +242,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                 }
                 // 分段：走勢（K 線、強弱）／分析（營收、趨勢推估、持股紀律）／資訊（除權息、提醒、公司、新聞），每段一個畫面看得完
-                com.enwei.moneymanager.ui.components.SubTabs(listOf("走勢", "分析", "資訊"), dtab) { dtab = it }
+                Box(Modifier.coachTarget("sd.tabs")) { com.enwei.moneymanager.ui.components.SubTabs(listOf("走勢", "分析", "資訊"), dtab) { dtab = it } }
                 // K 線
                 LaunchedEffect(hourly, held.isNotEmpty(), settings.investPlan.disciplineOn, settings.investPlan.guardOn) {
                     if ((hourly || held.isNotEmpty() && settings.investPlan.disciplineOn && settings.investPlan.guardOn) && hourBars == null) {

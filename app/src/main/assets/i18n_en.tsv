@@ -2844,3 +2844,74 @@ K 線可用兩指縮放、左右拖曳，點選 K 棒可查看當日開高低收
 電腦端的 Ollama 須允許區域網路連線（設定 OLLAMA_HOST=0.0.0.0）。	Ollama on the computer must accept LAN connections (set OLLAMA_HOST=0.0.0.0).
 輸入店家、說明或金額搜尋；可依分類、帳戶與期間篩選，並檢視篩選結果的圖表。	Search by merchant, note or amount; filter by category, account and period, and view charts of the results.
 AI 整理	AI tidy
+設定每月總預算後，交易頁上方會顯示已使用比例與每日可用金額。	With a monthly total budget set, Transactions shows how much is used and your daily allowance.
+為個別分類設定上限；記帳時金額下方即時顯示記後剩餘，超過時以紅色標示。	Set limits per category; the amount left appears under the amount when recording, in red if exceeded.
+接近上限（80%）與超過時會發出提醒；每月起始日可於設定中調整。	You are notified near (80%) and over the limit; the month start day can be changed in Settings.
+左右箭頭切換上一期或下一期；點選中間的期間名稱可回到本期。	Use the arrows to move between periods; tap the period name to return to the current one.
+類型與期間長度	Type and period length
+切換支出或收入，以及每週、每月、每年或自訂期間。	Switch between expenses and income, and weekly, monthly, yearly or custom periods.
+分類比例	Category breakdown
+圓餅圖顯示各分類所佔比例；下方清單點選分類可查看子分類與明細交易。	The chart shows each category's share; tap a category below for subcategories and transactions.
+更多分析	More analysis
+往下捲動可查看每月比較與收支趨勢；選擇自訂期間可比較任意兩段時間。	Scroll down for monthly comparison and trends; use a custom period to compare any two ranges.
+每日報告：大盤概況、可考慮的標的（含依據、時光機推估與進出場建議）與持股應採取的動作。報告每日自動產生，也可手動更新。	Daily report: market overview, candidate stocks (with reasoning, outcome estimates and entry/exit guidance) and actions for your holdings. Generated daily, or update manually.
+以自然語言詢問個股、產業或自己的持股，AI 會參考新聞與營收資料回答，回覆中的個股可直接點開 K 線。	Ask about stocks, sectors or your holdings in plain language; AI answers using news and revenue data, and stocks in replies open their charts.
+自動蒐集並標註的新聞：依題材整理重點，標示偏多或偏空，點選可閱讀內容。	News collected and tagged automatically, grouped by theme and marked bullish or bearish; tap to read.
+紀律	Discipline
+資金配置（長線、可投入、預留）、持股的停損停利狀態與自訂的交易紀律；大盤階段提示目前適合加碼或減碼。	Capital allocation (long-term, investable, reserve), stop-loss and take-profit status for holdings, and your trading rules; the market phase suggests whether to add or reduce.
+所有帳戶依群組列出，頂端為淨資產；點選帳戶可查看交易紀錄與餘額走勢，長按可調整排序。	Accounts are listed by group with net worth at the top; tap an account for its transactions and balance trend, long-press to reorder.
+依帳單週期計算本期應繳與未出帳金額；設定自動扣款帳戶後，繳款日會自動記錄轉帳。	Amount due and unbilled spending follow the statement cycle; with an autopay account set, the payment is recorded on the due date.
+與他人的借貸、代墊與分帳集中於「往來」，列出每位對象的應收與應付。	Loans, payments on behalf of others and splits are kept in "Contacts", showing what each person owes and is owed.
+持股、成本與損益；可新增交易、設定價格提醒，點選個股查看 K 線與分析。	Holdings, cost and P/L; add trades, set price alerts, and tap a stock for its chart and analysis.
+往來對象	Contacts
+每位對象列出應收（對方欠你）與應付（你欠對方）；點選對象可查看每一筆往來明細。	Each contact shows what they owe you and what you owe them; tap for every transaction.
+如何記錄	How to record
+代墊或分帳：於記帳表單最下方的「往來」選擇對象；收回欠款：在收入選擇對象並選「他還我」。	Paying for someone or splitting: choose the contact under "Contacts" at the bottom of the form. Getting repaid: choose the contact in income and select "They repaid me".
+結清	Settled
+雙方金額相抵為零即視為結清；點選對象的選單可記錄借出、收回或設定借貸細節。	A contact is settled when the balance is zero; use the contact's menu to record lending, repayment or loan details.
+列出讀取到的每則通知與處理結果（已記帳、待確認或略過）；辨識不正確時可「教它辨識」，下次即自動套用。	Lists every notification read and its result (recorded, pending or skipped); if recognition is wrong, use "Teach" and it applies next time.
+指定要讀取的銀行、信用卡與支付 App；未勾選的 App 不會被讀取。	Choose which bank, card and payment apps to read; unchecked apps are ignored.
+地點測試、通知辨識測試與貼上通知測試；Android 15 被隱藏的通知內容，可在此依步驟開啟讀取。	Location test, recognition test and paste test; on Android 15, follow the steps here to read hidden notification content.
+完整備份	Full backup
+匯出 .lgbak 檔即包含所有交易、帳戶、分類與設定（不含金鑰），可在其他裝置還原。	An exported .lgbak file contains all transactions, accounts, categories and settings (no keys) and can be restored on another device.
+自動備份	Automatic backup
+選擇一個資料夾（例如雲端硬碟同步資料夾）後，帳理會定期自動備份；資料夾權限失效時會在交易頁提醒。	Choose a folder (such as a cloud-synced folder) and Ledgerly backs up regularly; you are reminded on Transactions if folder access is lost.
+還原方式	Restore modes
+「合併」保留現有資料並加入備份內容；「取代」會先清空再匯入，請先確認。	"Merge" keeps current data and adds the backup; "Replace" clears everything first, so check before using it.
+點選「開啟」後，於「通知存取權」清單找到「帳理」並開啟，系統詢問時選擇「允許」，再返回帳理。	Tap "Open", find Ledgerly in the notification access list and turn it on, choose "Allow" when asked, then return.
+點選「開啟」，於系統詢問時選擇「允許」。	Tap "Open" and choose "Allow" when asked.
+點選「開啟」，於系統詢問時選擇「使用應用程式時允許」，並保留「精確位置」。	Tap "Open", choose "While using the app" when asked, and keep "Precise location" on.
+點選「設定」進入應用程式資訊，依序選擇「權限 → 位置 → 一律允許」，再返回帳理。	Tap "Set up" to open app info, then Permissions → Location → Allow all the time, and return.
+點選「設定」查看申請步驟：啟用 Google Cloud 帳單、啟用 Places API (New)、建立金鑰後貼上。	Tap "Set up" for the steps: enable Google Cloud billing, enable Places API (New), create a key and paste it.
+可擇一使用：Gemini（Google AI Studio 免費申請）、Groq（GroqCloud 免費申請），或家中電腦的自架伺服器。點選「設定」依步驟完成。	Use one of: Gemini (free from Google AI Studio), Groq (free from GroqCloud), or a self-hosted server at home. Tap "Set up" and follow the steps.
+點選「重新選擇」，選取用於自動備份的資料夾（建議選擇會同步至雲端硬碟的資料夾）。	Tap "Choose again" and select the backup folder (a cloud-synced folder is recommended).
+Gemini（建議）	Gemini (recommended)
+以 Google 帳號登入 Google AI Studio	Sign in to Google AI Studio with your Google account
+點選「Create API key」並複製金鑰（AIza 開頭）	Tap "Create API key" and copy it (starts with AIza)
+將金鑰貼於下方，點選「測試並儲存」	Paste the key below and tap "Test and save"
+登入 GroqCloud（可免費註冊）	Sign in to GroqCloud (free sign-up)
+點選「Create API Key」並複製金鑰（gsk_ 開頭）	Tap "Create API Key" and copy it (starts with gsk_)
+Gemini 免費額度足以應付日常記帳與每日報告，可讀取較大量的資料。	Gemini's free tier covers everyday recording and daily reports, and handles larger inputs.
+Groq 回應速度快，適合頻繁的小型判讀。	Groq responds quickly and suits frequent small tasks.
+使用家中電腦的自架伺服器（Ollama）：請至「設定 → AI 模型設定 → 自架伺服器」。	To use a self-hosted server (Ollama) at home, go to Settings → AI models → Self-hosted server.
+測試並儲存	Test and save
+房租、訂閱、薪資等固定收支可設為週期交易，依設定的頻率自動產生。	Rent, subscriptions, salary and other fixed items can be recurring and are created on schedule.
+自動或確認	Automatic or review
+可選擇到期時直接記錄，或放入「待確認」由您確認金額後再記錄；分期付款也在此設定。	Record automatically when due, or place in "Pending" for you to confirm the amount; instalments are set here too.
+登入 Mapbox（可免費註冊）	Sign in to Mapbox (free sign-up)
+於 Access tokens 複製 Default public token（pk. 開頭）	Copy the Default public token (starts with pk.) from Access tokens
+將金鑰貼於下方	Paste the key below
+登入 Google Cloud 並啟用帳單（每月有免費額度，個人使用通常不會產生費用）	Sign in to Google Cloud and enable billing (there is a monthly free allowance; personal use is usually free)
+於 API 程式庫啟用「Places API (New)」	Enable "Places API (New)" in the API library
+於「憑證」建立 API 金鑰，並建議限制僅能使用 Places API	Create an API key under Credentials, ideally restricted to Places API
+（建議）將每日用量上限設為 200	(Recommended) set the daily quota to 200
+將 AIza 開頭的金鑰貼於下方	Paste the key starting with AIza below
+三個分頁	Three tabs
+「走勢」為 K 線與技術指標；「分析」為營收、趨勢推估與持股紀律；「資訊」為除權息、新聞與公司簡介。	"Chart" has candles and indicators; "Analysis" has revenue, trend projections and holding rules; "Info" has dividends, news and the company profile.
+K 線操作	Using the chart
+兩指縮放、左右拖曳；點選 K 棒顯示當日開高低收；上方可切換 60 分、日、週、月 K 與顯示區間。	Pinch and drag; tap a candle for its open, high, low and close; switch between hourly, daily, weekly and monthly and the visible range above.
+均線與指標	Moving averages & indicators
+下方可加入或移除均線、布林通道，並切換成交量、RSI、MACD 或 KD 指標。	Add or remove moving averages and Bollinger bands below, and switch between volume, RSI, MACD and KD.
+設定目標價與停損價，盤中每 15 分鐘檢查一次，到價時發出通知。	Set a target and stop price; checked every 15 minutes during trading with a notification when reached.
+可輸入店家、說明或金額；結果會即時列出並加總。	Enter a merchant, note or amount; results and totals appear instantly.
+依分類、帳戶、類型與期間組合篩選，並可查看篩選結果的分類圖表與趨勢。	Combine filters by category, account, type and period, and view category charts and trends for the results.

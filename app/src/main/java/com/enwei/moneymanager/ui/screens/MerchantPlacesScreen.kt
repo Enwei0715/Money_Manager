@@ -276,15 +276,7 @@ fun MerchantPlacesScreen(nav: NavController) {
         )
     }
 
-    if (gOpen) KeyDialog("Google Places 金鑰", "AIza…", { com.enwei.moneymanager.net.GooglePlaces.key }, { com.enwei.moneymanager.net.GooglePlaces.key = it },
-        { com.enwei.moneymanager.net.GooglePlaces.test() },
-        steps = listOf(
-            "登入 Google Cloud，開啟帳單（每月有免費額度，個人使用通常不會收費）" to "https://console.cloud.google.com/billing",
-            "啟用「Places API (New)」" to "https://console.cloud.google.com/apis/library/places.googleapis.com",
-            "建立 API 金鑰（建議限制只能用 Places API）" to "https://console.cloud.google.com/apis/credentials",
-            "（建議）把每日用量上限設為 200" to "https://console.cloud.google.com/apis/api/places.googleapis.com/quotas",
-            "把 AIza 開頭的金鑰貼在下面" to null,
-        )) { gOpen = false; gOn = com.enwei.moneymanager.net.GooglePlaces.enabled; tick++ }
+    if (gOpen) GooglePlacesKeyDialog { gOpen = false; gOn = com.enwei.moneymanager.net.GooglePlaces.enabled; tick++ }
     if (tokenOpen) MapboxTokenDialog { tokenOpen = false; mbOn = com.enwei.moneymanager.net.Mapbox.enabled; tick++ }
     searching?.let { p ->
         MapboxSearchDialog(p.name, p.loc ?: PlaceHints.anchors(ctx).firstOrNull() ?: (25.0136 to 121.5414)) { hit ->
@@ -366,9 +358,9 @@ private fun ActionLine(label: String, onClick: () -> Unit) {
 private fun MapboxTokenDialog(onClose: () -> Unit) = KeyDialog("Mapbox 金鑰", "pk.…", { com.enwei.moneymanager.net.Mapbox.token },
     { com.enwei.moneymanager.net.Mapbox.token = it }, { com.enwei.moneymanager.net.Mapbox.test() },
     steps = listOf(
-        "登入 Mapbox（免費帳號）" to "https://account.mapbox.com/",
-        "到 Access tokens 複製 Default public token（pk. 開頭）" to "https://account.mapbox.com/access-tokens/",
-        "貼在下面" to null,
+        "登入 Mapbox（可免費註冊）" to "https://account.mapbox.com/",
+        "於 Access tokens 複製 Default public token（pk. 開頭）" to "https://account.mapbox.com/access-tokens/",
+        "將金鑰貼於下方" to null,
     ), onClose = onClose)
 
 /** 金鑰設定視窗：存檔前先測試，失敗就還原並顯示原因；留空＝刪除金鑰。 */
@@ -457,3 +449,17 @@ private fun MapboxSearchDialog(name: String, near: Pair<Double, Double>, onDone:
         confirmButton = { TextButton(onClick = { onDone(null) }) { Text("取消") } },
     )
 }
+
+
+/** Google Places 金鑰：申請步驟（每一步可直接打開）＋貼上＋測試。店家位置與功能設定共用。 */
+@Composable
+internal fun GooglePlacesKeyDialog(onClose: () -> Unit) = KeyDialog("Google Places 金鑰", "AIza…",
+    { com.enwei.moneymanager.net.GooglePlaces.key }, { com.enwei.moneymanager.net.GooglePlaces.key = it },
+    { com.enwei.moneymanager.net.GooglePlaces.test() },
+    steps = listOf(
+        "登入 Google Cloud 並啟用帳單（每月有免費額度，個人使用通常不會產生費用）" to "https://console.cloud.google.com/billing",
+        "於 API 程式庫啟用「Places API (New)」" to "https://console.cloud.google.com/apis/library/places.googleapis.com",
+        "於「憑證」建立 API 金鑰，並建議限制僅能使用 Places API" to "https://console.cloud.google.com/apis/credentials",
+        "（建議）將每日用量上限設為 200" to "https://console.cloud.google.com/apis/api/places.googleapis.com/quotas",
+        "將 AIza 開頭的金鑰貼於下方" to null,
+    ), onClose = onClose)

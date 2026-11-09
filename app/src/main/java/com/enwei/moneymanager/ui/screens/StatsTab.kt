@@ -129,9 +129,12 @@ private fun List<TxnEntity>.inRange(r: PeriodRange) = filter { val d = it.date.t
 
 @Composable
 fun StatsTab(nav: NavController) {
-    // 第一次打開這頁：簡短介紹
+    // 第一次打開這頁：逐一介紹期間、類型與圖表
     com.enwei.moneymanager.ui.components.PageTour("stats", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "統計", "切換期間與類型，檢視分類比例、每月比較與收支趨勢；點選分類可查看明細。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("st.period", "期間", "左右箭頭切換上一期或下一期；點選中間的期間名稱可回到本期。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("st.kind", "類型與期間長度", "切換支出或收入，以及每週、每月、每年或自訂期間。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("st.pie", "分類比例", "圓餅圖顯示各分類所佔比例；下方清單點選分類可查看子分類與明細交易。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "更多分析", "往下捲動可查看每月比較與收支趨勢；選擇自訂期間可比較任意兩段時間。"),
     ))
     val lk = rememberLookups()
     // 期間與收支種類都記住，下次回來維持上次的檢視
@@ -160,7 +163,7 @@ fun StatsTab(nav: NavController) {
             scrollBehavior = topScroll,
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, scrolledContainerColor = MaterialTheme.colorScheme.surface),
             title = {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(x = (-12).dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(x = (-12).dp).coachTarget("st.period")) {
                     if (period != Period.CUSTOM) IconButton(onClick = { anchor = shift(period, anchor, -1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
                     Text(range.title, fontSize = if (period == Period.CUSTOM) AppText.section else AppText.title, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable { if (period == Period.CUSTOM) pickRange = true else anchor = LocalDate.now() })
@@ -170,7 +173,7 @@ fun StatsTab(nav: NavController) {
             actions = {
                 Box(Modifier.padding(end = 8.dp)) {
                     Row(
-                        Modifier.border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(8.dp)).clickable { menu = true }
+                        Modifier.coachTarget("st.kind").border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(8.dp)).clickable { menu = true }
                             .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) { Text(period.label, fontSize = AppText.body); Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp)) }
@@ -200,7 +203,7 @@ fun StatsTab(nav: NavController) {
             }) {
             LazyColumn(Modifier.fillMaxSize()) {
                 item {
-                    Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.background(MaterialTheme.colorScheme.surface).coachTarget("st.pie")) {
                         PieChart(byCat.map { (cid, v) -> (lk.category(cid)?.name ?: "未分類") to v })
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

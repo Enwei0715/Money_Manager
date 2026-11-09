@@ -132,7 +132,11 @@ object Onboarding {
                 Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 24.dp, vertical = 12.dp)) {
                     Row(Modifier.fillMaxWidth()) {
                         Spacer(Modifier.weight(1f))
-                        if (pager.currentPage < pages.size - 1) TextButton(onClick = { finish() }) { Text("略過") }
+                        // 略過：還沒到「完成功能設定」時先跳到那一頁（設定很重要，不直接離開）；已在設定頁才結束
+                        val setupPage = pages.indexOfFirst { it.kind == 3 }
+                        if (pager.currentPage < pages.size - 1) TextButton(onClick = {
+                            if (setupPage > pager.currentPage) scope.launch { pager.animateScrollToPage(setupPage) } else finish()
+                        }) { Text("略過") }
                     }
                     androidx.compose.material3.LinearProgressIndicator(
                         progress = { (pager.currentPage + 1f) / pages.size }, modifier = Modifier.fillMaxWidth().height(3.dp),

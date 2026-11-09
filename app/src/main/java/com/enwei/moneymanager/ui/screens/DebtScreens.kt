@@ -56,9 +56,11 @@ import java.time.LocalDate
  */
 @Composable
 fun DebtsScreen(nav: NavController) {
-    // 第一次打開這頁：簡短介紹
+    // 第一次打開這頁：介紹往來
     com.enwei.moneymanager.ui.components.PageTour("debts", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "往來", "列出每位對象的應收與應付金額；點選對象可查看明細，或記錄代墊、借還款。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "往來對象", "每位對象列出應收（對方欠你）與應付（你欠對方）；點選對象可查看每一筆往來明細。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "如何記錄", "代墊或分帳：於記帳表單最下方的「往來」選擇對象；收回欠款：在收入選擇對象並選「他還我」。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "結清", "雙方金額相抵為零即視為結清；點選對象的選單可記錄借出、收回或設定借貸細節。"),
     ))
     val lk = rememberLookups()
     val balances by repo.balances.collectAsStateWithLifecycle(emptyList())

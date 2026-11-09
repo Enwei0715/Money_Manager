@@ -292,9 +292,11 @@ private fun installedApps(ctx: Context): List<AppEntry> {
 
 @Composable
 fun NotificationSettingsScreen(nav: NavController) {
-    // 第一次打開這頁：簡短介紹
+    // 第一次打開這頁：介紹三個分頁
     com.enwei.moneymanager.ui.components.PageTour("notif", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "通知自動記帳", "「紀錄」列出讀取到的通知與處理結果；「來源 App」指定要讀取的 App；「進階」提供地點與辨識測試。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("nf.tab0", "紀錄", "列出讀取到的每則通知與處理結果（已記帳、待確認或略過）；辨識不正確時可「教它辨識」，下次即自動套用。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("nf.tab1", "來源 App", "指定要讀取的銀行、信用卡與支付 App；未勾選的 App 不會被讀取。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("nf.tab2", "進階", "地點測試、通知辨識測試與貼上通知測試；Android 15 被隱藏的通知內容，可在此依步驟開啟讀取。"),
     ))
     val ctx = LocalContext.current
     val lk = rememberLookups()
@@ -426,7 +428,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).padding(3.dp)) {
                     listOf("紀錄", "來源 App", "進階").forEachIndexed { i, l ->
                         val on = tab == i
-                        Box(Modifier.weight(1f).background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
+                        Box(Modifier.weight(1f).coachTarget("nf.tab$i").background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(8.dp))
                             .clickable { tab = i }.padding(vertical = 7.dp), contentAlignment = Alignment.Center) {
                             Text(l, fontSize = AppText.secondary, fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal)
                         }
@@ -830,9 +832,11 @@ fun FxScreen(nav: NavController) {
 
 @Composable
 fun BackupScreen(nav: NavController) {
-    // 第一次打開這頁：簡短介紹
+    // 第一次打開這頁：介紹備份與還原
     com.enwei.moneymanager.ui.components.PageTour("backup", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "備份", "可匯出完整備份並於其他裝置還原；設定自動備份資料夾後，將定期自動備份。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "完整備份", "匯出 .lgbak 檔即包含所有交易、帳戶、分類與設定（不含金鑰），可在其他裝置還原。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "自動備份", "選擇一個資料夾（例如雲端硬碟同步資料夾）後，帳理會定期自動備份；資料夾權限失效時會在交易頁提醒。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "還原方式", "「合併」保留現有資料並加入備份內容；「取代」會先清空再匯入，請先確認。"),
     ))
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()

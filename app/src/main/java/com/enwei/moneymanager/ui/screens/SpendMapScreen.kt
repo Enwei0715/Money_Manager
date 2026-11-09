@@ -355,7 +355,7 @@ fun SpendMapScreen(nav: NavController) {
 }
 
 /** 地圖針頭的半徑（dp）：金額越大越大，但差距不誇張 */
-private fun pinR(sp: SpendSpot, maxTotal: Long) = 7.0 + 5.0 * kotlin.math.sqrt(sp.total.toDouble() / maxTotal)
+private fun pinR(sp: SpendSpot, maxTotal: Long) = 3.6 + 2.2 * kotlin.math.sqrt(sp.total.toDouble() / maxTotal)
 
 /** 地圖圖磚的記憶體快取（最近用過的 240 張）。 */
 private object TileCache {
@@ -420,7 +420,7 @@ private fun SpendMap(
     androidx.compose.runtime.LaunchedEffect(focusTick) {
         if (focusTick > 0) picked?.let { cx = mx(it.lon); cy = my(it.lat); if (zoom < 16.0) zoom = 16.0 }
     }
-    val palette = listOf(0xFFE4574F, 0xFF3D7FD9, 0xFFE89A2C, 0xFF2A9D8F, 0xFF9B5DC4, 0xFF6BA544, 0xFFD9682B, 0xFF5B6ABF)
+    val palette = listOf(0xFFC8574E, 0xFF4F7FC0, 0xFFC9913F, 0xFF3E9488, 0xFF8C66B0, 0xFF6E9A4F, 0xFFC0703C, 0xFF6370B0)
     val cats = remember(spots) { spots.map { it.cat }.distinct() }
     val maxTotal = spots.maxOfOrNull { it.total }?.coerceAtLeast(1) ?: 1
     // 第一次量到大小時：把所有點框進畫面
@@ -588,28 +588,28 @@ private fun SpendMap(
                     load(z, ((tx % n) + n) % n, ty, pre = true)
                 }
             }
-            // 地點標記：跟地圖上的店家圖示同一種風格——實心圓＋白邊＋淡淡的陰影，顏色＝分類、大小＝金額
+            // 地點標記：小而精緻的圓點——細白邊、極淡陰影；選中的外圍多一圈淡色光暈（大小隨金額只略為變化）
             spots.sortedBy { if (it == picked) 1 else 0 }.forEach { sp ->
                 val px = ((mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
-                val r = (pinR(sp, maxTotal) * 0.8).dp.toPx() * (if (sp == picked) 1.25f else 1f)
+                val r = (pinR(sp, maxTotal) * 0.8 + 1.0).dp.toPx()
                 val col = androidx.compose.ui.graphics.Color(palette[cats.indexOf(sp.cat).coerceAtLeast(0) % palette.size])
                 val c = androidx.compose.ui.geometry.Offset(px, py)
-                drawCircle(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.18f), r + 3.dp.toPx(), c + androidx.compose.ui.geometry.Offset(0f, 1.5.dp.toPx()))
-                drawCircle(androidx.compose.ui.graphics.Color.White, r + 2.dp.toPx(), c)
+                if (sp == picked) drawCircle(col.copy(alpha = 0.22f), r + 7.dp.toPx(), c)
+                drawCircle(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.12f), r + 1.6.dp.toPx(), c + androidx.compose.ui.geometry.Offset(0f, 0.8.dp.toPx()))
+                drawCircle(if (dark) androidx.compose.ui.graphics.Color(0xFFF2F0EC) else androidx.compose.ui.graphics.Color.White, r + 1.4.dp.toPx(), c)
                 drawCircle(col, r, c)
-                drawCircle(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.9f), r * 0.32f, c)
             }
             // 店名：像地圖上的地名一樣，深色字＋白色描邊（深色模式相反），寫在圓點右邊；重疊時只寫金額大的
             val labelFg = if (dark) androidx.compose.ui.graphics.Color(0xFFEDEDED) else androidx.compose.ui.graphics.Color(0xFF2B2B2B)
             val halo = if (dark) androidx.compose.ui.graphics.Color(0xE61E1E21) else androidx.compose.ui.graphics.Color(0xF2FFFFFF)
             val taken = mutableListOf<androidx.compose.ui.geometry.Rect>()
-            (listOfNotNull(picked) + spots.take(8)).distinct().forEach { sp ->
+            (listOfNotNull(picked) + spots.take(5)).distinct().forEach { sp ->
                 val px = ((mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
                 if (px < -40 || px > size.width + 40 || py < -20 || py > size.height + 20) return@forEach
-                val r = (pinR(sp, maxTotal) * 0.8).dp.toPx()
-                val base = androidx.compose.ui.text.TextStyle(fontSize = 11.5.sp, fontWeight = if (sp == picked) FontWeight.SemiBold else FontWeight.Medium)
+                val r = (pinR(sp, maxTotal) * 0.8 + 2.4).dp.toPx()
+                val base = androidx.compose.ui.text.TextStyle(fontSize = 10.5.sp, fontWeight = if (sp == picked) FontWeight.SemiBold else FontWeight.Normal, letterSpacing = 0.2.sp)
                 val lay = textMeasurer.measure(if (sp.name.length > 10) sp.name.take(9) + "…" else sp.name, base.copy(color = labelFg))
-                val lx = px + r + 5.dp.toPx(); val ly = py - lay.size.height / 2f
+                val lx = px + r + 6.dp.toPx(); val ly = py - lay.size.height / 2f
                 val rect = androidx.compose.ui.geometry.Rect(lx - 2.dp.toPx(), ly, lx + lay.size.width + 2.dp.toPx(), ly + lay.size.height)
                 if (taken.any { it.overlaps(rect) }) return@forEach
                 taken += rect

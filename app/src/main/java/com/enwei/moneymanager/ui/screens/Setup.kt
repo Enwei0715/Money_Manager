@@ -55,6 +55,17 @@ object Setup {
      */
     data class Item(val id: String, val feature: String, val title: String, val why: String, val required: Boolean, val action: String)
 
+    /** 每一項怎麼設定（尚未完成時顯示在項目下方） */
+    val howTo = mapOf(
+        "notif.listener" to "點選「開啟」後，於「通知存取權」清單找到「帳理」並開啟，系統詢問時選擇「允許」，再返回帳理。",
+        "notif.post" to "點選「開啟」，於系統詢問時選擇「允許」。",
+        "map.location" to "點選「開啟」，於系統詢問時選擇「使用應用程式時允許」，並保留「精確位置」。",
+        "map.background" to "點選「設定」進入應用程式資訊，依序選擇「權限 → 位置 → 一律允許」，再返回帳理。",
+        "map.places" to "點選「設定」查看申請步驟：啟用 Google Cloud 帳單、啟用 Places API (New)、建立金鑰後貼上。",
+        "ai.key" to "可擇一使用：Gemini（Google AI Studio 免費申請）、Groq（GroqCloud 免費申請），或家中電腦的自架伺服器。點選「設定」依步驟完成。",
+        "backup.folder" to "點選「重新選擇」，選取用於自動備份的資料夾（建議選擇會同步至雲端硬碟的資料夾）。",
+    )
+
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("smart", Context.MODE_PRIVATE)
 
     fun items(): List<Item> = buildList {
@@ -134,7 +145,32 @@ fun SetupList(features: Set<String>, open: (String) -> Unit) {
     val tick = rememberResumeTick()
     var shizukuOpen by remember { mutableStateOf(false) }
     var shizukuMsg by remember { mutableStateOf<String?>(null) }
-    @Suppress("UNUSED_VARIABLE") val t = tick
+    var aiOpen by remember { mutableStateOf(false) }
+    var placesOpen by remember { mutableStateOf(false) }
+    var recheck by remember { mutableIntStateOf(0) }
+    val appDetails = { runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        android.net.Uri.fromParts("package", ctx.packageName, null)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+    // 權限直接在這裡跳系統詢問；已被拒絕到不再詢問時，改開應用程式資訊頁
+    val locLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { r ->
+        recheck++; if (r.values.none { it }) appDetails()
+        if (r.values.any { it }) repo.settings.update { it.copy(locationHints = true) }
+    }
+    val postLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { ok ->
+        recheck++; if (!ok) Setup.act(ctx, "notif.post") {}
+    }
+    fun doAction(id: String) {
+        when (id) {
+            "notif.sensitive" -> shizukuOpen = !shizukuOpen
+            "ai.key" -> aiOpen = true
+            "map.places" -> placesOpen = true
+            "map.location" -> locLauncher.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
+            "notif.post" -> if (android.os.Build.VERSION.SDK_INT >= 33) postLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            else -> Setup.act(ctx, id, open)
+        }
+    }
+    if (aiOpen) AiKeySetupDialog { aiOpen = false; recheck++ }
+    if (placesOpen) GooglePlacesKeyDialog { placesOpen = false; recheck++ }
+    @Suppress("UNUSED_VARIABLE") val t = tick + recheck
     val groups = Setup.items().filter { it.feature in features }.groupBy { it.feature }
     Column {
         groups.forEach { (f, list) ->
@@ -152,9 +188,12 @@ fun SetupList(features: Set<String>, open: (String) -> Unit) {
                         Text(item.title + if (!item.required) "（選用）" else "", fontSize = AppText.body)
                         Text(item.why, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (!ok) TextButton(onClick = {
-                        if (item.id == "notif.sensitive") shizukuOpen = !shizukuOpen else Setup.act(ctx, item.id, open)
-                    }) { Text(item.action) }
+                    if (!ok) TextButton(onClick = { doAction(item.id) }) { Text(item.action) }
+                }
+                // 尚未完成：下方寫清楚怎麼設定
+                if (!ok) Setup.howTo[item.id]?.let { how ->
+                    Text(how, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 42.dp, end = 16.dp, bottom = 10.dp))
                 }
                 // 讀取被隱藏的通知：用 Shizuku（不用電腦）
                 if (item.id == "notif.sensitive" && shizukuOpen && !ok) Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
@@ -228,4 +267,65 @@ fun SetupBanner(nav: NavController) {
         Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.clickable { SetupBannerState.dismissed = SetupBannerState.dismissed + item.id }.padding(horizontal = 10.dp, vertical = 6.dp))
     }
+}
+
+
+/**
+ * AI 金鑰設定：選 Gemini 或 Groq，照步驟申請（每一步可直接打開網頁），貼上後測試，成功才儲存並開啟 AI。
+ * 自架伺服器（Ollama）較進階，於「設定 → AI 模型設定」填寫。
+ */
+@Composable
+fun AiKeySetupDialog(onClose: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var gemini by remember { mutableStateOf(true) }
+    var key by remember { mutableStateOf("") }
+    var msg by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    fun open(url: String) = runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("設定 AI") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.FilterChip(gemini, { gemini = true }, label = { Text("Gemini（建議）") })
+                    androidx.compose.material3.FilterChip(!gemini, { gemini = false }, label = { Text("Groq") })
+                }
+                val steps = if (gemini) listOf(
+                    "以 Google 帳號登入 Google AI Studio" to "https://aistudio.google.com/app/apikey",
+                    "點選「Create API key」並複製金鑰（AIza 開頭）" to null,
+                    "將金鑰貼於下方，點選「測試並儲存」" to null,
+                ) else listOf(
+                    "登入 GroqCloud（可免費註冊）" to "https://console.groq.com/keys",
+                    "點選「Create API Key」並複製金鑰（gsk_ 開頭）" to null,
+                    "將金鑰貼於下方，點選「測試並儲存」" to null,
+                )
+                steps.forEachIndexed { i, (label, url) -> StepLine("${i + 1}. $label", if (url != null) "打開" else null) { url?.let { open(it) } } }
+                Text(if (gemini) "Gemini 免費額度足以應付日常記帳與每日報告，可讀取較大量的資料。" else "Groq 回應速度快，適合頻繁的小型判讀。",
+                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp))
+                androidx.compose.material3.OutlinedTextField(key, { key = it.trim() }, singleLine = true, placeholder = { Text(if (gemini) "AIza…" else "gsk_…") },
+                    modifier = Modifier.fillMaxWidth())
+                if (msg.isNotBlank()) Text(msg, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                Text("使用家中電腦的自架伺服器（Ollama）：請至「設定 → AI 模型設定 → 自架伺服器」。", fontSize = AppText.label,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy && key.length > 10, onClick = {
+                busy = true; msg = "測試中…"
+                val before = repo.settings.value
+                repo.settings.update { if (gemini) it.copy(geminiKey = key, aiEnabled = true) else it.copy(groqKey = key, aiEnabled = true) }
+                scope.launch {
+                    val err = com.enwei.moneymanager.net.GroqAi.testProvider(if (gemini) com.enwei.moneymanager.net.GroqAi.Provider.GEMINI else com.enwei.moneymanager.net.GroqAi.Provider.GROQ)
+                    busy = false
+                    if (err == null) onClose() else {
+                        msg = "無法使用：$err"
+                        repo.settings.update { if (gemini) it.copy(geminiKey = before.geminiKey) else it.copy(groqKey = before.groqKey) }
+                    }
+                }
+            }) { Text(if (busy) "測試中…" else "測試並儲存") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("取消") } },
+    )
 }

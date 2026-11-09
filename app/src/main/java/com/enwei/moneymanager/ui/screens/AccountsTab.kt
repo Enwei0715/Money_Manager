@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.coachTarget
 import com.enwei.moneymanager.ui.components.groupCell
 import androidx.compose.foundation.lazy.itemsIndexed
 
@@ -145,10 +146,12 @@ private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int = 0) {
-    // 第一次打開這頁：簡短介紹
+    // 第一次打開這頁：介紹帳戶、信用卡、往來與股票
     com.enwei.moneymanager.ui.components.PageTour("accounts", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "資產", "帳戶、信用卡、往來與股票集中於此；點選帳戶可查看交易與餘額變化。"),
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "信用卡", "依帳單週期計算本期應繳與未出帳金額，並於繳款日前提醒。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("ac.tab0", "帳戶", "所有帳戶依群組列出，頂端為淨資產；點選帳戶可查看交易紀錄與餘額走勢，長按可調整排序。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "信用卡", "依帳單週期計算本期應繳與未出帳金額；設定自動扣款帳戶後，繳款日會自動記錄轉帳。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "往來", "與他人的借貸、代墊與分帳集中於「往來」，列出每位對象的應收與應付。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("ac.tab1", "股票", "持股、成本與損益；可新增交易、設定價格提醒，點選個股查看 K 線與分析。"),
     ))
     // 往下捲時標題列與分頁列收起，內容用滿畫面；往上捲立刻出現
     val topScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -232,7 +235,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
             indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[section]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
         ) {
             (if (stocksOn) listOf("帳戶", "股票") else listOf("帳戶")).forEachIndexed { i, t ->
-                Tab(section == i, { section = i }, text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = AppText.body, group = fitGroup1) },
+                Tab(section == i, { section = i }, modifier = Modifier.coachTarget("ac.tab$i"), text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = AppText.body, group = fitGroup1) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } }

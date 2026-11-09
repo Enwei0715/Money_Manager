@@ -71,9 +71,10 @@ fun currencyOptions(lk: Lookups): List<String> =
 
 @Composable
 fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMonth: java.time.YearMonth? = null) {
-    // 第一次打開這頁：簡短介紹
+    // 第一次打開這頁：介紹搜尋與篩選
     com.enwei.moneymanager.ui.components.PageTour("search", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "搜尋與篩選", "輸入店家、說明或金額搜尋；可依分類、帳戶與期間篩選，並檢視篩選結果的圖表。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "搜尋", "可輸入店家、說明或金額；結果會即時列出並加總。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "篩選", "依分類、帳戶、類型與期間組合篩選，並可查看篩選結果的分類圖表與趨勢。"),
     ))
     val lk = rememberLookups()
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
