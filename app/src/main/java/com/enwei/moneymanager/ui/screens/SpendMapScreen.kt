@@ -523,9 +523,10 @@ private fun SpendMap(
                 val rect = androidx.compose.ui.geometry.Rect(lx - 2.dp.toPx(), ly, lx + lay.size.width + 2.dp.toPx(), ly + lay.size.height)
                 if (taken.any { it.overlaps(rect) }) return@forEach
                 taken += rect
-                val haloLay = textMeasurer.measure(sp.name.take(10), base.copy(color = halo,
-                    drawStyle = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx(), join = androidx.compose.ui.graphics.StrokeJoin.Round)))
-                drawText(haloLay, topLeft = androidx.compose.ui.geometry.Offset(lx, ly))
+                // 描邊：同一段字用底色在周圍畫一圈（比描邊筆刷穩定，不會糊成一團）
+                val h = 1.4.dp.toPx()
+                for (dx in listOf(-h, 0f, h)) for (dy in listOf(-h, 0f, h)) if (dx != 0f || dy != 0f)
+                    drawText(lay, color = halo, topLeft = androidx.compose.ui.geometry.Offset(lx + dx, ly + dy))
                 drawText(lay, topLeft = androidx.compose.ui.geometry.Offset(lx, ly))
             }
             val credit = textMeasurer.measure(if (style == "mb") "© Mapbox © OpenStreetMap" else "© OpenStreetMap contributors", androidx.compose.ui.text.TextStyle(fontSize = 9.sp, color = if (dark) androidx.compose.ui.graphics.Color(0xAAFFFFFF) else androidx.compose.ui.graphics.Color(0xAA000000)))
