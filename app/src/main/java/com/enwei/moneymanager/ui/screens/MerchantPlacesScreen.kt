@@ -318,7 +318,9 @@ private fun MapboxSearchDialog(name: String, near: Pair<Double, Double>, onDone:
     LaunchedEffect(q) {
         if (q.trim().length < 2) { results = emptyList(); return@LaunchedEffect }
         kotlinx.coroutines.delay(600)
+        // Mapbox 找不到（台灣小店它常常沒有）就用 OpenStreetMap 在附近 3 公里找
         results = com.enwei.moneymanager.net.Mapbox.search(q, near, 10)
+            .ifEmpty { PlaceHints.overpassSearch(q, near.first, near.second, 3000) }
     }
     AlertDialog(
         onDismissRequest = { onDone(null) },

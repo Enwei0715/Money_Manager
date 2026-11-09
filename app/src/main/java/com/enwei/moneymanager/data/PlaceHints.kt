@@ -422,6 +422,31 @@ object PlaceHints {
      * 對準店家：在 [lat],[lon] 附近 [radius] 公尺內找名稱相符的店（OpenStreetMap），回傳最近那間的座標。
      * 連鎖店（萊爾富、7-11…）也是找離付款位置最近的那間分店。找不到回傳 null。
      */
+    /** OpenStreetMap（Overpass）用名稱在附近找店，列出名稱與位置（由近到遠），給「搜尋店家」用 */
+    suspend fun overpassSearch(name: String, lat: Double, lon: Double, radius: Int = 3000): List<com.enwei.moneymanager.net.Mapbox.Place> = withContext(Dispatchers.IO) {
+        runCatching {
+            val key = matchKey(name).ifBlank { return@runCatching emptyList() }
+            val esc = Regex.escape(key).replace("\\Q", "").replace("\\E", "").replace("\"", "")
+            val q = "[out:json][timeout:12];(" +
+                "node(around:$radius,$lat,$lon)[\"name\"~\"$esc\",i];" +
+                "way(around:$radius,$lat,$lon)[\"name\"~\"$esc\",i];" +
+                ");out center 20;"
+            val els = overpassPost(q) ?: return@runCatching emptyList()
+            els.mapNotNull { e ->
+                val o = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                fun num(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                    ?: ((o["center"] as? kotlinx.serialization.json.JsonObject)?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                val tags = o["tags"] as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                fun tag(k: String) = (tags[k] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                val nm = (tag("name:zh") ?: tag("name") ?: return@mapNotNull null) + (tag("branch")?.let { " $it" } ?: "")
+                val la = num("lat") ?: return@mapNotNull null
+                val lo = num("lon") ?: return@mapNotNull null
+                val addr = listOfNotNull(tag("addr:street"), tag("addr:housenumber")).joinToString("")
+                com.enwei.moneymanager.net.Mapbox.Place(nm, addr, la, lo, dist(lat, lon, la, lo))
+            }.sortedBy { it.meters }.distinctBy { it.name to "%.4f".format(it.lat) }.take(10)
+        }.getOrDefault(emptyList())
+    }
+
     suspend fun snapToStore(name: String, lat: Double, lon: Double, radius: Int = 300): Pair<Double, Double>? = withContext(Dispatchers.IO) {
         runCatching {
             // 店名去掉分店、括號等，只用主要名稱比對（例如「萊爾富 永和店」→「萊爾富」）

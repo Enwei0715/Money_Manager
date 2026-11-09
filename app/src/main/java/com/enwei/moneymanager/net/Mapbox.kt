@@ -70,13 +70,28 @@ object Mapbox {
         if (!enabled || q.isBlank()) return emptyList()
         val k = "s|${q.trim().lowercase()}|${near?.let { "%.3f,%.3f".format(it.first, it.second) }}|$limit|$poi"
         cached(k)?.let { return it }
-        fun url(lang: Boolean, types: Boolean) = "https://api.mapbox.com/search/searchbox/v1/forward?q=" + URLEncoder.encode(q.trim(), "UTF-8") +
-            (if (lang) "&language=zh" else "") + "&country=TW&limit=$limit" + (if (poi && types) "&types=poi" else "") +
+        fun url(lang: Boolean) = "https://api.mapbox.com/search/searchbox/v1/forward?q=" + URLEncoder.encode(q.trim(), "UTF-8") +
+            (if (lang) "&language=zh" else "") + "&country=TW&limit=$limit" + (if (poi) "&types=poi" else "") +
             (near?.let { "&proximity=${it.second},${it.first}" } ?: "") + "&access_token=" + token
-        // 先找店家（中文名稱）；沒有結果再放寬（不限語言、不限類型）
-        var res = get(url(lang = true, types = true))?.let { parse(it, near) }.orEmpty()
-        if (res.isEmpty() && lastOk) res = get(url(lang = false, types = false))?.let { parse(it, near) }.orEmpty()
+        // 只要店家（POI）；中文查不到再不指定語言查一次
+        var res = get(url(lang = true))?.let { parse(it, near) }.orEmpty()
+        if (res.isEmpty() && lastOk) res = get(url(lang = false))?.let { parse(it, near) }.orEmpty()
+        // 只留名稱對得上、離中心 15 公里內的（Mapbox 會回傳很遠、只有一個字相同的地名，不能用）
+        if (poi) res = res.filter { (it.meters ?: 0f) <= 15_000f && relevant(q, it.name) }
         return res.sortedBy { it.meters ?: 0f }.also { if (lastOk) cache.put(k, System.currentTimeMillis() to it) }
+    }
+
+    /** 名稱是否對得上：查詢的主要字詞（連鎖店用分店名）要出現在結果名稱裡 */
+    fun relevant(q: String, name: String): Boolean {
+        fun norm(s: String) = s.lowercase().replace(Regex("[\\s\\-－·・()（）]"), "")
+        val n = norm(name)
+        val parts = q.replace(Regex("[（(].*?[)）]"), "").trim().split(' ', '　').filter { it.isNotBlank() }
+        val branch = parts.drop(1).lastOrNull()?.replace(Regex("(門市|分店|店)$"), "")?.let(::norm)?.takeIf { it.length >= 2 }
+        if (branch != null) return n.contains(branch)
+        val core = norm(parts.firstOrNull().orEmpty())
+        if (core.length < 2) return n.contains(core) && core.isNotEmpty()
+        // 至少兩個連續字相同
+        return (0 until core.length - 1).any { n.contains(core.substring(it, it + 2)) }
     }
 
     /** 這個位置附近的店（由近到遠） */
