@@ -96,14 +96,29 @@ fun MerchantPlacesScreen(nav: NavController) {
 
     // Google 地圖：開啟搜尋 → 分享、複製連結 → 回到這裡自動讀剪貼簿
     var googleFor by remember { mutableStateOf<String?>(null) }
-    fun applyClipboard(name: String) = scope.launch {
+    // 貼連結的視窗：先帶入剪貼簿的內容，讀不到也可以自己貼上
+    var linkFor by remember { mutableStateOf<String?>(null) }
+    var linkText by remember { mutableStateOf("") }
+    var linkBusy by remember { mutableStateOf(false) }
+    fun clip(): String {
         val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
-        val text = runCatching { cm?.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString() }.getOrNull().orEmpty()
-        val ll = PlaceHints.coordsFromMapsLink(text)
+        return runCatching { cm?.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString() }.getOrNull().orEmpty()
+    }
+    fun applyLink(name: String, text: String) = scope.launch {
+        linkBusy = true
+        val ll = PlaceHints.coordsFromMapsLink(text, PlaceHints.anchors(ctx).firstOrNull())
+        linkBusy = false
         if (ll != null) {
-            PlaceHints.setMerchantPin(name, ll.first, ll.second); tick++
+            PlaceHints.setMerchantPin(name, ll.first, ll.second); tick++; linkFor = null
             android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("已設定「$name」的位置"), android.widget.Toast.LENGTH_SHORT).show()
-        } else android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("剪貼簿裡沒有地圖連結"), android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            linkFor = name; linkText = text
+            android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("這個連結讀不出位置"), android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+    fun applyClipboard(name: String) {
+        val t = clip()
+        if (Regex("https?://").containsMatchIn(t)) applyLink(name, t) else { linkFor = name; linkText = t }
     }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
@@ -190,6 +205,21 @@ fun MerchantPlacesScreen(nav: NavController) {
                 }
             },
             confirmButton = { TextButton(onClick = { open = null }) { Text("關閉") } },
+        )
+    }
+
+    linkFor?.let { n ->
+        AlertDialog(
+            onDismissRequest = { if (!linkBusy) linkFor = null },
+            title = { Text(n) },
+            text = {
+                androidx.compose.material3.OutlinedTextField(linkText, { linkText = it }, placeholder = { Text("Google 地圖連結") },
+                    modifier = Modifier.fillMaxWidth(), maxLines = 4)
+            },
+            confirmButton = {
+                TextButton(enabled = !linkBusy && linkText.isNotBlank(), onClick = { applyLink(n, linkText) }) { Text(if (linkBusy) "讀取中…" else "設定") }
+            },
+            dismissButton = { TextButton(onClick = { linkFor = null }) { Text("取消") } },
         )
     }
 }

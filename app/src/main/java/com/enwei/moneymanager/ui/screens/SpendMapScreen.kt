@@ -163,7 +163,7 @@ fun SpendMapScreen(nav: NavController) {
                     kotlinx.coroutines.delay(400)
                     val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
                     val text = runCatching { cm?.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString() }.getOrNull().orEmpty()
-                    PlaceHints.coordsFromMapsLink(text)?.let { googleHit = key to it }
+                    PlaceHints.coordsFromMapsLink(text, PlaceHints.anchors(ctx).firstOrNull())?.let { googleHit = key to it }
                 }
             }
         }
@@ -336,9 +336,8 @@ private fun SpendMap(
         val z = minOf(kotlin.math.log2((sizePx.width - pad * 2) / (dx * tilePx)), kotlin.math.log2((sizePx.height - pad * 2) / (dy * tilePx)))
         zoom = if (spots.size == 1) 16.0 else z.coerceIn(3.0, 16.0)
     }
-    // 底圖：預設「臺灣通用電子地圖」（國土測繪中心，免金鑰、中文清楚）；可切換成 OpenStreetMap。深色模式在畫的時候轉暗
-    val mapPrefs = remember { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("map_prefs", android.content.Context.MODE_PRIVATE) }
-    var style by remember { mutableStateOf(mapPrefs.getString("style", "emap") ?: "emap") }
+    // 底圖：OpenStreetMap（深色模式在畫的時候轉暗）
+    val style = "osm"
     fun load(z: Int, x: Int, y: Int, pre: Boolean = false) {
         if (z < 0 || y < 0 || y >= (1 shl z)) return
         val key = "$style/$z/$x/$y"
@@ -526,7 +525,7 @@ private fun SpendMap(
                     androidx.compose.ui.geometry.Size(lay.size.width + 8.dp.toPx(), lay.size.height + 2.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
                 drawText(lay, topLeft = androidx.compose.ui.geometry.Offset(lx, ly))
             }
-            val credit = textMeasurer.measure(if (style == "emap") "© 內政部國土測繪中心" else "© OpenStreetMap contributors", androidx.compose.ui.text.TextStyle(fontSize = 9.sp, color = if (dark) androidx.compose.ui.graphics.Color(0xAAFFFFFF) else androidx.compose.ui.graphics.Color(0xAA000000)))
+            val credit = textMeasurer.measure("© OpenStreetMap contributors", androidx.compose.ui.text.TextStyle(fontSize = 9.sp, color = if (dark) androidx.compose.ui.graphics.Color(0xAAFFFFFF) else androidx.compose.ui.graphics.Color(0xAA000000)))
             drawText(credit, topLeft = androidx.compose.ui.geometry.Offset(size.width - credit.size.width - 6.dp.toPx(), size.height - credit.size.height - 4.dp.toPx()))
         }
         // 對準店家的進度：地圖右下角一行小字
@@ -534,13 +533,6 @@ private fun SpendMap(
             Text(it, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 22.dp)
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
-        }
-        // 底圖切換：通用電子地圖／OpenStreetMap
-        androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), shape = RoundedCornerShape(6.dp),
-            modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).clickable {
-                style = if (style == "emap") "osm" else "emap"; mapPrefs.edit().putString("style", style).apply(); version++
-            }) {
-            Text(if (style == "emap") "通用電子地圖" else "OpenStreetMap", fontSize = AppText.label, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
         }
         // 縮放按鈕
         Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

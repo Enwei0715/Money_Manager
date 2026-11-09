@@ -98,18 +98,17 @@ object PlaceHints {
      */
     suspend fun geocodeMerchants(names: List<String>, anchors: List<Pair<Double, Double>>, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int = withContext(Dispatchers.IO) {
         var found = 0
+        val near = anchors.take(2)
         names.forEachIndexed { i, n ->
-            onProgress(i, names.size)
+            onProgress(i + 1, names.size)
             if (geoPrefs.contains(n)) return@forEachIndexed
-            // 先用手機內建的 Google 定位服務（資料最完整、不用金鑰），找不到再用 OpenStreetMap
-            val g = anchors.mapNotNull { (la, lo) -> geocoderNear(n, la, lo)?.let { h -> h to dist(la, lo, h.first, h.second) } }
-            val hits = g.ifEmpty {
-                kotlinx.coroutines.delay(1100)
-                anchors.flatMap { (la, lo) ->
-                    listOfNotNull(snapToStore(n, la, lo, 2000), photonNear(n, la, lo, 2000)).map { h -> h to dist(la, lo, h.first, h.second) }
-                }
+            // 每家店最多等 12 秒：先用手機內建的 Google 定位服務，找不到再用 Photon（OpenStreetMap）
+            val hit = kotlinx.coroutines.withTimeoutOrNull(12_000) {
+                val g = near.mapNotNull { (la, lo) -> geocoderNear(n, la, lo)?.let { h -> h to dist(la, lo, h.first, h.second) } }
+                g.ifEmpty {
+                    near.mapNotNull { (la, lo) -> photonNear(n, la, lo, 2500)?.let { h -> h to dist(la, lo, h.first, h.second) } }
+                }.minByOrNull { it.second }?.first
             }
-            val hit = hits.minByOrNull { it.second }?.first
             geoPrefs.edit().putString(n, hit?.let { "${it.first},${it.second}" } ?: "").apply()
             if (hit != null) found++
         }
@@ -149,13 +148,47 @@ object PlaceHints {
     private fun geocoder(): android.location.Geocoder? =
         if (android.location.Geocoder.isPresent()) android.location.Geocoder(com.enwei.moneymanager.MoneyApp.instance, java.util.Locale.TAIWAN) else null
 
+    /** 地理編碼（有時間上限；Android 13 以上用非同步介面，舊版在背景執行緒等最多 6 秒）。 */
+    @Suppress("DEPRECATION")
+    private suspend fun geoByName(q: String, s: Double, w: Double, n: Double, e: Double): List<android.location.Address> {
+        val g = geocoder() ?: return emptyList()
+        return kotlinx.coroutines.withTimeoutOrNull(6_000) {
+            if (android.os.Build.VERSION.SDK_INT >= 33) kotlinx.coroutines.suspendCancellableCoroutine { c ->
+                runCatching {
+                    g.getFromLocationName(q, 6, s, w, n, e, object : android.location.Geocoder.GeocodeListener {
+                        override fun onGeocode(addresses: MutableList<android.location.Address>) { if (c.isActive) c.resumeWith(Result.success(addresses.toList())) }
+                        override fun onError(errorMessage: String?) { if (c.isActive) c.resumeWith(Result.success(emptyList())) }
+                    })
+                }.onFailure { if (c.isActive) c.resumeWith(Result.success(emptyList())) }
+            } else kotlinx.coroutines.coroutineScope {
+                kotlinx.coroutines.async(Dispatchers.IO) { runCatching { g.getFromLocationName(q, 6, s, w, n, e).orEmpty() }.getOrDefault(emptyList()) }.await()
+            }
+        }.orEmpty()
+    }
+
+    @Suppress("DEPRECATION")
+    private suspend fun geoByPoint(lat: Double, lon: Double, max: Int): List<android.location.Address> {
+        val g = geocoder() ?: return emptyList()
+        return kotlinx.coroutines.withTimeoutOrNull(6_000) {
+            if (android.os.Build.VERSION.SDK_INT >= 33) kotlinx.coroutines.suspendCancellableCoroutine { c ->
+                runCatching {
+                    g.getFromLocation(lat, lon, max, object : android.location.Geocoder.GeocodeListener {
+                        override fun onGeocode(addresses: MutableList<android.location.Address>) { if (c.isActive) c.resumeWith(Result.success(addresses.toList())) }
+                        override fun onError(errorMessage: String?) { if (c.isActive) c.resumeWith(Result.success(emptyList())) }
+                    })
+                }.onFailure { if (c.isActive) c.resumeWith(Result.success(emptyList())) }
+            } else kotlinx.coroutines.coroutineScope {
+                kotlinx.coroutines.async(Dispatchers.IO) { runCatching { g.getFromLocation(lat, lon, max).orEmpty() }.getOrDefault(emptyList()) }.await()
+            }
+        }.orEmpty()
+    }
+
     private val areaCache = java.util.concurrent.ConcurrentHashMap<String, String>()
     /** 座標所在的行政區（例如「永和區」），店名加上它搜尋比較準。 */
-    @Suppress("DEPRECATION")
-    private fun areaName(lat: Double, lon: Double): String? {
+    private suspend fun areaName(lat: Double, lon: Double): String? {
         val k = "%.2f,%.2f".format(lat, lon)
         areaCache[k]?.let { return it.ifEmpty { null } }
-        val a = runCatching { geocoder()?.getFromLocation(lat, lon, 1)?.firstOrNull() }.getOrNull()
+        val a = geoByPoint(lat, lon, 1).firstOrNull()
         val name = a?.locality ?: a?.subAdminArea ?: a?.subLocality
         areaCache[k] = name.orEmpty()
         return name
@@ -165,16 +198,15 @@ object PlaceHints {
      * 用店名在 [lat],[lon] 附近 [radius] 公尺內找（Google 的資料，透過手機內建服務）。
      * 結果的名稱要對得上店名，避免只對到路名或行政區中心。
      */
-    @Suppress("DEPRECATION")
     suspend fun geocoderNear(name: String, lat: Double, lon: Double, radius: Int = 3000): Pair<Double, Double>? = withContext(Dispatchers.IO) {
-        val g = geocoder() ?: return@withContext null
+        if (geocoder() == null) return@withContext null
         val key = name.replace(Regex("[（(].*?[)）]"), "").trim().ifBlank { return@withContext null }
         val core = key.split(' ', '　').first().take(4).lowercase()
         val d = radius / 111_000.0
         val dl = d / kotlin.math.cos(Math.toRadians(lat))
         val area = areaName(lat, lon)
         for (q in listOfNotNull(area?.let { "$key $it" }, key)) {
-            val res = runCatching { g.getFromLocationName(q, 6, lat - d, lon - dl, lat + d, lon + dl) }.getOrNull().orEmpty()
+            val res = geoByName(q, lat - d, lon - dl, lat + d, lon + dl)
             val hit = res.filter { it.hasLatitude() && it.hasLongitude() }.filter { a ->
                 val text = listOfNotNull(a.featureName, a.premises, a.getAddressLine(0)).joinToString(" ").lowercase()
                 text.contains(core)
@@ -186,9 +218,8 @@ object PlaceHints {
     }
 
     /** 這個位置的店名（Google 反查，常常只回地址；看起來是店名才採用）。 */
-    @Suppress("DEPRECATION")
     suspend fun geocoderHere(loc: Location): List<String> = withContext(Dispatchers.IO) {
-        val res = runCatching { geocoder()?.getFromLocation(loc.latitude, loc.longitude, 8) }.getOrNull().orEmpty()
+        val res = geoByPoint(loc.latitude, loc.longitude, 8)
         res.mapNotNull { a -> (a.premises ?: a.featureName)?.trim() }
             .filter { n -> n.length >= 2 && !n.any { it.isDigit() } && !Regex("(路|街|段|巷|弄|號|區|里|市|縣|道)$").containsMatchIn(n) }
             .distinct()
@@ -200,7 +231,7 @@ object PlaceHints {
     /** Overpass 查詢：主站忙時換鏡像站（用 POST，查詢字串不會太長被擋）。 */
     private suspend fun overpassPost(q: String): kotlinx.serialization.json.JsonArray? = withContext(Dispatchers.IO) {
         val hosts = listOf("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter")
-        val client = com.enwei.moneymanager.net.Http.client.newBuilder().callTimeout(12, java.util.concurrent.TimeUnit.SECONDS).build()
+        val client = com.enwei.moneymanager.net.Http.client.newBuilder().callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).build()
         val errs = mutableListOf<String>()
         for (h in hosts) {
             val r = runCatching {
@@ -422,18 +453,37 @@ object PlaceHints {
      * 從 Google 地圖的分享連結讀出座標：短網址（maps.app.goo.gl）先跟著轉址拿到完整網址，
      * 再找「!3d緯度!4d經度」（地點本身）、「@緯度,經度」或「q=緯度,經度」。
      */
-    suspend fun coordsFromMapsLink(text: String): Pair<Double, Double>? = withContext(Dispatchers.IO) {
-        val url = Regex("https?://\\S+").find(text)?.value ?: return@withContext null
+    suspend fun coordsFromMapsLink(text: String, near: Pair<Double, Double>? = null): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+        val url = Regex("https?://[^\\s]+").find(text)?.value?.trimEnd('.', ',', '。', '）', ')') ?: return@withContext null
         if (!url.contains("goo.gl") && !url.contains("google.") && !url.contains("g.co")) return@withContext null
-        val full = runCatching {
-            val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Linux; Android 14)").build()
-            com.enwei.moneymanager.net.Http.client.newCall(req).execute().use { r -> r.request.url.toString() + "\n" + (r.body?.string()?.take(200_000) ?: "") }
-        }.getOrNull() ?: url
-        fun pair(m: MatchResult?) = m?.let { it.groupValues[1].toDoubleOrNull()?.let { a -> it.groupValues[2].toDoubleOrNull()?.let { b -> a to b } } }
-        val dec = runCatching { java.net.URLDecoder.decode(full, "UTF-8") }.getOrDefault(full)
-        pair(Regex("!3d(-?\\d+\\.\\d+)!4d(-?\\d+\\.\\d+)").find(dec))
-            ?: pair(Regex("@(-?\\d+\\.\\d+),(-?\\d+\\.\\d+)").find(dec))
-            ?: pair(Regex("[?&](?:q|ll|query|center)=(-?\\d+\\.\\d+),\\s*(-?\\d+\\.\\d+)").find(dec))
+        fun pair(m: MatchResult?, swap: Boolean = false) = m?.let {
+            val a = it.groupValues[1].toDoubleOrNull(); val b = it.groupValues[2].toDoubleOrNull()
+            if (a == null || b == null) null else if (swap) b to a else a to b
+        }
+        fun parse(s: String): Pair<Double, Double>? {
+            val dec = runCatching { java.net.URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
+            return pair(Regex("!3d(-?\\d+\\.\\d+)!4d(-?\\d+\\.\\d+)").find(dec))
+                ?: pair(Regex("@(-?\\d+\\.\\d+),(-?\\d+\\.\\d+)").find(dec))
+                ?: pair(Regex("[?&](?:q|ll|query|center|daddr|markers)=(?:[^&]*?)(-?\\d{1,2}\\.\\d{4,}),\\s*(-?\\d{1,3}\\.\\d{4,})").find(dec))
+                ?: pair(Regex("APP_INITIALIZATION_STATE=\\[\\[\\[[\\d.]+,(-?\\d+\\.\\d+),(-?\\d+\\.\\d+)\\]").find(dec), swap = true)
+                ?: pair(Regex("\\[null,null,(-?\\d{1,2}\\.\\d{4,}),(-?\\d{1,3}\\.\\d{4,})\\]").find(dec))
+        }
+        parse(url)?.let { return@withContext it }
+        // 短網址：跟著轉址拿到完整網址與頁面內容（用桌機的瀏覽器標頭，避免被導到 App）
+        val client = com.enwei.moneymanager.net.Http.client.newBuilder().callTimeout(12, java.util.concurrent.TimeUnit.SECONDS).build()
+        val (finalUrl, body) = runCatching {
+            val req = okhttp3.Request.Builder().url(url)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36")
+                .header("Accept-Language", "zh-TW,zh;q=0.9").build()
+            client.newCall(req).execute().use { r -> r.request.url.toString() to (r.body?.string()?.take(400_000) ?: "") }
+        }.getOrNull() ?: return@withContext null
+        parse(finalUrl)?.let { return@withContext it }
+        parse(body)?.let { return@withContext it }
+        // 網址只有店名（/maps/place/店名/…）：用店名在附近找
+        val name = Regex("/maps/place/([^/?]+)").find(finalUrl)?.groupValues?.get(1)
+            ?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrDefault(it) }?.replace('+', ' ')?.trim()
+            ?: Regex("[?&]q=([^&]+)").find(finalUrl)?.groupValues?.get(1)?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrDefault(it) }
+        if (!name.isNullOrBlank() && near != null) geocoderNear(name, near.first, near.second, 30_000) else null
     }
 
     /** OpenStreetMap 類型 → 分類名稱關鍵字（在使用者的分類裡找名稱含這些字的）。 */
