@@ -2933,7 +2933,7 @@ K 線操作	Using the chart
 報酬率	Return
 大盤跌破季線時降低持股	Reduce holdings when the index breaks its 60-day MA
 容許跌破幅度	Allowed break margin
-實際買入的股票：市值、預估損益與今日漲跌，計入資產。點選個股查看庫存明細與每筆交易；證券帳戶與已出清的股票收合於下方。	Stocks you actually bought: market value, estimated P/L and today's change, counted as assets. Tap a stock for lots and trades; brokerage accounts and closed positions are folded below.
+實際買入的股票：市值、預估損益與今日漲跌，計入資產。點選個股查看庫存明細與每筆交易；下方列出各證券帳戶，已出清的股票收合於最後。	Stocks you actually bought: market value, estimated P/L and today's change, counted as assets. Tap a stock for lots and trades; brokerage accounts are listed below and closed positions are folded at the end.
 尚未加入觀察的股票	No stocks on the watchlist
 尚未買入、僅追蹤報價的股票，不計入資產。決定買進時點選「買進」記錄交易，該股即移入持股。	Stocks you track but haven't bought; not counted as assets. Tap "Buy" to record a trade and the stock moves to Holdings.
 工具列	Toolbar

@@ -107,8 +107,8 @@ private fun pnlColor(v: Double) = if (v >= 0) StockUp else StockDown
 @Composable
 fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -> Unit = {}) {
     com.enwei.moneymanager.ui.components.PageTour("stocks", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step("stock.view0", "持股", "實際買入的股票：市值、預估損益與今日漲跌，計入資產。點選個股查看庫存明細與每筆交易；證券帳戶與已出清的股票收合於下方。"),
-        com.enwei.moneymanager.ui.components.Coach.Step("stock.view1", "觀察", "尚未買入、僅追蹤報價的股票，不計入資產。決定買進時點選「買進」記錄交易，該股即移入持股。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("stock.view", "持股", "實際買入的股票：市值、預估損益與今日漲跌，計入資產。點選個股查看庫存明細與每筆交易；下方列出各證券帳戶，已出清的股票收合於最後。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("stock.view", "觀察", "尚未買入、僅追蹤報價的股票，不計入資產。決定買進時點選「買進」記錄交易，該股即移入持股。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "工具列", "右上角依序為搜尋股票、更新股價、手續費設定與新增交易。"),
     ))
     val lk = rememberLookups()
@@ -120,8 +120,6 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
     val byBroker by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
     val brokers = balances.filter { it.account.type == AccountType.BROKERAGE && !it.account.archived }
         .sortedWith(compareBy({ it.account.sortOrder }, { it.account.id }))
-    val brokersFold = com.enwei.moneymanager.ui.components.rememberFold("invest.brokers", false)
-    val brokersExpanded = brokersFold.open
 
     // 畫面開著時每 30 秒更新一次報價；手動按更新時 refreshTick 會變動
     val quotes by repo.quotes.collectAsStateWithLifecycle(emptyList())
@@ -154,13 +152,11 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // 持股（實際買入，計入資產）與觀察（只看報價，不計入資產）分成兩個檢視
         item(key = "seg") {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 10.dp)) {
-                listOf("持股（${open.size}）", "觀察（${settings.watchlist.size}）").forEachIndexed { i, t ->
-                    SegmentedButton(selected = view == i, onClick = { view = i }, shape = SegmentedButtonDefaults.itemShape(i, 2),
-                        modifier = Modifier.coachTarget("stock.view$i"), icon = {}) { Text(t, fontSize = AppText.secondary) }
-                }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            // 與股票助理「紀律」分頁相同的子分頁樣式
+            com.enwei.moneymanager.ui.components.SubTabs(
+                listOf("持股（${open.size}）", "觀察（${settings.watchlist.size}）"), view,
+                Modifier.padding(horizontal = 12.dp, vertical = 10.dp).coachTarget("stock.view"),
+            ) { view = it }
         }
         if (view == 0) {
             item(key = "sum") {
@@ -194,11 +190,16 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                 items(open, key = { "${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
             }
             item(key = "brk") {
-                FoldHeader("證券帳戶（${brokers.size}）", brokersExpanded, { brokersFold.toggle() }) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("證券帳戶（${brokers.size}）", Modifier.weight(1f), fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextButton(onClick = { nav.navigate("account/0?type=BROKERAGE") }) { Text("＋ 新增") }
                 }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
-            if (brokersExpanded) items(brokers, key = { "b${it.account.id}" }) { b ->
+            items(brokers, key = { "b${it.account.id}" }) { b ->
                 val hs = byBroker[b.account.id].orEmpty().filter { it.shares > 0.0001 }
                 val stock = hs.sumOf { lk.fx.convert(Money.toMinor(it.marketValue), it.currency) }
                 val pnl = hs.sumOf { lk.fx.convert(Money.toMinor(it.unrealized), it.currency) }
