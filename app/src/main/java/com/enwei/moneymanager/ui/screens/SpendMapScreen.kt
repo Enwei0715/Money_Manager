@@ -61,7 +61,7 @@ import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 
 /** 線上消費（沒有實體地點）：不標在地圖上、也不用店名找位置。 */
-internal val ONLINE = listOf("蝦皮", "Claude", "Firstory", "CapCut", "ElevenLabs", "Endel", "Uber One", "Netflix", "Spotify", "YouTube", "Apple", "Google",
+internal val ONLINE = listOf("LINE ", "UK ETA", "簽證", "歐洲之星", "Eurostar", "MyCard", "App Store", "Google Play", "蝦皮", "Claude", "Firstory", "CapCut", "ElevenLabs", "Endel", "Uber One", "Netflix", "Spotify", "YouTube", "Apple", "Google",
     "LINE 貼圖", "LINE 主題", "LINE 官方", "MyCard", "Steam", "Chess.com", "傳說對決", "Brawl Stars", "Clash of Clans", "Pixel Survival", "Sky 光遇",
     "售票網站", "銀行手續費", "對帳調整", "房東", "電費", "保險", "Uber Eats", "foodpanda", "momo", "PChome", "Amazon")
 internal val ONLINE_ROOTS = listOf("訂閱", "保險", "金融費用", "居住")
@@ -105,7 +105,7 @@ fun SpendMapScreen(nav: NavController) {
     fun online(t: com.enwei.moneymanager.data.TxnEntity): Boolean {
         val m = t.merchant?.trim().orEmpty()
         val root = lk.category(lk.rootId(t.categoryId))?.name.orEmpty()
-        return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) } || NOT_PLACE.any { m.contains(it, ignoreCase = true) }
+        return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) } || NOT_PLACE.any { m.contains(it, ignoreCase = true) } || m in PlaceHints.excluded()
     }
     fun chain(m: String) = CHAINS.any { m.contains(it, ignoreCase = true) }
     // 連鎖店名稱帶分店（例如「萊爾富 永和貞寧店」）：可以用名稱找到那一間

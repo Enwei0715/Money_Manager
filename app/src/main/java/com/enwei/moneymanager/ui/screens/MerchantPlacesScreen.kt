@@ -67,8 +67,9 @@ fun MerchantPlacesScreen(nav: NavController) {
     fun branchy(m: String) = chain(m) && m.trim().contains(' ')
     fun online(m: String, cat: Long?): Boolean {
         val root = lk.category(lk.rootId(cat))?.name.orEmpty()
-        return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) }
+        return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) } || m in PlaceHints.excluded()
     }
+    var renaming by remember { mutableStateOf<Place?>(null) }
 
     // 只列支出的店；往來對象（人名）、退款回饋這類不是店家的不列
     val people = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN }.map { it.name.trim() }.toSet()
@@ -85,6 +86,7 @@ fun MerchantPlacesScreen(nav: NavController) {
         val samples = PlaceHints.samples(ctx).associateBy { it.txnId }
         val pins = PlaceHints.merchantPins()
         val geo = PlaceHints.merchantGeo()
+        val amb = PlaceHints.ambiguous()
         txns.filter { t -> val m = t.merchant!!.trim(); !online(m, t.categoryId) && (!chain(m) || branchy(m)) }
             .groupBy { it.merchant!!.trim() }
             .map { (m, list) ->
@@ -93,11 +95,13 @@ fun MerchantPlacesScreen(nav: NavController) {
                     pins[m] != null -> Place(m, list.size, pins[m], "手動")
                     fixes.isNotEmpty() -> Place(m, list.size, fixes.map { it.lat }.average() to fixes.map { it.lon }.average(), "記帳定位")
                     geo[m] != null -> Place(m, list.size, geo[m], "自動")
+                    m in amb -> Place(m, list.size, null, "多個結果")
                     m in geo -> Place(m, list.size, null, "找不到")
                     else -> Place(m, list.size, null, "")
                 }
             }
-            .sortedWith(compareBy<Place>({ it.loc != null }, { -it.count }))
+            // 要處理的排前面：多個結果（點一下選）→ 沒有位置 → 找不到 → 已有位置
+            .sortedWith(compareBy<Place>({ when { it.source == "多個結果" -> 0; it.loc == null && it.source.isEmpty() -> 1; it.loc == null -> 2; else -> 3 } }, { -it.count }))
     }
     val missing = places.filter { it.loc == null }
 
@@ -185,7 +189,7 @@ fun MerchantPlacesScreen(nav: NavController) {
             }
             items(places, key = { it.name }) { p ->
                 Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { open = p }
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { if (p.source == "多個結果" && (mbOn || gOn)) searching = p else open = p }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -193,8 +197,28 @@ fun MerchantPlacesScreen(nav: NavController) {
                         Text(p.name, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${p.count} 筆", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text(p.source.ifBlank { "沒有位置" }, fontSize = AppText.caption,
-                        color = if (p.loc == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (p.source == "多個結果") "選擇 ›" else p.source.ifBlank { "沒有位置" }, fontSize = AppText.caption,
+                        color = when {
+                            p.source == "多個結果" -> MaterialTheme.colorScheme.primary
+                            p.loc == null -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        })
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            // 不是實體店：收在最下面，可以還原
+            val ex = PlaceHints.excluded().filter { it in current }.sorted()
+            if (ex.isNotEmpty()) item(key = "ex-head") {
+                Text("不是實體店", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            items(ex, key = { "ex-$it" }) { n ->
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text(n, fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("還原", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { PlaceHints.setExcluded(n, false); tick++ }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
@@ -212,6 +236,8 @@ fun MerchantPlacesScreen(nav: NavController) {
                         fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
                     val action: @Composable (String, () -> Unit) -> Unit = { label, onClick -> ActionLine(label) { open = null; onClick() } }
                     if (mbOn || gOn) action("搜尋店家") { searching = p }
+                    action("改名") { renaming = p }
+                    action("不是實體店（不放地圖）") { PlaceHints.setExcluded(p.name, true); tick++ }
                     action("在地圖上點選") { picking = p }
                     action("自動找") { autoFind(listOf(p.name)) }
                     action("在 Google 地圖找") {
@@ -253,6 +279,29 @@ fun MerchantPlacesScreen(nav: NavController) {
                 PlaceHints.setMerchantPin(to, hit.lat, hit.lon); tick++
             }
         }
+    }
+
+    renaming?.let { p ->
+        var text by remember(p.name) { mutableStateOf(p.name) }
+        AlertDialog(
+            onDismissRequest = { renaming = null },
+            title = { Text("改名") },
+            text = { androidx.compose.material3.OutlinedTextField(text, { text = it }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
+            confirmButton = {
+                TextButton(enabled = text.isNotBlank() && text.trim() != p.name, onClick = {
+                    val to = text.trim(); renaming = null
+                    scope.launch {
+                        val n = repo.renameMerchant(p.name, to)
+                        // 位置跟著新名字走
+                        PlaceHints.merchantPins()[p.name]?.let { ll -> PlaceHints.setMerchantPin(to, ll.first, ll.second); PlaceHints.clearMerchantPin(p.name) }
+                        PlaceHints.clearMerchantGeo(p.name)
+                        tick++
+                        android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("已改名（$n 筆）"), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text("改名") }
+            },
+            dismissButton = { TextButton(onClick = { renaming = null }) { Text("取消") } },
+        )
     }
 
     picking?.let { p ->

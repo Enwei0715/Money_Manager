@@ -54,8 +54,18 @@ object PlaceHints {
         k to s.split(',').takeIf { it.size == 2 }?.let { (a, b) -> a.toDoubleOrNull()?.let { la -> b.toDoubleOrNull()?.let { lo -> la to lo } } }
     }.toMap()
 
+    /** 自動找時有好幾個結果、要使用者自己選的店 */
+    private val ambPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("merchant_amb", Context.MODE_PRIVATE) }
+    fun ambiguous(): Set<String> = ambPrefs.all.keys
+    fun clearAmbiguous(name: String) = ambPrefs.edit().remove(name).apply()
+
+    /** 使用者標成「不是實體店」的店名（線上購物、簽證、面交…）：不放地圖、不列在店家位置 */
+    private val exPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("merchant_excluded", Context.MODE_PRIVATE) }
+    fun excluded(): Set<String> = exPrefs.all.keys
+    fun setExcluded(name: String, on: Boolean) = exPrefs.edit().apply { if (on) putBoolean(name, true) else remove(name) }.apply()
+
     fun setMerchantGeo(name: String, ll: Pair<Double, Double>?) = geoPrefs.edit().putString(name, ll?.let { "${it.first},${it.second}" } ?: "").apply()
-    fun clearMerchantGeo(name: String) = geoPrefs.edit().remove(name).apply()
+    fun clearMerchantGeo(name: String) { geoPrefs.edit().remove(name).apply(); ambPrefs.edit().remove(name).apply() }
     /** 只留目前交易裡還有的店名 */
     fun pruneMerchantGeo(keep: Set<String>) {
         val e = geoPrefs.edit(); geoPrefs.all.keys.filter { it !in keep }.forEach { e.remove(it) }; e.apply()
@@ -78,7 +88,7 @@ object PlaceHints {
         pinPrefs.edit().also { e -> bad.forEach { e.remove(it) } }.apply()
         return all - bad
     }
-    fun setMerchantPin(name: String, lat: Double, lon: Double) = pinPrefs.edit().putString(name, "$lat,$lon").apply()
+    fun setMerchantPin(name: String, lat: Double, lon: Double) { pinPrefs.edit().putString(name, "$lat,$lon").apply(); ambPrefs.edit().remove(name).apply() }
     fun clearMerchantPin(name: String) = pinPrefs.edit().remove(name).apply()
 
     /** 使用者在地圖上手動修正的位置：key＝「店名|原本座標」，只改那一個點 */
@@ -110,19 +120,27 @@ object PlaceHints {
         val near = anchors.take(2)
         names.forEachIndexed { i, n ->
             onProgress(i + 1, names.size)
-            if (geoPrefs.contains(n)) return@forEachIndexed
-            // 有 Mapbox 金鑰只用 Mapbox；沒有就只用 OpenStreetMap 的 Overpass（名稱相符、常活動區域 2 公里內）
+            if (geoPrefs.contains(n) || ambPrefs.contains(n)) return@forEachIndexed
+            // 有 Google／Mapbox 金鑰用它們找；沒有才用 OpenStreetMap（Overpass，常活動區域 2 公里內）
             val hit = kotlinx.coroutines.withTimeoutOrNull(15_000) {
                 if (com.enwei.moneymanager.net.PlaceSearch.online) {
-                    near.take(1).flatMap { c -> com.enwei.moneymanager.net.PlaceSearch.search(n, c, 5) }
-                        .filter { com.enwei.moneymanager.net.Mapbox.relevant(n, it.name) && (it.meters ?: 0f) <= 5000f }
-                        .minByOrNull { it.meters ?: 0f }?.let { it.lat to it.lon }
-                        ?: near.mapNotNull { (la, lo) -> snapToStore(n, la, lo, 2000)?.let { h -> h to dist(la, lo, h.first, h.second) } }.minByOrNull { it.second }?.first
+                    val c = near.firstOrNull()
+                    val rel = com.enwei.moneymanager.net.PlaceSearch.search(n, c, 8)
+                        .filter { com.enwei.moneymanager.net.Mapbox.relevant(n, it.name) }
+                        .sortedBy { it.meters ?: 0f }
+                    when {
+                        rel.isEmpty() -> c?.let { (la, lo) -> snapToStore(n, la, lo, 2000) }
+                        // 只有一個、或最近的一個就在常活動區域 3 公里內：直接用
+                        rel.size == 1 || (rel.first().meters ?: Float.MAX_VALUE) <= 3000f -> rel.first().let { it.lat to it.lon }
+                        // 好幾個、都離得遠（例如連鎖店、外縣市同名店）：留給使用者選
+                        else -> { ambPrefs.edit().putBoolean(n, true).apply(); null }
+                    }
                 } else {
                     near.mapNotNull { (la, lo) -> snapToStore(n, la, lo, 2000)?.let { h -> h to dist(la, lo, h.first, h.second) } }
                         .minByOrNull { it.second }?.first
                 }
             }
+            if (hit == null && ambPrefs.contains(n)) return@forEachIndexed
             geoPrefs.edit().putString(n, hit?.let { "${it.first},${it.second}" } ?: "").apply()
             if (hit != null) found++
             // Overpass 是免費的公共服務：每家店之間停一下，不要一次打太快
