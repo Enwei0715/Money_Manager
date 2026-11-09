@@ -119,7 +119,7 @@ object Onboarding {
         fun finish(tour: Boolean = false) {
             show.value = false
             MoneyApp.repo.settings.update { it.copy(onboarded = true) }
-            if (tour) Coach.start(MoneyApp.repo.settings.value, "split" in w)
+            if (tour) Coach.start(MoneyApp.repo.settings.value, w)
             picked.value = null
         }
         val pager = rememberPagerState { pages.size }

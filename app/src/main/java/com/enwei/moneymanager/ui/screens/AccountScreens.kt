@@ -150,7 +150,9 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 Box {
                     Text(type.label, fontSize = AppText.body)
                     DropdownMenu(typeMenu, { typeMenu = false }) {
-                        AccountType.entries.forEach { t -> DropdownMenuItem(text = { Text(t.label) }, onClick = { type = t; typeMenu = false }) }
+                        // 股票功能關閉時不提供「證券交割」（已是證券帳戶的仍保留，避免無法編輯）
+                        val stocksOn = repo.settings.value.featureStocks
+                        AccountType.entries.filter { stocksOn || it != AccountType.BROKERAGE || type == AccountType.BROKERAGE }.forEach { t -> DropdownMenuItem(text = { Text(t.label) }, onClick = { type = t; typeMenu = false }) }
                     }
                 }
             }
@@ -335,7 +337,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                     )
                 }
             } else if (type == AccountType.BANK) {
-                FormLine("末四碼") { FormInput(last4, { s -> last4 = s.filter(Char::isDigit).take(4) }, "帳號末四碼，用於辨識通知", number = true) }
+                FormLine("末四碼") { FormInput(last4, { s -> last4 = s.filter(Char::isDigit).take(4) }, if (repo.settings.value.featureNotif) "帳號末四碼，用於辨識通知" else "帳號末四碼", number = true) }
             }
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(thickness = 10.dp, color = MaterialTheme.colorScheme.background)

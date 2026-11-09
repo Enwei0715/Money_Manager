@@ -102,7 +102,7 @@ fun AccountGroupScreen(nav: NavController) {
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            ReorderableColumn(s.groupOrder(), { it.name }, { list ->
+            ReorderableColumn(s.groupOrder().filter { s.featureStocks || it != AccountType.BROKERAGE }, { it.name }, { list ->
                 repo.settings.update { it.copy(accountGroupOrder = list.map { t -> t.name }) }
             }) { type, handle ->
                 val n = accounts.count { it.type == type }

@@ -127,7 +127,7 @@ fun MoreScreen(nav: NavController) {
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     // 設定裡關掉的功能，對應的工具也不顯示
     val off = buildSet {
-        if (!settings.featureStocks) addAll(listOf("advisor", "stockfees"))
+        if (!settings.featureStocks) addAll(listOf("advisor", "stockfees", "stocksearch"))
         if (!settings.featureNotif) add("notif")
         if (!settings.aiEnabled) add("ai-hub")
     }

@@ -59,20 +59,37 @@ object Coach {
     /** 一步：要亮出的目標（null＝不亮任何東西，置中說明）、要先切到哪個分頁 */
     data class Step(val target: String?, val title: String, val body: String, val tab: String? = null)
 
-    val steps = listOf(
-        Step(null, "功能導覽", "接下來依序介紹各項功能的位置，可隨時點選「跳過全部」。"),
-        Step("tab.txns", "交易", "每日的收入與支出依日期排列。", tab = "txns"),
-        Step("txns.summary", "本月總覽", "本月的收入、支出與結餘；設定預算後，可在此查看使用比例與每日可用金額。", tab = "txns"),
-        Step("fab.add", "新增交易", "輸入金額，選擇分類與帳戶即可儲存；上方可切換支出、收入、轉帳與股票。", tab = "txns"),
-        Step("txns.map", "支出地圖", "以地圖檢視每日、每週或每月的消費地點。", tab = "txns"),
-        Step("txns.search", "搜尋與篩選", "依店家、分類或期間查詢交易，並檢視篩選後的圖表。", tab = "txns"),
-        Step("tab.stats", "統計", "分類比例、每月比較與收支趨勢。", tab = "stats"),
-        Step("tab.accounts", "資產", "所有帳戶、信用卡（依帳單週期計算應繳）、往來與股票。", tab = "accounts"),
-        Step("tab.assistant", "股票助理", "每日報告、新聞整理、AI 問答與資金紀律；需先完成 AI 設定。", tab = "assistant"),
-        Step("tab.more", "工具", "預算、週期交易、備份與通知記帳等工具；可點選「編輯」調整排列。", tab = "more"),
-        Step("more.settings", "設定", "外觀、記帳方式、通知與 AI 等設定。", tab = "more"),
-        Step(null, "導覽完成", "如需再次查看，請至「設定 → 關於 → 新手導覽」。", tab = "txns"),
+    /** 功能鍵：notif 通知記帳、split 往來、map 定位與地圖、stocks 股票、ai AI；null＝基本功能都會介紹 */
+    private data class S(val need: String?, val step: Step)
+
+    private fun all(stocks: Boolean, ai: Boolean, split: Boolean) = listOf(
+        S(null, Step(null, "功能導覽", "接下來依序介紹各頁面，以及你在設定中選擇開啟的功能。可隨時點選「跳過全部」，日後於「設定 → 關於 → 新手導覽」重新查看。")),
+        S(null, Step("tab.txns", "交易", "每日的收入與支出依日期排列；點選交易可查看與修改。", tab = "txns")),
+        S(null, Step("txns.summary", "本月總覽", "本月的收入、支出與結餘；設定預算後，可在此查看使用比例與每日可用金額。", tab = "txns")),
+        S(null, Step("fab.add", "新增交易", "輸入金額，選擇分類與帳戶即可儲存；上方可切換支出、收入、轉帳" + (if (stocks) "與股票" else "") + "。" +
+            (if (split) "與他人分帳、代墊或收回欠款時，使用表單最下方的「往來」。" else ""), tab = "txns")),
+        S("notif", Step(null, "通知自動記帳", "銀行、信用卡與行動支付的付款通知會自動記為交易，帳戶與分類依通知內容與過去的紀錄判斷。無法確定的交易會列為「待確認」，交易頁上方出現鈴鐺圖示並顯示筆數，點選即可逐筆確認或修改。", tab = "txns")),
+        S("map", Step("txns.map", "定位與支出地圖", "付款時記錄所在位置：記帳時推薦附近店家，並可在地圖上依日、週、月檢視消費地點。點選下方清單中的店家可導航或修正位置。", tab = "txns")),
+        S(null, Step("txns.search", "搜尋與篩選", "依店家、說明、分類、帳戶或期間查詢交易，並檢視篩選結果的圖表與趨勢。", tab = "txns")),
+        S(null, Step("tab.stats", "統計", "分類比例、每月比較與收支趨勢；可切換期間與收入、支出。", tab = "stats")),
+        S(null, Step("tab.accounts", "資產", "所有帳戶依群組列出，頂端為資產、負債與合計；信用卡依帳單週期計算本期應繳與未出帳金額。", tab = "accounts")),
+        S("split", Step("ac.debts", "往來", "與他人分攤費用、代墊與借還款的紀錄集中於此，列出每位對象的應收與應付；點選對象可查看明細並記錄還款。", tab = "accounts")),
+        S("stocks", Step("ac.tab1", "股票", "分為「持股」與「觀察」：持股為實際買入、計入資產的股票，顯示市值與損益；觀察僅追蹤報價。右上角可新增交易與更新股價。", tab = "accounts")),
+        S("stocks", Step("tab.assistant", "股票助理", if (ai) "今日報告、問 AI、新聞整理與紀律四個分頁：AI 依你的持股與新聞產生每日報告，紀律分頁依你設定的門檻提示停損與停利。"
+            else "「紀律」分頁依你設定的門檻提示停損與停利，並可記錄自己的投資原則；完成 AI 設定後，可使用每日報告與 AI 問答。", tab = "assistant")),
+        S(null, Step("tab.more", "工具", "常用工具集中於此；點選右上角「編輯」或長按任一格，可調整排列、大小或隱藏。", tab = "more")),
+        S(null, Step("tool.budget", "預算", "設定每月總預算與各分類預算；接近或超過上限時提醒，交易頁的本月總覽也會顯示使用比例。", tab = "more")),
+        S(null, Step("tool.recurring", "週期交易", "房租、訂閱、薪資等固定收支，設定週期後於到期日自動記錄。", tab = "more")),
+        S("notif", Step("tool.notif", "通知記帳設定", "選擇要讀取哪些 App 的通知、查看通知紀錄並測試辨識結果。Android 15 會隱藏部分付款通知，可依頁面中的步驟以 Shizuku 開啟讀取。", tab = "more")),
+        S("ai", Step("tool.ai-hub", "AI 中心", "設定 AI 金鑰或自架伺服器並測試連線；AI 用於判讀通知、收支分析與每日投資報告。", tab = "more")),
+        S("ai", Step("tool.review", "收支分析", "由 AI 檢視近期支出，整理支出結構並指出可調整之處。", tab = "more")),
+        S("map", Step("tool.merchants", "店家位置", "管理已記錄的店家位置；設定 Google Places 或 Mapbox 金鑰可提高店家搜尋的準確度，未設定時使用 OpenStreetMap。", tab = "more")),
+        S(null, Step("tool.backup", "備份", "所有資料只存在這支手機；建議設定自動備份到雲端硬碟，換手機時在新手機還原即可。", tab = "more")),
+        S(null, Step("more.settings", "設定", "外觀、記帳方式、通知與 AI 等設定。「功能開關」可隨時開啟或關閉上述功能，「功能設定檢查」列出尚未完成的設定。", tab = "more")),
+        S(null, Step(null, "導覽完成", "第一次進入各頁面時，還會有該頁的詳細說明。如需再次查看，請至「設定 → 關於 → 新手導覽」。", tab = "txns")),
     )
+
+    val steps: List<Step> get() = all(true, true, true).map { it.step }
 
     /** 這次要走的步驟：依問卷與功能開關，關掉的功能不介紹 */
     var active by androidx.compose.runtime.mutableStateOf(steps)
@@ -92,18 +109,23 @@ object Coach {
     /** 重看導覽時：各頁面的介紹也重新出現 */
     fun resetPages() = seen.edit().clear().apply()
 
-    fun start(s: com.enwei.moneymanager.data.AppSettings? = null, split: Boolean = true) {
+    /** 開始整體導覽：只介紹基本功能與 [picks]（問卷勾選的功能；null 時依目前設定） */
+    fun start(s: com.enwei.moneymanager.data.AppSettings? = null, picks: Set<String>? = null) {
         pageMode = false
         resetPages()
-        active = steps.filter { st ->
-            when (st.target) {
-                "tab.assistant" -> s?.featureStocks != false
-                "txns.map" -> s?.locationHints != false
+        val w = picks ?: buildSet {
+            if (s?.featureNotif != false) add("notif"); if (s?.locationHints == true) add("map")
+            if (s?.featureStocks != false) add("stocks"); if (s?.aiEnabled == true) add("ai"); add("split")
+        }
+        // 功能開關以實際設定為準（問卷勾了但之後關掉的不介紹）
+        val on = w.filter { k ->
+            when (k) {
+                "notif" -> s?.featureNotif != false
+                "stocks" -> s?.featureStocks != false
                 else -> true
             }
-        }.map { st ->
-            if (st.target == "fab.add" && split) st.copy(body = st.body + "與他人分帳時，使用表單最下方的「往來」。") else st
-        }
+        }.toSet()
+        active = all("stocks" in on, "ai" in on, "split" in on).filter { it.need == null || it.need in on }.map { it.step }
         step = 0
     }
     fun stop() { step = -1 }

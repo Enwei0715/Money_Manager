@@ -1,5 +1,6 @@
 package com.enwei.moneymanager.ui.screens
 
+import com.enwei.moneymanager.ui.components.coachTarget
 import androidx.compose.ui.draw.drawBehind
 import com.enwei.moneymanager.ui.AppText
 
@@ -169,6 +170,7 @@ fun ToolGrid(
             Box(
                 Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }
                     .size(cellW * w + gap * (w - 1), rowH * h + gap * (h - 1))
+                    .coachTarget("tool.${t.id}")
                     .zIndex(if (isDrag || isResize) 2f else 1f)
                     .scale(if (isDrag) 1.05f else 1f),
             ) {

@@ -162,6 +162,10 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
     androidx.compose.runtime.LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.accountsSection) {
         com.enwei.moneymanager.ui.TabRequest.accountsSection?.let { section = it; com.enwei.moneymanager.ui.TabRequest.accountsSection = null }
     }
+    // 整體導覽介紹往來時，切回「帳戶」分頁才看得到
+    LaunchedEffect(com.enwei.moneymanager.ui.components.Coach.step) {
+        if (com.enwei.moneymanager.ui.components.Coach.active.getOrNull(com.enwei.moneymanager.ui.components.Coach.step)?.target in setOf("ac.debts", "ac.tab0")) section = 0
+    }
     var refreshTick by remember { mutableStateOf(0) }
     val snack = remember { androidx.compose.material3.SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -254,7 +258,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                 val owed = people.filter { it.balance > 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
                 val owe = -people.filter { it.balance < 0 }.sumOf { lk.fx.convert(it.balance, it.account.currency) }
                 Row(
-                    Modifier.fillMaxWidth().padding(top = 12.dp).groupCell(true, true).clickable { nav.navigate("debts") }
+                    Modifier.fillMaxWidth().padding(top = 12.dp).coachTarget("ac.debts").groupCell(true, true).clickable { nav.navigate("debts") }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
