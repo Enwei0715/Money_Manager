@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -77,7 +78,11 @@ internal val CHAINS = listOf("7-11", "7-ELEVEN", "全家", "萊爾富", "OK超�
     "家樂福", "寶雅", "屈臣氏", "康是美", "吉野家", "八方", "可不可", "50嵐", "迷客夏", "中油", "台北捷運", "公車", "YouBike", "台鐵", "台灣高鐵", "Subway", "漢堡王", "Burger King")
 
 /** 地圖上的一個點：同一家店（或同一個位置）在這段期間的支出合計。 */
-private data class SpendSpot(val lat: Double, val lon: Double, val name: String, val total: Long, val count: Int, val cat: String, val key: String = "", val fixed: Boolean = false)
+private data class SpendSpot(
+    val lat: Double, val lon: Double, val name: String, val total: Long, val count: Int, val cat: String, val key: String = "", val fixed: Boolean = false,
+    /** 這個地點的支出（新到舊） */
+    val txns: List<com.enwei.moneymanager.data.TxnEntity> = emptyList(),
+)
 
 /**
  * 支出地圖：每日／每週／每月的支出畫在地圖上（圓越大花越多），下方列出各地點。
@@ -150,7 +155,8 @@ fun SpendMapScreen(nav: NavController) {
         val total = l.sumOf { lk.fx.convert(it.first.amount, it.first.currency) }
         val cat = l.groupingBy { lk.category(lk.rootId(it.first.categoryId))?.name ?: "" }.eachCount().maxByOrNull { it.value }?.key.orEmpty()
         SpendSpot(l.map { it.second.first }.average(), l.map { it.second.second }.average(),
-            k.first.ifBlank { "（未命名）" }, total, l.size, cat, "${k.first}|${k.second}", k.first in pins)
+            k.first.ifBlank { "（未命名）" }, total, l.size, cat, "${k.first}|${k.second}", k.first in pins,
+            l.map { it.first }.sortedByDescending { it.date })
     }.sortedByDescending { it.total }
     var selKey by remember { mutableStateOf<String?>(null) }
     var focusTick by remember { mutableStateOf(0) }
@@ -203,6 +209,7 @@ fun SpendMapScreen(nav: NavController) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
                 else SpendMap(spots, dark, Modifier.fillMaxWidth().height(380.dp).clipToBounds(), selKey, focusTick, status = snapping,
                     onSelect = { selKey = it?.key },
+                    onOpenTxn = { nav.navigate("txn/$it") },
                     // 修正位置：記成這家店的位置（這家店所有支出都用這個點）
                     onMove = { sp, la, lo -> PlaceHints.setMerchantPin(sp.name, la, lo); pins = PlaceHints.merchantPins() },
                     onReset = { sp -> PlaceHints.clearMerchantPin(sp.name); pins = PlaceHints.merchantPins() },
@@ -313,6 +320,8 @@ private fun SpendMap(
     spots: List<SpendSpot>, dark: Boolean, modifier: Modifier, selKey: String?, focusTick: Int, status: String? = null,
     onSelect: (SpendSpot?) -> Unit, onMove: (SpendSpot, Double, Double) -> Unit, onReset: (SpendSpot) -> Unit,
     onGoogle: (SpendSpot) -> Unit = {},
+    /** 點資訊卡裡的一筆交易 */
+    onOpenTxn: (Long) -> Unit = {},
     /** 選位置模式：點地圖就是新位置，畫面不重新對焦、不顯示資訊卡 */
     pickOnly: Boolean = false,
     /** 顯示右上角的縮放按鈕（小預覽圖不顯示） */
@@ -521,7 +530,7 @@ private fun SpendMap(
                 if (px < -40 || px > size.width + 40 || py < -20 || py > size.height + 20) return@forEach
                 val r = (pinR(sp, maxTotal) * 0.8).dp.toPx()
                 val base = androidx.compose.ui.text.TextStyle(fontSize = 11.5.sp, fontWeight = if (sp == picked) FontWeight.SemiBold else FontWeight.Medium)
-                val lay = textMeasurer.measure(sp.name.take(10), base.copy(color = labelFg))
+                val lay = textMeasurer.measure(if (sp.name.length > 10) sp.name.take(9) + "…" else sp.name, base.copy(color = labelFg))
                 val lx = px + r + 5.dp.toPx(); val ly = py - lay.size.height / 2f
                 val rect = androidx.compose.ui.geometry.Rect(lx - 2.dp.toPx(), ly, lx + lay.size.width + 2.dp.toPx(), ly + lay.size.height)
                 if (taken.any { it.overlaps(rect) }) return@forEach
@@ -550,23 +559,52 @@ private fun SpendMap(
                 }
             }
         }
+        // 點地點：下方資訊卡——店名、分類、總額、筆數、平均、上次去的日期、最近幾筆（點一下打開），以及導航與修正位置
         if (!pickOnly) picked?.let { sp ->
-            androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp), shadowElevation = 2.dp,
-                modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Text(sp.name, fontSize = AppText.body, fontWeight = FontWeight.SemiBold)
-                    Text("${Money.withSymbol(sp.total, "TWD")}・${sp.count} 筆" + (if (sp.cat.isNotBlank()) "・${sp.cat}" else ""), fontSize = AppText.caption,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (moving) Text("在地圖上點正確的位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
-                    // 只有一個「修正位置」，點了才列出方式
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            val muted = MaterialTheme.colorScheme.onSurfaceVariant
+            fun day(ms: Long) = java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(10.dp), shadowElevation = 3.dp,
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(8.dp)) {
+                Column(Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(sp.name, fontSize = AppText.body, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val last = sp.txns.firstOrNull()?.let { day(it.date) }
+                            Text(listOfNotNull(sp.cat.ifBlank { null }, "${sp.count} 筆", if (sp.count > 1) "平均 ${Money.withSymbol(sp.total / sp.count, "TWD")}" else null,
+                                last?.let { "上次 ${it.monthValue}/${it.dayOfMonth}" }).joinToString("・"), fontSize = AppText.caption, color = muted, maxLines = 1)
+                        }
+                        Text(Money.withSymbol(sp.total, "TWD"), fontSize = AppText.body, fontWeight = FontWeight.SemiBold, color = com.enwei.moneymanager.ui.ExpenseColor)
+                        Text("✕", color = muted, modifier = Modifier.clickable { onSelect(null) }.padding(horizontal = 10.dp, vertical = 4.dp))
+                    }
+                    if (moving) Text("在地圖上點正確的位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+                    else {
+                        HorizontalDivider(Modifier.padding(top = 8.dp, end = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        sp.txns.take(3).forEach { t ->
+                            val d = day(t.date)
+                            Row(Modifier.fillMaxWidth().clickable { onOpenTxn(t.id) }.padding(top = 6.dp, bottom = 6.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("${d.monthValue}/${d.dayOfMonth}", fontSize = AppText.caption, color = muted, modifier = Modifier.width(44.dp))
+                                Text(t.note?.takeIf { it.isNotBlank() } ?: sp.cat.ifBlank { "—" }, fontSize = AppText.secondary, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Text(Money.withSymbol(t.amount, t.currency), fontSize = AppText.secondary)
+                            }
+                        }
+                        if (sp.txns.size > 3) Text("還有 ${sp.txns.size - 3} 筆", fontSize = AppText.label, color = muted, modifier = Modifier.padding(bottom = 2.dp))
+                    }
+                    // 動作：導航、修正位置（點了才列出方式）
                     var fixMenu by remember(sp.key) { mutableStateOf(false) }
-                    Box(Modifier.padding(top = 4.dp)) {
-                        Text(if (moving) "取消" else "修正位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable { if (moving) moving = false else fixMenu = true })
-                        androidx.compose.material3.DropdownMenu(fixMenu, { fixMenu = false }) {
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("在地圖上點正確位置") }, onClick = { fixMenu = false; moving = true })
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("用 Google 地圖找") }, onClick = { fixMenu = false; onGoogle(sp) })
-                            if (sp.fixed) androidx.compose.material3.DropdownMenuItem(text = { Text("還原") }, onClick = { fixMenu = false; onReset(sp) })
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (!moving) androidx.compose.material3.TextButton(onClick = {
+                            val uri = android.net.Uri.parse("geo:${sp.lat},${sp.lon}?q=${sp.lat},${sp.lon}(" + android.net.Uri.encode(sp.name) + ")")
+                            runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
+                        }) { Text("導航") }
+                        Box {
+                            androidx.compose.material3.TextButton(onClick = { if (moving) moving = false else fixMenu = true }) { Text(if (moving) "取消" else "修正位置") }
+                            androidx.compose.material3.DropdownMenu(fixMenu, { fixMenu = false }) {
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("在地圖上點正確位置") }, onClick = { fixMenu = false; moving = true })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("用 Google 地圖找") }, onClick = { fixMenu = false; onGoogle(sp) })
+                                if (sp.fixed) androidx.compose.material3.DropdownMenuItem(text = { Text("還原") }, onClick = { fixMenu = false; onReset(sp) })
+                            }
                         }
                     }
                 }
