@@ -58,9 +58,23 @@ object Updater {
     fun isNewer(r: ReleaseInfo) = r.versionCode > BuildConfig.VERSION_CODE
 
     /** 下載新版；帶 Token 下載失敗時改用公開下載網址。 */
-    suspend fun download(context: Context, r: ReleaseInfo, token: String, onProgress: (Float) -> Unit): File =
-        if (token.isBlank()) downloadWith(context, r, "", onProgress)
-        else runCatching { downloadWith(context, r, token, onProgress) }.getOrElse { downloadWith(context, r, "", onProgress) }
+    /** 下載新版：GitHub 偶爾回 5xx（例如 504）或連線中斷，自動等一下再試，最多 3 次 */
+    suspend fun download(context: Context, r: ReleaseInfo, token: String, onProgress: (Float) -> Unit): File {
+        var last: Throwable? = null
+        repeat(3) { attempt ->
+            val res = runCatching {
+                if (token.isBlank()) downloadWith(context, r, "", onProgress)
+                else runCatching { downloadWith(context, r, token, onProgress) }.getOrElse { downloadWith(context, r, "", onProgress) }
+            }
+            res.getOrNull()?.let { return it }
+            last = res.exceptionOrNull()
+            val msg = last?.message.orEmpty()
+            val retryable = Regex("HTTP 5\\d\\d").containsMatchIn(msg) || last is IOException
+            if (!retryable) throw last!!
+            if (attempt < 2) kotlinx.coroutines.delay(2000L * (attempt + 1))
+        }
+        throw last ?: IOException("下載失敗")
+    }
 
     private suspend fun downloadWith(context: Context, r: ReleaseInfo, token: String, onProgress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "updates").apply { mkdirs() }

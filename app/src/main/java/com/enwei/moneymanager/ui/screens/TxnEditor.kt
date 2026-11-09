@@ -703,11 +703,14 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     if (notes.isNotEmpty()) Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                             .padding(start = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // 跟商家的推薦同一個樣子：圓角底色小方框
                         notes.forEach { n ->
-                            Text(n, fontSize = AppText.secondary, maxLines = 1, color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.clickable { note = n; focusManager.clearFocus() }.padding(vertical = 4.dp))
+                            Surface(
+                                shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.clickable { note = n; focusManager.clearFocus() },
+                            ) { Text(n, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1) }
                         }
                     }
                 }
