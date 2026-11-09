@@ -632,6 +632,28 @@ private fun SpendMap(
 }
 
 
+/**
+ * 在地圖上點選店家位置：一開始對準目前的位置（沒有就用常活動的區域），點一下就把針移過去，按「設定」存成這家店的位置。
+ */
+@Composable
+internal fun MapPicker(name: String, start: Pair<Double, Double>, onDone: (Pair<Double, Double>?) -> Unit) {
+    var at by remember { mutableStateOf(start) }
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.4f
+    val spot = SpendSpot(at.first, at.second, name, 1, 1, "", "pick")
+    androidx.compose.ui.window.Dialog(onDismissRequest = { onDone(null) },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(name, fontSize = AppText.body, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                androidx.compose.material3.TextButton(onClick = { onDone(null) }) { Text("取消") }
+                androidx.compose.material3.TextButton(onClick = { onDone(at) }) { Text("設定") }
+            }
+            SpendMap(listOf(spot), dark, Modifier.fillMaxWidth().height(460.dp).clipToBounds(), "pick", 0,
+                status = "點地圖上的正確位置", onSelect = {}, onMove = { _, la, lo -> at = la to lo }, onReset = {}, pickOnly = true)
+        }
+    }
+}
+
 /** 小地圖預覽：顯示一個位置，點一下打開選位置的地圖修改。 */
 @Composable
 internal fun MapPreview(name: String, at: Pair<Double, Double>, modifier: Modifier, onClick: () -> Unit) {
