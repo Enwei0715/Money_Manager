@@ -257,6 +257,15 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     suspend fun deleteRule(keyword: String) = db.rules().delete(keyword)
 
+    /** 把某個店名的所有交易改成正確的店名（店家搜尋選了正確的店時用），學過的分類規則一起搬過去 */
+    suspend fun renameMerchant(from: String, to: String): Int {
+        val f = from.trim(); val t = to.trim()
+        if (f.isEmpty() || t.isEmpty() || f == t) return 0
+        val n = db.txns().renameMerchant(f, t)
+        db.rules().all().firstOrNull { it.keyword == f }?.let { r -> db.rules().delete(f); db.rules().upsert(r.copy(keyword = t)) }
+        return n
+    }
+
     /** 已學習的商家規則只留目前交易裡還有的店名（改名、刪掉的舊店名一併清掉）。回傳清掉幾個。 */
     suspend fun pruneRules(): Int {
         val names = db.txns().all().mapNotNull { it.merchant?.trim()?.lowercase()?.takeIf { m -> m.isNotEmpty() } }.toSet()

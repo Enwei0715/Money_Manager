@@ -226,9 +226,18 @@ fun MerchantPlacesScreen(nav: NavController) {
 
     if (tokenOpen) MapboxTokenDialog { tokenOpen = false; mbOn = com.enwei.moneymanager.net.Mapbox.enabled; tick++ }
     searching?.let { p ->
-        MapboxSearchDialog(p.name, p.loc ?: PlaceHints.anchors(ctx).firstOrNull() ?: (25.0136 to 121.5414)) { ll ->
-            if (ll != null) { PlaceHints.setMerchantPin(p.name, ll.first, ll.second); tick++ }
+        MapboxSearchDialog(p.name, p.loc ?: PlaceHints.anchors(ctx).firstOrNull() ?: (25.0136 to 121.5414)) { hit ->
             searching = null
+            if (hit != null) scope.launch {
+                // 選了店：位置存成這家店，店名也改成正確名稱（所有交易一起改）
+                val to = hit.name.trim()
+                if (to != p.name) {
+                    val n = repo.renameMerchant(p.name, to)
+                    PlaceHints.clearMerchantPin(p.name); PlaceHints.clearMerchantGeo(p.name)
+                    android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("已改名為「$to」（$n 筆）"), android.widget.Toast.LENGTH_SHORT).show()
+                }
+                PlaceHints.setMerchantPin(to, hit.lat, hit.lon); tick++
+            }
         }
     }
 
@@ -303,12 +312,12 @@ private fun MapboxTokenDialog(onClose: () -> Unit) {
 
 /** 用 Mapbox 搜尋店家：預設用店名，可以改關鍵字；列出名稱、地址與距離，點一下設定位置。 */
 @Composable
-private fun MapboxSearchDialog(name: String, near: Pair<Double, Double>, onDone: (Pair<Double, Double>?) -> Unit) {
+private fun MapboxSearchDialog(name: String, near: Pair<Double, Double>, onDone: (com.enwei.moneymanager.net.Mapbox.Place?) -> Unit) {
     var q by remember { mutableStateOf(name) }
     var results by remember { mutableStateOf<List<com.enwei.moneymanager.net.Mapbox.Place>?>(null) }
     LaunchedEffect(q) {
-        if (q.isBlank()) { results = emptyList(); return@LaunchedEffect }
-        kotlinx.coroutines.delay(350)
+        if (q.trim().length < 2) { results = emptyList(); return@LaunchedEffect }
+        kotlinx.coroutines.delay(600)
         results = com.enwei.moneymanager.net.Mapbox.search(q, near, 10)
     }
     AlertDialog(
@@ -324,7 +333,7 @@ private fun MapboxSearchDialog(name: String, near: Pair<Double, Double>, onDone:
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
                     else -> LazyColumn(Modifier.padding(top = 6.dp).height(320.dp)) {
                         items(r) { p ->
-                            Column(Modifier.fillMaxWidth().clickable { onDone(p.lat to p.lon) }.padding(vertical = 8.dp)) {
+                            Column(Modifier.fillMaxWidth().clickable { onDone(p) }.padding(vertical = 8.dp)) {
                                 Text(p.name, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(listOfNotNull(p.meters?.let { if (it < 1000) "${it.toInt()} 公尺" else "%.1f 公里".format(it / 1000) }, p.address.ifBlank { null }).joinToString("・"),
                                     fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)

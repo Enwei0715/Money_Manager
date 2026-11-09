@@ -1229,22 +1229,21 @@ private fun LocationTest() {
                         add(g?.let { "過去紀錄：常在這裡記「${it.merchant}」" } ?: "過去紀錄：這附近還沒有", g != null)
                         // Google（手機內建）：這個位置的店名
                         add("查附近店家中…", true)
-                        val gHere = kotlinx.coroutines.withTimeoutOrNull(10_000) { runCatching { ph.geocoderHere(loc) }.getOrNull() }
                         val txns = repo.transactions.first()
                         val known = ph.knownNear(loc, txns.mapNotNull { it.merchant?.trim() }.toSet())
-                        val osm = kotlinx.coroutines.withTimeoutOrNull(20_000) { runCatching { ph.nearbyStores(loc) }.getOrNull() }
+                        val mbOn = com.enwei.moneymanager.net.Mapbox.enabled
+                        val osm = kotlinx.coroutines.withTimeoutOrNull(20_000) {
+                            runCatching { if (mbOn) com.enwei.moneymanager.net.Mapbox.nearby(loc.latitude, loc.longitude).map { it.name } else ph.nearbyStores(loc) }.getOrNull()
+                        }
+                        val src = if (mbOn) "Mapbox" else "OpenStreetMap"
+                        val err = if (mbOn) com.enwei.moneymanager.net.Mapbox.lastError else ph.lastNearbyError
                         lines = lines.dropLast(1)
                         add(if (known.isNotEmpty()) "已知位置的店（200 公尺內）：${known.joinToString("、")}" else "已知位置的店：200 公尺內沒有（到「店家位置」按自動找）", known.isNotEmpty())
                         add(when {
-                            gHere == null -> "Google 反查：10 秒內沒有回應"
-                            gHere.isEmpty() -> "Google 反查：這裡只查到地址，沒有店名"
-                            else -> "Google 反查：${gHere.take(5).joinToString("、")}"
-                        }, !gHere.isNullOrEmpty())
-                        add(when {
-                            osm == null -> "OpenStreetMap：20 秒內沒有回應"
-                            osm.isEmpty() && ph.lastNearbyError.isNotBlank() -> "OpenStreetMap：連不上（${ph.lastNearbyError}）"
-                            osm.isEmpty() -> "OpenStreetMap：150 公尺內沒有登錄的店"
-                            else -> "OpenStreetMap（150 公尺內）：${osm.take(6).joinToString("、")}"
+                            osm == null -> "$src：20 秒內沒有回應"
+                            osm.isEmpty() && err.isNotBlank() -> "$src：連不上（$err）"
+                            osm.isEmpty() -> "$src：附近沒有登錄的店"
+                            else -> "$src 附近的店：${osm.take(6).joinToString("、")}"
                         }, !osm.isNullOrEmpty())
                     }
                 } catch (e: Exception) {

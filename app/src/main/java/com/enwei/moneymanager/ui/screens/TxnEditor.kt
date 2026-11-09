@@ -264,17 +264,17 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         val hist = ph.historyNear(appCtx, loc, txns)
         val known = ph.knownNear(loc, txns.mapNotNull { it.merchant?.trim() }.toSet())
         nearby = (hist + known).distinct().take(8)
-        val g = ph.geocoderHere(loc)
-        nearby = (hist + known + g).distinct().take(8)
+        // 附近的店：有 Mapbox 金鑰用 Mapbox，否則用 OpenStreetMap（Overpass）
         if (com.enwei.moneymanager.net.Mapbox.enabled) {
             val mb = com.enwei.moneymanager.net.Mapbox.nearby(loc.latitude, loc.longitude)
             placeLocs = placeLocs + mb.associate { it.name to (it.lat to it.lon) }
-            nearby = (hist + known + mb.map { it.name } + g).distinct().take(10)
-        } else nearby = (hist + known + g + ph.nearbyStores(loc)).distinct().take(8)
+            nearby = (hist + known + mb.map { it.name }).distinct().take(10)
+        } else nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
     }
     LaunchedEffect(merchant, merchantFocused) {
-        if (!merchantFocused || merchant.isBlank() || !com.enwei.moneymanager.net.Mapbox.enabled) { mbResults = emptyList(); return@LaunchedEffect }
-        kotlinx.coroutines.delay(400)
+        // 打字停下來 0.6 秒、至少 2 個字才查；剛從清單選好的店不再查（減少 API 呼叫）
+        if (!merchantFocused || merchant.trim().length < 2 || merchantAt != null || !com.enwei.moneymanager.net.Mapbox.enabled) { mbResults = emptyList(); return@LaunchedEffect }
+        kotlinx.coroutines.delay(600)
         val c = hereLoc?.let { it.latitude to it.longitude } ?: com.enwei.moneymanager.data.PlaceHints.anchors(com.enwei.moneymanager.MoneyApp.instance).firstOrNull()
         mbResults = com.enwei.moneymanager.net.Mapbox.search(merchant, c, 6).filter { it.name != merchant }
     }

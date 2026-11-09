@@ -57,22 +57,30 @@ object Mapbox {
             .getOrNull()
     }
 
-    /** 用名稱搜尋店家（以 [near] 為中心，台灣境內），由近到遠 */
-    suspend fun search(q: String, near: Pair<Double, Double>?, limit: Int = 8): List<Place> {
+    /** 查過的結果先記著（同樣的關鍵字、約 500 公尺內的中心 30 分鐘內不重查），避免太多 API 呼叫 */
+    private val cache = object : android.util.LruCache<String, Pair<Long, List<Place>>>(200) {}
+    private fun cached(k: String): List<Place>? = cache.get(k)?.takeIf { System.currentTimeMillis() - it.first < 30 * 60_000L }?.second
+
+    /** 用名稱搜尋店家（以 [near] 為中心，台灣境內），由近到遠；[poi]＝只找店家（false 時也找地址） */
+    suspend fun search(q: String, near: Pair<Double, Double>?, limit: Int = 8, poi: Boolean = true): List<Place> {
         if (!enabled || q.isBlank()) return emptyList()
+        val k = "s|${q.trim().lowercase()}|${near?.let { "%.3f,%.3f".format(it.first, it.second) }}|$limit|$poi"
+        cached(k)?.let { return it }
         val url = "https://api.mapbox.com/search/searchbox/v1/forward?q=" + URLEncoder.encode(q.trim(), "UTF-8") +
-            "&language=zh-Hant&country=TW&limit=$limit&types=poi" +
+            "&language=zh-Hant&country=TW&limit=$limit" + (if (poi) "&types=poi" else "") +
             (near?.let { "&proximity=${it.second},${it.first}" } ?: "") + "&access_token=" + token
         val root = get(url) ?: return emptyList()
-        return parse(root, near).sortedBy { it.meters ?: 0f }
+        return parse(root, near).sortedBy { it.meters ?: 0f }.also { cache.put(k, System.currentTimeMillis() to it) }
     }
 
     /** 這個位置附近的店（由近到遠） */
     suspend fun nearby(lat: Double, lon: Double, limit: Int = 10): List<Place> {
         if (!enabled) return emptyList()
+        val k = "n|%.3f,%.3f|$limit".format(lat, lon)
+        cached(k)?.let { return it }
         val url = "https://api.mapbox.com/search/searchbox/v1/reverse?longitude=$lon&latitude=$lat&types=poi&language=zh-Hant&limit=$limit&access_token=$token"
         val root = get(url) ?: return emptyList()
-        return parse(root, lat to lon).sortedBy { it.meters ?: 0f }
+        return parse(root, lat to lon).sortedBy { it.meters ?: 0f }.also { cache.put(k, System.currentTimeMillis() to it) }
     }
 
     /** 底圖圖磚（Mapbox Streets，512 像素） */

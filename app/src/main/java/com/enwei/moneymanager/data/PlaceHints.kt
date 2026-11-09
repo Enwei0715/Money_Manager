@@ -111,22 +111,22 @@ object PlaceHints {
         names.forEachIndexed { i, n ->
             onProgress(i + 1, names.size)
             if (geoPrefs.contains(n)) return@forEachIndexed
-            // 每家店最多等 12 秒：先用手機內建的 Google 定位服務，找不到再用 Photon（OpenStreetMap）
-            val hit = kotlinx.coroutines.withTimeoutOrNull(12_000) {
-                // 有 Mapbox 金鑰：先用 Mapbox 的店家搜尋（名稱要對得上、5 公里內）
+            // 有 Mapbox 金鑰只用 Mapbox；沒有就只用 OpenStreetMap 的 Overpass（名稱相符、常活動區域 2 公里內）
+            val hit = kotlinx.coroutines.withTimeoutOrNull(15_000) {
                 if (com.enwei.moneymanager.net.Mapbox.enabled) {
                     val core = matchKey(n)
-                    near.flatMap { c -> com.enwei.moneymanager.net.Mapbox.search(n, c, 5) }
+                    near.take(1).flatMap { c -> com.enwei.moneymanager.net.Mapbox.search(n, c, 5) }
                         .filter { it.name.lowercase().contains(core) && (it.meters ?: 0f) <= 5000f }
-                        .minByOrNull { it.meters ?: 0f }?.let { return@withTimeoutOrNull it.lat to it.lon }
+                        .minByOrNull { it.meters ?: 0f }?.let { it.lat to it.lon }
+                } else {
+                    near.mapNotNull { (la, lo) -> snapToStore(n, la, lo, 2000)?.let { h -> h to dist(la, lo, h.first, h.second) } }
+                        .minByOrNull { it.second }?.first
                 }
-                val g = near.mapNotNull { (la, lo) -> geocoderNear(n, la, lo)?.let { h -> h to dist(la, lo, h.first, h.second) } }
-                g.ifEmpty {
-                    near.mapNotNull { (la, lo) -> (photonNear(n, la, lo, 2500) ?: nominatimNear(n, la, lo, 2500))?.let { h -> h to dist(la, lo, h.first, h.second) } }
-                }.minByOrNull { it.second }?.first
             }
             geoPrefs.edit().putString(n, hit?.let { "${it.first},${it.second}" } ?: "").apply()
             if (hit != null) found++
+            // Overpass 是免費的公共服務：每家店之間停一下，不要一次打太快
+            if (!com.enwei.moneymanager.net.Mapbox.enabled) kotlinx.coroutines.delay(1000)
         }
         onProgress(names.size, names.size)
         found
@@ -370,7 +370,10 @@ object PlaceHints {
      * 店家、餐廳（較慢，最多等 15 秒）。查不到回傳 null。
      */
     suspend fun nearbyPlace(loc: Location): Place? = withContext(Dispatchers.IO) {
-        reverse(loc) ?: overpass(loc)
+        if (com.enwei.moneymanager.net.Mapbox.enabled)
+            com.enwei.moneymanager.net.Mapbox.nearby(loc.latitude, loc.longitude, 3).firstOrNull()
+                ?.takeIf { (it.meters ?: 999f) <= 60f + loc.accuracy.coerceAtMost(60f) }?.let { Place(it.name, null) }
+        else overpass(loc)
     }
 
     private val spendKeys = setOf("shop", "amenity", "tourism", "leisure", "craft")
@@ -421,7 +424,7 @@ object PlaceHints {
     suspend fun snapToStore(name: String, lat: Double, lon: Double, radius: Int = 300): Pair<Double, Double>? = withContext(Dispatchers.IO) {
         runCatching {
             // 店名去掉分店、括號等，只用主要名稱比對（例如「萊爾富 永和店」→「萊爾富」）
-            val key = name.replace(Regex("[（(].*?[)）]"), "").split(' ', '　', '-', '－').firstOrNull { it.length >= 2 }?.take(12) ?: return@runCatching null
+            val key = matchKey(name).ifBlank { return@runCatching null }
             val esc = Regex.escape(key).replace("\\Q", "").replace("\\E", "").replace("\"", "")
             val q = "[out:json][timeout:12];(" +
                 "node(around:$radius,$lat,$lon)[\"name\"~\"$esc\",i];" +
@@ -575,6 +578,7 @@ object PlaceHints {
     /** 地址 → 座標：手機內建的 Google 地理編碼（台灣範圍內），找不到再用 OpenStreetMap 的 Nominatim。 */
     suspend fun geocodeAddress(addr: String): Pair<Double, Double>? = withContext(Dispatchers.IO) {
         val a = addr.replace(Regex("^\\d{3,6}"), "").trim()
+        if (com.enwei.moneymanager.net.Mapbox.enabled) com.enwei.moneymanager.net.Mapbox.search(a, null, 1, poi = false).firstOrNull()?.let { return@withContext it.lat to it.lon }
         geoByName(a, 21.8, 119.3, 25.4, 122.1).firstOrNull { it.hasLatitude() }?.let { return@withContext it.latitude to it.longitude }
         runCatching {
             val u = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=tw&accept-language=zh-TW&q=" + java.net.URLEncoder.encode(a, "UTF-8")
