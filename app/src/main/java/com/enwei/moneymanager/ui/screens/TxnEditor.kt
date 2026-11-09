@@ -173,6 +173,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     // 收入：別人還我錢時選對象 → 存成「從他的往來帳戶轉進來」，不算收入
     var repayPerson by rememberSaveable { mutableStateOf<Long?>(null) }
     var repayName by rememberSaveable { mutableStateOf("") }
+    // 收入的往來方向：0 他還我、1 向他借（記法相同，都是從他的往來帳戶轉進來，只差名稱）
+    var repayKind by rememberSaveable { mutableStateOf(0) }
+    // 支出「他先付」：這筆由對方先幫我付 → 我欠他，不從我的帳戶扣
+    var paidBy by rememberSaveable { mutableStateOf(false) }
     // 往來模式：類型列選「往來」時，在頁面上直接選對象與方向（底層仍是支出＋代墊或轉帳）
     var debtMode by rememberSaveable { mutableStateOf(false) }
     var debtPerson by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -209,7 +213,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     val feeMinor = if (showFee) Calculator.evaluate(feeExpr)?.abs()?.let(Money::toMinor)?.takeIf { it > 0 } else null
     val toAcc = lk.account(toAccountId)
     val crossCurrency = type == TxnType.TRANSFER && toAcc != null && toAcc.currency != currency
-    val canSave = amountMinor != null && accountId != null && (type != TxnType.TRANSFER || toAccountId != null)
+    val payer = if (type == TxnType.EXPENSE && paidBy && !debtMode) splitRows.firstOrNull() else null
+    val canSave = amountMinor != null && (accountId != null || payer != null) && (type != TxnType.TRANSFER || toAccountId != null)
     // 自動分類：依內容（商家）、過去紀錄、金額與帳戶建議分類；新交易還沒選分類時直接帶入
     var memoNew by remember { mutableStateOf(false) }
     var catSuggest by remember { mutableStateOf<com.enwei.moneymanager.core.CategorySuggester.Suggestion?>(null) }
@@ -286,20 +291,47 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         )
     }
 
-    val splitParts = if (type == TxnType.EXPENSE && !debtMode) splitRows.mapNotNull { r ->
+    val splitParts = if (type == TxnType.EXPENSE && !debtMode && !paidBy) splitRows.mapNotNull { r ->
         val v = Calculator.evaluate(r.expr)?.abs()?.let(Money::toMinor)?.takeIf { it > 0 } ?: return@mapNotNull null
         if (r.person == null && r.name.isBlank()) null else r to v
     } else emptyList()
     val splitReady = splitParts.isNotEmpty() && amountMinor != null && splitParts.sumOf { it.second } <= amountMinor
 
+    /** 手續費另記一筆支出（轉帳、支出都可以加） */
+    suspend fun saveFee(t: TxnEntity) {
+        val fee = feeMinor ?: return
+        if (t.type != TxnType.TRANSFER && t.type != TxnType.EXPENSE) return
+        val feeCat = lk.categories.firstOrNull { it.name.contains("手續費") }?.id ?: if (t.type == TxnType.EXPENSE) t.categoryId else null
+        repo.saveTxn(TxnEntity(
+            type = TxnType.EXPENSE, amount = fee, currency = t.currency, accountId = t.accountId, categoryId = feeCat,
+            merchant = if (t.type == TxnType.TRANSFER) "轉帳手續費" else listOfNotNull(t.merchant, "手續費").joinToString(" "),
+            date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
+        ))
+    }
+
     fun save(again: Boolean) {
-        val t = build() ?: return
+        val t0 = build() ?: return
+        if (payer != null) {
+            scope.launch {
+                val pid = payer.person ?: repo.debtPerson(payer.name)
+                val t = t0.copy(accountId = pid)
+                repo.saveTxn(t)
+                saveFee(t0.copy(accountId = accountId ?: pid))
+                TxnScroll.focusDay = date
+                if (again) {
+                    expr = ""; merchant = ""; note = ""; splitRaw = ""; paidBy = false; feeExpr = ""; showFee = false
+                    snack.showSnackbar(com.enwei.moneymanager.ui.tr("已儲存，繼續記下一筆"))
+                } else nav.popBackStack()
+            }
+            return
+        }
+        val t = t0
         if (type == TxnType.INCOME && original == null && (repayPerson != null || repayName.isNotBlank())) {
             scope.launch {
                 val pid = repayPerson ?: repo.debtPerson(repayName)
                 val who = lk.account(pid)?.name ?: repayName.trim()
                 repo.saveTxn(t.copy(type = TxnType.TRANSFER, accountId = pid, toAccountId = t.accountId, categoryId = null,
-                    merchant = t.merchant ?: "$who 還款"))
+                    merchant = t.merchant ?: if (repayKind == 0) "$who 還款" else "向 $who 借款"))
                 if (again) {
                     expr = ""; merchant = ""; note = ""; repayPerson = null; repayName = ""
                     snack.showSnackbar(com.enwei.moneymanager.ui.tr("已儲存，繼續記下一筆"))
@@ -311,6 +343,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             scope.launch {
                 val shares = splitParts.map { (r, v) -> (r.person ?: repo.debtPerson(r.name)) to v }
                 repo.saveWithSplits(t, shares)
+                saveFee(t)
                 TxnScroll.focusDay = date
                 if (again) {
                     expr = ""; merchant = ""; note = ""; splitRaw = ""; splitMe = true; splitOn = false
@@ -338,13 +371,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     (hereLoc ?: com.enwei.moneymanager.data.PlaceHints.current(appCtx))?.let { com.enwei.moneymanager.data.PlaceHints.record(appCtx, newId, it) }
                 }
             }
-            // 轉帳手續費另記一筆支出
-            if (type == TxnType.TRANSFER && feeMinor != null) repo.saveTxn(
-                TxnEntity(
-                    type = TxnType.EXPENSE, amount = feeMinor, currency = currency, accountId = accountId,
-                    merchant = "轉帳手續費", date = t.date, source = TxnSource.MANUAL,
-                ),
-            )
+            // 手續費另記一筆支出
+            if (original == null) saveFee(t)
             if (again) {
                 expr = ""; merchant = ""; note = ""; toExpr = ""; feeExpr = ""; showFee = false
                 time = LocalTime.now().withSecond(0).withNano(0)
@@ -389,7 +417,12 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            BackTopBar(if (debtMode) "往來" else type.label, { nav.popBackStack() }) {
+            BackTopBar(when {
+                debtMode -> "往來"
+                type == TxnType.INCOME && original == null && (repayPerson != null || repayName.isNotBlank()) -> if (repayKind == 0) "收到還款" else "借入"
+                type == TxnType.EXPENSE && payer != null -> "別人先付"
+                else -> type.label
+            }, { nav.popBackStack() }) {
                 // 當天備註（不是交易）：收在右上角
                 if (original == null) androidx.compose.material3.IconButton(onClick = { memoNew = true }) {
                     Icon(com.enwei.moneymanager.ui.components.LineIcons.IcNote, "當天備註")
@@ -437,7 +470,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("金額", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                        if (type == TxnType.TRANSFER && !debtMode) Text(if (showFee) "手續費 ✓" else "＋手續費", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                        if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && !debtMode && original == null) Text(if (showFee) "手續費 ✓" else "＋手續費", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.clickable { showFee = !showFee; if (showFee) panel = Panel.FEE }.padding(4.dp))
                     }
                     Text(
@@ -485,7 +518,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         })
                     }
                 }
-                if (type == TxnType.TRANSFER && showFee) {
+                if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && showFee && original == null) {
                     FormRow("手續費", color, panel == Panel.FEE, onClick = { focusManager.clearFocus(); panel = Panel.FEE }) {
                         Text(feeExpr, fontSize = AppText.body)
                     }
@@ -530,16 +563,16 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                             }
                         }
                     }
-                    FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
+                    if (payer == null) FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
                         PlaceholderText(lk.account(accountId)?.name, "")
                     }
                     if (!debtMode && type == TxnType.EXPENSE && (original == null || original?.type == TxnType.EXPENSE)) SplitSection(
-                        splitMe, { splitMe = it },
+                        splitMe, { splitMe = it }, paidBy, { paidBy = it },
                         splitRows, { splitRaw = SplitRow.encode(it) }, amountMinor, currency, color,
                         onFieldFocus = { panel = Panel.NONE },
                     )
-                    if (type == TxnType.INCOME && original == null) RepayRow(repayPerson, repayName, color,
-                        onPick = { id, name -> repayPerson = id; repayName = name },
+                    if (type == TxnType.INCOME && original == null) RepayRow(repayPerson, repayName, repayKind, color,
+                        onPick = { id, name -> repayPerson = id; repayName = name }, onKind = { repayKind = it },
                         onFieldFocus = { panel = Panel.NONE })
 
                 }
@@ -704,7 +737,7 @@ private fun FormRow(
         val icon = when (label) {
             "日期" -> com.enwei.moneymanager.ui.components.LineIcons.IcCalendar; "分類" -> com.enwei.moneymanager.ui.components.LineIcons.IcShapes; "帳戶", "Account", "轉出" -> com.enwei.moneymanager.ui.components.LineIcons.IcWallet
             "轉入" -> com.enwei.moneymanager.ui.components.LineIcons.IcArrowIn; "商家" -> com.enwei.moneymanager.ui.components.LineIcons.IcStore; "說明" -> com.enwei.moneymanager.ui.components.LineIcons.IcLines; "手續費" -> com.enwei.moneymanager.ui.components.LineIcons.IcPercent
-            "分帳" -> com.enwei.moneymanager.ui.components.LineIcons.IcPeople; "對象" -> com.enwei.moneymanager.ui.components.LineIcons.IcPerson
+            "分帳", "往來" -> com.enwei.moneymanager.ui.components.LineIcons.IcPeople; "對象" -> com.enwei.moneymanager.ui.components.LineIcons.IcPerson
             "對方付", "誰還的" -> com.enwei.moneymanager.ui.components.LineIcons.IcCash
             else -> null
         }
@@ -998,35 +1031,78 @@ private fun SourceDialog(t: TxnEntity, onDismiss: () -> Unit) {
 }
 
 
-/**
- * 收入的「誰還的」：別人還你錢時打名字（推薦過去的往來對象）；選了就不算收入，而是對方欠你的減少。
- */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+/** 往來對象的小標籤：已選的填滿顏色，未選的只有細框。支出、收入共用同一個樣子。 */
 @Composable
-private fun RepayRow(person: Long?, name: String, color: Color, onPick: (Long?, String) -> Unit, onFieldFocus: () -> Unit) {
+private fun PersonChip(label: String, on: Boolean, color: Color, onClick: () -> Unit) {
+    Text(label, fontSize = AppText.secondary, maxLines = 1,
+        color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.background(if (on) color else Color.Transparent, MaterialTheme.shapes.small)
+            .border(1.dp, if (on) color else MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp))
+}
+
+/** 往來對象一列：常往來的人排前面（可左右滑），最後一個「＋」輸入新名字。 */
+@Composable
+private fun PeopleRow(selected: (Long) -> Boolean, extra: List<String>, color: Color, onToggle: (Long) -> Unit, onExtra: (String) -> Unit, onAdd: (String) -> Unit, onFieldFocus: () -> Unit) {
     val lk = rememberLookups()
-    val people = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN && !it.archived }
-    var focused by remember { mutableStateOf(false) }
-    val shown = person?.let { lk.account(it)?.name } ?: name
-    val clear: @Composable () -> Unit = {
-        Text("清除", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.clickable { onPick(null, "") }.padding(start = 8.dp, top = 6.dp, bottom = 6.dp))
+    val people0 = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN && !it.archived }
+    var freq by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) }
+    LaunchedEffect(people0.size) {
+        val ids = people0.map { it.id }.toSet()
+        freq = repo.allTxns().filter { it.type == TxnType.TRANSFER }.flatMap { listOfNotNull(it.toAccountId, it.accountId) }
+            .filter { it in ids }.groupingBy { it }.eachCount()
     }
-    FormRow("對象", color, focused, onClick = {}, trailing = if (shown.isNotBlank()) clear else null) {
-        UnderlineField(shown, { onPick(null, it) }, "",
-            Modifier.onFocusChanged { focused = it.isFocused; if (it.isFocused) onFieldFocus() })
-    }
-    val typed = name.trim()
-    val sugg = if (person != null || !focused) emptyList() else people.filter { typed.isEmpty() || it.name.contains(typed, true) }.take(6)
-    if (sugg.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier.padding(start = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp, end = 16.dp, top = 4.dp),
-    ) {
-        sugg.forEach { p ->
-            Text(p.name, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { onPick(p.id, "") }.padding(vertical = 4.dp))
+    val people = people0.sortedByDescending { freq[it.id] ?: 0 }
+    var adding by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    FormRow("往來", color, false, onClick = {}) {
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
+            items(extra.size) { k -> PersonChip(extra[k], true, color) { onExtra(extra[k]) } }
+            items(people.size) { k -> val p = people[k]; PersonChip(p.name, selected(p.id), color) { onToggle(p.id) } }
+            item {
+                Text("＋", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
+                        .clickable { adding = true }.padding(horizontal = 12.dp, vertical = 5.dp))
+            }
         }
     }
+    if (adding) FormRow("", color, true, onClick = {}, trailing = {
+        Text("加入", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable {
+            if (newName.isNotBlank()) onAdd(newName.trim())
+            newName = ""; adding = false
+        }.padding(start = 10.dp, top = 6.dp, bottom = 6.dp))
+    }) {
+        UnderlineField(newName, { newName = it }, "新名字", Modifier.onFocusChanged { if (it.isFocused) onFieldFocus() })
+    }
+}
+
+/** 一列文字選項（選中的用主題色），右邊可放一段狀態。 */
+@Composable
+private fun ModeLine(options: List<String>, sel: Int, color: Color, onSel: (Int) -> Unit, end: (@Composable () -> Unit)? = null) {
+    val indent = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp
+    Row(Modifier.fillMaxWidth().padding(start = indent, end = 16.dp, top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        options.forEachIndexed { i, l ->
+            Text(l, fontSize = AppText.secondary, color = if (i == sel) color else MaterialTheme.colorScheme.primary,
+                fontWeight = if (i == sel) FontWeight.SemiBold else FontWeight.Normal,
+                modifier = Modifier.clickable { onSel(i) }.padding(end = 18.dp, top = 4.dp, bottom = 4.dp))
+        }
+        Spacer(Modifier.weight(1f))
+        end?.invoke()
+    }
+}
+
+/**
+ * 收入的往來：和支出同一排對象標籤（單選）。選了就不是收入：他還我（他欠我的減少）或向他借（我欠他的增加）。
+ */
+@Composable
+private fun RepayRow(person: Long?, name: String, kind: Int, color: Color, onPick: (Long?, String) -> Unit, onKind: (Int) -> Unit, onFieldFocus: () -> Unit) {
+    PeopleRow(
+        selected = { it == person }, extra = listOfNotNull(name.trim().takeIf { person == null && it.isNotEmpty() }), color = color,
+        onToggle = { id -> if (person == id) onPick(null, "") else onPick(id, "") },
+        onExtra = { onPick(null, "") }, onAdd = { onPick(null, it) }, onFieldFocus = onFieldFocus,
+    )
+    if (person != null || name.isNotBlank()) ModeLine(listOf("他還我", "向他借"), kind, color, onKind)
 }
 
 /** 分帳的一個人：對象（既有往來帳戶 id，或新名字）、他的部分（可輸入算式）、是否自動平攤（手動改過金額就不再自動算）。 */
@@ -1049,20 +1125,12 @@ private data class SplitRow(val person: Long?, val name: String, val expr: Strin
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SplitSection(
-    includeMe: Boolean, onIncludeMe: (Boolean) -> Unit,
+    includeMe: Boolean, onIncludeMe: (Boolean) -> Unit, paidBy: Boolean, onPaidBy: (Boolean) -> Unit,
     rows: List<SplitRow>, onRows: (List<SplitRow>) -> Unit, total: Long?, currency: String, color: Color,
     onFieldFocus: () -> Unit,
 ) {
     val lk = rememberLookups()
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val people0 = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN && !it.archived }
-    // 常一起分帳的人排前面（依過去代墊的次數）
-    var freq by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) }
-    LaunchedEffect(people0.size) {
-        val ids = people0.map { it.id }.toSet()
-        freq = repo.allTxns().filter { it.type == TxnType.TRANSFER && it.toAccountId in ids }.groupingBy { it.toAccountId!! }.eachCount()
-    }
-    val people = people0.sortedByDescending { freq[it.id] ?: 0 }
     fun nameOf(r: SplitRow) = r.person?.let { lk.account(it)?.name } ?: r.name.trim()
     // 自動平攤：沒手動改過的人，每人＝（總額 − 手動的部分）÷ 人數（含我時人數＋1）
     LaunchedEffect(total, rows.size, includeMe, rows.count { it.auto }) {
@@ -1075,37 +1143,29 @@ private fun SplitSection(
         val next = rows.map { if (it.auto) it.copy(expr = minorToExpr(each)) else it }
         if (next != rows) onRows(next)
     }
-    var adding by remember { mutableStateOf(false) }
-    var newName by remember { mutableStateOf("") }
-    // 第一列：人的小標籤（點一下加入／移除），最後一個「＋」輸入新名字
-    FormRow("分帳", color, false, onClick = {}) {
-        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-            items(people.size) { k ->
-                val p = people[k]
-                val on = rows.any { it.person == p.id }
-                Text(p.name, fontSize = AppText.secondary, maxLines = 1,
-                    color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.background(if (on) color else Color.Transparent, MaterialTheme.shapes.small)
-                        .border(1.dp, if (on) color else MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
-                        .clickable { onRows(if (on) rows.filter { it.person != p.id } else rows + SplitRow(p.id, "", "", auto = true)) }
-                        .padding(horizontal = 10.dp, vertical = 5.dp))
-            }
-            item {
-                Text("＋", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
-                        .clickable { adding = true }.padding(horizontal = 12.dp, vertical = 5.dp))
-            }
-        }
-    }
-    if (adding) FormRow("", color, true, onClick = {}, trailing = {
-        Text("加入", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable {
-            if (newName.isNotBlank()) onRows(rows + SplitRow(null, newName.trim(), "", auto = true))
-            newName = ""; adding = false
-        }.padding(start = 10.dp, top = 6.dp, bottom = 6.dp))
-    }) {
-        UnderlineField(newName, { newName = it }, "新名字", Modifier.onFocusChanged { if (it.isFocused) onFieldFocus() })
-    }
+    // 對象：和收入同一排標籤；「他先付」只能選一個人
+    PeopleRow(
+        selected = { id -> rows.any { it.person == id } }, extra = rows.filter { it.person == null }.map { it.name.trim() }, color = color,
+        onToggle = { id ->
+            val on = rows.any { it.person == id }
+            onRows(when { on -> rows.filter { it.person != id }; paidBy -> listOf(SplitRow(id, "", "", auto = true)); else -> rows + SplitRow(id, "", "", auto = true) })
+        },
+        onExtra = { n -> onRows(rows.filter { !(it.person == null && it.name.trim() == n) }) },
+        onAdd = { n -> onRows(if (paidBy) listOf(SplitRow(null, n, "", auto = true)) else rows + SplitRow(null, n, "", auto = true)) },
+        onFieldFocus = onFieldFocus,
+    )
     if (rows.isEmpty()) return
+    val modeSel = when { paidBy -> 2; includeMe -> 0; else -> 1 }
+    val pick: (Int) -> Unit = { m ->
+        onPaidBy(m == 2)
+        if (m == 2) onRows(rows.take(1)) else { onIncludeMe(m == 0); onRows(rows.map { it.copy(auto = true) }) }
+    }
+    if (paidBy) {
+        ModeLine(listOf("平攤", "我全付", "他先付"), modeSel, color, pick) {
+            if (total != null) Text("我欠 ${Money.withSymbol(total, currency)}", fontSize = AppText.caption, color = muted)
+        }
+        return
+    }
     // 已加入的人：名字、他的部分（可改）、移除
     rows.forEachIndexed { i, r ->
         val del: @Composable () -> Unit = {
@@ -1122,16 +1182,9 @@ private fun SplitSection(
             }
         }
     }
-    // 所有人下方一行：平攤（含我一份）、我全付（整筆先墊，他們各還我）、我自己的部分
+    // 所有人下方一行：平攤（含我一份）、我全付（整筆先墊，他們各還我）、他先付（他幫我付，我欠他）
     val others = rows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L }
-    val indent = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp
-    Row(Modifier.fillMaxWidth().padding(start = indent, end = 16.dp, top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("平攤", fontSize = AppText.secondary, color = if (includeMe && rows.all { it.auto }) color else MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable { onIncludeMe(true); onRows(rows.map { it.copy(auto = true) }) }.padding(vertical = 4.dp))
-        Spacer(Modifier.width(18.dp))
-        Text("我全付", fontSize = AppText.secondary, color = if (!includeMe && rows.all { it.auto }) color else MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable { onIncludeMe(false); onRows(rows.map { it.copy(auto = true) }) }.padding(vertical = 4.dp))
-        Spacer(Modifier.weight(1f))
+    ModeLine(listOf("平攤", "我全付", "他先付"), if (rows.all { it.auto }) modeSel else -1, color, pick) {
         if (total != null) Text(if (others > total) "超過總額" else "我付 ${Money.withSymbol(total - others, currency)}", fontSize = AppText.caption,
             color = if (others > total) MaterialTheme.colorScheme.error else muted)
     }
