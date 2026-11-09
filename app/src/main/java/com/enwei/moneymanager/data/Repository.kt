@@ -266,6 +266,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return n
     }
 
+    /** 只改這幾筆交易的店名（同一個連鎖店名的交易可能在不同分店） */
+    suspend fun setMerchant(ids: List<Long>, to: String): Int =
+        if (ids.isEmpty() || to.isBlank()) 0 else db.txns().setMerchant(ids, to.trim())
+
     /** 已學習的商家規則只留目前交易裡還有的店名（改名、刪掉的舊店名一併清掉）。回傳清掉幾個。 */
     suspend fun pruneRules(): Int {
         val names = db.txns().all().mapNotNull { it.merchant?.trim()?.lowercase()?.takeIf { m -> m.isNotEmpty() } }.toSet()

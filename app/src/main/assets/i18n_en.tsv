@@ -2994,3 +2994,14 @@ K 線操作	Using the chart
 輸入時會推薦曾記錄的店家，並帶入上次使用的分類與帳戶。	Previously recorded stores are suggested as you type, filling in the last category and account used.
 往來與分帳	People & splits
 定位與支出地圖	Location & spending map
+需指定分店	Branch needed
+這些交易只記了連鎖店名，指定分店後才能標示位置。	These transactions only name the chain; pick a branch to place them on the map.
+指定分店 ›	Pick branch ›
+店家	Stores
+要指定的交易	Transactions to assign
+曾記錄的分店	Branches you've used
+搜尋分店	Search branches
+設定 Google Places 或 Mapbox 金鑰後，可搜尋附近的分店；也可先選擇曾記錄的分店。	Set a Google Places or Mapbox key to search nearby branches, or pick a branch you've used before.
+找不到結果，可改用其他關鍵字。	No results; try another keyword.
+搜尋中…	Searching…
+完成	Done

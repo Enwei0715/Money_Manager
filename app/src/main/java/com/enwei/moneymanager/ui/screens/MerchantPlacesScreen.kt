@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -45,7 +46,7 @@ private data class Place(val name: String, val count: Int, val loc: Pair<Double,
 
 /**
  * 店家位置：清單來自目前的支出與收入（改名、刪掉的舊店名不會出現）。
- * 位置來源依序：手動指定 → 記帳時的定位 → 用店名自動找。線上消費與沒寫分店的連鎖店不列。
+ * 位置來源依序：手動指定 → 記帳時的定位 → 用店名自動找。線上消費不列；沒寫分店的連鎖店列在「需指定分店」。
  */
 @Composable
 fun MerchantPlacesScreen(nav: NavController) {
@@ -106,6 +107,17 @@ fun MerchantPlacesScreen(nav: NavController) {
             .sortedWith(compareBy<Place>({ when { it.source == "多個結果" -> 0; it.loc == null && it.source.isEmpty() -> 1; it.loc == null -> 2; else -> 3 } }, { -it.count }))
     }
     val missing = places.filter { it.loc == null }
+    // 只寫連鎖店名、沒寫分店的交易（例如「小北百貨」）：要指定分店才能標位置，不自動猜
+    val bare = remember(txns, tick) {
+        txns.filter { t -> val m = t.merchant!!.trim(); !online(m, t.categoryId) && chain(m) && !branchy(m) }
+            .groupBy { it.merchant!!.trim() }.toList().sortedByDescending { it.second.size }
+    }
+    // 同一個連鎖店，資料裡已經出現過的分店（例如「小北百貨-新北福和店 SHOWBA」）
+    fun knownBranches(name: String): List<String> {
+        val key = CHAINS.filter { name.contains(it, ignoreCase = true) }.maxByOrNull { it.length } ?: name
+        return current.filter { it != name && it.contains(key, ignoreCase = true) && branchy(it) }.sorted()
+    }
+    var branchFor by remember { mutableStateOf<String?>(null) }
 
     // Google 地圖：開啟搜尋 → 分享、複製連結 → 回到這裡自動讀剪貼簿
     var googleFor by remember { mutableStateOf<String?>(null) }
@@ -194,6 +206,34 @@ fun MerchantPlacesScreen(nav: NavController) {
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
+            if (bare.isNotEmpty()) {
+                item(key = "bare-head") {
+                    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)) {
+                        Text("需指定分店", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("這些交易只記了連鎖店名，指定分店後才能標示位置。", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                items(bare, key = { "bare-${it.first}" }) { (name, list) ->
+                    Row(
+                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { branchFor = name }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(name, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${list.size} 筆", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text("指定分店 ›", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                item(key = "places-head") {
+                    Text("店家", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, top = 18.dp, bottom = 6.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
             items(places, key = { it.name }) { p ->
                 Row(
                     Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { if (p.source == "多個結果" && (mbOn || gOn)) searching = p else open = p }
@@ -273,6 +313,26 @@ fun MerchantPlacesScreen(nav: NavController) {
                 }
             },
             confirmButton = { TextButton(onClick = { open = null }) { Text("關閉") } },
+        )
+    }
+
+    branchFor?.let { name ->
+        val list = bare.firstOrNull { it.first == name }?.second.orEmpty()
+        if (list.isEmpty()) branchFor = null
+        else BranchDialog(
+            name, list, knownBranches(name),
+            near = PlaceHints.samples(ctx).filter { s -> list.any { it.id == s.txnId } }.let { f ->
+                if (f.isEmpty()) null else f.map { it.lat }.average() to f.map { it.lon }.average()
+            } ?: PlaceHints.anchors(ctx).firstOrNull(),
+            onPick = { ids, branch, loc ->
+                scope.launch {
+                    val n = repo.setMerchant(ids, branch)
+                    loc?.let { PlaceHints.setMerchantPin(branch, it.first, it.second, "搜尋") }
+                    tick++
+                    android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("已指定為「$branch」（$n 筆）"), android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
+            onClose = { branchFor = null },
         )
     }
 
@@ -463,3 +523,88 @@ internal fun GooglePlacesKeyDialog(onClose: () -> Unit) = KeyDialog("Google Plac
         "（建議）將每日用量上限設為 200" to "https://console.cloud.google.com/apis/api/places.googleapis.com/quotas",
         "將 AIza 開頭的金鑰貼於下方" to null,
     ), onClose = onClose)
+
+/**
+ * 指定分店：勾選要指定的交易（預設全部），再從已出現過的分店或附近搜尋結果選一家。
+ * 不會自動決定，每一筆都由使用者確認。
+ */
+@Composable
+private fun BranchDialog(
+    name: String, list: List<com.enwei.moneymanager.data.TxnEntity>, known: List<String>, near: Pair<Double, Double>?,
+    onPick: (List<Long>, String, Pair<Double, Double>?) -> Unit, onClose: () -> Unit,
+) {
+    var picked by remember(name, list.size) { mutableStateOf(list.map { it.id }.toSet()) }
+    var q by remember(name) { mutableStateOf(name) }
+    var results by remember { mutableStateOf<List<com.enwei.moneymanager.net.Mapbox.Place>?>(null) }
+    val online = com.enwei.moneymanager.net.PlaceSearch.online
+    LaunchedEffect(q, online) {
+        if (!online || q.trim().length < 2) { results = emptyList(); return@LaunchedEffect }
+        results = null
+        kotlinx.coroutines.delay(500)
+        results = com.enwei.moneymanager.net.PlaceSearch.search(q.trim(), near, 8)
+    }
+    val fmt = remember { java.text.SimpleDateFormat("yyyy/M/d HH:mm", java.util.Locale.TAIWAN) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("指定「$name」的分店") },
+        text = {
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
+                item {
+                    Text("要指定的交易（${picked.size} / ${list.size}）", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp))
+                }
+                items(list.sortedByDescending { it.date }, key = { "t${it.id}" }) { t ->
+                    val on = t.id in picked
+                    Row(
+                        Modifier.fillMaxWidth().clickable { picked = if (on) picked - t.id else picked + t.id }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.Checkbox(on, { picked = if (on) picked - t.id else picked + t.id })
+                        Column(Modifier.weight(1f)) {
+                            Text(fmt.format(java.util.Date(t.date)) + "　" + com.enwei.moneymanager.core.Money.withSymbol(t.amount, t.currency),
+                                fontSize = AppText.secondary)
+                            if (!t.note.isNullOrBlank()) Text(t.note!!, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+                if (known.isNotEmpty()) {
+                    item {
+                        Text("曾記錄的分店", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    items(known, key = { "k$it" }) { b ->
+                        Text(b, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().clickable(enabled = picked.isNotEmpty()) {
+                                onPick(picked.toList(), b, PlaceHints.merchantPins()[b])
+                                picked = emptySet()
+                            }.padding(vertical = 10.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+                item {
+                    Text("搜尋分店", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
+                    if (online) androidx.compose.material3.OutlinedTextField(q, { q = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    else Text("設定 Google Places 或 Mapbox 金鑰後，可搜尋附近的分店；也可先選擇曾記錄的分店。",
+                        fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (online && results == null) Text("搜尋中…", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                    if (online && results?.isEmpty() == true && q.trim().length >= 2) Text("找不到結果，可改用其他關鍵字。", fontSize = AppText.caption,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                }
+                items(results.orEmpty(), key = { "r${it.name}${it.lat}" }) { r ->
+                    Column(Modifier.fillMaxWidth().clickable(enabled = picked.isNotEmpty()) {
+                        onPick(picked.toList(), r.name, r.lat to r.lon)
+                        picked = emptySet()
+                    }.padding(vertical = 8.dp)) {
+                        Text(r.name, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(listOfNotNull(r.meters?.let { if (it < 1000) "${it.toInt()} 公尺" else "%.1f 公里".format(it / 1000) }, r.address.ifBlank { null }).joinToString("・"),
+                            fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("完成") } },
+    )
+}

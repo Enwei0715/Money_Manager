@@ -113,6 +113,10 @@ interface TxnDao {
     @Query("UPDATE transactions SET merchant = :to WHERE TRIM(merchant) = :from")
     suspend fun renameMerchant(from: String, to: String): Int
 
+    /** 指定幾筆交易的店名（連鎖店指定分店時用） */
+    @Query("UPDATE transactions SET merchant = :to WHERE id IN (:ids)")
+    suspend fun setMerchant(ids: List<Long>, to: String): Int
+
     @Query("UPDATE transactions SET toAccountId = NULL WHERE toAccountId = :accountId")
     suspend fun detachToAccount(accountId: Long)
 
