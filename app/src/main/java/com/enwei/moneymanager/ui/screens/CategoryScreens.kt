@@ -100,6 +100,18 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
                     onClick = { nav.navigate("subcats/${c.id}") },
                 )
             }
+            // 已學習的清單只留目前交易裡還有的店名（舊名字、改過名的自動清掉）
+            androidx.compose.runtime.LaunchedEffect(Unit) { repo.pruneRules() }
+            // 店家位置：自動找、手動指定
+            Row(
+                Modifier.fillMaxWidth().padding(top = 16.dp).background(MaterialTheme.colorScheme.surface)
+                    .clickable { nav.navigate("merchants") }.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("店家位置", Modifier.weight(1f))
+                Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             val myRules = rules.filter { r -> lk.category(r.categoryId)?.kind == kind }
             if (myRules.isNotEmpty()) {
                 // 已學習的商家：點一下勾選（可多選），按「刪除」再確認一次才刪
@@ -110,8 +122,6 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
                         androidx.compose.material3.TextButton(onClick = { confirmRules = true }) { Text("刪除 ${picked.size} 個", color = Color(0xFFE5484D)) }
                     } else androidx.compose.material3.TextButton(onClick = { picked = myRules.map { it.keyword }.toSet() }) { Text("全選") }
                 }
-                Text("點一下勾選，可以一次刪除多個；刪除後同一家店不會再自動帶出這個分類", fontSize = com.enwei.moneymanager.ui.AppText.label,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 6.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 myRules.forEach { r ->
                     val on = r.keyword in picked

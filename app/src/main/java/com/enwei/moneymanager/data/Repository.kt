@@ -257,6 +257,14 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     suspend fun deleteRule(keyword: String) = db.rules().delete(keyword)
 
+    /** 已學習的商家規則只留目前交易裡還有的店名（改名、刪掉的舊店名一併清掉）。回傳清掉幾個。 */
+    suspend fun pruneRules(): Int {
+        val names = db.txns().all().mapNotNull { it.merchant?.trim()?.lowercase()?.takeIf { m -> m.isNotEmpty() } }.toSet()
+        val stale = db.rules().all().filter { it.keyword.trim().lowercase() !in names }
+        stale.forEach { db.rules().delete(it.keyword) }
+        return stale.size
+    }
+
     /** 自動分類（含子分類）：商家規則 → 過去紀錄 → 內建關鍵字 → 同金額固定支出，詳見 [CategorySuggester]。 */
     suspend fun suggestCategory(merchant: String?, type: TxnType, at: Long, amountMinor: Long = 0, accountId: Long? = null): CategorySuggester.Suggestion? {
         if (type == TxnType.TRANSFER) return null

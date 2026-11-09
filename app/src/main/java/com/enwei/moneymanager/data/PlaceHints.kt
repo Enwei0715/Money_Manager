@@ -53,6 +53,25 @@ object PlaceHints {
         k to s.split(',').takeIf { it.size == 2 }?.let { (a, b) -> a.toDoubleOrNull()?.let { la -> b.toDoubleOrNull()?.let { lo -> la to lo } } }
     }.toMap()
 
+    fun setMerchantGeo(name: String, ll: Pair<Double, Double>?) = geoPrefs.edit().putString(name, ll?.let { "${it.first},${it.second}" } ?: "").apply()
+    fun clearMerchantGeo(name: String) = geoPrefs.edit().remove(name).apply()
+    /** 只留目前交易裡還有的店名 */
+    fun pruneMerchantGeo(keep: Set<String>) {
+        val e = geoPrefs.edit(); geoPrefs.all.keys.filter { it !in keep }.forEach { e.remove(it) }; e.apply()
+        val f = pinPrefs.edit(); pinPrefs.all.keys.filter { it !in keep }.forEach { f.remove(it) }; f.apply()
+    }
+
+    /** 使用者手動指定的店家位置（店名 → 座標）：優先於自動找到的與記帳時的定位 */
+    private val pinPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("merchant_pin", Context.MODE_PRIVATE) }
+    fun merchantPins(): Map<String, Pair<Double, Double>> = pinPrefs.all.mapNotNull { (k, v) ->
+        val p = (v as? String)?.split(',')?.takeIf { it.size == 2 } ?: return@mapNotNull null
+        val la = p[0].toDoubleOrNull() ?: return@mapNotNull null
+        val lo = p[1].toDoubleOrNull() ?: return@mapNotNull null
+        k to (la to lo)
+    }.toMap()
+    fun setMerchantPin(name: String, lat: Double, lon: Double) = pinPrefs.edit().putString(name, "$lat,$lon").apply()
+    fun clearMerchantPin(name: String) = pinPrefs.edit().remove(name).apply()
+
     /** 使用者在地圖上手動修正的位置：key＝「店名|原本座標」，只改那一個點 */
     private val fixPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("spot_fix", Context.MODE_PRIVATE) }
     fun spotFixes(): Map<String, Pair<Double, Double>> = fixPrefs.all.mapNotNull { (k, v) ->
