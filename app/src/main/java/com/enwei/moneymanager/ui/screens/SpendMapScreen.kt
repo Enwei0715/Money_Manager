@@ -159,6 +159,7 @@ fun SpendMapScreen(nav: NavController) {
             l.map { it.first }.sortedByDescending { it.date })
     }.sortedByDescending { it.total }
     var selKey by remember { mutableStateOf<String?>(null) }
+    var expanded by remember { mutableStateOf(setOf<String>()) }
     var focusTick by remember { mutableStateOf(0) }
     val snapping: String? = null
     // Google 地圖：開啟搜尋 → 使用者按分享、複製連結 → 回到這裡自動讀剪貼簿裡的連結
@@ -261,16 +262,35 @@ fun SpendMapScreen(nav: NavController) {
                 Text("地點", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
             }
             items(spots, key = { "${it.name}${it.lat}${it.lon}" }) { s ->
-                // 點一下：地圖移到這個地點並標出來
+                // 點一下：展開這個地點的每一筆紀錄（點一筆打開），地圖同時標出這個地點；再點一下收起
                 val on = s.key == selKey
+                val open = s.key in expanded
                 Row(Modifier.fillMaxWidth().background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
-                    .clickable { selKey = s.key; focusTick++; scope.launch { listState.animateScrollToItem(0) } }
+                    .clickable {
+                        expanded = if (open) expanded - s.key else expanded + s.key
+                        selKey = s.key; focusTick++
+                    }
                     .padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(s.name, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${s.cat.ifBlank { "—" }}・${s.count} 筆", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(Money.withSymbol(s.total, lk.base), fontSize = AppText.body, color = com.enwei.moneymanager.ui.ExpenseColor)
+                }
+                if (open) Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+                    s.txns.forEach { t ->
+                        val d = java.time.Instant.ofEpochMilli(t.date).atZone(zone).toLocalDate()
+                        HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        Row(Modifier.fillMaxWidth().clickable { nav.navigate("txn/${t.id}") }.padding(start = 28.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("${d.monthValue}/${d.dayOfMonth}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(48.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(t.note?.takeIf { it.isNotBlank() } ?: (lk.category(t.categoryId)?.name ?: "—"), fontSize = AppText.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(lk.account(t.accountId)?.name.orEmpty(), fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            Text(Money.withSymbol(t.amount, t.currency), fontSize = AppText.secondary)
+                        }
+                    }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             }

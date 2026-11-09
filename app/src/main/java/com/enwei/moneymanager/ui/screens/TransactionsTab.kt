@@ -689,7 +689,8 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
         Column(Modifier.weight(1f)) {
             if (title != null) Text(title, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(accountText, color = gray, fontSize = if (title != null) AppText.secondary else AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = AppText.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // 帳戶一行、說明一行：太長以「…」結尾
+            if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
