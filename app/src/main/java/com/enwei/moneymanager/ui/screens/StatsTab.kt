@@ -129,6 +129,10 @@ private fun List<TxnEntity>.inRange(r: PeriodRange) = filter { val d = it.date.t
 
 @Composable
 fun StatsTab(nav: NavController) {
+    // 第一次打開這頁：簡短介紹
+    com.enwei.moneymanager.ui.components.PageTour("stats", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "統計", "切換期間與類型，檢視分類比例、每月比較與收支趨勢；點選分類可查看明細。"),
+    ))
     val lk = rememberLookups()
     // 期間與收支種類都記住，下次回來維持上次的檢視
     var period by com.enwei.moneymanager.ui.components.rememberChoice("stats.period", Period.entries, Period.MONTH)

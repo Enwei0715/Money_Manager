@@ -210,7 +210,7 @@ fun SpendMapScreen(nav: NavController) {
                 if (more) Text(listOfNotNull(unplaced.size.takeIf { it > 0 }?.let { "沒有位置 $it 筆" }, onlineCount.takeIf { it > 0 }?.let { "線上 $it 筆" }).joinToString("・"),
                     fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (spots.isEmpty()) Text("這段期間沒有可以標在地圖上的支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            if (spots.isEmpty()) Text("此期間沒有可標示於地圖的支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
             else SpendMap(spots, dark, Modifier.fillMaxWidth().height(mapH).clipToBounds().coachTarget("map.view"), selKey, focusTick, status = snapping,
                 // 點地圖上的點：下方清單同時展開那個地點的紀錄
@@ -235,7 +235,7 @@ fun SpendMapScreen(nav: NavController) {
                     val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("geo:${sp.lat},${sp.lon}?q=$q"))
                     val web = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=$q"))
                     runCatching { ctx.startActivity(geo.setPackage("com.google.android.apps.maps")) }.recoverCatching { ctx.startActivity(web) }
-                    android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("在 Google 地圖找到店家後按「分享」→「複製連結」，再回到帳理"), android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("於 Google 地圖找到店家後，點選「分享」→「複製連結」，再返回帳理"), android.widget.Toast.LENGTH_LONG).show()
                 })
             googleHit?.let { (key, ll) ->
                 val name = spots.firstOrNull { it.key == key }?.name.orEmpty()
@@ -251,8 +251,8 @@ fun SpendMapScreen(nav: NavController) {
                 )
             }
         if (spots.isNotEmpty()) com.enwei.moneymanager.ui.components.PageTour("spendmap", listOf(
-            com.enwei.moneymanager.ui.components.Coach.Step("map.view", "支出地圖", "每個圓點是一家店：越大代表花越多，顏色是分類。兩指縮放、拖曳移動。"),
-            com.enwei.moneymanager.ui.components.Coach.Step("map.list", "地點清單", "點一個地點展開它的每一筆紀錄，也可以導航或修正位置；點地圖上的圓點會跳到這裡。"),
+            com.enwei.moneymanager.ui.components.Coach.Step("map.view", "支出地圖", "每個圓點代表一家店家：圓點越大表示金額越高，顏色代表分類。可用兩指縮放、拖曳移動。"),
+            com.enwei.moneymanager.ui.components.Coach.Step("map.list", "地點清單", "點選地點可展開各筆紀錄，並可導航或修正位置；點選地圖上的圓點亦會跳至此處。"),
         ))
         LazyColumn(Modifier.weight(1f).fillMaxWidth().coachTarget("map.list"), state = listState) {
             // 沒有位置的店：用店名在 OpenStreetMap 找（每秒一家）
@@ -267,7 +267,7 @@ fun SpendMapScreen(nav: NavController) {
                                 listOfNotNull(kotlinx.coroutines.withTimeoutOrNull(8000) { PlaceHints.current(ctx) }?.let { it.latitude to it.longitude })
                             }
                             if (anchors.isEmpty()) {
-                                android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("需要定位權限，才知道要在哪一帶找店"), android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("需要位置權限，才能判斷搜尋範圍"), android.widget.Toast.LENGTH_SHORT).show()
                                 return@launch
                             }
                             val n = PlaceHints.geocodeMerchants(missing.take(40), anchors) { i, total -> progress = "找位置中 $i/$total…" }

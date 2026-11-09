@@ -489,6 +489,10 @@ private fun PasscodeSetupDialog(onDone: (String) -> Unit, onCancel: () -> Unit) 
 @Composable
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 fun BudgetScreen(nav: NavController) {
+    // 第一次打開這頁：簡短介紹
+    com.enwei.moneymanager.ui.components.PageTour("budget", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "預算", "設定每月總預算與分類預算；接近或超過上限時，記帳頁與交易頁會顯示提醒。"),
+    ))
     val lk = rememberLookups()
     val s by repo.settings.flow.collectAsStateWithLifecycle()
     fun setCap(id: Long, minor: Long?) {

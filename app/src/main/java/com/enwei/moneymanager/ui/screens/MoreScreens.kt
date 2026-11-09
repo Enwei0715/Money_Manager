@@ -292,6 +292,10 @@ private fun installedApps(ctx: Context): List<AppEntry> {
 
 @Composable
 fun NotificationSettingsScreen(nav: NavController) {
+    // 第一次打開這頁：簡短介紹
+    com.enwei.moneymanager.ui.components.PageTour("notif", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "通知自動記帳", "「紀錄」列出讀取到的通知與處理結果；「來源 App」指定要讀取的 App；「進階」提供地點與辨識測試。"),
+    ))
     val ctx = LocalContext.current
     val lk = rememberLookups()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
@@ -363,7 +367,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     }
                     Row {
                         // 不用電腦：用 Shizuku 一鍵開啟
-                        TextButton(onClick = { nav.navigate("setup") }) { Text("一鍵開啟（不用電腦）") }
+                        TextButton(onClick = { nav.navigate("setup") }) { Text("一鍵開啟（無須電腦）") }
                         TextButton(onClick = {
                             clip.setText(androidx.compose.ui.text.AnnotatedString(repo.SENSITIVE_ADB))
                             testMsg = "已複製指令"
@@ -826,6 +830,10 @@ fun FxScreen(nav: NavController) {
 
 @Composable
 fun BackupScreen(nav: NavController) {
+    // 第一次打開這頁：簡短介紹
+    com.enwei.moneymanager.ui.components.PageTour("backup", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "備份", "可匯出完整備份並於其他裝置還原；設定自動備份資料夾後，將定期自動備份。"),
+    ))
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<String?>(null) }
@@ -1183,7 +1191,7 @@ private fun LocationHintRow(on: Boolean) {
             })
         }
         if (on && fg && !bg) Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("位置權限請改成「一律允許」，App 沒開著時才讀得到位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+            Text("請將位置權限設為「一律允許」，App 未開啟時才能取得位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
             TextButton(onClick = { openAppSettings() }) { Text("前往設定") }
         }
     }
@@ -1250,7 +1258,7 @@ private fun LocationTest(onSetup: () -> Unit = {}) {
             color = when (ok) { true -> MaterialTheme.colorScheme.onSurface; false -> MaterialTheme.colorScheme.error; null -> MaterialTheme.colorScheme.onSurfaceVariant }) }
         // 建議設定 Google Places：附近的店、店名搜尋都會準很多
         if (suggestKey && !running) Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("設定 Google Places 金鑰，找店更準", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
+            Text("設定 Google Places 金鑰可提升店家搜尋的準確度", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
             androidx.compose.material3.TextButton(onClick = onSetup) { Text("前往設定") }
         }
     }

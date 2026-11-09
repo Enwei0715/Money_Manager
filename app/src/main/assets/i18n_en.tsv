@@ -2619,3 +2619,228 @@ AI 建議	AI advice
 依位置推測店家	Guess store by location
 通知沒寫店家時，用付款當下的位置與過去紀錄補上	When a notification has no store name, fill it from your location and past records
 前往設定	Open settings
+功能導覽	Feature tour
+接下來依序介紹各項功能的位置，可隨時點選「跳過全部」。	The following steps show where each feature is. Tap "Skip all" at any time.
+每日的收入與支出依日期排列。	Daily income and expenses, listed by date.
+本月總覽	This month
+本月的收入、支出與結餘；設定預算後，可在此查看使用比例與每日可用金額。	Income, expenses and balance for this month; with a budget set, usage and daily allowance appear here.
+輸入金額，選擇分類與帳戶即可儲存；上方可切換支出、收入、轉帳與股票。	Enter an amount, choose a category and account, then save. Switch between expense, income, transfer and stock at the top.
+支出地圖	Spending map
+以地圖檢視每日、每週或每月的消費地點。	See where you spent each day, week or month on a map.
+依店家、分類或期間查詢交易，並檢視篩選後的圖表。	Find transactions by merchant, category or period, and view charts of the results.
+分類比例、每月比較與收支趨勢。	Category breakdown, monthly comparison and trends.
+所有帳戶、信用卡（依帳單週期計算應繳）、往來與股票。	All accounts, credit cards (amount due per statement), contacts and stocks.
+每日報告、新聞整理、AI 問答與資金紀律；需先完成 AI 設定。	Daily reports, news digests, AI Q&A and money discipline. Requires AI setup.
+預算、週期交易、備份與通知記帳等工具；可點選「編輯」調整排列。	Budgets, recurring transactions, backup, notification recording and more. Tap "Edit" to rearrange.
+外觀、記帳方式、通知與 AI 等設定。	Appearance, recording, notifications, AI and other settings.
+導覽完成	Tour complete
+如需再次查看，請至「設定 → 關於 → 新手導覽」。	To view it again, go to Settings → About → Getting started.
+跳過全部	Skip all
+上一步	Back
+下一步	Next
+開始使用	Get started
+讀取營收中…	Loading revenue…
+讀不到這幾檔的營收資料（需要網路，或資料來源暫時無法連線）	Revenue data unavailable (network required, or the source is temporarily unreachable)
+銀行、信用卡與行動支付的付款通知自動記為交易	Payment notifications from banks, cards and mobile wallets are recorded automatically
+往來與分帳	Contacts & splitting
+與他人分攤費用、代墊與借還款，清楚記錄應收應付	Split costs, pay on behalf of others and track loans; see who owes whom
+定位與支出地圖	Location & spending map
+記錄付款地點、推薦附近店家，並以地圖檢視消費分布	Record where you pay, get nearby merchant suggestions and view spending on a map
+股票與投資	Stocks & investing
+記錄股票交易，檢視持股損益與 K 線	Record trades and view holdings, P/L and charts
+AI 助理	AI assistant
+判讀通知、分析收支與產生每日投資報告（需要金鑰或自架伺服器）	Reads notifications, reviews spending and writes daily investment reports (requires a key or self-hosted server)
+歡迎使用帳理	Welcome to Ledgerly
+請先選擇要使用的功能，帳理將依此調整介面與設定。	Choose the features you want; Ledgerly will tailor its interface and settings accordingly.
+選擇要使用的功能	Choose your features
+勾選的功能將立即開啟；未勾選的功能會先隱藏，介面更為精簡。	Checked features are turned on now; unchecked ones stay hidden for a cleaner interface.
+選擇外觀	Choose a look
+日後可於「設定 → 外觀與顯示」調整。	You can adjust this later in Settings → Appearance.
+點選交易頁右下角的「＋」。	Tap "+" at the bottom right of Transactions.
+付款通知將自動記為交易。	Payment notifications are recorded as transactions.
+統計與預算	Statistics & budgets
+掌握支出分布與每月預算執行情形。	See where money goes and how your monthly budget is doing.
+股票與 AI 助理	Stocks & AI assistant
+位於底部的「助理」分頁。	In the "Assistant" tab at the bottom.
+完成功能設定	Finish setup
+記帳、預算與統計	Recording, budgets and statistics
+基本功能，固定提供	Core features, always included
+主要按鈕	Primary button
+區塊	Blocks
+字體大小	Text size
+字體	Font
+主題、字體與版面	Theme, font and layout
+系統字體	System font
+AI 功能	AI features
+功能設定檢查	Setup check
+AI 模型設定	AI models
+新手導覽	Getting started
+設定每月總預算與分類預算；接近或超過上限時，記帳頁與交易頁會顯示提醒。	Set a monthly total and per-category budgets; reminders appear when you approach or exceed them.
+每月金額（留空＝不設定）	Monthly amount (blank = none)
+%（留空＝不設定）	% (blank = none)
+切換期間與類型，檢視分類比例、每月比較與收支趨勢；點選分類可查看明細。	Switch period and type to see category breakdown, monthly comparison and trends; tap a category for details.
+已學習的商家分類	Learned merchant categories
+每日報告整理市場概況、可考慮的標的與持股動作；可向 AI 提問並查看新聞重點。	The daily report covers the market, candidate stocks and holding actions; ask AI questions and read news highlights.
+AI 功能已關閉	AI is off
+設定 AI	Set up AI
+大盤：	Market: 
+進場	Entry
+☆ 觀察	☆ Watch
+K 線 ›	Chart ›
+新聞資料集	News dataset
+自動更新與每日報告	Auto-update & daily report
+前往 AI 設定 ›	AI settings ›
+AI 讀取中…	AI is reading…
+天數（逗號分開）	Days (comma separated)
+店家位置	Merchant locations
+往來	Contacts
+找股票	Find stocks
+快速套用	Presets
+黑體、明體、楷體首次選用時會從 Google Fonts 下載，下載完成前暫以系統字體顯示	Sans, serif and Kai fonts download from Google Fonts on first use; the system font is shown until then
+連同間距、按鈕一起縮放	Scales spacing and buttons too
+全部恢復預設	Reset all
+標籤	Label
+連結文字	Link text
+十一月帳本	November ledger
+越香的午餐、捷運通勤	Lunch and metro commute
+說明文字：小字與次要資訊	Caption: small and secondary text
+位數對齊	Align digits
+不對齊	Don't align
+繳款日當天	On the due date
+繳款日後一個營業日	One business day after due date
+固定日	Fixed day
+已採用，每月在分析頁看進度	Adopted; track progress monthly in Analysis
+同期	Same period
+下載中…	Downloading…
+帳戶、信用卡、往來與股票集中於此；點選帳戶可查看交易與餘額變化。	Accounts, cards, contacts and stocks are here; tap an account for its transactions and balance history.
+依帳單週期計算本期應繳與未出帳金額，並於繳款日前提醒。	Amount due and unbilled spending are calculated per statement cycle, with a reminder before the due date.
+未設定（點選右上角編輯）	Not set (tap Edit at top right)
+列出每位對象的應收與應付金額；點選對象可查看明細，或記錄代墊、借還款。	Shows what each contact owes you and what you owe; tap a contact for details or to record payments and loans.
+目前沒有往來對象。可於記帳時使用「往來」，或點選右上角新增	No contacts yet. Use "Contacts" when recording, or add one at the top right
+新增往來對象	New contact
+名字	Name
+記錄代墊	Record a payment for them
+他幫我付	They paid for me
+借貸細節（分期、利息、到期）	Loan details (instalments, interest, due date)
+「紀錄」列出讀取到的通知與處理結果；「來源 App」指定要讀取的 App；「進階」提供地點與辨識測試。	"Log" lists notifications read and their results; "Source apps" chooses which apps to read; "Advanced" has location and recognition tests.
+一鍵開啟（無須電腦）	Enable in one tap (no computer)
+複製 adb 指令	Copy adb command
+任何 App	Any app
+可匯出完整備份並於其他裝置還原；設定自動備份資料夾後，將定期自動備份。	Export a full backup and restore it on another device; set a folder for automatic backups.
+請將位置權限設為「一律允許」，App 未開啟時才能取得位置	Set location permission to "Allow all the time" so location works when the app is closed
+測試目前位置	Test current location
+設定 Google Places 金鑰可提升店家搜尋的準確度	A Google Places key makes merchant search more accurate
+通知存取權	Notification access
+讀取付款通知以自動記帳	Reads payment notifications to record them
+傳送通知	Send notifications
+記錄完成與待確認時提醒	Alerts when recorded or awaiting review
+讀取受保護的通知內容	Read protected notification content
+Android 15 起，部分銀行通知內容會被系統隱藏	From Android 15, some bank notification content is hidden by the system
+位置權限	Location permission
+記錄付款地點並推薦附近店家	Records where you pay and suggests nearby merchants
+背景位置（一律允許）	Background location (allow all the time)
+未開啟 App 時，通知記帳亦可記錄地點	Lets notification recording capture location when the app is closed
+店家搜尋（Google Places）	Merchant search (Google Places)
+提升店家搜尋的準確度；未設定時使用已記錄的店家	More accurate merchant search; without it, saved merchants are used
+AI 金鑰或自架伺服器	AI key or self-hosted server
+判讀複雜通知與產生報告所需	Needed to read complex notifications and write reports
+自動備份資料夾	Automatic backup folder
+資料夾權限失效時，自動備份將暫停	Automatic backup pauses if folder access is lost
+重新選擇	Choose again
+（選用）	 (optional)
+1. 安裝 Shizuku	1. Install Shizuku
+2. 連上 Wi-Fi，於「開發人員選項」開啟「無線偵錯」	2. On Wi-Fi, turn on "Wireless debugging" in Developer options
+前往	Open
+3. 於 Shizuku 選擇「透過無線偵錯啟動」：首次先配對，再點選「啟動」	3. In Shizuku, choose "Start via Wireless debugging": pair the first time, then tap "Start"
+開啟 Shizuku	Open Shizuku
+4. 顯示「Shizuku 正在執行」後，返回此處點選「一鍵開啟」	4. When Shizuku shows it is running, return here and tap "Enable"
+「無線偵錯」須在連上 Wi-Fi 時才能開啟；開啟成功後即不再需要 Shizuku。	Wireless debugging requires Wi-Fi. Once enabled, Shizuku is no longer needed.
+Shizuku 正在執行	Shizuku is running
+一鍵開啟	Enable
+目前未開啟需要設定的功能（通知記帳、定位、AI、自動備份）	No features needing setup are on (notification recording, location, AI, automatic backup)
+收入／轉入	Income / in
+支出／轉出	Expense / out
+點選此處以計算機輸入，可輸入算式；右上角可加入手續費。	Tap to enter with the calculator (expressions allowed); add a fee at top right.
+與他人分帳、由他人代付或收回欠款時，點選對象即可。	To split, record that someone paid for you, or record a repayment, tap the contact.
+商家	Merchant
+輸入時會推薦附近及曾記錄的店家，選取後將一併記錄位置。	Nearby and saved merchants are suggested as you type; choosing one also records its location.
+手續費 ✓	Fee ✓
+＋手續費	+ Fee
+往來對象（借錢、還錢）	Contact (loans, repayments)
+超過總額	Over total
+對象名字	Contact name
+或輸入新的名字	Or enter a new name
+方向	Direction
+房租、訂閱等固定收支可設為週期交易，到期時自動記錄或提醒確認。	Set rent, subscriptions and other fixed items as recurring; they are recorded or flagged for review when due.
+無法從此連結取得位置	Couldn't get a location from this link
+需要位置權限，才能判斷搜尋範圍	Location permission is needed to set the search area
+店家搜尋	Merchant search
+設定 Google Places 金鑰可提升店家搜尋的準確度，點選即可查看申請步驟。	A Google Places key makes merchant search more accurate; tap to see how to get one.
+自動找	Find automatically
+為尚無位置的店家一併搜尋；有多個結果者會標示「選擇」，由您挑選。	Searches all merchants without a location; those with several matches are marked "Choose" for you to pick.
+每一家店	Each merchant
+點選店家可搜尋正確店家、更改名稱，或於地圖上指定位置。	Tap a merchant to search for it, rename it or set its location on the map.
+多個結果	Several matches
+選擇 ›	Choose ›
+沒有位置	No location
+不是實體店	Not a physical store
+搜尋店家	Search merchant
+在地圖上點選	Pick on map
+改名	Rename
+其他方式	More options
+Google 地圖連結	Google Maps link
+用目前位置	Use current location
+讀不到目前位置	Couldn't get current location
+不是實體店（不放地圖）	Not a physical store (hide from map)
+清除位置	Clear location
+打開	Open
+沒有結果，請嘗試其他關鍵字	No results; try another keyword
+K 線可用兩指縮放、左右拖曳，點選 K 棒可查看當日開高低收。	Pinch to zoom and drag the chart; tap a candle to see its open, high, low and close.
+分析與資訊	Analysis & info
+「分析」包含營收與趨勢推估，「資訊」包含除權息、新聞與公司簡介；右上角可設定價格提醒。	"Analysis" covers revenue and trend projections; "Info" covers dividends, news and the company profile. Set price alerts at top right.
+自訂	Custom
+回到最新 ›	Latest ›
+顯示幾根 K 棒	Candles shown
+根數（每根 1 小時）	Candles (1 hour each)
+亦可於圖上以兩指縮放、左右拖曳	You can also pinch and drag on the chart
+買點：	Buy: 
+賣點：	Sell: 
+布林 ✕	Bollinger ✕
+＋布林	+ Bollinger
+＋均線	+ MA
+日 K：	Daily: 
+請 AI 依新聞與營收說明	Ask AI to explain from news and revenue
+盤中每 15 分鐘檢查一次，到價時通知	Checked every 15 minutes during trading; notifies when the price is reached
+目標 +10%	Target +10%
+停損 −8%	Stop −8%
+70 過熱	70 overbought
+30 超賣	30 oversold
+━ 壓力線	━ Resistance
+━ 支撐線	━ Support
+○ 波段高低點	○ Swing highs/lows
+此期間沒有可標示於地圖的支出	No spending with a location in this period
+於 Google 地圖找到店家後，點選「分享」→「複製連結」，再返回帳理	In Google Maps, find the merchant, tap Share → Copy link, then return to Ledgerly
+套用 Google 地圖的位置？	Use the Google Maps location?
+每個圓點代表一家店家：圓點越大表示金額越高，顏色代表分類。可用兩指縮放、拖曳移動。	Each dot is a merchant: larger dots mean more spent, colours show the category. Pinch to zoom and drag to move.
+地點清單	Places
+點選地點可展開各筆紀錄，並可導航或修正位置；點選地圖上的圓點亦會跳至此處。	Tap a place to expand its entries, navigate or fix its location; tapping a dot on the map jumps here.
+用店名找位置	Find by name
+地點	Places
+導航	Navigate
+修正位置	Fix location
+在地圖上點正確位置	Tap the correct spot on the map
+用 Google 地圖找	Find in Google Maps
+點地圖上正確的位置	Tap the correct spot on the map
+＋ 新增	+ Add
+昨天	Yesterday
+＋備註	+ Note
+（沒有內容）	(empty)
+自架伺服器	Self-hosted server
+於家中電腦執行 Ollama，手機連上同一 Wi-Fi 即可使用；免費，且資料不離開家中網路	Run Ollama on a home computer and connect on the same Wi-Fi; free, and data stays on your home network
+伺服器網址	Server URL
+例如 qwen2.5:7b	e.g. qwen2.5:7b
+讀取模型	Load models
+下載 Ollama	Get Ollama
+電腦端的 Ollama 須允許區域網路連線（設定 OLLAMA_HOST=0.0.0.0）。	Ollama on the computer must accept LAN connections (set OLLAMA_HOST=0.0.0.0).
+輸入店家、說明或金額搜尋；可依分類、帳戶與期間篩選，並檢視篩選結果的圖表。	Search by merchant, note or amount; filter by category, account and period, and view charts of the results.
+AI 整理	AI tidy

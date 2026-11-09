@@ -81,6 +81,11 @@ import kotlinx.coroutines.launch
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun StockDetailScreen(nav: NavController, symbol: String) {
+    // 第一次打開這頁：簡短介紹
+    com.enwei.moneymanager.ui.components.PageTour("stock", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "個股", "K 線可用兩指縮放、左右拖曳，點選 K 棒可查看當日開高低收。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "分析與資訊", "「分析」包含營收與趨勢推估，「資訊」包含除權息、新聞與公司簡介；右上角可設定價格提醒。"),
+    ))
     // 英文字母開頭的代號是美股（沒有月營收；大盤比較改用 S&P 500）
     val market = com.enwei.moneymanager.core.marketOf(symbol)
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
@@ -313,7 +318,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                         androidx.compose.material3.OutlinedTextField(txt, { txt = it.filter(Char::isDigit).take(4) }, singleLine = true,
                                             label = { Text(if (hourly) "根數（每根 1 小時）" else "根數（每根 1 $unit）") },
                                             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
-                                        Text("也可以在圖上用兩指縮放、左右拖曳", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("亦可於圖上以兩指縮放、左右拖曳", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 },
                                 confirmButton = { TextButton(onClick = { txt.toIntOrNull()?.takeIf { it >= 10 }?.let { count = it.toFloat(); back = 0f }; customRange = false }) { Text("套用") } },

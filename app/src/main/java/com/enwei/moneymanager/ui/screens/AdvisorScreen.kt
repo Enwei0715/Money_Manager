@@ -113,6 +113,10 @@ import kotlinx.coroutines.launch
 /** 從通知等處直接開啟投資助理（獨立頁）。 */
 @Composable
 fun AdvisorScreen(nav: NavController) {
+    // 第一次打開這頁：簡短介紹
+    com.enwei.moneymanager.ui.components.PageTour("advisor", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "股票助理", "每日報告整理市場概況、可考慮的標的與持股動作；可向 AI 提問並查看新聞重點。"),
+    ))
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("股票助理", { nav.popBackStack() }) }) { pad ->
         Box(Modifier.padding(pad)) { AdvisorContent(nav) }
     }

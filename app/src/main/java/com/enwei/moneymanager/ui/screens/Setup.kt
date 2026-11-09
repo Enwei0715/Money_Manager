@@ -58,14 +58,14 @@ object Setup {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("smart", Context.MODE_PRIVATE)
 
     fun items(): List<Item> = buildList {
-        add(Item("notif.listener", "notif", "允許讀取通知", "看得到付款通知才能自動記帳", true, "開啟"))
-        if (android.os.Build.VERSION.SDK_INT >= 33) add(Item("notif.post", "notif", "允許 App 發通知", "記下一筆、待確認時通知你", false, "開啟"))
-        if (android.os.Build.VERSION.SDK_INT >= 35) add(Item("notif.sensitive", "notif", "讀取被隱藏的通知內容", "Android 15 起部分銀行通知內容會被隱藏", false, "設定"))
-        add(Item("map.location", "map", "允許使用位置", "記下付款地點、推薦附近的店", true, "開啟"))
-        if (android.os.Build.VERSION.SDK_INT >= 29) add(Item("map.background", "map", "位置設為「一律允許」", "App 沒開著時，通知記帳也能記下地點", false, "設定"))
-        add(Item("map.places", "map", "店家搜尋金鑰（Google Places）", "找店最準；不設也能用自己記過的店", false, "設定"))
-        add(Item("ai.key", "ai", "AI 金鑰或自架伺服器", "有 AI 才能判讀複雜通知、產生報告", true, "設定"))
-        add(Item("backup.folder", "backup", "自動備份的資料夾", "資料夾權限不見時，自動備份會停止", true, "重新選擇"))
+        add(Item("notif.listener", "notif", "通知存取權", "讀取付款通知以自動記帳", true, "開啟"))
+        if (android.os.Build.VERSION.SDK_INT >= 33) add(Item("notif.post", "notif", "傳送通知", "記錄完成與待確認時提醒", false, "開啟"))
+        if (android.os.Build.VERSION.SDK_INT >= 35) add(Item("notif.sensitive", "notif", "讀取受保護的通知內容", "Android 15 起，部分銀行通知內容會被系統隱藏", false, "設定"))
+        add(Item("map.location", "map", "位置權限", "記錄付款地點並推薦附近店家", true, "開啟"))
+        if (android.os.Build.VERSION.SDK_INT >= 29) add(Item("map.background", "map", "背景位置（一律允許）", "未開啟 App 時，通知記帳亦可記錄地點", false, "設定"))
+        add(Item("map.places", "map", "店家搜尋（Google Places）", "提升店家搜尋的準確度；未設定時使用已記錄的店家", false, "設定"))
+        add(Item("ai.key", "ai", "AI 金鑰或自架伺服器", "判讀複雜通知與產生報告所需", true, "設定"))
+        add(Item("backup.folder", "backup", "自動備份資料夾", "資料夾權限失效時，自動備份將暫停", true, "重新選擇"))
     }
 
     fun done(ctx: Context, s: AppSettings, id: String): Boolean = when (id) {
@@ -160,15 +160,21 @@ fun SetupList(features: Set<String>, open: (String) -> Unit) {
                 if (item.id == "notif.sensitive" && shizukuOpen && !ok) Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
                     .padding(start = 42.dp, end = 16.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     if (!ShizukuHelper.running) {
-                        StepLine("1. 安裝 Shizuku", "安裝") {
-                            runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(ShizukuHelper.PLAY_URL))) }
+                        fun go(i: android.content.Intent) = runCatching { ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                        StepLine("1. 安裝 Shizuku", "安裝") { go(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(ShizukuHelper.PLAY_URL))) }
+                        StepLine("2. 連上 Wi-Fi，於「開發人員選項」開啟「無線偵錯」", "前往") {
+                            go(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
                         }
-                        StepLine("2. 打開 Shizuku，用「無線偵錯」啟動（照它的說明配對一次）", null) {}
-                        StepLine("3. 回到這裡按「一鍵開啟」", null) {}
-                    } else StepLine("Shizuku 已啟動", "一鍵開啟") {
+                        StepLine("3. 於 Shizuku 選擇「透過無線偵錯啟動」：首次先配對，再點選「啟動」", "開啟 Shizuku") {
+                            ctx.packageManager.getLaunchIntentForPackage(ShizukuHelper.PKG)?.let { go(it) }
+                        }
+                        StepLine("4. 顯示「Shizuku 正在執行」後，返回此處點選「一鍵開啟」", null) {}
+                        Text("「無線偵錯」須在連上 Wi-Fi 時才能開啟；開啟成功後即不再需要 Shizuku。", fontSize = AppText.label,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+                    } else StepLine("Shizuku 正在執行", "一鍵開啟") {
                         scope.launch {
                             shizukuMsg = "處理中…"
-                            if (!ShizukuHelper.granted && !ShizukuHelper.requestPermission()) { shizukuMsg = "需要在 Shizuku 允許帳理"; return@launch }
+                            if (!ShizukuHelper.granted && !ShizukuHelper.requestPermission()) { shizukuMsg = "請在 Shizuku 的提示中允許帳理"; return@launch }
                             val err = ShizukuHelper.allowSensitiveNotifications()
                             if (err == null) { ctx.getSharedPreferences("smart", Context.MODE_PRIVATE).edit().putBoolean("sensitive_ok", true).apply(); shizukuMsg = "已開啟" }
                             else shizukuMsg = err
@@ -197,7 +203,7 @@ fun SetupScreen(nav: NavController) {
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("功能設定檢查", { nav.popBackStack() }) }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
             val f = Setup.features(s)
-            if (f.isEmpty()) Text("目前沒有開啟需要設定的功能（通知記帳、定位、AI、自動備份）", fontSize = AppText.secondary,
+            if (f.isEmpty()) Text("目前未開啟需要設定的功能（通知記帳、定位、AI、自動備份）", fontSize = AppText.secondary,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
             SetupList(f) { nav.navigate(it) }
             Spacer(Modifier.height(32.dp))
@@ -217,7 +223,7 @@ fun SetupBanner(nav: NavController) {
     val item = Setup.missing(ctx, s).firstOrNull { it.id !in SetupBannerState.dismissed } ?: return
     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).clickable { Setup.act(ctx, item.id) { nav.navigate(it) } }
         .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("${Setup.featureName[item.feature]}：需要${item.title}", fontSize = AppText.secondary, maxLines = 1, modifier = Modifier.weight(1f))
+        Text("${Setup.featureName[item.feature]}：尚未設定${item.title}", fontSize = AppText.secondary, maxLines = 1, modifier = Modifier.weight(1f))
         TextButton(onClick = { Setup.act(ctx, item.id) { nav.navigate(it) } }) { Text(item.action) }
         Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.clickable { SetupBannerState.dismissed = SetupBannerState.dismissed + item.id }.padding(horizontal = 10.dp, vertical = 6.dp))

@@ -70,39 +70,38 @@ object Onboarding {
     /** 問卷的選項：要用哪些功能（勾了就幫你打開，導覽也只介紹勾選的） */
     private data class Want(val key: String, val title: String, val desc: String)
     private val wants = listOf(
-        Want("notif", "通知自動記帳", "銀行、信用卡、支付 App 的付款通知自動記成一筆"),
-        Want("split", "代墊、分帳、借還", "幫朋友付錢、室友分攤房租、借錢還錢，記清楚誰欠誰"),
-        Want("map", "支出地圖", "記下付款地點，之後在地圖上看錢花在哪"),
-        Want("stocks", "股票與投資", "記錄股票買賣、看持股損益與 K 線"),
-        Want("ai", "AI 助理", "AI 判讀通知、檢討收支、每日股票報告（需要免費金鑰）"),
+        Want("notif", "通知自動記帳", "銀行、信用卡與行動支付的付款通知自動記為交易"),
+        Want("split", "往來與分帳", "與他人分攤費用、代墊與借還款，清楚記錄應收應付"),
+        Want("map", "定位與支出地圖", "記錄付款地點、推薦附近店家，並以地圖檢視消費分布"),
+        Want("stocks", "股票與投資", "記錄股票交易，檢視持股損益與 K 線"),
+        Want("ai", "AI 助理", "判讀通知、分析收支與產生每日投資報告（需要金鑰或自架伺服器）"),
     )
     /** 這次導覽勾了哪些（代墊沒有對應的設定，只影響導覽內容） */
     private val picked = androidx.compose.runtime.mutableStateOf<Set<String>?>(null)
 
     private fun pagesFor(w: Set<String>) = buildList {
-        add(Page(Icons.Outlined.Savings, "歡迎使用帳理", "先花一分鐘告訴我你想怎麼用，幫你把用不到的功能收起來、設定好。",
-            listOf("隨時可以按右上「略過」", "之後都能在「設定 → 功能開關」改")))
-        add(Page(Icons.Outlined.Checklist, "你想用帳理做哪些事？", "勾了就幫你開啟；沒勾的先收起來，畫面比較簡單。", kind = 1))
-        add(Page(Icons.Outlined.Palette, "挑一個順眼的樣子", "之後可在「設定 → 外觀與顯示」細調。", kind = 2))
-        add(Page(Icons.Outlined.EditNote, "記一筆", "交易頁右下的「＋」。", listOfNotNull(
-            "輸入金額、選分類與帳戶就完成",
-            "上方切換支出／收入／轉帳" + (if ("stocks" in w) "／股票" else ""),
-            if ("split" in w) "幫別人付錢：在支出裡點「分帳」，可以分給好幾個人" else null,
-            if ("split" in w) "別人還錢：收入裡填「誰還的」；借錢、還錢：用「轉帳」選往來對象" else null,
+        add(Page(Icons.Outlined.Savings, "歡迎使用帳理", "請先選擇要使用的功能，帳理將依此調整介面與設定。",
+            listOf("可隨時點選右上角「略過」", "日後可於「設定 → 功能開關」調整")))
+        add(Page(Icons.Outlined.Checklist, "選擇要使用的功能", "勾選的功能將立即開啟；未勾選的功能會先隱藏，介面更為精簡。", kind = 1))
+        add(Page(Icons.Outlined.Palette, "選擇外觀", "日後可於「設定 → 外觀與顯示」調整。", kind = 2))
+        add(Page(Icons.Outlined.EditNote, "新增交易", "點選交易頁右下角的「＋」。", listOfNotNull(
+            "輸入金額，選擇分類與帳戶即可儲存",
+            "上方可切換支出、收入、轉帳" + (if ("stocks" in w) "與股票" else ""),
+            if ("split" in w) "與他人分帳、由他人代付或收回欠款：使用表單最下方的「往來」" else null,
         )))
-        if ("notif" in w) add(Page(Icons.Outlined.NotificationsActive, "通知自動記帳", "付款通知自動記成一筆。",
-            listOf("不確定的放在交易頁上方的「待確認」", "可以選要聽哪些 App 的通知")))
-        add(Page(Icons.Outlined.PieChart, "統計與預算", "看錢花在哪、每月有沒有超支。", listOfNotNull(
-            "統計：分類圓餅、每月比較", if ("map" in w) "支出地圖：交易頁右上的地圖圖示" else null, "預算：快超過時提醒"), "設定預算", "budget"))
-        add(Page(Icons.Outlined.AccountBalanceWallet, "資產", "帳戶、信用卡" + (if ("split" in w) "、往來" else "") + "都在這裡。", listOfNotNull(
-            "信用卡依每期帳單算應繳與未出帳", if ("split" in w) "往來：誰欠你、你欠誰，一眼看清楚" else null), "新增帳戶", "account/0"))
-        if ("stocks" in w || "ai" in w) add(Page(Icons.Outlined.AutoAwesome, if ("ai" in w) "股票與 AI 助理" else "股票", "底部「助理」分頁。", listOfNotNull(
-            if ("stocks" in w) "記錄股票買賣，看持股損益、K 線與除權息" else null,
-            if ("ai" in w) "填入 Groq 或 Gemini 的免費金鑰後，可產生每日報告、問 AI" else null),
+        if ("notif" in w) add(Page(Icons.Outlined.NotificationsActive, "通知自動記帳", "付款通知將自動記為交易。",
+            listOf("無法確定的交易列於交易頁上方的「待確認」", "可指定要讀取哪些 App 的通知")))
+        add(Page(Icons.Outlined.PieChart, "統計與預算", "掌握支出分布與每月預算執行情形。", listOfNotNull(
+            "統計：分類比例與每月比較", if ("map" in w) "支出地圖：交易頁右上角的地圖圖示" else null, "預算：接近上限時提醒"), "設定預算", "budget"))
+        add(Page(Icons.Outlined.AccountBalanceWallet, "資產", "帳戶、信用卡" + (if ("split" in w) "與往來" else "") + "集中於此。", listOfNotNull(
+            "信用卡依帳單週期計算應繳與未出帳金額", if ("split" in w) "往來：列出應收與應付的對象與金額" else null), "新增帳戶", "account/0"))
+        if ("stocks" in w || "ai" in w) add(Page(Icons.Outlined.AutoAwesome, if ("ai" in w) "股票與 AI 助理" else "股票", "位於底部的「助理」分頁。", listOfNotNull(
+            if ("stocks" in w) "記錄股票交易，檢視持股損益、K 線與除權息" else null,
+            if ("ai" in w) "完成 AI 設定後，可產生每日報告並向 AI 提問" else null),
             null, null))
         // 最後一頁：選了的功能需要的設定，一項一項按掉（之後少了會在交易頁上方提醒）
-        if (w.any { it in setOf("notif", "map", "ai") }) add(Page(Icons.Outlined.Checklist, "把選的功能設定好",
-            "按一下就會帶你去設定，回來會自動打勾。之後在「設定 → 功能設定檢查」也看得到。", kind = 3))
+        if (w.any { it in setOf("notif", "map", "ai") }) add(Page(Icons.Outlined.Checklist, "完成功能設定",
+            "點選各項即可前往設定，完成後會自動標示。日後可於「設定 → 功能設定檢查」查看。", kind = 3))
     }
 
     /** 第一次開啟（還沒看過導覽）時顯示；[onOpen] 開啟某個畫面。整頁蓋在 App 上（不用對話框，底部按鈕不會被導覽列擋住）。 */
@@ -196,7 +195,7 @@ object Onboarding {
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("記帳、預算與統計", fontSize = AppText.body)
-                    Text("基本功能，一定會有", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("基本功能，固定提供", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 CheckMark(true, enabled = false)
             }

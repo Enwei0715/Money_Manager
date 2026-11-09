@@ -11,6 +11,7 @@ import rikka.shizuku.Shizuku
  * 使用者要先安裝並啟動 Shizuku App。
  */
 object ShizukuHelper {
+    const val PKG = "moe.shizuku.privileged.api"
     const val PLAY_URL = "https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api"
     private const val CMD = "appops set com.enwei.moneymanager RECEIVE_SENSITIVE_NOTIFICATIONS allow"
 

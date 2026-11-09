@@ -145,6 +145,11 @@ private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int = 0) {
+    // 第一次打開這頁：簡短介紹
+    com.enwei.moneymanager.ui.components.PageTour("accounts", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "資產", "帳戶、信用卡、往來與股票集中於此；點選帳戶可查看交易與餘額變化。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "信用卡", "依帳單週期計算本期應繳與未出帳金額，並於繳款日前提醒。"),
+    ))
     // 往下捲時標題列與分頁列收起，內容用滿畫面；往上捲立刻出現
     val topScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
     var section by com.enwei.moneymanager.ui.components.rememberTab("accounts.section", initialTab)
@@ -584,7 +589,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                             Text("持股市值 ${Money.withSymbol(value)}", fontSize = AppText.body)
                             Text("原幣成本 ${Money.full(cost)} · 預估損益 ${Money.full(pnl)}", fontSize = AppText.secondary,
                                 color = if (pnl >= 0) com.enwei.moneymanager.ui.StockUp else com.enwei.moneymanager.ui.StockDown)
-                            Text("交割帳戶：${lk.account(acc.linkedAccountId)?.name ?: "未設定（按右上編輯）"}", fontSize = AppText.secondary,
+                            Text("交割帳戶：${lk.account(acc.linkedAccountId)?.name ?: "未設定（點選右上角編輯）"}", fontSize = AppText.secondary,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         androidx.compose.material3.OutlinedButton(onClick = { nav.navigate("trade/0?broker=${acc.id}") }) { Text("＋ 交易") }

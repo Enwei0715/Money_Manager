@@ -216,9 +216,9 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     BackHandler(enabled = panel != Panel.NONE) { panel = Panel.NONE }
     // 第一次記帳：簡短介紹這頁幾個重點
     if (id == 0L) com.enwei.moneymanager.ui.components.PageTour("editor", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step("ed.amount", "金額", "點這裡用 App 的計算機輸入，可以打算式；右上角可以加手續費。"),
-        com.enwei.moneymanager.ui.components.Coach.Step("ed.people", "往來", "跟別人分帳、別人先幫你付、或收到還款，點對象就好。"),
-        com.enwei.moneymanager.ui.components.Coach.Step("ed.merchant", "商家", "打字會推薦附近的店與以前記過的店，選了會一起記下位置。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("ed.amount", "金額", "點選此處以計算機輸入，可輸入算式；右上角可加入手續費。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("ed.people", "往來", "與他人分帳、由他人代付或收回欠款時，點選對象即可。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("ed.merchant", "商家", "輸入時會推薦附近及曾記錄的店家，選取後將一併記錄位置。"),
     ))
     // 打開 App 內的鍵盤或選單時，系統鍵盤一定收起來
     LaunchedEffect(panel) { if (panel != Panel.NONE) { focusManager.clearFocus(); keyboard?.hide() } }
@@ -539,6 +539,15 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     if (currency != lk.base && amountMinor != null && lk.fx.hasRate(currency)) {
                         Text("≈ ${Money.withSymbol(lk.fx.convert(amountMinor, currency), lk.base)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    // 預算：緊貼在金額下方（記這筆之後還剩多少），不把表單隔開
+                    if (budget.isNotEmpty() && type == TxnType.EXPENSE) {
+                        val add = if (currency == lk.base) (amountMinor ?: 0) else lk.fx.convert(amountMinor ?: 0, currency)
+                        Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            budget.forEach { u ->
+                                com.enwei.moneymanager.ui.components.BudgetInline(u.name.removeSuffix("預算").ifBlank { u.name }, u.used, u.cap, add, Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
                     HorizontalDivider(Modifier.padding(top = 8.dp), thickness = if (panel == Panel.AMOUNT) 2.dp else 1.dp,
                         color = if (panel == Panel.AMOUNT) color else MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -606,31 +615,9 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     if (!(type == TxnType.INCOME && (repayPerson != null || repayName.isNotBlank()))) FormRow("分類", color, panel == Panel.CATEGORY, onClick = { focusManager.clearFocus(); panel = Panel.CATEGORY }) {
                         PlaceholderText(lk.catLabel(categoryId), "")
                     }
-                    // 預算：每個一行，緊貼分類、和欄位內容對齊（不把分類和帳戶隔開）
-                    if (budget.isNotEmpty()) {
-                        val add = if (currency == lk.base) (amountMinor ?: 0) else lk.fx.convert(amountMinor ?: 0, currency)
-                        Column(
-                            Modifier.fillMaxWidth().padding(start = 16.dp + (if (com.enwei.moneymanager.ui.I18n.english) 96.dp else 76.dp), end = 16.dp, top = 4.dp, bottom = 2.dp),
-                            verticalArrangement = Arrangement.spacedBy(3.dp),
-                        ) {
-                            budget.forEach { u ->
-                                com.enwei.moneymanager.ui.components.BudgetInline(u.name.removeSuffix("預算").ifBlank { u.name }, u.used, u.cap, add, Modifier.fillMaxWidth())
-                            }
-                        }
-                    }
                     if (payer == null) FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
                         PlaceholderText(lk.account(accountId)?.name, "")
                     }
-                    if (!debtMode && type == TxnType.EXPENSE && (original == null || original?.type == TxnType.EXPENSE)) SplitSection(
-                        splitMe, { splitMe = it }, paidBy, { paidBy = it },
-                        editing = if (panel == Panel.SPLIT) splitIdx else -1,
-                        onEditAmount = { i -> splitIdx = i; panel = Panel.SPLIT },
-                        splitRows, { splitRaw = SplitRow.encode(it) }, amountMinor, currency, color,
-                        onFieldFocus = { panel = Panel.NONE },
-                    )
-                    if (type == TxnType.INCOME && original == null) RepayRow(repayPerson, repayName, repayKind, color,
-                        onPick = { id, name -> repayPerson = id; repayName = name }, onKind = { repayKind = it },
-                        onFieldFocus = { panel = Panel.NONE })
 
                 }
                 FormRow("商家", color, merchantFocused, onClick = {}) {
@@ -641,11 +628,15 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 if (nearby.isNotEmpty() && type != TxnType.TRANSFER && (merchant.isBlank() || merchantFocused)) Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(start = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
                 ) {
                     nearby.forEach { n ->
-                        Text(n, fontSize = AppText.secondary, maxLines = 1, color = if (merchant == n) color else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable { merchant = n; merchantAuto = false; merchantAt = placeLocs[n]; focusManager.clearFocus() }.padding(vertical = 4.dp))
+                        // 與說明的推薦同樣式：圓角底色小方框
+                        Surface(
+                            shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius),
+                            color = if (merchant == n) color.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.clickable { merchant = n; merchantAuto = false; merchantAt = placeLocs[n]; focusManager.clearFocus() },
+                        ) { Text(n, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1) }
                     }
                 }
                 val placeIndent = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp
@@ -720,6 +711,19 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                             ) { Text(n, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1) }
                         }
                     }
+                }
+                // 往來（分帳、別人先付、還款）：放在表單最後，主要欄位一路填下來不被打斷
+                if (type != TxnType.TRANSFER) {
+                    if (!debtMode && type == TxnType.EXPENSE && (original == null || original?.type == TxnType.EXPENSE)) SplitSection(
+                        splitMe, { splitMe = it }, paidBy, { paidBy = it },
+                        editing = if (panel == Panel.SPLIT) splitIdx else -1,
+                        onEditAmount = { i -> splitIdx = i; panel = Panel.SPLIT },
+                        splitRows, { splitRaw = SplitRow.encode(it) }, amountMinor, currency, color,
+                        onFieldFocus = { panel = Panel.NONE },
+                    )
+                    if (type == TxnType.INCOME && original == null) RepayRow(repayPerson, repayName, repayKind, color,
+                        onPick = { id, name -> repayPerson = id; repayName = name }, onKind = { repayKind = it },
+                        onFieldFocus = { panel = Panel.NONE })
                 }
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider(thickness = 8.dp, color = MaterialTheme.colorScheme.background)

@@ -135,7 +135,7 @@ fun AppearanceScreen(nav: NavController) {
                                     }
                                 }
                             }
-                            Text("黑體、明體、楷體第一次選用時會從 Google Fonts 下載，下載完成前先用系統字體", fontSize = AppText.label,
+                            Text("黑體、明體、楷體首次選用時會從 Google Fonts 下載，下載完成前暫以系統字體顯示", fontSize = AppText.label,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
                         }
                         Group("字體大小") {

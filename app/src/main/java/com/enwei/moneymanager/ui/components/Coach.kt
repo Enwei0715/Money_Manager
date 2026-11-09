@@ -60,18 +60,18 @@ object Coach {
     data class Step(val target: String?, val title: String, val body: String, val tab: String? = null)
 
     val steps = listOf(
-        Step(null, "帶你逛一圈", "接下來用一分鐘，一個一個指給你看每個功能在哪裡。隨時可以按「跳過全部」。"),
-        Step("tab.txns", "交易", "每天的收入、支出都在這裡，依日期排好。", tab = "txns"),
-        Step("txns.summary", "本月總覽", "這個月的收入、支出與結餘；設了預算的話，下方會看到用了多少、每天還能花多少。", tab = "txns"),
-        Step("fab.add", "記一筆", "按這裡記帳：輸入金額、選分類與帳戶就好。上方可以切換支出／收入／轉帳／股票。", tab = "txns"),
-        Step("txns.map", "支出地圖", "記帳時有定位的話，可以在地圖上看每天、每週、每月在哪裡花錢。", tab = "txns"),
-        Step("txns.search", "搜尋與篩選", "找某家店、某個分類或某段期間的交易，也能看篩選後的圖表。", tab = "txns"),
-        Step("tab.stats", "統計", "錢花在哪：分類圓餅、每月比較、收支趨勢。", tab = "stats"),
-        Step("tab.accounts", "資產", "所有帳戶、信用卡（依每期帳單算應繳）、往來（誰欠你、你欠誰）與股票。", tab = "accounts"),
-        Step("tab.assistant", "股票助理", "每日報告、新聞整理、問 AI 與資金紀律。需要先在設定裡填 AI 金鑰。", tab = "assistant"),
-        Step("tab.more", "工具", "預算、週期交易、備份、通知記帳等工具都在這；可以按「編輯」調整排列。", tab = "more"),
-        Step("more.settings", "設定", "外觀（主題、字體、版面）、記帳方式、通知與 AI 都在設定裡。", tab = "more"),
-        Step(null, "就這樣！", "開始記第一筆吧。想再看一次，到「設定 → 關於 → 新手導覽」。", tab = "txns"),
+        Step(null, "功能導覽", "接下來依序介紹各項功能的位置，可隨時點選「跳過全部」。"),
+        Step("tab.txns", "交易", "每日的收入與支出依日期排列。", tab = "txns"),
+        Step("txns.summary", "本月總覽", "本月的收入、支出與結餘；設定預算後，可在此查看使用比例與每日可用金額。", tab = "txns"),
+        Step("fab.add", "新增交易", "輸入金額，選擇分類與帳戶即可儲存；上方可切換支出、收入、轉帳與股票。", tab = "txns"),
+        Step("txns.map", "支出地圖", "以地圖檢視每日、每週或每月的消費地點。", tab = "txns"),
+        Step("txns.search", "搜尋與篩選", "依店家、分類或期間查詢交易，並檢視篩選後的圖表。", tab = "txns"),
+        Step("tab.stats", "統計", "分類比例、每月比較與收支趨勢。", tab = "stats"),
+        Step("tab.accounts", "資產", "所有帳戶、信用卡（依帳單週期計算應繳）、往來與股票。", tab = "accounts"),
+        Step("tab.assistant", "股票助理", "每日報告、新聞整理、AI 問答與資金紀律；需先完成 AI 設定。", tab = "assistant"),
+        Step("tab.more", "工具", "預算、週期交易、備份與通知記帳等工具；可點選「編輯」調整排列。", tab = "more"),
+        Step("more.settings", "設定", "外觀、記帳方式、通知與 AI 等設定。", tab = "more"),
+        Step(null, "導覽完成", "如需再次查看，請至「設定 → 關於 → 新手導覽」。", tab = "txns"),
     )
 
     /** 這次要走的步驟：依問卷與功能開關，關掉的功能不介紹 */
@@ -102,7 +102,7 @@ object Coach {
                 else -> true
             }
         }.map { st ->
-            if (st.target == "fab.add" && split) st.copy(body = st.body + "幫別人付錢時點「分帳」，可以分給好幾個人。") else st
+            if (st.target == "fab.add" && split) st.copy(body = st.body + "與他人分帳時，使用表單最下方的「往來」。") else st
         }
         step = 0
     }

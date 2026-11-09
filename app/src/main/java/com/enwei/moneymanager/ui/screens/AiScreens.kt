@@ -288,7 +288,7 @@ private fun LocalServerCard() {
     com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("自架伺服器", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
-            Text("家裡電腦跑 Ollama，手機連同一個 Wi-Fi 就能用；免費、資料不出家門", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("於家中電腦執行 Ollama，手機連上同一 Wi-Fi 即可使用；免費，且資料不離開家中網路", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             androidx.compose.material3.OutlinedTextField(url, { url = it; com.enwei.moneymanager.net.LocalAi.url = it }, singleLine = true,
                 label = { Text("伺服器網址") }, placeholder = { Text("http://192.168.1.10:11434") }, modifier = Modifier.fillMaxWidth())
             androidx.compose.material3.OutlinedTextField(model, { model = it; com.enwei.moneymanager.net.LocalAi.model = it }, singleLine = true,
@@ -320,7 +320,7 @@ private fun LocalServerCard() {
                 }) { Text("下載 Ollama") }
             }
             result?.let { Text(it, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            Text("電腦上要讓 Ollama 接受區網連線（設定 OLLAMA_HOST=0.0.0.0）。", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("電腦端的 Ollama 須允許區域網路連線（設定 OLLAMA_HOST=0.0.0.0）。", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

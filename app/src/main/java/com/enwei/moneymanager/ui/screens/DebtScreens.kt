@@ -56,6 +56,10 @@ import java.time.LocalDate
  */
 @Composable
 fun DebtsScreen(nav: NavController) {
+    // 第一次打開這頁：簡短介紹
+    com.enwei.moneymanager.ui.components.PageTour("debts", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "往來", "列出每位對象的應收與應付金額；點選對象可查看明細，或記錄代墊、借還款。"),
+    ))
     val lk = rememberLookups()
     val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
@@ -88,7 +92,7 @@ fun DebtsScreen(nav: NavController) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
             if (people.isEmpty()) item {
-                EmptyHint("還沒有往來對象。記帳時開啟「代墊／分帳」，或按右上角新增")
+                EmptyHint("目前沒有往來對象。可於記帳時使用「往來」，或點選右上角新增")
             }
             items(open, key = { "p${it.account.id}" }) { b -> PersonRow(nav, b.account, b.balance, st.loans[b.account.id], lastMove[b.account.id]) }
             if (settled.isNotEmpty()) item {
@@ -141,7 +145,7 @@ private fun PersonRow(nav: NavController, a: com.enwei.moneymanager.data.Account
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "更多", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
             DropdownMenu(menu, { menu = false }) {
-                DropdownMenuItem(text = { Text("記代墊（我幫他付）") }, onClick = { menu = false; nav.navigate("txn/0?type=EXPENSE&split=${a.id}") })
+                DropdownMenuItem(text = { Text("記錄代墊") }, onClick = { menu = false; nav.navigate("txn/0?type=EXPENSE&split=${a.id}") })
                 DropdownMenuItem(text = { Text("他幫我付") }, onClick = { menu = false; nav.navigate("txn/0?type=EXPENSE&account=${a.id}") })
                 // 收回＝從他的往來帳戶轉進來；還款＝轉給他（金額預設為目前差額）
                 DropdownMenuItem(text = { Text(if (balance >= 0) "收回款項" else "還款") }, onClick = {

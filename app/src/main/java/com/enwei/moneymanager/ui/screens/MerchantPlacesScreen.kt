@@ -126,7 +126,7 @@ fun MerchantPlacesScreen(nav: NavController) {
             android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("已設定「$name」的位置"), android.widget.Toast.LENGTH_SHORT).show()
         } else {
             linkFor = name; linkText = text
-            android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("這個連結讀不出位置"), android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("無法從此連結取得位置"), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
     fun applyClipboard(name: String) {
@@ -151,7 +151,7 @@ fun MerchantPlacesScreen(nav: NavController) {
     fun autoFind(names: List<String>) = scope.launch {
         val a = anchors()
         if (a.isEmpty()) {
-            android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("需要定位權限，才知道要在哪一帶找店"), android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("需要位置權限，才能判斷搜尋範圍"), android.widget.Toast.LENGTH_SHORT).show()
             return@launch
         }
         names.forEach { PlaceHints.clearMerchantGeo(it) }
@@ -162,9 +162,9 @@ fun MerchantPlacesScreen(nav: NavController) {
 
     Scaffold(topBar = { BackTopBar("店家位置", { nav.popBackStack() }) }) { pad ->
         com.enwei.moneymanager.ui.components.PageTour("merchants", listOfNotNull(
-            com.enwei.moneymanager.ui.components.Coach.Step("mp.google", "店家搜尋", "設定 Google Places 金鑰後，找店最準（台灣小店最完整）。點這裡有申請步驟。"),
-            if (missing.isNotEmpty()) com.enwei.moneymanager.ui.components.Coach.Step("mp.auto", "自動找", "一次幫還沒有位置的店找位置；有好幾個結果的會標「選擇」讓你挑。") else null,
-            com.enwei.moneymanager.ui.components.Coach.Step(null, "每一家店", "點一家店可以搜尋正確的店、改名，或在地圖上點選位置。"),
+            com.enwei.moneymanager.ui.components.Coach.Step("mp.google", "店家搜尋", "設定 Google Places 金鑰可提升店家搜尋的準確度，點選即可查看申請步驟。"),
+            if (missing.isNotEmpty()) com.enwei.moneymanager.ui.components.Coach.Step("mp.auto", "自動找", "為尚無位置的店家一併搜尋；有多個結果者會標示「選擇」，由您挑選。") else null,
+            com.enwei.moneymanager.ui.components.Coach.Step(null, "每一家店", "點選店家可搜尋正確店家、更改名稱，或於地圖上指定位置。"),
         ))
         LazyColumn(Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             item {
@@ -439,7 +439,7 @@ private fun MapboxSearchDialog(name: String, near: Pair<Double, Double>, onDone:
                 val r = results
                 when {
                     r == null -> Text("搜尋中…", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
-                    r.isEmpty() -> Text(com.enwei.moneymanager.net.PlaceSearch.lastError.ifBlank { "沒有結果，換個關鍵字試試" }, fontSize = AppText.caption,
+                    r.isEmpty() -> Text(com.enwei.moneymanager.net.PlaceSearch.lastError.ifBlank { "沒有結果，請嘗試其他關鍵字" }, fontSize = AppText.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
                     else -> LazyColumn(Modifier.padding(top = 6.dp).height(320.dp)) {
                         items(r) { p ->

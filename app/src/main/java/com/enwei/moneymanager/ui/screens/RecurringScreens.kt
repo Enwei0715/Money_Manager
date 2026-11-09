@@ -66,6 +66,10 @@ private val Frequency.label get() = when (this) {
 
 @Composable
 fun RecurringScreen(nav: NavController) {
+    // 第一次打開這頁：簡短介紹
+    com.enwei.moneymanager.ui.components.PageTour("recurring", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "週期交易", "房租、訂閱等固定收支可設為週期交易，到期時自動記錄或提醒確認。"),
+    ))
     val lk = rememberLookups()
     val list by repo.recurring.collectAsStateWithLifecycle(emptyList())
     Scaffold(
