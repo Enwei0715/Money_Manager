@@ -47,7 +47,7 @@ object PlaceHints {
     fun samples(ctx: Context): List<Sample> = load(ctx)
 
     /** 用店名找到的位置（店名 → 緯度、經度；查不到存 null，之後不再查）。 */
-    private val geoPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("merchant_geo", Context.MODE_PRIVATE) }
+    private val geoPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("merchant_geo2", Context.MODE_PRIVATE) }
     fun merchantGeo(): Map<String, Pair<Double, Double>?> = geoPrefs.all.mapNotNull { (k, v) ->
         val s = v as? String ?: return@mapNotNull null
         k to s.split(',').takeIf { it.size == 2 }?.let { (a, b) -> a.toDoubleOrNull()?.let { la -> b.toDoubleOrNull()?.let { lo -> la to lo } } }
@@ -65,31 +65,71 @@ object PlaceHints {
     fun clearSpotFix(key: String) = fixPrefs.edit().remove(key).apply()
 
     /**
-     * 用 OpenStreetMap 依店名找位置（在 [center] 附近約 15 公里內），每秒最多查一次；
-     * 回傳這次找到幾家。查不到的記下來不再重查。
+     * 常活動的區域：把記過的付款位置以約 1 公里的格子分群，取次數最多的幾群的中心（例如學校、住家附近）。
+     * 用店名找位置時只在這些區域附近找，不會跑到十幾公里外的同名店。
      */
-    suspend fun geocodeMerchants(names: List<String>, center: Pair<Double, Double>, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int = withContext(Dispatchers.IO) {
+    fun anchors(ctx: Context, max: Int = 4): List<Pair<Double, Double>> =
+        load(ctx).groupBy { (Math.round(it.lat * 100)) to (Math.round(it.lon * 100)) }.values
+            .sortedByDescending { it.size }.take(max)
+            .map { g -> g.map { it.lat }.average() to g.map { it.lon }.average() }
+
+    /**
+     * 用店名找位置：只在常活動區域（[anchors]）附近 2 公里內找；先找 OpenStreetMap 名稱相符的店，
+     * 再用 Photon 模糊搜尋；多個結果取離常活動區域最近的。找不到就記下來不再重查。回傳這次找到幾家。
+     */
+    suspend fun geocodeMerchants(names: List<String>, anchors: List<Pair<Double, Double>>, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int = withContext(Dispatchers.IO) {
         var found = 0
-        val (la, lo) = center
-        val box = "${lo - 0.15},${la + 0.15},${lo + 0.15},${la - 0.15}"
         names.forEachIndexed { i, n ->
             onProgress(i, names.size)
             if (geoPrefs.contains(n)) return@forEachIndexed
-            val hit = runCatching {
-                val url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&bounded=1&accept-language=zh-TW&viewbox=$box&q=" + java.net.URLEncoder.encode(n, "UTF-8")
-                val arr = com.enwei.moneymanager.net.Http.getJson(url, mapOf("User-Agent" to UA)) as? kotlinx.serialization.json.JsonArray
-                (arr?.firstOrNull() as? kotlinx.serialization.json.JsonObject)?.let { o ->
-                    val a = (o["lat"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
-                    val b = (o["lon"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
-                    if (a != null && b != null) a to b else null
-                }
-            }.getOrNull()
+            val hits = anchors.flatMap { (la, lo) ->
+                listOfNotNull(snapToStore(n, la, lo, 2000), photonNear(n, la, lo, 2000)).map { h -> h to dist(la, lo, h.first, h.second) }
+            }
+            val hit = hits.minByOrNull { it.second }?.first
             geoPrefs.edit().putString(n, hit?.let { "${it.first},${it.second}" } ?: "").apply()
             if (hit != null) found++
             kotlinx.coroutines.delay(1100)
         }
         onProgress(names.size, names.size)
         found
+    }
+
+    /** 附近的店（OpenStreetMap，[radius] 公尺內，由近到遠）：記帳時推薦店名用。 */
+    suspend fun nearbyStores(loc: Location, radius: Int = 150): List<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val q = "[out:json][timeout:10];(" +
+                "node(around:$radius,${loc.latitude},${loc.longitude})[name][shop];" +
+                "node(around:$radius,${loc.latitude},${loc.longitude})[name][amenity];" +
+                "way(around:$radius,${loc.latitude},${loc.longitude})[name][shop];" +
+                "way(around:$radius,${loc.latitude},${loc.longitude})[name][amenity];" +
+                ");out center 40;"
+            val body = com.enwei.moneymanager.net.Http.getJson("https://overpass-api.de/api/interpreter?data=" + java.net.URLEncoder.encode(q, "UTF-8"), mapOf("User-Agent" to UA))
+            val els = (body as? kotlinx.serialization.json.JsonObject)?.get("elements") as? kotlinx.serialization.json.JsonArray ?: return@runCatching emptyList()
+            els.mapNotNull { e ->
+                val o = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                fun num(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                    ?: ((o["center"] as? kotlinx.serialization.json.JsonObject)?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                val tags = o["tags"] as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                fun tag(k: String) = (tags[k] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                val name = tag("name:zh") ?: tag("name") ?: return@mapNotNull null
+                if ((tag("amenity") ?: tag("shop")) in notSpend) return@mapNotNull null
+                val la = num("lat") ?: return@mapNotNull null
+                val lo = num("lon") ?: return@mapNotNull null
+                // 連鎖店把分店名一起帶上（例如「萊爾富 永和貞寧店」）
+                val branch = tag("branch")?.let { " $it" }.orEmpty()
+                (name + branch) to dist(loc.latitude, loc.longitude, la, lo)
+            }.sortedBy { it.second }.map { it.first }.distinct().take(8)
+        }.getOrDefault(emptyList())
+    }
+
+    /** 這附近記過的店（[radius] 公尺內，次數多的在前）：記帳時推薦店名用。 */
+    fun historyNear(ctx: Context, loc: Location, txns: List<TxnEntity>, radius: Float = 150f): List<String> {
+        val byId = txns.associateBy { it.id }
+        return load(ctx).mapNotNull { s ->
+            val t = byId[s.txnId] ?: return@mapNotNull null
+            val m = t.merchant?.trim()?.takeIf { it.length >= 2 } ?: return@mapNotNull null
+            if (dist(loc.latitude, loc.longitude, s.lat, s.lon) > radius + loc.accuracy.coerceAtMost(60f)) null else m
+        }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }.take(6)
     }
 
     /** 已記下的位置筆數。 */

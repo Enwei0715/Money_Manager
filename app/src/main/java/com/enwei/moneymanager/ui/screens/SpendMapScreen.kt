@@ -67,7 +67,7 @@ private val ONLINE = listOf("蝦皮", "Claude", "Firstory", "CapCut", "ElevenLab
 private val ONLINE_ROOTS = listOf("訂閱", "保險", "金融費用", "居住")
 
 /** 連鎖店：每家分店位置不同，只用付款當下記下的位置（不套用其他分店、不用店名找）。 */
-private val CHAINS = listOf("7-11", "全家", "萊爾富", "OK超商", "全聯", "小北百貨", "麥當勞", "摩斯漢堡", "肯德基", "85度C", "星巴克", "路易莎", "大創", "愛買",
+private val CHAINS = listOf("7-11", "7-ELEVEN", "全家", "萊爾富", "OK超商", "全聯", "小北百貨", "麥當勞", "摩斯漢堡", "肯德基", "85度C", "星巴克", "路易莎", "大創", "愛買",
     "家樂福", "寶雅", "屈臣氏", "康是美", "吉野家", "八方", "可不可", "50嵐", "迷客夏", "中油", "台北捷運", "公車", "YouBike", "台鐵", "台灣高鐵", "Subway", "漢堡王", "Burger King")
 
 /** 地圖上的一個點：同一家店（或同一個位置）在這段期間的支出合計。 */
@@ -105,6 +105,8 @@ fun SpendMapScreen(nav: NavController) {
         return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) }
     }
     fun chain(m: String) = CHAINS.any { m.contains(it, ignoreCase = true) }
+    // 連鎖店名稱帶分店（例如「萊爾富 永和貞寧店」）：可以用名稱找到那一間
+    fun branchy(m: String) = chain(m) && m.trim().contains(' ')
     // 同一家店：記過位置的平均位置
     val merchantLoc = remember(all, samples) {
         all.mapNotNull { t -> val s = samples[t.id] ?: return@mapNotNull null; t.merchant?.trim()?.takeIf { it.isNotEmpty() }?.let { it to (s.lat to s.lon) } }
@@ -118,7 +120,7 @@ fun SpendMapScreen(nav: NavController) {
             java.time.Instant.ofEpochMilli(t.date).atZone(zone).toLocalDate().let { !it.isBefore(from) && !it.isAfter(to) }
     }
     fun locOf(t: com.enwei.moneymanager.data.TxnEntity): Pair<Double, Double>? =
-        samples[t.id]?.let { it.lat to it.lon } ?: t.merchant?.trim()?.takeIf { !chain(it) }?.let { m -> merchantLoc[m] ?: geo[m] }
+        samples[t.id]?.let { it.lat to it.lon } ?: t.merchant?.trim()?.takeIf { !chain(it) || branchy(it) }?.let { m -> (if (branchy(m)) null else merchantLoc[m]) ?: geo[m] }
     val offline = inRange.filter { !online(it) }
     val onlineCount = inRange.size - offline.size
     val placed = offline.mapNotNull { t -> locOf(t)?.let { t to it } }
@@ -222,14 +224,21 @@ fun SpendMapScreen(nav: NavController) {
                 }
             }
             // 沒有位置的店：用店名在 OpenStreetMap 找（每秒一家）
-            val missing = unplaced.mapNotNull { it.merchant?.trim()?.takeIf { m -> m.isNotEmpty() && m !in geo && !chain(m) } }.distinct()
+            val missing = unplaced.mapNotNull { it.merchant?.trim()?.takeIf { m -> m.isNotEmpty() && m !in geo && (!chain(m) || branchy(m)) } }.distinct()
             if (missing.isNotEmpty()) item {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(progress ?: "${missing.size} 家店還沒有位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     OutlinedButton(enabled = progress == null, onClick = {
-                        val center = samples.values.takeIf { it.isNotEmpty() }?.let { s -> s.map { it.lat }.average() to s.map { it.lon }.average() } ?: (25.033 to 121.565)
                         scope.launch {
-                            val n = PlaceHints.geocodeMerchants(missing.take(40), center) { i, total -> progress = "找位置中 $i/$total…" }
+                            // 只在常活動的區域附近找（依記過的付款位置）；還沒有記錄時用目前位置
+                            val anchors = PlaceHints.anchors(ctx).ifEmpty {
+                                listOfNotNull(kotlinx.coroutines.withTimeoutOrNull(8000) { PlaceHints.current(ctx) }?.let { it.latitude to it.longitude })
+                            }
+                            if (anchors.isEmpty()) {
+                                android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("需要定位權限，才知道要在哪一帶找店"), android.widget.Toast.LENGTH_SHORT).show()
+                                return@launch
+                            }
+                            val n = PlaceHints.geocodeMerchants(missing.take(40), anchors) { i, total -> progress = "找位置中 $i/$total…" }
                             geo = PlaceHints.merchantGeo(); progress = null
                             android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("找到 $n 家店的位置"), android.widget.Toast.LENGTH_SHORT).show()
                         }

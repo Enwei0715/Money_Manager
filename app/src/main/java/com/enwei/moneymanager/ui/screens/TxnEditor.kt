@@ -231,6 +231,18 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
 
     // 依金額推測：過去同類型、金額相近的交易（同時段、最近、同帳戶加分），推測分類與內容
     var merchantAuto by remember { mutableStateOf(false) }
+    // 記新的一筆：一打開就讀目前位置，推薦附近的店名（這附近記過的店在前，再來是地圖上離你最近的店）
+    var nearby by remember { mutableStateOf<List<String>>(emptyList()) }
+    var hereLoc by remember { mutableStateOf<android.location.Location?>(null) }
+    LaunchedEffect(Unit) {
+        if (id != 0L || !settings.locationHints) return@LaunchedEffect
+        val appCtx = com.enwei.moneymanager.MoneyApp.instance
+        val loc = kotlinx.coroutines.withTimeoutOrNull(8000) { com.enwei.moneymanager.data.PlaceHints.current(appCtx) } ?: return@LaunchedEffect
+        hereLoc = loc
+        val hist = com.enwei.moneymanager.data.PlaceHints.historyNear(appCtx, loc, repo.allTxns())
+        nearby = hist
+        nearby = (hist + com.enwei.moneymanager.data.PlaceHints.nearbyStores(loc)).distinct().take(8)
+    }
     data class Guess(val categoryId: Long, val merchant: String?, val score: Double, val count: Int)
     val guesses = remember(amountMinor, type, history, accountId) {
         val amt = amountMinor
@@ -322,7 +334,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 kotlin.math.abs(System.currentTimeMillis() - t.date) <= 30 * 60_000L) {
                 val appCtx = com.enwei.moneymanager.MoneyApp.instance
                 com.enwei.moneymanager.MoneyApp.instance.appScope.launch {
-                    com.enwei.moneymanager.data.PlaceHints.current(appCtx)?.let { com.enwei.moneymanager.data.PlaceHints.record(appCtx, newId, it) }
+                    // 用打開記帳時讀到的位置（人還在店裡），沒有才重新讀
+                    (hereLoc ?: com.enwei.moneymanager.data.PlaceHints.current(appCtx))?.let { com.enwei.moneymanager.data.PlaceHints.record(appCtx, newId, it) }
                 }
             }
             // 轉帳手續費另記一筆支出
@@ -533,6 +546,17 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 FormRow("商家", color, merchantFocused, onClick = {}) {
                     UnderlineField(merchant, { merchant = it; merchantAuto = false }, "",
                         Modifier.onFocusChanged { merchantFocused = it.isFocused; if (it.isFocused) panel = Panel.NONE })
+                }
+                // 附近的店：還沒填商家（或正在填）時，點一下帶入
+                if (nearby.isNotEmpty() && type != TxnType.TRANSFER && (merchant.isBlank() || merchantFocused)) Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(start = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    nearby.forEach { n ->
+                        Text(n, fontSize = AppText.secondary, maxLines = 1, color = if (merchant == n) color else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { merchant = n; merchantAuto = false; focusManager.clearFocus() }.padding(vertical = 4.dp))
+                    }
                 }
                 // 自動完成：依過去紀錄建議，點選時一併帶入分類與帳戶
                 if (settings.autocomplete && merchantFocused && merchant.isNotBlank()) {
@@ -1098,14 +1122,14 @@ private fun SplitSection(
             }
         }
     }
-    // 所有人下方一行：平攤、他們全付、我付多少
+    // 所有人下方一行：平攤（含我一份）、我全付（整筆先墊，他們各還我）、我自己的部分
     val others = rows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L }
     val indent = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp
     Row(Modifier.fillMaxWidth().padding(start = indent, end = 16.dp, top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("平攤", fontSize = AppText.secondary, color = if (includeMe && rows.all { it.auto }) color else MaterialTheme.colorScheme.primary,
             modifier = Modifier.clickable { onIncludeMe(true); onRows(rows.map { it.copy(auto = true) }) }.padding(vertical = 4.dp))
         Spacer(Modifier.width(18.dp))
-        Text("他們全付", fontSize = AppText.secondary, color = if (!includeMe && rows.all { it.auto }) color else MaterialTheme.colorScheme.primary,
+        Text("我全付", fontSize = AppText.secondary, color = if (!includeMe && rows.all { it.auto }) color else MaterialTheme.colorScheme.primary,
             modifier = Modifier.clickable { onIncludeMe(false); onRows(rows.map { it.copy(auto = true) }) }.padding(vertical = 4.dp))
         Spacer(Modifier.weight(1f))
         if (total != null) Text(if (others > total) "超過總額" else "我付 ${Money.withSymbol(total - others, currency)}", fontSize = AppText.caption,
