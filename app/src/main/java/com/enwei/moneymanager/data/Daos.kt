@@ -260,6 +260,10 @@ interface NotificationLogDao {
     @Query("DELETE FROM notification_log WHERE postedAt < :before")
     suspend fun prune(before: Long)
 
+    /** 沒有記成交易的通知（略過、看不懂、非付款）：保留較短時間 */
+    @Query("DELETE FROM notification_log WHERE postedAt < :before AND txnId IS NULL")
+    suspend fun pruneUnused(before: Long)
+
     @Query("UPDATE notification_log SET result = :result WHERE id = :id")
     suspend fun setResult(id: Long, result: String)
 }

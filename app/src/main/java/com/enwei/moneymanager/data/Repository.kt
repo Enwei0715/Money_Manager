@@ -1035,7 +1035,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val log = db.notificationLog()
         // 同一則通知可能因更新而重複送達
         if (!force && log.countSame(pkg, title, text, postedAt - 10 * 60_000) > 0) return null
+        // 通知紀錄：記成交易的保留 60 天；沒有記帳的（略過、非付款通知）保留 7 天
         log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
+        log.pruneUnused(System.currentTimeMillis() - 7L * 24 * 3600 * 1000)
         // 銀行寄的 Email：只用來補充轉帳的轉入銀行，不另外記帳（其他 Email 一律不處理）
         // 券商寄來的成交 Email 例外：當成成交通知建立持股
         val fillMail = pkg == GMAIL_PACKAGE && isBrokerFillMail(title, text)

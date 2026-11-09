@@ -49,7 +49,7 @@ fun FormLine(
 fun FormInput(value: String, onChange: (String) -> Unit, placeholder: String = "", number: Boolean = false) {
     BasicTextField(
         value = value, onValueChange = onChange, singleLine = true,
-        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
+        textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body)),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         keyboardOptions = if (number) KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default,
         modifier = Modifier.fillMaxWidth(),

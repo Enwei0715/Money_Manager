@@ -133,7 +133,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
             Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                 androidx.compose.foundation.text.BasicTextField(
                     q, { q = it }, singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
+                    textStyle = MaterialTheme.typography.bodyLarge.merge(androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body)),
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     decorationBox = { inner ->

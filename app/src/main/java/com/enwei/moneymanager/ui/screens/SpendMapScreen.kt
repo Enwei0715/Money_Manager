@@ -210,9 +210,10 @@ fun SpendMapScreen(nav: NavController) {
                 if (more) Text(listOfNotNull(unplaced.size.takeIf { it > 0 }?.let { "沒有位置 $it 筆" }, onlineCount.takeIf { it > 0 }?.let { "線上 $it 筆" }).joinToString("・"),
                     fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (spots.isEmpty()) Text("此期間沒有可標示於地圖的支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp))
-            else SpendMap(spots, dark, Modifier.fillMaxWidth().height(mapH).clipToBounds().coachTarget("map.view"), selKey, focusTick, status = snapping,
+            // 沒有可標示的支出時地圖照樣顯示（對準常活動的區域），只在下方註明
+            val fallback = remember { PlaceHints.anchors(ctx).firstOrNull() ?: (25.0136 to 121.5414) }
+            SpendMap(spots, dark, Modifier.fillMaxWidth().height(mapH).clipToBounds().coachTarget("map.view"), selKey, focusTick,
+                status = snapping ?: if (spots.isEmpty()) "此期間沒有可標示於地圖的支出" else null, fallback = fallback,
                 // 點地圖上的點：下方清單同時展開那個地點的紀錄
                 onSelect = { sp ->
                     selKey = sp?.key
@@ -404,6 +405,8 @@ private fun SpendMap(
     pickOnly: Boolean = false,
     /** 顯示右上角的縮放按鈕（小預覽圖不顯示） */
     controls: Boolean = true,
+    /** 沒有任何地點時地圖對準的位置 */
+    fallback: Pair<Double, Double>? = null,
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val tilePx = with(density) { 256.dp.toPx() }
@@ -424,6 +427,9 @@ private fun SpendMap(
     val cats = remember(spots) { spots.map { it.cat }.distinct() }
     val maxTotal = spots.maxOfOrNull { it.total }?.coerceAtLeast(1) ?: 1
     // 第一次量到大小時：把所有點框進畫面
+    if (zoom < 0 && sizePx.width > 0 && spots.isEmpty() && fallback != null) {
+        cx = mx(fallback.second); cy = my(fallback.first); zoom = 14.0
+    }
     if (zoom < 0 && sizePx.width > 0 && spots.isNotEmpty()) {
         val xs = spots.map { mx(it.lon) }; val ys = spots.map { my(it.lat) }
         cx = (xs.min() + xs.max()) / 2; cy = (ys.min() + ys.max()) / 2

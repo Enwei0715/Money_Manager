@@ -91,6 +91,7 @@ import com.enwei.moneymanager.ui.components.formatNum
 import com.enwei.moneymanager.ui.components.formatPct
 import com.enwei.moneymanager.work.SyncWorker
 import kotlinx.coroutines.launch
+import com.enwei.moneymanager.ui.components.coachTarget
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.util.Date
@@ -105,6 +106,11 @@ private fun pnlColor(v: Double) = if (v >= 0) StockUp else StockDown
 /** 帳戶頁的「股票」分頁：持股、即時股價、損益（台股漲紅跌綠）。 */
 @Composable
 fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -> Unit = {}) {
+    com.enwei.moneymanager.ui.components.PageTour("stocks", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step("stock.view0", "持股", "實際買入的股票：市值、預估損益與今日漲跌，計入資產。點選個股查看庫存明細與每筆交易；證券帳戶與已出清的股票收合於下方。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("stock.view1", "觀察", "尚未買入、僅追蹤報價的股票，不計入資產。決定買進時點選「買進」記錄交易，該股即移入持股。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "工具列", "右上角依序為搜尋股票、更新股價、手續費設定與新增交易。"),
+    ))
     val lk = rememberLookups()
     val holdings by repo.holdings.collectAsStateWithLifecycle(emptyList())
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
@@ -140,125 +146,147 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
     // 與持股明細相同的券商算法（扣預估賣出費用、成本扣股利）
     val unreal = open.sumOf { lk.fx.convert(Money.toMinor(it.unrealized), it.currency) }
 
+    var view by com.enwei.moneymanager.ui.components.rememberTab("stock.view", 0)
+    val closedFold = com.enwei.moneymanager.ui.components.rememberFold("invest.closed", false)
+    val heldSyms = open.map { it.symbol.uppercase() }.toSet()
+    val quoteTime = if (settings.lastQuoteUpdate > 0) "報價 " + SimpleDateFormat("HH:mm", Locale.TAIWAN).format(Date(settings.lastQuoteUpdate)) + " · 每 30 秒更新" else ""
+
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        item {
-            SummaryBarCustom(
-                listOf(
-                    "市值" to (Money.full(totalValue) to MaterialTheme.colorScheme.onSurface),
-                    "預估損益" to (Money.full(unreal) to pnlColor(unreal.toDouble())),
-                    "今日" to (Money.full(dayChange) to pnlColor(dayChange.toDouble())),
-                ),
-            )
-            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(
-                    if (totalCost > 0) "報酬率 ${formatPct(Money.toDouble(unreal) / Money.toDouble(totalCost) * 100)}" else "",
-                    color = pnlColor(unreal.toDouble()), fontSize = AppText.secondary, modifier = Modifier.weight(1f),
-                )
-                Text(
-                    if (settings.lastQuoteUpdate > 0) "報價 " + SimpleDateFormat("HH:mm:ss", Locale.TAIWAN).format(Date(settings.lastQuoteUpdate)) + "（每 30 秒更新）" else "",
-                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        // 持股（實際買入，計入資產）與觀察（只看報價，不計入資產）分成兩個檢視
+        item(key = "seg") {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 10.dp)) {
+                listOf("持股（${open.size}）", "觀察（${settings.watchlist.size}）").forEachIndexed { i, t ->
+                    SegmentedButton(selected = view == i, onClick = { view = i }, shape = SegmentedButtonDefaults.itemShape(i, 2),
+                        modifier = Modifier.coachTarget("stock.view$i"), icon = {}) { Text(t, fontSize = AppText.secondary) }
+                }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
-        if (open.isEmpty()) item {
-            Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("尚無持股", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body)
-                Spacer(Modifier.height(8.dp))
-                Text("還沒有股票交易",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = { nav.navigate("trade/0") }) { Text("新增股票") }
+        if (view == 0) {
+            item(key = "sum") {
+                SummaryBarCustom(
+                    listOf(
+                        "市值" to (Money.full(totalValue) to MaterialTheme.colorScheme.onSurface),
+                        "預估損益" to (Money.full(unreal) to pnlColor(unreal.toDouble())),
+                        "今日" to (Money.full(dayChange) to pnlColor(dayChange.toDouble())),
+                    ),
+                )
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text(
+                        if (totalCost > 0) "報酬率 ${formatPct(Money.toDouble(unreal) / Money.toDouble(totalCost) * 100)}" else "",
+                        color = pnlColor(unreal.toDouble()), fontSize = AppText.secondary, modifier = Modifier.weight(1f),
+                    )
+                    Text(quoteTime, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            if (open.isEmpty()) item(key = "empty") {
+                Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("尚無持股", fontSize = AppText.body)
+                    Spacer(Modifier.height(6.dp))
+                    Text("記錄第一筆買進後，持股、成本與損益將自動計算。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.secondary, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(14.dp))
+                    Button(onClick = { nav.navigate("trade/0") }) { Text("記錄買進") }
+                }
+            } else {
+                item(key = "hh") { StockHeader("持股 ${open.size} 檔", Money.withSymbol(totalValue, lk.base)) }
+                items(open, key = { "${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
+            }
+            item(key = "brk") {
+                FoldHeader("證券帳戶（${brokers.size}）", brokersExpanded, { brokersFold.toggle() }) {
+                    TextButton(onClick = { nav.navigate("account/0?type=BROKERAGE") }) { Text("＋ 新增") }
+                }
+            }
+            if (brokersExpanded) items(brokers, key = { "b${it.account.id}" }) { b ->
+                val hs = byBroker[b.account.id].orEmpty().filter { it.shares > 0.0001 }
+                val stock = hs.sumOf { lk.fx.convert(Money.toMinor(it.marketValue), it.currency) }
+                val pnl = hs.sumOf { lk.fx.convert(Money.toMinor(it.unrealized), it.currency) }
+                val cost = hs.sumOf { lk.fx.convert(Money.toMinor(it.netCost), it.currency) }
+                val cashV = lk.fx.convert(b.balance, b.account.currency)
+                Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { nav.navigate("acct/${b.account.id}") }.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(b.account.name, fontSize = AppText.body)
+                            Text(
+                                "持股 ${hs.size} 檔 ${Money.withSymbol(stock, lk.base)} · 現金 ${Money.withSymbol(cashV, lk.base)}",
+                                fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (hs.isNotEmpty()) Text(
+                                "預估損益 ${if (pnl > 0) "+" else ""}${Money.full(pnl)}（${formatPct(if (cost > 0) pnl * 100.0 / cost else 0.0)}）",
+                                fontSize = AppText.caption, color = pnlColor(pnl.toDouble()),
+                            )
+                        }
+                        Text(Money.withSymbol(stock + cashV, lk.base), fontSize = AppText.body)
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+            if (closed.isNotEmpty()) {
+                item(key = "clh") { FoldHeader("已出清（${closed.size}）", closedFold.open, { closedFold.toggle() }) }
+                if (closedFold.open) items(closed, key = { "c${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
+            }
+            if (holdings.isNotEmpty()) item(key = "real") {
+                StockHeader("已實現損益＋股利", Money.withSymbol(realized, lk.base), pnlColor(realized.toDouble()))
             }
         } else {
-            item {
-                StockHeader("持股（${open.size}）", Money.withSymbol(totalValue, lk.base))
-            }
-            items(open, key = { "${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
-        }
-        item {
-            Row(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
-                    .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            item(key = "wh") {
                 Row(
-                    Modifier.weight(1f).clickable { brokersFold.toggle() }.padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("證券帳戶（${brokers.size}）", fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                    Spacer(Modifier.width(8.dp))
-                    com.enwei.moneymanager.ui.components.FoldToggle(brokersExpanded)
-                }
-                TextButton(onClick = { nav.navigate("account/0?type=BROKERAGE") }) { Text("＋ 新增") }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        }
-        if (brokersExpanded) items(brokers, key = { "b${it.account.id}" }) { b ->
-            val hs = byBroker[b.account.id].orEmpty().filter { it.shares > 0.0001 }
-            val stock = hs.sumOf { lk.fx.convert(Money.toMinor(it.marketValue), it.currency) }
-            val pnl = hs.sumOf { lk.fx.convert(Money.toMinor(it.unrealized), it.currency) }
-            val cost = hs.sumOf { lk.fx.convert(Money.toMinor(it.netCost), it.currency) }
-            val cashV = lk.fx.convert(b.balance, b.account.currency)
-            Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-                Row(
-                    Modifier.fillMaxWidth().clickable { nav.navigate("acct/${b.account.id}") }.padding(horizontal = 16.dp, vertical = 12.dp),
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(b.account.name, fontSize = AppText.body)
-                        Text(
-                            "持股 ${hs.size} 檔 ${Money.withSymbol(stock, lk.base)} · 現金 ${Money.withSymbol(cashV, lk.base)}",
-                            fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (hs.isNotEmpty()) Text(
-                            "預估損益 ${if (pnl > 0) "+" else ""}${Money.full(pnl)}（${formatPct(if (cost > 0) pnl * 100.0 / cost else 0.0)}）",
-                            fontSize = AppText.caption, color = pnlColor(pnl.toDouble()),
-                        )
+                        Text("僅追蹤報價，不計入資產", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (quoteTime.isNotEmpty()) Text(quoteTime, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text(Money.withSymbol(stock + cashV, lk.base), fontSize = AppText.body)
+                    TextButton(onClick = { addWatch = true }) { Text("＋ 加入") }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
-        }
-        // 觀察清單：還沒買、想留意的股票（AI 推薦卡片或個股頁的☆加入）
-        item {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("觀察清單（${settings.watchlist.size}）", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body)
-                TextButton(onClick = { addWatch = true }) { Text("＋ 加入") }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            if (settings.watchlist.isEmpty()) Text("在個股頁按☆加入",
-                fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
-        }
-        items(settings.watchlist, key = { "w$it" }) { sym ->
-            val q = quotes.find { it.key == com.enwei.moneymanager.data.quoteKey(com.enwei.moneymanager.core.marketOf(sym), sym) }
-            val pct = q?.previousClose?.takeIf { it > 0 }?.let { (q.price - it) / it * 100 }
-            Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("stock/$sym") }) {
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // 台股顯示中文名稱，美股維持英文
-                    val nm = (if (com.enwei.moneymanager.core.marketOf(sym) == com.enwei.moneymanager.core.Market.TW) com.enwei.moneymanager.net.TwData.nameOf(sym) else null) ?: q?.name.orEmpty()
-                    Text("$sym  $nm", fontSize = AppText.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(q?.let { formatNum(it.price) } ?: "—", fontSize = AppText.body)
-                        if (pct != null) Text((if (pct >= 0) "▲" else "▼") + formatPct(pct), fontSize = AppText.secondary, color = pnlColor(pct))
-                    }
-                    IconButton(onClick = { repo.settings.update { it.copy(watchlist = it.watchlist - sym) } }) {
-                        Icon(Icons.Filled.Close, "移出觀察", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                    }
+            if (settings.watchlist.isEmpty()) item(key = "wempty") {
+                Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("尚未加入觀察的股票", fontSize = AppText.body)
+                    Spacer(Modifier.height(6.dp))
+                    Text("可依名稱或代號加入，或在個股頁點選☆。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.secondary, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(14.dp))
+                    Button(onClick = { addWatch = true }) { Text("加入股票") }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
-        }
-        if (closed.isNotEmpty()) {
-            item { StockHeader("已出清", "") }
-            items(closed, key = { "c${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
-        }
-        if (holdings.isNotEmpty()) item {
-            StockHeader("已實現損益＋股利", Money.withSymbol(realized, lk.base), pnlColor(realized.toDouble()))
+            items(settings.watchlist, key = { "w$it" }) { sym ->
+                val mk = com.enwei.moneymanager.core.marketOf(sym)
+                val q = quotes.find { it.key == com.enwei.moneymanager.data.quoteKey(mk, sym) }
+                val pct = q?.previousClose?.takeIf { it > 0 }?.let { (q.price - it) / it * 100 }
+                // 台股顯示中文名稱，美股維持英文
+                val nm = (if (mk == Market.TW) com.enwei.moneymanager.net.TwData.nameOf(sym) else null) ?: q?.name.orEmpty()
+                val held = sym.uppercase() in heldSyms
+                Column(Modifier.background(MaterialTheme.colorScheme.surface).clickable { nav.navigate("stock/$sym") }) {
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(nm.ifBlank { sym }, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(sym + if (held) " · 已持有" else "", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(q?.let { formatNum(it.price) } ?: "—", fontSize = AppText.body)
+                            if (pct != null) Text((if (pct >= 0) "▲" else "▼") + formatPct(pct), fontSize = AppText.secondary, color = pnlColor(pct))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        // 決定買進：直接記一筆買進，之後就出現在「持股」
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = { nav.navigate("trade/0?market=${mk.name}&symbol=$sym") },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                            modifier = Modifier.height(32.dp),
+                        ) { Text("買進", fontSize = AppText.secondary) }
+                        IconButton(onClick = { repo.settings.update { it.copy(watchlist = it.watchlist - sym) } }) {
+                            Icon(Icons.Filled.Close, "移出觀察", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
         }
         item { Spacer(Modifier.height(32.dp)) }
     }
@@ -277,6 +305,23 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
             dismissButton = { TextButton(onClick = { addWatch = false }) { Text("取消") } },
         )
     }
+}
+
+/** 可收合的區塊標題：點標題展開／收合，右側可放動作 */
+@Composable
+private fun FoldHeader(title: String, open: Boolean, toggle: () -> Unit, action: @Composable () -> Unit = {}) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(Modifier.weight(1f).clickable(onClick = toggle).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(8.dp))
+            com.enwei.moneymanager.ui.components.FoldToggle(open)
+        }
+        action()
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @Composable

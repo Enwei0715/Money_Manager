@@ -1187,7 +1187,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
         // 搜尋框：按搜尋圖示才出現
         if (searchOpen || query.isNotEmpty()) androidx.compose.foundation.text.BasicTextField(
             query, { query = it; shown = 100 }, singleLine = true,
-            textStyle = androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
+            textStyle = MaterialTheme.typography.bodyLarge.merge(androidx.compose.ui.text.TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body)),
             cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
             modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
             decorationBox = { inner ->
@@ -1594,27 +1594,78 @@ private fun PlanTab(nav: NavController) {
                 } else HoldingCard(h, ai[h.symbol], settings.investPlan.disciplineOn, nav)
             }
         }
-        // 紀律參數：和投資原則一樣條列，點「調整」修改數字
+        // 紀律參數：分組成「項目｜數值」兩欄，數字一眼對齊；點「調整」修改
         if (sub == 2) Section("我的紀律參數", action = "調整" to { editPlan = true }) {
             val p = settings.investPlan
-            val lines = if (!p.disciplineOn) listOf("持股紀律建議目前關閉（按「調整」開啟）")
-            else if (p.guardOn) listOf(
-                "股價上漲：保本＋移動停利，從最高價回落 ${"%.1f".format(p.guardTrailPct)}% 賣出多賺的股數",
-                "想減碼：先設減碼價，跌破時賣出約 ${"%.0f".format(p.reducePct)}%",
-                "股價下跌：60 分 K ${p.hourFast}MA、${p.hourSlow}MA，跌破其中一條賣約 ${"%.0f".format(p.reducePct)}%",
-                "兩條都跌破：只留 ${p.baseShares.toLong()} 股基本股；站上兩條是買入訊號",
-                "容許稍微跌破 ${"%.1f".format(p.tolerancePct)}%，連續 ${p.confirmBars} 根才算，避免被洗出場",
-                "輔助參考：日 K ${p.dailyMas.joinToString("、")} 日均線",
-            ) else listOf(
-                "短線停損：跌破買進價 ${"%.0f".format(p.shortStopPct)}%",
-                "短線移動停損：從高點回落 ${"%.0f".format(p.shortTrailPct)}%；長線 ${"%.0f".format(p.longTrailPct)}%",
-                "分批停利：獲利 ${"%.0f".format(p.takeProfitPct)}% 先賣 1/3（長線為兩倍）",
-            )
-            lines.forEachIndexed { i, l -> Text("${i + 1}. $l", fontSize = AppText.body) }
+            @Composable fun group(title: String) = Text(title, fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+            @Composable fun row(label: String, value: String, note: String? = null) {
+                Column(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, fontSize = AppText.body, modifier = Modifier.weight(1f))
+                        Text(value, fontSize = AppText.body, fontWeight = FontWeight.SemiBold)
+                    }
+                    note?.let { Text(it, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            }
+            if (!p.disciplineOn) Text("持股紀律建議目前關閉，點選「調整」開啟。", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else if (p.guardOn) {
+                group("上漲時")
+                row("移動停利（自最高價回落）", "%.1f%%".format(p.guardTrailPct), "保留成本，只賣出獲利的股數")
+                row("減碼價跌破時賣出", "約 %.0f%%".format(p.reducePct))
+                group("下跌時（60 分 K）")
+                row("觀察均線", "${p.hourFast}MA・${p.hourSlow}MA")
+                row("跌破其中一條", "賣出約 %.0f%%".format(p.reducePct))
+                row("兩條皆跌破", "保留 ${p.baseShares.toLong()} 股", "重新站上兩條均線視為買進訊號")
+                group("避免誤判")
+                row("容許跌破幅度", "%.1f%%".format(p.tolerancePct))
+                row("連續確認", "${p.confirmBars} 根 K 棒")
+                group("輔助參考")
+                row("日 K 均線", p.dailyMas.joinToString("・") + " 日")
+            } else {
+                group("短線")
+                row("停損（跌破買進價）", "%.0f%%".format(p.shortStopPct))
+                row("移動停損（自高點回落）", "%.0f%%".format(p.shortTrailPct))
+                group("長線")
+                row("移動停損（自高點回落）", "%.0f%%".format(p.longTrailPct))
+                group("停利")
+                row("分批停利", "獲利 %.0f%% 先賣 1/3".format(p.takeProfitPct), "長線為兩倍門檻")
+            }
         }
-        if (sub == 2) Section("我的投資原則（${settings.investPlan.rules.size} 條）", action = "編輯" to { editRules = true }) {
-            if (settings.investPlan.rules.isEmpty()) Text("尚未設定投資原則。", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            settings.investPlan.rules.forEachIndexed { i, r -> Text("${i + 1}. $r", fontSize = AppText.body) }
+        // 投資原則：一條一列，可直接刪除；下方一行新增，或從常用原則挑選
+        if (sub == 2) Section("我的投資原則（${settings.investPlan.rules.size} 條）") {
+            val rules = settings.investPlan.rules
+            fun save(list: List<String>) = repo.settings.update { it.copy(investPlan = it.investPlan.copy(rules = list)) }
+            if (rules.isEmpty()) Text("尚未設定投資原則。", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            rules.forEachIndexed { i, r ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {
+                    Text("${i + 1}", fontSize = AppText.body, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.width(24.dp))
+                    Text(r, fontSize = AppText.body, modifier = Modifier.weight(1f))
+                    Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.clickable { save(rules.filterIndexed { j, _ -> j != i }) }.padding(start = 10.dp, end = 2.dp))
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            }
+            var draft by remember { mutableStateOf("") }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                OutlinedTextField(draft, { draft = it }, placeholder = { Text("新增一條原則") }, singleLine = true, modifier = Modifier.weight(1f))
+                TextButton(enabled = draft.isNotBlank(), onClick = { save(rules + draft.trim()); draft = "" }) { Text("新增") }
+            }
+            val presets = listOf("單一個股不超過資金的 20%", "虧損 8% 一律停損，不攤平", "只買看得懂的公司", "財報公布前不加碼",
+                "大盤跌破季線時降低持股", "每月固定投入，不追高").filter { it !in rules }
+            if (presets.isNotEmpty()) {
+                Text("常用原則", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    presets.forEach { pr ->
+                        Surface(shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.clickable { save(rules + pr) }) {
+                            Text("＋ $pr", Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                        }
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(24.dp))
     }

@@ -900,7 +900,7 @@ private fun UnderlineField(value: String, onChange: (String) -> Unit, placeholde
             keyboardType = if (numeric) androidx.compose.ui.text.input.KeyboardType.Decimal else androidx.compose.ui.text.input.KeyboardType.Text,
             imeAction = if (singleLine) androidx.compose.ui.text.input.ImeAction.Done else androidx.compose.ui.text.input.ImeAction.Default),
         keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { focus.clearFocus(); kb?.hide() }),
-        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
+        textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body)),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         modifier = modifier.fillMaxWidth(),
         decorationBox = { inner ->
@@ -963,7 +963,7 @@ private fun BottomPanel(
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     BasicTextField(
                         query, { query = it }, singleLine = true,
-                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body),
+                        textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = AppText.body)),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         modifier = Modifier.weight(1f),
                         decorationBox = { inner ->

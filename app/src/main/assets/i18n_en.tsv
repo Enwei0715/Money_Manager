@@ -2915,3 +2915,49 @@ K 線操作	Using the chart
 設定目標價與停損價，盤中每 15 分鐘檢查一次，到價時發出通知。	Set a target and stop price; checked every 15 minutes during trading with a notification when reached.
 可輸入店家、說明或金額；結果會即時列出並加總。	Enter a merchant, note or amount; results and totals appear instantly.
 依分類、帳戶、類型與期間組合篩選，並可查看篩選結果的分類圖表與趨勢。	Combine filters by category, account, type and period, and view category charts and trends for the results.
+已持有	held
+每 30 秒更新	updates every 30 s
+上漲時	When rising
+下跌時（60 分 K）	When falling (60-min K)
+根 K 棒	K bars
+保留成本，只賣出獲利的股數	Keep cost basis, sell only the profit shares
+停損（跌破買進價）	Stop loss (below buy price)
+僅追蹤報價，不計入資產	Tracks quotes only; not counted as assets
+兩條皆跌破	Both broken
+加入股票	Add stock
+只買看得懂的公司	Only buy companies I understand
+可依名稱或代號加入，或在個股頁點選☆。	Add by name or code, or tap ☆ on a stock page.
+右上角依序為搜尋股票、更新股價、手續費設定與新增交易。	Top-right icons: search stocks, refresh quotes, fee settings and add trade.
+單一個股不超過資金的 20%	No single stock above 20% of capital
+報價	Quote
+報酬率	Return
+大盤跌破季線時降低持股	Reduce holdings when the index breaks its 60-day MA
+容許跌破幅度	Allowed break margin
+實際買入的股票：市值、預估損益與今日漲跌，計入資產。點選個股查看庫存明細與每筆交易；證券帳戶與已出清的股票收合於下方。	Stocks you actually bought: market value, estimated P/L and today's change, counted as assets. Tap a stock for lots and trades; brokerage accounts and closed positions are folded below.
+尚未加入觀察的股票	No stocks on the watchlist
+尚未買入、僅追蹤報價的股票，不計入資產。決定買進時點選「買進」記錄交易，該股即移入持股。	Stocks you track but haven't bought; not counted as assets. Tap "Buy" to record a trade and the stock moves to Holdings.
+工具列	Toolbar
+已出清	Closed
+常用原則	Common principles
+我的投資原則	My investment principles
+持股紀律建議目前關閉，點選「調整」開啟。	Holding discipline suggestions are off; tap "Adjust" to turn them on.
+新增一條原則	Add a principle
+日 K 均線	Daily MA
+每月固定投入，不追高	Invest a fixed amount monthly; don't chase highs
+減碼價跌破時賣出	Sell when the trim price breaks
+移動停利（自最高價回落）	Trailing take-profit (from the high)
+移動停損（自高點回落）	Trailing stop (from the high)
+虧損 8% 一律停損，不攤平	Always stop out at -8%; never average down
+觀察均線	Watched MA
+記錄第一筆買進後，持股、成本與損益將自動計算。	After you record your first buy, holdings, cost and P/L are calculated automatically.
+記錄買進	Record a buy
+證券帳戶	Brokerage accounts
+財報公布前不加碼	Don't add before earnings
+避免誤判	Avoid false signals
+重新站上兩條均線視為買進訊號	Reclaiming both MAs counts as a buy signal
+長線為兩倍門檻	Long-term uses double the threshold
+輔助參考	Supplementary
+此期間沒有可標示於地圖的支出	No mappable spending in this period
+觀察	Watchlist
+持股	Holdings
+買進	Buy
