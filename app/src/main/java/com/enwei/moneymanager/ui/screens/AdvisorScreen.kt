@@ -400,7 +400,11 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         com.enwei.moneymanager.ui.components.RevenueCompare(r.picks.map { it.symbol })
         r.picks.groupBy { it.style.ifBlank { "其他" } }.toSortedMap(compareBy { listOf("短線", "長線").indexOf(it).let { i -> if (i < 0) 9 else i } }).forEach { (style, list) ->
             SubHead("$style（${list.size}）")
-            list.forEach { PickCard(it, r.cites, newsById, foldKey = "pick.${it.symbol}") { nav.navigate("stock/${it.symbol}") } }
+            // 股與股之間用整條分隔線隔開
+            list.forEachIndexed { i, it ->
+                if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                PickCard(it, r.cites, newsById, foldKey = "pick.${it.symbol}") { nav.navigate("stock/${it.symbol}") }
+            }
         }
     }
     // ④ 持股動作：動作用色塊標示，理由條列

@@ -333,11 +333,30 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             if (sel != null) {
                                 val dd = java.time.LocalDate.ofEpochDay(kb.days[sel])
                                 val chg = if (sel > 0) (kb.close[sel] / kb.close[sel - 1] - 1) * 100 else null
-                                Text(
-                                    "${dd.monthValue}/${dd.dayOfMonth}　開 ${"%.2f".format(kb.open[sel])}　高 ${"%.2f".format(kb.high[sel])}　低 ${"%.2f".format(kb.low[sel])}　收 ${"%.2f".format(kb.close[sel])}" +
-                                        (chg?.let { "（${"%+.2f".format(it)}%）" } ?: "") + (kb.volume.getOrNull(sel)?.let { "　量 ${"%,.0f".format(it / 1000)} 張" } ?: ""),
-                                    fontSize = AppText.caption, color = if ((chg ?: 0.0) >= 0) StockUp else StockDown, modifier = Modifier.padding(top = 6.dp),
-                                )
+                                // 第一行：日期（含年份）、漲跌幅、量；第二行：開高低收四欄對齊
+                                val upC = if ((chg ?: 0.0) >= 0) StockUp else StockDown
+                                val dateLabel = when {
+                                    span == 2 && !hourly -> "${dd.year} 年 ${dd.monthValue} 月"
+                                    span == 1 && !hourly -> "${dd.year}/${dd.monthValue}/${dd.dayOfMonth} 當週"
+                                    else -> "${dd.year}/${dd.monthValue}/${dd.dayOfMonth}（${"一二三四五六日"[dd.dayOfWeek.value - 1]}）"
+                                }
+                                Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(dateLabel, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                                        chg?.let { Text("%+.2f%%".format(it), fontSize = AppText.caption, color = upC, fontWeight = FontWeight.Medium) }
+                                        kb.volume.getOrNull(sel)?.let {
+                                            Text("　量 ${"%,.0f".format(it / 1000)} 張", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    Row(Modifier.fillMaxWidth().padding(top = 2.dp)) {
+                                        listOf("開" to kb.open[sel], "高" to kb.high[sel], "低" to kb.low[sel], "收" to kb.close[sel]).forEach { (l, v) ->
+                                            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                                Text(l, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text(" ${"%.2f".format(v)}", fontSize = AppText.caption, color = if (l == "收") upC else MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             // 60 分 K：依「保本＋移動停利」的快慢線規則標買賣點；日 K：依停損／移動停損／停利標
                             val hourSignals = if (hourly && showSignals) remember(System.identityHashCode(kb), plan) {
