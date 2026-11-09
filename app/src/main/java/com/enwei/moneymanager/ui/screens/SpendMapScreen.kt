@@ -270,16 +270,24 @@ fun SpendMapScreen(nav: NavController) {
 /** 地圖針頭的半徑（dp）：金額越大越大，但差距不誇張 */
 private fun pinR(sp: SpendSpot, maxTotal: Long) = 7.0 + 5.0 * kotlin.math.sqrt(sp.total.toDouble() / maxTotal)
 
-/** 地圖圖磚的記憶體快取（最近用過的 120 張）。 */
+/** 地圖圖磚的記憶體快取（最近用過的 240 張）。 */
 private object TileCache {
-    val mem = object : android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(120) {}
+    val mem = object : android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(240) {}
     val inflight = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-    val failed = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    /** 下載失敗的時間：幾秒後自動重試，不會永遠空白 */
+    val failedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    /** 最近一次畫面需要的圖磚：排隊輪到時已經不在畫面上（縮放、拖走了）就不下載，避免塞車 */
+    @Volatile var visible: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     val gate = kotlinx.coroutines.sync.Semaphore(6)
+    /** 預先載入另外排隊，不跟畫面上的圖磚搶 */
+    val preGate = kotlinx.coroutines.sync.Semaphore(2)
     /** 圖磚存在手機的快取（60MB）：看過的地方下次直接從手機讀，不用再下載 */
     val client by lazy {
         com.enwei.moneymanager.net.Http.client.newBuilder()
             .cache(okhttp3.Cache(java.io.File(com.enwei.moneymanager.MoneyApp.instance.cacheDir, "map_tiles"), 60L * 1024 * 1024))
+            .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .callTimeout(14, java.util.concurrent.TimeUnit.SECONDS)
             .addNetworkInterceptor { ch -> ch.proceed(ch.request()).newBuilder().header("Cache-Control", "public, max-age=1209600").build() }
             .build()
     }
@@ -330,13 +338,23 @@ private fun SpendMap(
     // 底圖：預設「臺灣通用電子地圖」（國土測繪中心，免金鑰、中文清楚）；可切換成 OpenStreetMap。深色模式在畫的時候轉暗
     val mapPrefs = remember { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("map_prefs", android.content.Context.MODE_PRIVATE) }
     var style by remember { mutableStateOf(mapPrefs.getString("style", "emap") ?: "emap") }
-    fun load(z: Int, x: Int, y: Int) {
+    fun load(z: Int, x: Int, y: Int, pre: Boolean = false) {
+        if (z < 0 || y < 0 || y >= (1 shl z)) return
         val key = "$style/$z/$x/$y"
-        if (TileCache.mem.get(key) != null || key in TileCache.failed || !TileCache.inflight.add(key)) return
+        if (!pre) TileCache.visible.add(key)
+        if (TileCache.mem.get(key) != null) return
+        if ((TileCache.failedAt[key] ?: 0L) > System.currentTimeMillis() - 4000) return
+        if (!TileCache.inflight.add(key)) return
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            var failed = false
+            var fetched = false
             try {
-                TileCache.gate.acquire()
+                val gate = if (pre) TileCache.preGate else TileCache.gate
+                gate.acquire()
                 try {
+                    // 輪到時已經不在畫面上：跳過（下次需要再排）
+                    if (!pre && key !in TileCache.visible) return@launch
+                    fetched = true
                     // 依序試：通用電子地圖 → OpenStreetMap（這一格載不到就換下一個，不會一片空白）
                     val urls = buildList {
                         if (key.startsWith("emap/")) add("https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/$z/$y/$x")
@@ -353,13 +371,33 @@ private fun SpendMap(
                         }.getOrNull()
                         if (bmp != null) break
                     }
-                    bmp?.let { TileCache.mem.put(key, it.asImageBitmap()) } ?: TileCache.failed.add(key)
-                } finally { TileCache.gate.release() }
+                    if (bmp != null) { TileCache.mem.put(key, bmp.asImageBitmap()); TileCache.failedAt.remove(key) }
+                    else { TileCache.failedAt[key] = System.currentTimeMillis(); failed = true }
+                } finally { gate.release() }
             } catch (_: Exception) {
+                failed = true
             } finally {
                 TileCache.inflight.remove(key)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { version++ }
+                if (fetched || failed) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.NonCancellable) { version++ }
             }
+            // 失敗的圖磚過一下自動重畫，重新下載
+            if (failed) { kotlinx.coroutines.delay(4500); version++ }
+        }
+    }
+    // 預先載入：一打開就把整個範圍放大、縮小一級的圖磚先抓好，縮放時不用等
+    androidx.compose.runtime.LaunchedEffect(style, zoom >= 0, sizePx) {
+        if (zoom < 0 || sizePx.width == 0) return@LaunchedEffect
+        val base = (kotlin.math.round(zoom).toInt() + 1).coerceIn(2, 19)
+        for (z in listOf(base - 1, base + 1, base - 2, base + 2)) {
+            if (z !in 2..19) continue
+            val n = 1 shl z
+            val world = tilePx * Math.pow(2.0, z - 1.0)
+            val t = world / n
+            val left = cx * world - sizePx.width / 2; val top = cy * world - sizePx.height / 2
+            val xs = kotlin.math.floor(left / t).toInt()..kotlin.math.floor((left + sizePx.width) / t).toInt()
+            val ys = kotlin.math.floor(top / t).toInt().coerceAtLeast(0)..kotlin.math.floor((top + sizePx.height) / t).toInt().coerceAtMost(n - 1)
+            if (xs.count() * ys.count() > 40) continue
+            for (ty in ys) for (tx in xs) load(z, ((tx % n) + n) % n, ty, pre = true)
         }
     }
     val bg = if (dark) androidx.compose.ui.graphics.Color(0xFF1E1E21) else androidx.compose.ui.graphics.Color(0xFFF2F2F2)
@@ -416,25 +454,43 @@ private fun SpendMap(
             val left = cx * world - size.width / 2; val top = cy * world - size.height / 2
             val x0 = kotlin.math.floor(left / t).toInt(); val x1 = kotlin.math.floor((left + size.width) / t).toInt()
             val y0 = kotlin.math.floor(top / t).toInt().coerceAtLeast(0); val y1 = kotlin.math.floor((top + size.height) / t).toInt().coerceAtMost(n - 1)
+            // 這一畫面需要的圖磚重新算（排隊中但已不需要的會被跳過）
+            TileCache.visible = java.util.concurrent.ConcurrentHashMap.newKeySet()
             for (ty in y0..y1) for (tx in x0..x1) {
                 val wx = ((tx % n) + n) % n
                 val img = TileCache.mem.get("$style/$z/$wx/$ty")
                 if (img == null) {
                     load(z, wx, ty)
-                    // 還在下載：先用上一級（已經有的）圖磚放大頂著，不會一片空白
-                    TileCache.mem.get("$style/${z - 1}/${wx / 2}/${ty / 2}")?.let { parent ->
-                        val half = parent.width / 2
-                        drawImage(parent, srcOffset = androidx.compose.ui.unit.IntOffset((wx % 2) * half, (ty % 2) * half),
-                            srcSize = androidx.compose.ui.unit.IntSize(half, half),
+                    // 還在下載：先用上面幾級（已經有的）圖磚放大頂著，不會一片空白
+                    var drawn = false
+                    for (up in 1..4) {
+                        val pz = z - up
+                        if (pz < 0) break
+                        val parent = TileCache.mem.get("$style/$pz/${wx shr up}/${ty shr up}") ?: continue
+                        val part = parent.width shr up
+                        if (part < 1) break
+                        val mask = (1 shl up) - 1
+                        drawImage(parent, srcOffset = androidx.compose.ui.unit.IntOffset((wx and mask) * part, (ty and mask) * part),
+                            srcSize = androidx.compose.ui.unit.IntSize(part, part),
                             dstOffset = androidx.compose.ui.unit.IntOffset((tx * t - left).toInt(), (ty * t - top).toInt()),
                             dstSize = androidx.compose.ui.unit.IntSize(kotlin.math.ceil(t).toInt() + 1, kotlin.math.ceil(t).toInt() + 1),
                             colorFilter = tileFilter)
-                    } ?: load(z - 1, wx / 2, ty / 2)
+                        drawn = true
+                        break
+                    }
+                    if (!drawn) load(z - 1, wx / 2, ty / 2)
                     continue
                 }
                 drawImage(img, dstOffset = androidx.compose.ui.unit.IntOffset((tx * t - left).toInt(), (ty * t - top).toInt()),
                     dstSize = androidx.compose.ui.unit.IntSize(kotlin.math.ceil(t).toInt() + 1, kotlin.math.ceil(t).toInt() + 1),
                     colorFilter = tileFilter)
+            }
+            // 畫面外一圈先預載：拖動時旁邊已經有圖（下載不忙時才排）
+            if (TileCache.inflight.size < 8) {
+                for (ty in (y0 - 1)..(y1 + 1)) for (tx in (x0 - 1)..(x1 + 1)) {
+                    if (ty in y0..y1 && tx in x0..x1) continue
+                    load(z, ((tx % n) + n) % n, ty, pre = true)
+                }
             }
             // 地圖針：針尖指在位置上，針頭顏色＝分類、大小＝金額；選中的針頭描白邊
             spots.sortedBy { if (it == picked) 1 else 0 }.forEach { sp ->

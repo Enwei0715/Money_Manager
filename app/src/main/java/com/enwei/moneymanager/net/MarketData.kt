@@ -109,8 +109,14 @@ object QuoteService {
         misNum(e.str("pz"))?.let { return it }
         val bid = misNum(e.str("b")?.split('_')?.firstOrNull())
         val ask = misNum(e.str("a")?.split('_')?.firstOrNull())
+        val up = misNum(e.str("u")); val down = misNum(e.str("w"))
+        val hi = misNum(e.str("h")); val lo = misNum(e.str("l"))
+        // 漲停鎖死：沒有賣單、買在漲停價（或今天最高就是漲停）→ 價格就是漲停價；跌停反之
+        if (up != null && ask == null && (bid?.let { it >= up - 1e-6 } == true || hi?.let { it >= up - 1e-6 } == true)) return up
+        if (down != null && bid == null && (ask?.let { it <= down + 1e-6 } == true || lo?.let { it <= down + 1e-6 } == true)) return down
         if (bid != null && ask != null) return (bid + ask) / 2
-        return bid ?: ask ?: misNum(e.str("y"))
+        // 今天有成交卻拿不到最新價時，不能退回昨收（會變成 0%）
+        return bid ?: ask ?: (if (hi != null && hi == lo) hi else null) ?: misNum(e.str("y"))
     }
 
     private fun misDay(e: kotlinx.serialization.json.JsonElement): Long =

@@ -22,10 +22,13 @@ data class DailyBars(
         return when {
             l.day == lastDay -> {
                 val i = close.lastIndex
+                // 即時來源有今天的高低就以它為準（Yahoo 盤中的日 K 常把昨收當成今天的低點）
+                val hi = maxOf(l.high ?: high[i], l.price)
+                val lo = minOf(l.low ?: low[i], l.price)
                 copy(
                     close = close.dropLast(1) + l.price,
-                    high = high.dropLast(1) + maxOf(high[i], l.high ?: l.price, l.price),
-                    low = low.dropLast(1) + minOf(low[i], l.low ?: l.price, l.price),
+                    high = high.dropLast(1) + hi,
+                    low = low.dropLast(1) + lo,
                     open = if (l.open != null) open.dropLast(1) + l.open else open,
                     volume = if (l.volume != null && volume.size == close.size) volume.dropLast(1) + l.volume else volume,
                 )
