@@ -115,7 +115,7 @@ object PlaceHints {
             val hit = kotlinx.coroutines.withTimeoutOrNull(12_000) {
                 val g = near.mapNotNull { (la, lo) -> geocoderNear(n, la, lo)?.let { h -> h to dist(la, lo, h.first, h.second) } }
                 g.ifEmpty {
-                    near.mapNotNull { (la, lo) -> photonNear(n, la, lo, 2500)?.let { h -> h to dist(la, lo, h.first, h.second) } }
+                    near.mapNotNull { (la, lo) -> (photonNear(n, la, lo, 2500) ?: nominatimNear(n, la, lo, 2500))?.let { h -> h to dist(la, lo, h.first, h.second) } }
                 }.minByOrNull { it.second }?.first
             }
             geoPrefs.edit().putString(n, hit?.let { "${it.first},${it.second}" } ?: "").apply()
@@ -484,21 +484,79 @@ object PlaceHints {
             return pair(Regex("!3d(-?\\d+\\.\\d+)!4d(-?\\d+\\.\\d+)").find(dec))
         }
         parse(url)?.let { return@withContext it }
-        // 短網址：跟著轉址拿到完整網址與頁面內容（用桌機的瀏覽器標頭，避免被導到 App）
-        val client = com.enwei.moneymanager.net.Http.client.newBuilder().callTimeout(12, java.util.concurrent.TimeUnit.SECONDS).build()
-        val (finalUrl, body) = runCatching {
-            val req = okhttp3.Request.Builder().url(url)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36")
-                .header("Accept-Language", "zh-TW,zh;q=0.9").build()
-            client.newCall(req).execute().use { r -> r.request.url.toString() to (r.body?.string()?.take(400_000) ?: "") }
-        }.getOrNull() ?: return@withContext null
-        parse(finalUrl)?.let { return@withContext it }
+        // 短網址：一步一步跟著轉址（每一站的網址都看），手機 App 分享的連結常轉到「maps?q=店名, 地址&ftid=…」，沒有座標
+        val client = com.enwei.moneymanager.net.Http.client.newBuilder().followRedirects(false).followSslRedirects(false)
+            .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS).build()
+        val hops = mutableListOf(url)
+        var body = ""
+        runCatching {
+            var cur = url
+            repeat(6) {
+                val req = okhttp3.Request.Builder().url(cur)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36")
+                    .header("Accept-Language", "zh-TW,zh;q=0.9").build()
+                val next = client.newCall(req).execute().use { r ->
+                    val loc = r.header("Location")
+                    if (r.isRedirect && loc != null) r.request.url.resolve(loc)?.toString() else { body = r.body?.string()?.take(400_000).orEmpty(); null }
+                } ?: return@runCatching
+                hops += next; cur = next
+                parse(next)?.let { return@withContext it }
+            }
+        }
         placeOnly(body)?.let { return@withContext it }
-        // 網址只有店名（/maps/place/店名/…）：用店名在附近找
-        val name = Regex("/maps/place/([^/?]+)").find(finalUrl)?.groupValues?.get(1)
-            ?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrDefault(it) }?.replace('+', ' ')?.trim()
-            ?: Regex("[?&]q=([^&]+)").find(finalUrl)?.groupValues?.get(1)?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrDefault(it) }
-        if (!name.isNullOrBlank() && near != null) geocoderNear(name, near.first, near.second, 30_000) else null
+        // 頁面的預覽圖（staticmap）以地點為中心
+        pair(Regex("staticmap\\?center=(-?\\d{1,2}\\.\\d{3,})(?:%2C|,)(-?\\d{1,3}\\.\\d{3,})").find(body))?.let { return@withContext it }
+        pair(Regex("markers=(-?\\d{1,2}\\.\\d{3,})(?:%2C|,)(-?\\d{1,3}\\.\\d{3,})").find(body))?.let { return@withContext it }
+        // 從網址取出「店名, 地址」：先用地址找（最準），再用店名在附近找
+        fun dec(x: String) = runCatching { java.net.URLDecoder.decode(x, "UTF-8") }.getOrDefault(x)
+        val q = hops.asReversed().firstNotNullOfOrNull { h ->
+            Regex("[?&](?:q|query|daddr)=([^&]+)").find(h)?.groupValues?.get(1)?.let(::dec)
+                ?: Regex("/maps/place/([^/?]+)").find(h)?.groupValues?.get(1)?.let(::dec)?.replace('+', ' ')
+        }?.trim().orEmpty()
+        val ogTitle = Regex("<meta[^>]+(?:property|itemprop)=\"(?:og:title|name)\"[^>]+content=\"([^\"]+)\"").find(body)?.groupValues?.get(1)
+            ?: Regex("<meta[^>]+content=\"([^\"]+)\"[^>]+(?:property|itemprop)=\"(?:og:title|name)\"").find(body)?.groupValues?.get(1)
+        val text0 = q.ifBlank { ogTitle.orEmpty().replace(" · ", ", ") }
+        if (text0.isBlank()) return@withContext null
+        val parts = text0.split(Regex(",\\s*|，|\\s·\\s"), limit = 2)
+        val name = parts.first().trim()
+        val addr = parts.getOrNull(1)?.trim()?.takeIf { a -> a.any { it.isDigit() } || Regex("[市縣區鄉鎮路街]").containsMatchIn(a) }
+        if (addr != null) geocodeAddress(addr)?.let { return@withContext it }
+        val center = near ?: (25.0136 to 121.5414)
+        geocoderNear(name, center.first, center.second, 30_000)
+    }
+
+    /** Nominatim（OpenStreetMap 的官方搜尋）在 [lat],[lon] 附近 [radius] 公尺的框內找店名 */
+    suspend fun nominatimNear(name: String, lat: Double, lon: Double, radius: Int): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+        runCatching {
+            val d = radius / 111_000.0; val dl = d / kotlin.math.cos(Math.toRadians(lat))
+            val key = name.replace(Regex("[（(].*?[)）]"), "").trim()
+            val u = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&bounded=1&accept-language=zh-TW" +
+                "&viewbox=${lon - dl},${lat + d},${lon + dl},${lat - d}&q=" + java.net.URLEncoder.encode(key, "UTF-8")
+            val arr = com.enwei.moneymanager.net.Http.getJson(u, mapOf("User-Agent" to UA)) as? kotlinx.serialization.json.JsonArray ?: return@runCatching null
+            val core = matchKey(name)
+            arr.mapNotNull { e ->
+                val o = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                val nm = ((o["name"] ?: o["display_name"]) as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+                if (!nm.lowercase().contains(core)) return@mapNotNull null
+                val la = (o["lat"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
+                val lo = (o["lon"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return@mapNotNull null
+                Triple(la, lo, dist(lat, lon, la, lo))
+            }.minByOrNull { it.third }?.let { it.first to it.second }
+        }.getOrNull()
+    }
+
+    /** 地址 → 座標：手機內建的 Google 地理編碼（台灣範圍內），找不到再用 OpenStreetMap 的 Nominatim。 */
+    suspend fun geocodeAddress(addr: String): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+        val a = addr.replace(Regex("^\\d{3,6}"), "").trim()
+        geoByName(a, 21.8, 119.3, 25.4, 122.1).firstOrNull { it.hasLatitude() }?.let { return@withContext it.latitude to it.longitude }
+        runCatching {
+            val u = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=tw&accept-language=zh-TW&q=" + java.net.URLEncoder.encode(a, "UTF-8")
+            val arr = com.enwei.moneymanager.net.Http.getJson(u, mapOf("User-Agent" to UA)) as? kotlinx.serialization.json.JsonArray
+            val o = arr?.firstOrNull() as? kotlinx.serialization.json.JsonObject ?: return@runCatching null
+            val la = (o["lat"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return@runCatching null
+            val lo = (o["lon"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return@runCatching null
+            la to lo
+        }.getOrNull()
     }
 
     /** OpenStreetMap 類型 → 分類名稱關鍵字（在使用者的分類裡找名稱含這些字的）。 */
