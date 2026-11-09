@@ -221,7 +221,7 @@ fun SpendMapScreen(nav: NavController) {
                         title = { Text("套用 Google 地圖的位置？") },
                         text = { Text("「$name」改用剛複製的 Google 地圖位置") },
                         confirmButton = { androidx.compose.material3.TextButton(onClick = {
-                            PlaceHints.setMerchantPin(name, ll.first, ll.second); pins = PlaceHints.merchantPins(); selKey = "$name|"; focusTick++
+                            PlaceHints.setMerchantPin(name, ll.first, ll.second, "連結"); pins = PlaceHints.merchantPins(); selKey = "$name|"; focusTick++
                             googleHit = null; googleFor = null
                         }) { Text("套用") } },
                         dismissButton = { androidx.compose.material3.TextButton(onClick = { googleHit = null; googleFor = null }) { Text("取消") } },

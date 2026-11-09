@@ -85,6 +85,7 @@ fun MerchantPlacesScreen(nav: NavController) {
     val places = remember(txns, tick) {
         val samples = PlaceHints.samples(ctx).associateBy { it.txnId }
         val pins = PlaceHints.merchantPins()
+        val via = PlaceHints.pinSources()
         val geo = PlaceHints.merchantGeo()
         val amb = PlaceHints.ambiguous()
         txns.filter { t -> val m = t.merchant!!.trim(); !online(m, t.categoryId) && (!chain(m) || branchy(m)) }
@@ -92,7 +93,7 @@ fun MerchantPlacesScreen(nav: NavController) {
             .map { (m, list) ->
                 val fixes = list.mapNotNull { samples[it.id] }
                 when {
-                    pins[m] != null -> Place(m, list.size, pins[m], "手動")
+                    pins[m] != null -> Place(m, list.size, pins[m], via[m] ?: "已設定")
                     fixes.isNotEmpty() -> Place(m, list.size, fixes.map { it.lat }.average() to fixes.map { it.lon }.average(), "記帳定位")
                     geo[m] != null -> Place(m, list.size, geo[m], "自動")
                     m in amb -> Place(m, list.size, null, "多個結果")
@@ -120,7 +121,7 @@ fun MerchantPlacesScreen(nav: NavController) {
         val ll = PlaceHints.coordsFromMapsLink(text, PlaceHints.anchors(ctx).firstOrNull(), name)
         linkBusy = false
         if (ll != null) {
-            PlaceHints.setMerchantPin(name, ll.first, ll.second); tick++; linkFor = null
+            PlaceHints.setMerchantPin(name, ll.first, ll.second, "連結"); tick++; linkFor = null
             android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("已設定「$name」的位置"), android.widget.Toast.LENGTH_SHORT).show()
         } else {
             linkFor = name; linkText = text
@@ -176,7 +177,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("Google Places", Modifier.weight(1f))
-                    Text(if (gOn) "已設定" else "未設定", fontSize = AppText.caption,
+                    Text(if (gOn) "本月查 ${com.enwei.moneymanager.net.GooglePlaces.usedThisMonth} 次" else "未設定", fontSize = AppText.caption,
                         color = if (gOn) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -226,36 +227,43 @@ fun MerchantPlacesScreen(nav: NavController) {
         }
     }
 
+    // 一家店：上面是位置預覽（點地圖就能修改），下面只留常用的幾個動作；連結、目前位置等收在「其他方式」
     open?.let { p ->
+        var more by remember(p.name) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { open = null },
-            title = { Text(p.name) },
+            title = { Text(p.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
             text = {
                 Column {
-                    Text(p.loc?.let { "${p.source}・%.5f, %.5f".format(it.first, it.second) } ?: p.source.ifBlank { "沒有位置" },
-                        fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
                     val action: @Composable (String, () -> Unit) -> Unit = { label, onClick -> ActionLine(label) { open = null; onClick() } }
-                    if (mbOn || gOn) action("搜尋店家") { searching = p }
+                    if (p.loc != null) {
+                        MapPreview(p.name, p.loc, Modifier.fillMaxWidth().height(150.dp)) { open = null; picking = p }
+                        Text("${p.source}・點地圖可以修改", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp, bottom = 4.dp))
+                    }
+                    if (mbOn || gOn) action("搜尋店家") { searching = p } else action("自動找") { autoFind(listOf(p.name)) }
+                    if (p.loc == null) action("在地圖上點選") { picking = p }
                     action("改名") { renaming = p }
-                    action("不是實體店（不放地圖）") { PlaceHints.setExcluded(p.name, true); tick++ }
-                    action("在地圖上點選") { picking = p }
-                    action("自動找") { autoFind(listOf(p.name)) }
-                    action("在 Google 地圖找") {
-                        googleFor = p.name
-                        runCatching {
-                            ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("geo:0,0?q=" + android.net.Uri.encode(p.name))))
+                    if (!more) Text("其他方式", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().clickable { more = true }.padding(vertical = 12.dp))
+                    else {
+                        action("Google 地圖連結") {
+                            googleFor = p.name
+                            runCatching {
+                                ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse("geo:0,0?q=" + android.net.Uri.encode(p.name))))
+                            }
                         }
-                    }
-                    action("貼上地圖連結") { applyClipboard(p.name) }
-                    action("用目前位置") {
-                        scope.launch {
-                            val l = kotlinx.coroutines.withTimeoutOrNull(8000) { PlaceHints.current(ctx) }
-                            if (l != null) { PlaceHints.setMerchantPin(p.name, l.latitude, l.longitude); tick++ }
-                            else android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("讀不到目前位置"), android.widget.Toast.LENGTH_SHORT).show()
+                        action("用目前位置") {
+                            scope.launch {
+                                val l = kotlinx.coroutines.withTimeoutOrNull(8000) { PlaceHints.current(ctx) }
+                                if (l != null) { PlaceHints.setMerchantPin(p.name, l.latitude, l.longitude, "定位"); tick++ }
+                                else android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("讀不到目前位置"), android.widget.Toast.LENGTH_SHORT).show()
+                            }
                         }
+                        action("不是實體店（不放地圖）") { PlaceHints.setExcluded(p.name, true); tick++ }
+                        if (p.loc != null) action("清除位置") { PlaceHints.clearMerchantPin(p.name); PlaceHints.clearMerchantGeo(p.name); tick++ }
                     }
-                    if (p.source == "手動") action("取消手動位置") { PlaceHints.clearMerchantPin(p.name); tick++ }
                 }
             },
             confirmButton = { TextButton(onClick = { open = null }) { Text("關閉") } },
@@ -276,7 +284,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                     PlaceHints.clearMerchantPin(p.name); PlaceHints.clearMerchantGeo(p.name)
                     android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("已改名為「$to」（$n 筆）"), android.widget.Toast.LENGTH_SHORT).show()
                 }
-                PlaceHints.setMerchantPin(to, hit.lat, hit.lon); tick++
+                PlaceHints.setMerchantPin(to, hit.lat, hit.lon, "搜尋"); tick++
             }
         }
     }
@@ -293,7 +301,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                     scope.launch {
                         val n = repo.renameMerchant(p.name, to)
                         // 位置跟著新名字走
-                        PlaceHints.merchantPins()[p.name]?.let { ll -> PlaceHints.setMerchantPin(to, ll.first, ll.second); PlaceHints.clearMerchantPin(p.name) }
+                        PlaceHints.merchantPins()[p.name]?.let { ll -> PlaceHints.setMerchantPin(to, ll.first, ll.second, PlaceHints.pinSources()[p.name] ?: "地圖"); PlaceHints.clearMerchantPin(p.name) }
                         PlaceHints.clearMerchantGeo(p.name)
                         tick++
                         android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("已改名（$n 筆）"), android.widget.Toast.LENGTH_SHORT).show()
@@ -307,7 +315,7 @@ fun MerchantPlacesScreen(nav: NavController) {
     picking?.let { p ->
         val start = p.loc ?: PlaceHints.anchors(ctx).firstOrNull() ?: (25.0136 to 121.5414)
         MapPicker(p.name, start) { ll ->
-            if (ll != null) { PlaceHints.setMerchantPin(p.name, ll.first, ll.second); tick++ }
+            if (ll != null) { PlaceHints.setMerchantPin(p.name, ll.first, ll.second, "地圖"); tick++ }
             picking = null
         }
     }

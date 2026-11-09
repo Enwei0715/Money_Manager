@@ -36,7 +36,17 @@ object GooglePlaces {
     private fun dist(aLat: Double, aLon: Double, bLat: Double, bLon: Double): Float =
         FloatArray(1).also { android.location.Location.distanceBetween(aLat, aLon, bLat, bLon, it) }[0]
 
+    /** 用量：本月與今天打了幾次（每天最多 [DAILY_CAP] 次，超過就先不查，避免意外大量呼叫） */
+    const val DAILY_CAP = 150
+    private fun dayKey() = "d:" + java.time.LocalDate.now()
+    private fun monthKey() = "m:" + java.time.YearMonth.now()
+    val usedThisMonth: Int get() = prefs.getInt(monthKey(), 0)
+    val usedToday: Int get() = prefs.getInt(dayKey(), 0)
+    private fun count() { prefs.edit().putInt(dayKey(), usedToday + 1).putInt(monthKey(), usedThisMonth + 1).apply() }
+
     private suspend fun post(path: String, body: JsonObject, near: Pair<Double, Double>?): List<Mapbox.Place>? = withContext(Dispatchers.IO) {
+        if (usedToday >= DAILY_CAP) { lastError = "今天已查 $DAILY_CAP 次，明天再查"; lastOk = false; return@withContext null }
+        count()
         runCatching {
             val req = okhttp3.Request.Builder().url("https://places.googleapis.com/v1/$path")
                 .header("X-Goog-Api-Key", key).header("X-Goog-FieldMask", FIELDS)

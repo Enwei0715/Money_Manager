@@ -196,6 +196,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     var showTime by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var merchantFocused by remember { mutableStateOf(false) }
+    var noteFocused by remember { mutableStateOf(false) }
     var calcMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(id) {
@@ -251,6 +252,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     // 店家的位置：搜尋結果、附近的店帶的座標；選了店就記下它的位置（儲存時存成這家店的位置）
     var placeLocs by remember { mutableStateOf<Map<String, Pair<Double, Double>>>(emptyMap()) }
     var merchantAt by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    var merchantVia by remember { mutableStateOf("搜尋") }
     var pickMap by remember { mutableStateOf(false) }
     val knownPlaces = remember { com.enwei.moneymanager.data.PlaceHints.merchantGeo().mapNotNull { (k, v) -> v?.let { k to it } }.toMap() + com.enwei.moneymanager.data.PlaceHints.merchantPins() }
     // Mapbox：打字時搜尋附近的店
@@ -345,7 +347,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     fun save(again: Boolean) {
         val t0 = build() ?: return
         // 選了店家位置（搜尋結果、附近的店或在地圖上修改）：存成這家店的位置
-        merchantAt?.let { ll -> merchant.trim().takeIf { it.isNotEmpty() }?.let { com.enwei.moneymanager.data.PlaceHints.setMerchantPin(it, ll.first, ll.second) } }
+        merchantAt?.let { ll -> merchant.trim().takeIf { it.isNotEmpty() }?.let { com.enwei.moneymanager.data.PlaceHints.setMerchantPin(it, ll.first, ll.second, merchantVia) } }
         if (payer != null) {
             scope.launch {
                 val pid = payer.person ?: repo.debtPerson(payer.name)
@@ -659,7 +661,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     MapPreview(merchant.trim(), at, Modifier.fillMaxWidth().height(130.dp).padding(start = placeIndent, end = 16.dp, top = 6.dp)) { pickMap = true }
                 }
                 if (pickMap) MapPicker(merchant.trim(), at ?: hereLoc?.let { it.latitude to it.longitude } ?: (25.0136 to 121.5414)) { ll ->
-                    if (ll != null) merchantAt = ll
+                    if (ll != null) { merchantAt = ll; merchantVia = "地圖" }
                     pickMap = false
                 }
                 // 自動完成：依過去紀錄建議，點選時一併帶入分類與帳戶
@@ -682,8 +684,32 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         }
                     }
                 }
-                FormRow("說明", color, false, onClick = {}) {
-                    UnderlineField(note, { note = it }, "", Modifier.onFocusChanged { if (it.isFocused) panel = Panel.NONE }, singleLine = false)
+                FormRow("說明", color, noteFocused, onClick = {}) {
+                    UnderlineField(note, { note = it }, "", Modifier.onFocusChanged { noteFocused = it.isFocused; if (it.isFocused) panel = Panel.NONE }, singleLine = false)
+                }
+                // 說明的推薦：這家店以前寫過的說明在前，再來是打的字對得上的；點一下帶入
+                if (noteFocused && type != TxnType.TRANSFER) {
+                    val m = merchant.trim()
+                    val typed = note.trim()
+                    val notes = remember(m, typed, history, type) {
+                        val pool = history.asSequence().filter { it.type == type && !it.note.isNullOrBlank() }
+                        val mine = pool.filter { m.isNotEmpty() && it.merchant?.trim() == m }.mapNotNull { it.note?.trim() }
+                        val all = pool.mapNotNull { it.note?.trim() }
+                        (mine + all).filter { it != typed && it.length <= 30 && !it.startsWith("共 ") && (typed.isEmpty() || it.contains(typed, true)) }
+                            .groupingBy { it }.eachCount().entries
+                            .sortedWith(compareByDescending<Map.Entry<String, Int>> { e -> mine.any { it == e.key } }.thenByDescending { it.value })
+                            .map { it.key }.take(8).toList()
+                    }
+                    if (notes.isNotEmpty()) Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                            .padding(start = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        notes.forEach { n ->
+                            Text(n, fontSize = AppText.secondary, maxLines = 1, color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { note = n; focusManager.clearFocus() }.padding(vertical = 4.dp))
+                        }
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider(thickness = 8.dp, color = MaterialTheme.colorScheme.background)
