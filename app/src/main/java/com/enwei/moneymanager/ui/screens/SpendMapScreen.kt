@@ -141,7 +141,9 @@ fun SpendMapScreen(nav: NavController) {
      */
     fun locOf(t: com.enwei.moneymanager.data.TxnEntity): Pair<Double, Double>? {
         val m = t.merchant?.trim().orEmpty()
-        if (m.isNotEmpty()) {
+        // 旅遊的消費（國外）：只用這一筆自己記下的位置，不用店名對到台灣的同名店
+        val travel = lk.category(lk.rootId(t.categoryId))?.name.orEmpty().contains("旅遊")
+        if (m.isNotEmpty() && !travel) {
             pins[m]?.let { return it }
             if (!chain(m) || branchy(m)) { geo[m]?.let { return it }; merchantLoc[m]?.let { return it } }
         }

@@ -69,7 +69,9 @@ fun MerchantPlacesScreen(nav: NavController) {
     fun branchy(m: String) = chain(m) && m.trim().contains(' ')
     fun online(m: String, cat: Long?): Boolean {
         val root = lk.category(lk.rootId(cat))?.name.orEmpty()
-        return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) } || m in PlaceHints.excluded() || m.lowercase() in ONLINE_EXACT
+        // 旅遊（國外）的消費不用店名在台灣找位置
+        return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) } || root.contains("旅遊") ||
+            m in PlaceHints.excluded() || m.lowercase() in ONLINE_EXACT
     }
     var renaming by remember { mutableStateOf<Place?>(null) }
 
