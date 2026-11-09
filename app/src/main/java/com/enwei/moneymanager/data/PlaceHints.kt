@@ -113,10 +113,9 @@ object PlaceHints {
             if (geoPrefs.contains(n)) return@forEachIndexed
             // 有 Mapbox 金鑰只用 Mapbox；沒有就只用 OpenStreetMap 的 Overpass（名稱相符、常活動區域 2 公里內）
             val hit = kotlinx.coroutines.withTimeoutOrNull(15_000) {
-                if (com.enwei.moneymanager.net.Mapbox.enabled) {
-                    val core = matchKey(n)
-                    near.take(1).flatMap { c -> com.enwei.moneymanager.net.Mapbox.search(n, c, 5) }
-                        .filter { it.name.lowercase().contains(core) && (it.meters ?: 0f) <= 5000f }
+                if (com.enwei.moneymanager.net.PlaceSearch.online) {
+                    near.take(1).flatMap { c -> com.enwei.moneymanager.net.PlaceSearch.search(n, c, 5) }
+                        .filter { com.enwei.moneymanager.net.Mapbox.relevant(n, it.name) && (it.meters ?: 0f) <= 5000f }
                         .minByOrNull { it.meters ?: 0f }?.let { it.lat to it.lon }
                         ?: near.mapNotNull { (la, lo) -> snapToStore(n, la, lo, 2000)?.let { h -> h to dist(la, lo, h.first, h.second) } }.minByOrNull { it.second }?.first
                 } else {
@@ -127,7 +126,7 @@ object PlaceHints {
             geoPrefs.edit().putString(n, hit?.let { "${it.first},${it.second}" } ?: "").apply()
             if (hit != null) found++
             // Overpass 是免費的公共服務：每家店之間停一下，不要一次打太快
-            if (!com.enwei.moneymanager.net.Mapbox.enabled) kotlinx.coroutines.delay(1000)
+            if (!com.enwei.moneymanager.net.PlaceSearch.online) kotlinx.coroutines.delay(1000)
         }
         onProgress(names.size, names.size)
         found
@@ -371,8 +370,8 @@ object PlaceHints {
      * 店家、餐廳（較慢，最多等 15 秒）。查不到回傳 null。
      */
     suspend fun nearbyPlace(loc: Location): Place? = withContext(Dispatchers.IO) {
-        if (com.enwei.moneymanager.net.Mapbox.enabled)
-            com.enwei.moneymanager.net.Mapbox.nearby(loc.latitude, loc.longitude, 3).firstOrNull()
+        if (com.enwei.moneymanager.net.PlaceSearch.online)
+            com.enwei.moneymanager.net.PlaceSearch.nearby(loc.latitude, loc.longitude).firstOrNull()
                 ?.takeIf { (it.meters ?: 999f) <= 60f + loc.accuracy.coerceAtMost(60f) }?.let { Place(it.name, null) }
         else overpass(loc)
     }
@@ -604,6 +603,7 @@ object PlaceHints {
     /** 地址 → 座標：手機內建的 Google 地理編碼（台灣範圍內），找不到再用 OpenStreetMap 的 Nominatim。 */
     suspend fun geocodeAddress(addr: String): Pair<Double, Double>? = withContext(Dispatchers.IO) {
         val a = addr.replace(Regex("^\\d{3,6}"), "").trim()
+        if (com.enwei.moneymanager.net.GooglePlaces.enabled) com.enwei.moneymanager.net.GooglePlaces.search(a, null, 1).firstOrNull()?.let { return@withContext it.lat to it.lon }
         if (com.enwei.moneymanager.net.Mapbox.enabled) com.enwei.moneymanager.net.Mapbox.search(a, null, 1, poi = false).firstOrNull()?.let { return@withContext it.lat to it.lon }
         geoByName(a, 21.8, 119.3, 25.4, 122.1).firstOrNull { it.hasLatitude() }?.let { return@withContext it.latitude to it.longitude }
         runCatching {

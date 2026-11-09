@@ -59,6 +59,8 @@ fun MerchantPlacesScreen(nav: NavController) {
     // Mapbox 金鑰（只存在這支手機）與搜尋
     var tokenOpen by remember { mutableStateOf(false) }
     var mbOn by remember { mutableStateOf(com.enwei.moneymanager.net.Mapbox.enabled) }
+    var gOn by remember { mutableStateOf(com.enwei.moneymanager.net.GooglePlaces.enabled) }
+    var gOpen by remember { mutableStateOf(false) }
     var searching by remember { mutableStateOf<Place?>(null) }
 
     fun chain(m: String) = CHAINS.any { m.contains(it, ignoreCase = true) }
@@ -164,6 +166,16 @@ fun MerchantPlacesScreen(nav: NavController) {
                         color = if (mbOn) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                // Google Places：店家搜尋（台灣小店最完整）
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { gOpen = true }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Google Places", Modifier.weight(1f))
+                    Text(if (gOn) "已設定" else "未設定", fontSize = AppText.caption,
+                        color = if (gOn) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(progress ?: "${places.size} 家・${missing.size} 家沒有位置", fontSize = AppText.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
@@ -199,7 +211,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                     Text(p.loc?.let { "${p.source}・%.5f, %.5f".format(it.first, it.second) } ?: p.source.ifBlank { "沒有位置" },
                         fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
                     val action: @Composable (String, () -> Unit) -> Unit = { label, onClick -> ActionLine(label) { open = null; onClick() } }
-                    if (mbOn) action("搜尋店家") { searching = p }
+                    if (mbOn || gOn) action("搜尋店家") { searching = p }
                     action("在地圖上點選") { picking = p }
                     action("自動找") { autoFind(listOf(p.name)) }
                     action("在 Google 地圖找") {
@@ -224,6 +236,8 @@ fun MerchantPlacesScreen(nav: NavController) {
         )
     }
 
+    if (gOpen) KeyDialog("Google Places 金鑰", "AIza…", { com.enwei.moneymanager.net.GooglePlaces.key }, { com.enwei.moneymanager.net.GooglePlaces.key = it },
+        { com.enwei.moneymanager.net.GooglePlaces.test() }) { gOpen = false; gOn = com.enwei.moneymanager.net.GooglePlaces.enabled; tick++ }
     if (tokenOpen) MapboxTokenDialog { tokenOpen = false; mbOn = com.enwei.moneymanager.net.Mapbox.enabled; tick++ }
     searching?.let { p ->
         MapboxSearchDialog(p.name, p.loc ?: PlaceHints.anchors(ctx).firstOrNull() ?: (25.0136 to 121.5414)) { hit ->
@@ -279,30 +293,35 @@ private fun ActionLine(label: String, onClick: () -> Unit) {
 
 /** 設定 Mapbox 公開金鑰（pk. 開頭），存檔前先測試一次。 */
 @Composable
-private fun MapboxTokenDialog(onClose: () -> Unit) {
+private fun MapboxTokenDialog(onClose: () -> Unit) = KeyDialog("Mapbox 金鑰", "pk.…", { com.enwei.moneymanager.net.Mapbox.token },
+    { com.enwei.moneymanager.net.Mapbox.token = it }, { com.enwei.moneymanager.net.Mapbox.test() }, onClose)
+
+/** 金鑰設定視窗：存檔前先測試，失敗就還原並顯示原因；留空＝刪除金鑰。 */
+@Composable
+private fun KeyDialog(title: String, hint: String, get: () -> String, set: (String) -> Unit, test: suspend () -> String?, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var text by remember { mutableStateOf(com.enwei.moneymanager.net.Mapbox.token) }
+    var text by remember { mutableStateOf(get()) }
     var msg by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("Mapbox 金鑰") },
+        title = { Text(title) },
         text = {
             Column {
-                androidx.compose.material3.OutlinedTextField(text, { text = it.trim() }, placeholder = { Text("pk.…") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                androidx.compose.material3.OutlinedTextField(text, { text = it.trim() }, placeholder = { Text(hint) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (msg.isNotBlank()) Text(msg, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
             }
         },
         confirmButton = {
             TextButton(enabled = !busy, onClick = {
-                val old = com.enwei.moneymanager.net.Mapbox.token
-                com.enwei.moneymanager.net.Mapbox.token = text
+                val old = get()
+                set(text)
                 if (text.isBlank()) { onClose(); return@TextButton }
                 busy = true; msg = "測試中…"
                 scope.launch {
-                    val err = com.enwei.moneymanager.net.Mapbox.test()
+                    val err = test()
                     busy = false
-                    if (err == null) onClose() else { msg = err; com.enwei.moneymanager.net.Mapbox.token = old }
+                    if (err == null) onClose() else { msg = err; set(old) }
                 }
             }) { Text(if (busy) "測試中…" else "儲存") }
         },
@@ -319,7 +338,7 @@ private fun MapboxSearchDialog(name: String, near: Pair<Double, Double>, onDone:
         if (q.trim().length < 2) { results = emptyList(); return@LaunchedEffect }
         kotlinx.coroutines.delay(600)
         // Mapbox 找不到（台灣小店它常常沒有）就用 OpenStreetMap 在附近 3 公里找
-        results = com.enwei.moneymanager.net.Mapbox.search(q, near, 10)
+        results = com.enwei.moneymanager.net.PlaceSearch.search(q, near, 10)
             .ifEmpty { PlaceHints.overpassSearch(q, near.first, near.second, 3000) }
     }
     AlertDialog(
@@ -331,7 +350,7 @@ private fun MapboxSearchDialog(name: String, near: Pair<Double, Double>, onDone:
                 val r = results
                 when {
                     r == null -> Text("搜尋中…", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
-                    r.isEmpty() -> Text(com.enwei.moneymanager.net.Mapbox.lastError.ifBlank { "沒有結果，換個關鍵字試試" }, fontSize = AppText.caption,
+                    r.isEmpty() -> Text(com.enwei.moneymanager.net.PlaceSearch.lastError.ifBlank { "沒有結果，換個關鍵字試試" }, fontSize = AppText.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
                     else -> LazyColumn(Modifier.padding(top = 6.dp).height(320.dp)) {
                         items(r) { p ->

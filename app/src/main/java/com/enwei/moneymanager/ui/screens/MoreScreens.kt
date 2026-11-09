@@ -1217,12 +1217,12 @@ private fun LocationTest() {
                         add("查附近店家中…", true)
                         val txns = repo.transactions.first()
                         val known = ph.knownNear(loc, txns.mapNotNull { it.merchant?.trim() }.toSet())
-                        val mbOn = com.enwei.moneymanager.net.Mapbox.enabled
+                        val mbOn = com.enwei.moneymanager.net.PlaceSearch.online
                         val osm = kotlinx.coroutines.withTimeoutOrNull(20_000) {
-                            runCatching { if (mbOn) com.enwei.moneymanager.net.Mapbox.nearby(loc.latitude, loc.longitude).map { it.name } else ph.nearbyStores(loc) }.getOrNull()
+                            runCatching { if (mbOn) com.enwei.moneymanager.net.PlaceSearch.nearby(loc.latitude, loc.longitude).map { it.name } else ph.nearbyStores(loc) }.getOrNull()
                         }
-                        val src = if (mbOn) "Mapbox" else "OpenStreetMap"
-                        val err = if (mbOn) com.enwei.moneymanager.net.Mapbox.lastError else ph.lastNearbyError
+                        val src = com.enwei.moneymanager.net.PlaceSearch.source
+                        val err = if (mbOn) com.enwei.moneymanager.net.PlaceSearch.lastError else ph.lastNearbyError
                         lines = lines.dropLast(1)
                         add(if (known.isNotEmpty()) "已知位置的店（200 公尺內）：${known.joinToString("、")}" else "已知位置的店：200 公尺內沒有（到「店家位置」按自動找）", known.isNotEmpty())
                         add(when {
