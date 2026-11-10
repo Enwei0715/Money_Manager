@@ -220,9 +220,8 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 }
                 if (bank != null) Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
                     Text(
-                        // 銀行說明已寫了截止日規則時不重複
-                        "${bank.code} ${bank.name}" +
-                            (bank.note?.takeIf { it.isNotBlank() }?.let { "：$it" } ?: "：繳款截止日＝結帳日＋${bank.dueOffsetDays} 天") + if (!bank.verified) "\n（此銀行資料不足，先用常見值，請對照帳單）" else "",
+                        // 只留一行重點；順延、晚一個營業日扣款等銀行規則已自動套用，不另外說明
+                        "${bank.name}・結帳日＋${bank.dueOffsetDays} 天繳款" + if (!bank.verified) "（請對照帳單）" else "",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (bank.statementDays.isNotEmpty()) Row(
@@ -272,11 +271,13 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 DropdownLine("週末結帳", shift.label, com.enwei.moneymanager.core.StatementShift.entries.map { it to it.label }) { shift = it }
                 if (sDay != null && dDay != null) {
                     val cycle = CardCycle(sDay, dDay, shift, dueOffset)
+                    fun md(d: LocalDate) = "${d.monthValue}/${d.dayOfMonth}"
                     val due = cycle.nextDueDate(LocalDate.now().minusDays(1))
                     val apDay = autopayDay.toIntOrNull()?.takeIf { it in 1..31 || it in -3..-1 }
                     Text(
-                        "本期：結帳日 ${cycle.statementDateFor(due)} → 繳款日 $due（遇假日順延）" +
-                            if (autopayFrom != null) "\n${cycle.autopayDateFor(due, apDay)} 從「${lk.account(autopayFrom)?.name}」自動扣繳" else "",
+                        // 一行看完本期：結帳 → 繳款 → 扣款（假日順延已算進去）
+                        "本期 ${md(cycle.statementDateFor(due))} 結帳 → ${md(due)} 繳款" +
+                            if (autopayFrom != null) " → ${md(cycle.autopayDateFor(due, apDay))} 扣款" else "",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
