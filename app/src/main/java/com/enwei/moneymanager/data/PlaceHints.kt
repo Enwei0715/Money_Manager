@@ -300,6 +300,15 @@ object PlaceHints {
             .sortedBy { it.second }.map { it.first }.take(6)
     }
 
+    /** 人就在這家店：已知位置（手動指定或找到的）在 [within] 公尺內、且記過的店，取最近的一家 */
+    fun storeHere(loc: Location, names: Set<String>, within: Float = 50f): String? {
+        val all = merchantGeo().mapNotNull { (k, v) -> v?.let { k to it } }.toMap() + merchantPins()
+        return all.filter { it.key in names }
+            .map { (k, v) -> k to dist(loc.latitude, loc.longitude, v.first, v.second) }
+            .filter { it.second <= within + loc.accuracy.coerceAtMost(30f) }
+            .minByOrNull { it.second }?.first
+    }
+
     fun historyNear(ctx: Context, loc: Location, txns: List<TxnEntity>, radius: Float = 150f): List<String> {
         val byId = txns.associateBy { it.id }
         return load(ctx).mapNotNull { s ->

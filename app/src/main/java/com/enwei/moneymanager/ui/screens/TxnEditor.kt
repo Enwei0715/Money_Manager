@@ -274,12 +274,25 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         val txns = repo.allTxns()
         // 先列這附近記過的店、已知位置的店（馬上有），再補 Google 反查與地圖上的店
         val hist = ph.historyNear(appCtx, loc, txns)
-        val known = ph.knownNear(loc, txns.mapNotNull { it.merchant?.trim() }.toSet())
+        val names = txns.filter { it.type == TxnType.EXPENSE }.mapNotNull { it.merchant?.trim() }.toSet()
+        val known = ph.knownNear(loc, names)
+        // 人就在某家記過的店（已知位置 50 公尺內）：店名直接帶入，分類跟著這家店過去的紀錄（比金額推測可靠）
+        ph.storeHere(loc, names)?.let { here ->
+            if (merchant.isBlank() || merchantAuto) { merchant = here; merchantAuto = true }
+        }
         nearby = (hist + known).distinct().take(8)
         // 附近的店：有 Mapbox 金鑰用 Mapbox，否則用 OpenStreetMap（Overpass）
         if (com.enwei.moneymanager.net.PlaceSearch.online) {
             val mb = com.enwei.moneymanager.net.PlaceSearch.nearby(loc.latitude, loc.longitude)
             placeLocs = placeLocs + mb.associate { it.name to (it.lat to it.lon) }
+            // 還沒依位置帶入店名：Google／Mapbox 找到 30 公尺內的店，名稱和記過的店對得上（例如「美麗潔美學牙醫診所 | …」對「美麗潔美學牙醫診所」）就用你記的店名
+            if (merchant.isBlank()) {
+                fun norm(x: String) = x.lowercase().replace(Regex("[\\s\\-－·・()（）|｜]"), "")
+                mb.filter { (it.meters ?: 999f) <= 30f }.sortedBy { it.meters ?: 999f }.firstNotNullOfOrNull { p ->
+                    val pn = norm(p.name)
+                    names.firstOrNull { n -> norm(n).let { it.length >= 3 && (pn.contains(it) || it.contains(pn)) } }
+                }?.let { mine -> merchant = mine; merchantAuto = true }
+            }
             nearby = (hist + known + mb.map { it.name }).distinct().take(10)
             if (mb.isEmpty()) nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
         } else nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
@@ -313,11 +326,12 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 .sortedByDescending { it.score }.take(3)
         }
     }
-    // 還沒選分類、內容還沒填時，直接帶入最可能的一組（之後手動改就不再覆蓋）
-    LaunchedEffect(guesses) {
+    // 只有金額時的推測：已有店名（自己填的或依位置帶入的）就以店名為準，不用金額覆蓋；
+    // 至少兩筆相近的紀錄一致才自動帶入分類，店名只列在建議裡讓你點選，不自動填（避免 200 元掛號費被填成捷運）
+    LaunchedEffect(guesses, merchant) {
         val g = guesses.firstOrNull() ?: return@LaunchedEffect
+        if (merchant.isNotBlank() || g.count < 2) return@LaunchedEffect
         if (categoryId == null || catAuto) { categoryId = g.categoryId; catAuto = true }
-        if (g.merchant != null && (merchant.isBlank() || merchantAuto)) { merchant = g.merchant; merchantAuto = true }
     }
 
     fun build(): TxnEntity? {

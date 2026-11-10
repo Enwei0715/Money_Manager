@@ -353,6 +353,17 @@ class CategorySuggesterTest {
         assertEquals(12L, CategorySuggester.suggest("麥當勞", at(12), c, history = h)?.categoryId)
     }
 
+    @Test fun brunchOnlyInLateMorning() {
+        // 早午餐排在午餐前面：下午兩點仍是午餐，上午十點才是早午餐
+        val c = listOf(
+            CategorySuggester.Cat(1, "飲食", null),
+            CategorySuggester.Cat(10, "早午餐", 1), CategorySuggester.Cat(11, "早餐", 1), CategorySuggester.Cat(12, "午餐", 1), CategorySuggester.Cat(13, "晚餐", 1),
+        )
+        assertEquals(12L, CategorySuggester.suggest("劉家包子", at(14), c)?.categoryId)
+        assertEquals(10L, CategorySuggester.suggest("劉家包子", at(10), c)?.categoryId)
+        assertEquals(11L, CategorySuggester.suggest("劉家包子", at(7), c)?.categoryId)
+    }
+
     @Test fun ruleBeatsBuiltIn() {
         assertEquals(4L, CategorySuggester.suggest("全聯福利中心", at(10), cats, rules = mapOf("全聯福利中心" to 4L))?.categoryId)
     }

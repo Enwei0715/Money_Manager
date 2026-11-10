@@ -182,12 +182,12 @@ object CategorySuggester {
 
     // ---------- 依時間選餐點 ----------
 
-    private enum class Meal { BREAKFAST, LUNCH, TEA, DINNER, LATE }
+    private enum class Meal { BREAKFAST, BRUNCH, LUNCH, TEA, DINNER, LATE }
 
     private fun mealSlot(name: String): Meal? {
         val n = name.lowercase()
         return when {
-            "早午餐" in n || "brunch" in n -> Meal.LUNCH
+            "早午餐" in n || "brunch" in n -> Meal.BRUNCH
             "早餐" in n || "breakfast" in n -> Meal.BREAKFAST
             "午餐" in n || "lunch" in n -> Meal.LUNCH
             "下午茶" in n || "afternoon" in n -> Meal.TEA
@@ -197,9 +197,11 @@ object CategorySuggester {
         }
     }
 
+    /** 這個時間該算哪一餐（依序找使用者有的子分類）：早午餐只在上午 9～11 點，下午不會被分成早午餐 */
     private fun slotAt(at: LocalDateTime): List<Meal> = when (at.hour) {
-        in 4..9 -> listOf(Meal.BREAKFAST, Meal.LUNCH)
-        in 10..14 -> listOf(Meal.LUNCH)
+        in 4..8 -> listOf(Meal.BREAKFAST, Meal.BRUNCH, Meal.LUNCH)
+        in 9..10 -> listOf(Meal.BRUNCH, Meal.BREAKFAST, Meal.LUNCH)
+        in 11..14 -> listOf(Meal.LUNCH, Meal.BRUNCH)
         in 15..16 -> listOf(Meal.TEA, Meal.LUNCH, Meal.DINNER)
         in 17..20 -> listOf(Meal.DINNER)
         else -> listOf(Meal.LATE, Meal.DINNER)
