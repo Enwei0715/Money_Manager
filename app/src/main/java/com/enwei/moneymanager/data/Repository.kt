@@ -1719,7 +1719,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 val due = cycle.nextDueDate(cursor)
                 val deduct = cycle.autopayDateFor(due, card.autopayDay)
                 if (deduct.isAfter(today)) break
-                if (!deduct.isAfter(lastRun)) { cursor = due; continue }
+                // 上次執行那天也再檢查一次（同一期有唯一鍵，不會重複）：舊版當天執行時可能已把當天標成做過卻沒扣
+                if (deduct.isBefore(lastRun)) { cursor = due; continue }
                 val statement = cycle.statementDateFor(due)
                 val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
                 val owed = -balanceAsOf(card, txns, statement.plusDays(1).toMillis(LocalTime.MIDNIGHT), fx)
