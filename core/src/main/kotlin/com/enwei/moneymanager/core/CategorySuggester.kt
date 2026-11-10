@@ -45,7 +45,9 @@ object CategorySuggester {
                 // 餐點子分類先合併到大分類計票，最後再依時間挑那一餐
                 val c = byId.getValue(p.categoryId)
                 val id = if (mealSlot(c.name) != null && c.parentId != null) c.parentId else c.id
-                votes[id] = (votes[id] ?: 0.0) + 1.0 + (if (ageDays < 180) 1.0 else 0.0)
+                // 旅遊時記的（例如出國吃的麥當勞）只當參考：平常同一家店不會因此被分到旅遊
+                val w = if (isTravel(c, byId)) 0.25 else 1.0
+                votes[id] = (votes[id] ?: 0.0) + w * (1.0 + (if (ageDays < 180) 1.0 else 0.0))
             }
             votes.maxByOrNull { it.value }?.let { (id, _) ->
                 byId[id]?.let { return Suggestion(meal(it, at, cats).id, "依過去「$m」的記帳紀錄") }
@@ -116,7 +118,8 @@ object CategorySuggester {
         Group(listOf("麵包", "烘焙", "甜點", "蛋糕", "點心"), listOf("點心", "甜點", "零食", "下午茶", "snack") + food),
         Group(listOf("711", "全家", "萊爾富", "ok超商", "okmart"), listOf("便利商店", "超商") + food, meal = true),
         Group(listOf("ubereats", "foodpanda", "麥當勞", "肯德基", "摩斯", "漢堡王", "必勝客", "達美樂", "拿坡里", "八方雲集", "四海遊龍", "鬍鬚張", "爭鮮", "壽司郎", "藏壽司", "王品", "瓦城", "鼎泰豐",
-            "餐廳", "餐館", "小吃", "便當", "麵", "飯", "鍋", "燒肉", "拉麵", "早餐", "早午餐", "美食", "牛排", "滷味", "鹽酥雞", "自助餐", "食堂"),
+            "餐廳", "餐館", "小吃", "便當", "麵", "飯", "鍋", "燒肉", "拉麵", "早餐", "早午餐", "美食", "牛排", "滷味", "鹽酥雞", "自助餐", "食堂",
+            "包子", "饅頭", "水煎包", "蛋餅", "粥", "餃", "燒臘", "鐵板燒", "臭豆腐", "麻辣", "赤肉羹", "肉圓", "蚵仔煎", "壽司", "丼"),
             food, meal = true),
         Group(listOf("全聯", "家樂福", "carrefour", "大潤發", "好市多", "愛買", "美廉社", "超市", "市場", "楓康", "頂好", "jasons"),
             listOf("市場", "超市", "菜", "食材", "日用品", "生活用品", "購物")),
@@ -146,14 +149,33 @@ object CategorySuggester {
         Group(listOf("寵物", "動物醫院"), listOf("寵物", "pet")),
     )
 
-    /** 依候選名稱順序找使用者的分類：子分類優先（更精確），名稱相同或包含候選字都算。 */
+    private val travelWords = listOf("旅遊", "旅行", "出國", "出差", "travel", "trip")
+
+    /** 旅遊、出差這類「情境」分類（本身或上層分類名稱有旅遊等字） */
+    private fun isTravel(c: Cat, byId: Map<Long, Cat>): Boolean {
+        val names = listOfNotNull(c.name, c.parentId?.let { byId[it]?.name })
+        return names.any { n -> travelWords.any { n.lowercase().contains(it) } }
+    }
+
+    /**
+     * 依候選名稱順序找使用者的分類。先找名稱完全相同的（所有候選都找過一輪），
+     * 找不到才用「包含」比對，且不會落到旅遊、出差這類情境分類
+     * （例如候選「餐飲」不能對到「旅遊餐飲」，應該用「飲食」）。
+     */
     private fun findCat(targets: List<String>, cats: List<Cat>): Cat? {
         fun norm(s: String) = Normalizer.normalize(s, Normalizer.Form.NFKC).lowercase().replace(Regex("\\s"), "")
+        val byId = cats.associateBy { it.id }
+        val wantTravel = targets.any { t -> travelWords.any { norm(t).contains(it) } }
+        val usable = if (wantTravel) cats else cats.filter { !isTravel(it, byId) }
         for (t in targets) {
             val tn = norm(t)
-            val hits = cats.filter { c -> norm(c.name).let { it == tn || (tn.length >= 2 && it.contains(tn)) } }
-            (hits.firstOrNull { it.parentId != null && norm(it.name) == tn } ?: hits.firstOrNull { norm(it.name) == tn }
-                ?: hits.firstOrNull())?.let { return it }
+            val exact = usable.filter { norm(it.name) == tn }
+            (exact.firstOrNull { it.parentId != null } ?: exact.firstOrNull())?.let { return it }
+        }
+        for (t in targets) {
+            val tn = norm(t)
+            if (tn.length < 2) continue
+            usable.firstOrNull { norm(it.name).contains(tn) }?.let { return it }
         }
         return null
     }

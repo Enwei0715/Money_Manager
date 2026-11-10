@@ -336,6 +336,23 @@ class CategorySuggesterTest {
         assertEquals(22L, CategorySuggester.suggest("好丘", at(12), cats, history = g)?.categoryId)
     }
 
+    @Test fun everydayFoodNeverLandsInTravel() {
+        // 使用者的分類：飲食（早餐／午餐／晚餐）與旅遊（旅遊餐飲）
+        val c = listOf(
+            CategorySuggester.Cat(1, "飲食", null),
+            CategorySuggester.Cat(11, "早餐", 1), CategorySuggester.Cat(12, "午餐", 1), CategorySuggester.Cat(13, "晚餐", 1),
+            CategorySuggester.Cat(5, "旅遊", null), CategorySuggester.Cat(51, "旅遊餐飲", 5),
+        )
+        assertEquals(12L, CategorySuggester.suggest("劉家包子", at(12), c)?.categoryId)
+        assertEquals(13L, CategorySuggester.suggest("麥當勞", at(19), c)?.categoryId)
+        // 出國時在麥當勞記成旅遊餐飲一次、平常記成午餐一次：平常還是午餐
+        val h = listOf(
+            CategorySuggester.Past("麥當勞", 51, at(12).minusDays(20), 30000, 5),
+            CategorySuggester.Past("麥當勞", 12, at(12).minusDays(200), 18000, 5),
+        )
+        assertEquals(12L, CategorySuggester.suggest("麥當勞", at(12), c, history = h)?.categoryId)
+    }
+
     @Test fun ruleBeatsBuiltIn() {
         assertEquals(4L, CategorySuggester.suggest("全聯福利中心", at(10), cats, rules = mapOf("全聯福利中心" to 4L))?.categoryId)
     }
