@@ -259,10 +259,10 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 if (autopayFrom != null) FormLine("扣款日") {
                     val mode = when { autopayDay.isBlank() -> 0; autopayDay.startsWith("-") -> 1; else -> 2 }
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        // 選項較長：放不下時換行，不會被切掉
-                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            androidx.compose.material3.FilterChip(mode == 0, { autopayDay = "" }, label = { Text("繳款日當天", fontSize = AppText.caption) })
-                            androidx.compose.material3.FilterChip(mode == 1, { autopayDay = "-1" }, label = { Text("繳款日後一個營業日", fontSize = AppText.caption) })
+                        // 一行排完，放不下時左右滑動
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            androidx.compose.material3.FilterChip(mode == 0, { autopayDay = "" }, label = { Text("繳款日當天", fontSize = AppText.caption, maxLines = 1) })
+                            androidx.compose.material3.FilterChip(mode == 1, { autopayDay = "-1" }, label = { Text("後一個營業日", fontSize = AppText.caption) })
                             androidx.compose.material3.FilterChip(mode == 2, { if (mode != 2) autopayDay = dueDay.ifBlank { "1" } }, label = { Text("固定日", fontSize = AppText.caption) })
                         }
                         if (mode == 2) FormInput(autopayDay, { autopayDay = it.filter(Char::isDigit).take(2) }, "每月幾號", number = true)

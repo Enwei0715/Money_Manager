@@ -312,6 +312,14 @@ object PlaceHints {
     /** 已記下的位置筆數。 */
     fun sampleCount(ctx: Context): Int = load(ctx).size
 
+    /** 備份用：記帳定位的原始內容 */
+    fun exportSamples(ctx: Context): String? = runCatching { file(ctx).takeIf { it.exists() }?.readText() }.getOrNull()
+    /** 還原備份：寫回記帳定位，清掉記憶中的舊資料 */
+    fun importSamples(ctx: Context, text: String) {
+        runCatching { file(ctx).writeText(text) }
+        cache = null
+    }
+
     private fun load(ctx: Context): List<Sample> = cache ?: runCatching {
         json.decodeFromString(ListSerializer(Sample.serializer()), file(ctx).readText())
     }.getOrDefault(emptyList()).also { cache = it }
