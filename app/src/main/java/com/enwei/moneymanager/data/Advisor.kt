@@ -453,6 +453,12 @@ suspend fun Repository.refreshNews(
             onStep(if (g.blocks > 0 && g.complete < g.blocks) "grid 依已整理的 ${g.complete}/${g.blocks} 組產生市場大局（其餘下次接續）…" else "grid 整理市場大局…")
             runCatching { ds.overview() }
         }
+        // AI 這一輪沒標完（額度用完、沒回應或時間到）：剩下的先在手機上依關鍵字整理，新聞頁不會空著或卡住；
+        // 這些新聞標記為本機整理，AI 恢復後會重新標註與整理
+        runCatching {
+            if (ds.load().items.any { !it.tagged }) { ds.tagLocal(); ds.digestLocal() }
+            if (ds.load().overview.isEmpty()) ds.overviewLocal()
+        }
         budget?.stopReason?.let { onStep("暫停：$it") }
     } else {
         // 沒有可用的 AI：在手機上依關鍵字分題材、標代號與多空，整理各題材的重點與大局（不花任何額度）

@@ -163,6 +163,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
         /** 3 天內要收付的借貸款項、14 天內到期或已逾期的借貸（同樣的內容只通知一次）。 */
         suspend fun warnLoans(context: Context, repo: Repository) {
+            // 往來功能關閉時不提醒借貸
+            if (!repo.settings.value.featureSplit) return
             val list = repo.loanReminders(days = 3)
             val key = list.joinToString(";")
             if (key == repo.settings.value.loanWarnKey) return

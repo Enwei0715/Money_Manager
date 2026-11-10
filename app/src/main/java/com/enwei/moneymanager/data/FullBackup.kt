@@ -50,6 +50,8 @@ object FullBackupIO {
     private val EXTRA_PREFS = listOf(
         "merchant_pin", "place_hints", "merchant_geo3", "merchant_amb", "merchant_excluded",
         "spot_fix", "spot_snap", "link_coords", "kline",
+        // 自架 AI 伺服器的網址與模型（不是金鑰）
+        "local_ai",
     )
     private fun prefsOf(name: String) = com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences(name, android.content.Context.MODE_PRIVATE)
 

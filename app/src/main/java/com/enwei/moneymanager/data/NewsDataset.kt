@@ -363,6 +363,8 @@ class NewsDataset(context: Context) {
     }
 
     private fun articleCovers(d: ThemeDigest, items: List<NewsItem>): Boolean {
+        // 本機整理的重點只列最重要的幾則：沒有 AI 時內容沒變就算完整；有 AI 時要等 AI 重新整理
+        if (d.v < 2) return !GroqAi.enabled && d.contentHash == groupContentHash(items)
         val ids = d.points.flatMap { it.sourceIds }
         return d.contentHash == groupContentHash(items) && ids.toSet() == items.map { it.id }.toSet() && ids.size == items.size
     }

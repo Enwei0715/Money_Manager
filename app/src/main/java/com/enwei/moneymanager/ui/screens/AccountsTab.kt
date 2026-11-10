@@ -278,7 +278,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                 }
             }
             // 借貸：7 天內要收付款、快到期或已逾期
-            if (loanNotes.isNotEmpty()) item(key = "loanNotes") {
+            if (st.featureSplit && loanNotes.isNotEmpty()) item(key = "loanNotes") {
                 androidx.compose.material3.Surface(
                     color = MaterialTheme.colorScheme.secondaryContainer, shape = androidx.compose.foundation.shape.RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),

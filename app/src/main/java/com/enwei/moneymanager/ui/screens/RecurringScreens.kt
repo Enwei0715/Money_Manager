@@ -170,11 +170,8 @@ fun RecurringEditScreen(nav: NavController, id: Long) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             OutlinedTextField(name, { name = it }, label = { Text("名稱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                TxnType.entries.forEachIndexed { i, t ->
-                    SegmentedButton(selected = type == t, onClick = { type = t }, shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(t.label) }
-                }
-            }
+            // 與其他頁面相同的子分頁樣式
+            com.enwei.moneymanager.ui.components.SubTabs(TxnType.entries.map { it.label }, TxnType.entries.indexOf(type)) { type = TxnType.entries[it] }
             Row {
                 NumberField(amount, { amount = it }, "金額", Modifier.weight(1f))
                 Spacer(Modifier.width(8.dp))

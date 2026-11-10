@@ -333,7 +333,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelLarge,
                 )
-                FormLine("每月${if (loanLent) "收款" else "還款"}") { FormInput(installment, { installment = it }, "金額，不分期留空", number = true) }
+                FormLine(if (loanLent) "月收款" else "月還款") { FormInput(installment, { installment = it }, "金額，不分期留空", number = true) }
                 if (installment.isNotBlank()) {
                     FormLine("每月幾號") { FormInput(payDay, { payDay = it.filter(Char::isDigit).take(2) }, "1～31", number = true) }
                     DropdownLine(if (loanLent) "收款帳戶" else "還款帳戶", lk.account(payFrom)?.name ?: "未設定",

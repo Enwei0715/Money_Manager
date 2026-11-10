@@ -506,7 +506,7 @@ private fun MapboxSearchDialog(name: String, near: Pair<Double, Double>, onDone:
         kotlinx.coroutines.delay(600)
         // Mapbox 找不到（台灣小店它常常沒有）就用 OpenStreetMap 在附近 3 公里找
         results = com.enwei.moneymanager.net.PlaceSearch.search(q, near, 10)
-            .ifEmpty { PlaceHints.overpassSearch(q, near.first, near.second, 3000) }
+            .ifEmpty { if (com.enwei.moneymanager.net.PlaceSearch.online) PlaceHints.overpassSearch(q, near.first, near.second, 3000) else emptyList() }
     }
     AlertDialog(
         onDismissRequest = { onDone(null) },

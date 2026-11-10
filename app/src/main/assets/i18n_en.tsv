@@ -3018,3 +3018,224 @@ grid 依已整理的	grid builds the market overview from
 市值	Value
 保本	Principal
 紀律	Discipline
+珊瑚	Coral
+墨	Ink
+苔綠	Moss
+深海	Deep sea
+暖砂	Warm sand
+薰紫	Lavender
+黑體	Sans-serif
+明體	Serif
+楷體	Kai
+圓潤	Rounded
+細緻	Fine
+直角	Square
+大局	Overview
+可隨時點選右上角「略過」	Tap "Skip" at the top right at any time
+日後可於「設定 → 功能開關」調整	Change later in Settings → Feature switches
+輸入金額，選擇分類與帳戶即可儲存	Enter an amount, choose a category and account, then save
+上方可切換支出、收入、轉帳	Switch between expense, income and transfer at the top
+與他人分帳、由他人代付或收回欠款：使用表單最下方的「往來」	To split, have someone pay for you or collect a debt, use "People" at the bottom of the form
+無法確定的交易列於交易頁上方的「待確認」	Uncertain transactions appear under "To confirm" at the top of Transactions
+可指定要讀取哪些 App 的通知	Choose which apps' notifications are read
+統計：分類比例與每月比較	Stats: category shares and monthly comparison
+支出地圖：交易頁右上角的地圖圖示	Spending map: the map icon at the top right of Transactions
+預算：接近上限時提醒	Budget: alerts near the limit
+設定預算	Set budget
+與往來	and People
+集中於此。	are gathered here.
+信用卡依帳單週期計算應繳與未出帳金額	Credit cards show amount due and unbilled spending per billing cycle
+往來：列出應收與應付的對象與金額	People: who owes you and whom you owe
+記錄股票交易，檢視持股損益、K 線與除權息	Record stock trades; view holdings, P/L, K-line and dividends
+完成 AI 設定後，可產生每日報告並向 AI 提問	After AI setup you get daily reports and can ask AI
+點選各項即可前往設定，完成後會自動標示。日後可於「設定 → 功能設定檢查」查看。	Tap an item to set it up; finished items are marked. Review later in Settings → Setup check.
+帶我逛一圈	Take the tour
+線條分隔	Divider lines
+卡片	Cards
+特大	Extra large
+借貸與代墊	Loans & advances
+人未結清	people unsettled
+別人欠我	Owed to me
+我欠別人	I owe
+應繳、未出帳是什麼	What are due and unbilled amounts?
+借出	Lent
+期間淨額	Net for period
+對方欠你	They owe you
+你欠對方	You owe them
+全市場	Whole market
+檔依趨勢、法人籌碼、基本面、消息、風險評分後挑選	stocks scored on trend, institutional flow, fundamentals, news and risk
+已刪除	Deleted
+份舊報告	old reports
+代號未確認	Code unverified
+依據	Basis
+分數怎麼算	How scores work
+弱於	weaker than
+連賣	selling streak
+籌碼	Flow
+基本	Fundamentals
+消息	News
+穩定	Stability
+時光機 · 未來 20 個交易日	Time machine · next 20 trading days
+時光機是什麼	What is the time machine?
+理由	Reason
+操作	Action
+先到目標	Target first
+都沒到	Neither
+先到停損	Stop first
+我：	Me:
+刪除這段對話的	Delete this chat's
+則訊息（過去的對話不受影響）。	messages (past chats are unaffected).
+近 3 天整理	Last 3 days organized
+完整區塊	Complete blocks
+待讀	Unread
+保留	Keep
+個模型）	models)
+判讀通知、整理名稱與分類、收支與股票分析	Reads notifications, tidies names and categories, analyzes spending and stocks
+主要模型（報告、分析、對話）	Main model (reports, analysis, chat)
+可填多把金鑰：一把的額度用完，自動換下一把。金鑰只存在這支手機、不放進備份	Add several keys: when one runs out the next is used. Keys stay on this phone and are never backed up
+部分可用	Partly available
+連不上：	Can't connect:
+個模型，點一個使用	models; tap one to use
+可以使用	Available
+色彩	Colors
+版面	Layout
+明暗	Light/Dark
+數字等寬	Tabular numbers
+金額的位數上下對齊	Align digits of amounts vertically
+列表圖示	List icons
+不顯示	Hidden
+圓角	Corners
+交易列在店名下方顯示說明	Show the note under the merchant in lists
+簡潔	Simple
+清晰	Clear
+上班通勤	Commute
+個已學習的商家？	learned merchants?
+外觀與顯示	Appearance & display
+記帳方式、期間、幣別	Recording, period, currency
+開關各項功能	Turn features on or off
+金鑰、模型、語氣	Keys, models, tone
+七種通知	Seven notification types
+密碼、備份還原	Passcode, backup & restore
+版本與更新	Version & updates
+按＋ → 先選分類 → 再輸入金額	Tap + → choose category → enter amount
+按＋ → 先輸入金額 → 再選分類	Tap + → enter amount → choose category
+在交易列表左右滑動 → 切到上個月／下個月	Swipe the list left/right → previous/next month
+左右滑動不做任何事，只能按標題的箭頭換月	Swiping does nothing; use the arrows in the title to change month
+新增對象	Add person
+淨額	Net
+欠我	Owes me
+我欠	I owe
+最近	Recent
+記帳定位	Recorded location
+連結	Link
+」的位置	"
+找位置中	Locating
+找到	Found
+家店的位置	store locations
+本月查	Lookups this month:
+家沒有位置	without a location
+・點地圖可以修改	 · tap the map to change
+定位	GPS
+已指定為「	Assigned to "
+已改名為「	Renamed to "
+已改名（	Renamed (
+Mapbox 金鑰	Mapbox key
+Google Places 金鑰	Google Places key
+指定「	Pick a branch for "
+」的分店	"
+地點測試	Location test
+交割款（不記帳）	Settlement (not recorded)
+已在待確認	Already in To confirm
+請到「帳戶」核對餘額；信用卡的結帳日、繳款日已帶入，扣繳帳戶與日期請再確認。	Check balances under Accounts; card statement and due days are filled in — please confirm the autopay account and date.
+檢查中	Checking
+下載	Download
+請允許	Please allow
+已記下	Saved
+個付款地點	payment locations
+上次讀通知：	Last notification:
+定位權限：	Location permission:
+已允許	Allowed
+未允許	Not allowed
+背景位置：	Background location:
+一律允許	Always allowed
+未設為一律允許（App 沒開著時讀不到）	Not "Allow all the time" (unavailable when the app is closed)
+目前位置：10 秒內拿不到（請確認手機的定位已開啟，或到室外再試）	Current location: not available within 10 s (check that location is on, or try outdoors)
+公尺，	 m, 
+秒前）	s ago)
+過去紀錄：常在這裡記「	History: often recorded here: "
+過去紀錄：這附近還沒有	History: nothing recorded near here yet
+查附近店家中…	Looking up nearby stores…
+已知位置的店：200 公尺內沒有	Known stores: none within 200 m
+OpenStreetMap 的公共伺服器目前很忙，查不到附近的店	OpenStreetMap's public servers are busy; nearby stores unavailable
+：20 秒內沒有回應	: no response within 20 s
+：附近沒有登錄的店	: no listed stores nearby
+測試失敗：	Test failed:
+處理中…	Working…
+請在 Shizuku 的提示中允許帳理	Allow Ledgerly in the Shizuku prompt
+已開啟	Enabled
+：尚未設定	: not set
+無法使用：	Unavailable:
+地圖上	On map
+線上	Online
+」改用剛複製的 Google 地圖位置	" now uses the Google Maps location you copied
+家店還沒有位置	stores without a location
+點地圖上的正確位置	Tap the correct spot on the map
+半年	6 months
+當週	This week
+移動停利是什麼	What is a trailing take-profit?
+月營收怎麼看	How to read monthly revenue
+趨勢推估怎麼看	How to read the trend projection
+悲觀	Bearish
+基準	Base
+樂觀	Bullish
+20 天後收高的機率約	Chance of closing higher in 20 days:
+%（200 次模擬）・統計推估，僅供參考	% (200 simulations) · statistical estimate, for reference only
+借款	Loan
+請輸入金額	Enter an amount
+請選帳戶	Choose an account
+請選轉入帳戶	Choose the destination account
+借給	Lend to
+還給	Repay
+收到還款	Repayment received
+借入	Borrowed
+別人先付	Paid by someone else
+當天備註	Day memo
+：借錢給他，或還他錢（他欠你的增加／你欠他的減少）	: you lend or repay them (they owe you more / you owe them less)
+：他還你錢，或你向他借（他欠你的減少／你欠他的增加）	: they repay you or you borrow (they owe you less / you owe them more)
+公尺	m
+%.1f 公里	%.1f km
+地圖	Map
+分帳	Split
+對方付	They pay
+誰還的	Who repaid
+新名字	New name
+他還我	They repay me
+向他借	Borrow from them
+平攤	Split evenly
+我全付	I pay all
+他先付	They pay first
+我付	I pay
+幫他付（代墊）	Pay for them
+借給他	Lend to them
+我向他借	I borrow from them
+我還他	I repay them
+輸入對象名字	Enter a name
+幫別人付錢（代墊、分攤）請切到「支出」，用下方的「分帳」	To pay for others (advance or split), switch to Expense and use "Split" below
+價格	Price
+・缺	 · missing 
+月收款	Monthly in
+月還款	Monthly pay
+套用這家店	Apply this store
+選到的店：	Selected store:
+改名並設定位置	Rename and set location
+只設定位置	Set location only
+OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金鑰。	Not found on OpenStreetMap; try another keyword or set a Google Places key.
+自動更新新聞	Auto-update news
+未使用 AI：新聞依關鍵字整理。設定 AI 後可產生摘要與每日報告。	No AI: news is organized by keywords. Set up AI for summaries and daily reports.
+尚無新聞。點選右上角的資訊圖示，再按「立即更新」開始蒐集。	No news yet. Tap the info icon at the top right, then "Update now" to start collecting.
+整理新聞（未使用 AI）	Organizing news (no AI)
+新聞已更新（未使用 AI）：共	News updated (no AI): 
+偏多	Bullish
+偏空	Bearish
+中性	Neutral
+其他財經	Other finance
