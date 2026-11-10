@@ -84,7 +84,8 @@ fun AiStatusBar(nav: NavController, padNav: Boolean = false, onOpen: (String) ->
                 val detail = listOfNotNull(
                     r.step.removeSuffix("…").takeIf { it.isNotBlank() },
                     eta,
-                    if (grid.blocks > 0) "已整理 ${grid.complete}/${grid.blocks} 組" + (if (grid.unread > 0) "・待標註 ${grid.unread}" else "") else null,
+                    // grid 階段的步驟文字已寫了幾組，不重複
+                    if (grid.blocks > 0 && !r.step.startsWith("grid")) "已整理 ${grid.complete}/${grid.blocks} 組" + (if (grid.unread > 0) "・待標註 ${grid.unread}" else "") else null,
                 ).joinToString("・")
                 add(AiLine("${if (r.refreshOnly) "新聞更新" else "每日報告"} ${stage + 1}/$stages・${NewsStages.full[stage]}",
                     if (r.refreshOnly) "advisor:2" else "advisor:0", true,

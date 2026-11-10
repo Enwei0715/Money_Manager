@@ -447,7 +447,12 @@ suspend fun Repository.refreshNews(
         // block：把每個區塊的全部新聞整理成重點文章，區塊就完整了
         ds.digest(stop = stop) { i, n -> onDigest(i, n); onStep("block 整理 ${i + 1}/$n 塊…") }
         // grid：所有題材的重點彙整成市場大局（一次呼叫）
-        if (!stop()) { onStep("grid 整理市場大局…"); runCatching { ds.overview() } }
+        // grid：用目前已整理好的組先產生大局；還沒整理的組（本輪 AI 呼叫或時間用完）下一輪接續，完成後大局會再更新
+        if (!stop()) {
+            val g = ds.grid.value
+            onStep(if (g.blocks > 0 && g.complete < g.blocks) "grid 依已整理的 ${g.complete}/${g.blocks} 組產生市場大局（其餘下次接續）…" else "grid 整理市場大局…")
+            runCatching { ds.overview() }
+        }
         budget?.stopReason?.let { onStep("暫停：$it") }
     }
     return added
