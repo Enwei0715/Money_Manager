@@ -65,6 +65,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 /** 帳戶資訊：群組、名稱、金額、說明；信用卡另有結帳日、繳款日、自動扣繳。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
     val lk = rememberLookups()
@@ -219,8 +220,9 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 }
                 if (bank != null) Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
                     Text(
-                        "${bank.code} ${bank.name}：繳款截止日＝結帳日＋${bank.dueOffsetDays} 天" +
-                            (bank.note?.let { "\n$it" } ?: "") + if (!bank.verified) "\n（此銀行資料不足，先用常見值，請對照帳單）" else "",
+                        // 銀行說明已寫了截止日規則時不重複
+                        "${bank.code} ${bank.name}" +
+                            (bank.note?.takeIf { it.isNotBlank() }?.let { "：$it" } ?: "：繳款截止日＝結帳日＋${bank.dueOffsetDays} 天") + if (!bank.verified) "\n（此銀行資料不足，先用常見值，請對照帳單）" else "",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (bank.statementDays.isNotEmpty()) Row(
@@ -236,7 +238,12 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 if (dueOffset != null) FormLine("繳款日", trailing = {
                     androidx.compose.material3.TextButton(onClick = { dueOffset = null }) { Text("改用固定日") }
                 }) {
-                    Text("結帳日＋$dueOffset 天" + (sDay?.let { s0 -> CardCycle(s0, 1, shift, dueOffset).let { c -> "（本期 ${c.nextDueDate(LocalDate.now().minusDays(1))}）" } } ?: ""), fontSize = AppText.body)
+                    Column {
+                        Text("結帳日＋$dueOffset 天", fontSize = AppText.body)
+                        sDay?.let { s0 -> CardCycle(s0, 1, shift, dueOffset).let { c ->
+                            Text("本期 ${c.nextDueDate(LocalDate.now().minusDays(1))}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } }
+                    }
                 } else FormLine("繳款日") { FormInput(dueDay, { dueDay = it.filter(Char::isDigit).take(2) }, "", number = true) }
                 FormLine("扣繳帳戶", onClick = { autopayMenu = true }) {
                     Box {
@@ -253,7 +260,8 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 if (autopayFrom != null) FormLine("扣款日") {
                     val mode = when { autopayDay.isBlank() -> 0; autopayDay.startsWith("-") -> 1; else -> 2 }
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // 選項較長：放不下時換行，不會被切掉
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             androidx.compose.material3.FilterChip(mode == 0, { autopayDay = "" }, label = { Text("繳款日當天", fontSize = AppText.caption) })
                             androidx.compose.material3.FilterChip(mode == 1, { autopayDay = "-1" }, label = { Text("繳款日後一個營業日", fontSize = AppText.caption) })
                             androidx.compose.material3.FilterChip(mode == 2, { if (mode != 2) autopayDay = dueDay.ifBlank { "1" } }, label = { Text("固定日", fontSize = AppText.caption) })
@@ -261,7 +269,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                         if (mode == 2) FormInput(autopayDay, { autopayDay = it.filter(Char::isDigit).take(2) }, "每月幾號", number = true)
                     }
                 }
-                DropdownLine("結帳日遇週末", shift.label, com.enwei.moneymanager.core.StatementShift.entries.map { it to it.label }) { shift = it }
+                DropdownLine("週末結帳", shift.label, com.enwei.moneymanager.core.StatementShift.entries.map { it to it.label }) { shift = it }
                 if (sDay != null && dDay != null) {
                     val cycle = CardCycle(sDay, dDay, shift, dueOffset)
                     val due = cycle.nextDueDate(LocalDate.now().minusDays(1))

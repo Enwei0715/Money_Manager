@@ -1710,11 +1710,16 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             // 繳款日為固定日或「結帳日＋N 天」都適用
             val cycle = settings.value.cycleFor(card) ?: return@forEach
             // 第一次設定時只從今天開始，不回溯
-            var cursor = card.autopayLastRun?.let(LocalDate::ofEpochDay) ?: today.minusDays(1)
+            val lastRun = card.autopayLastRun?.let(LocalDate::ofEpochDay) ?: today.minusDays(1)
+            // 依「扣款日」判斷：扣款日在上次執行之後、今天以前的都要扣。
+            // 繳款日遇假日順延、扣款日又在繳款日之後（例如繳款日 11/9、扣款日 11/10）時，
+            // 不能從上次執行日往後找繳款日，否則 11/10 會直接跳到下一期而漏扣。
+            var cursor = lastRun.minusDays(40)
             while (true) {
                 val due = cycle.nextDueDate(cursor)
                 val deduct = cycle.autopayDateFor(due, card.autopayDay)
                 if (deduct.isAfter(today)) break
+                if (!deduct.isAfter(lastRun)) { cursor = due; continue }
                 val statement = cycle.statementDateFor(due)
                 val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED }
                 val owed = -balanceAsOf(card, txns, statement.plusDays(1).toMillis(LocalTime.MIDNIGHT), fx)
