@@ -23,7 +23,8 @@ object PlaceHints {
     @Serializable
     data class Sample(val txnId: Long, val lat: Double, val lon: Double, val at: Long)
 
-    data class Guess(val merchant: String, val categoryId: Long?, val fromHistory: Boolean, val kind: String? = null)
+    /** [sure]：這個地點的紀錄大多是這家店（同一地點有好幾家店、分不出來時為 false，應交給使用者確認） */
+    data class Guess(val merchant: String, val categoryId: Long?, val fromHistory: Boolean, val kind: String? = null, val sure: Boolean = true)
 
     /** 附近的店：名稱與 OpenStreetMap 類型（restaurant、convenience…，推測分類用）。 */
     data class Place(val name: String, val kind: String?)
@@ -399,7 +400,9 @@ object PlaceHints {
         val best = near.groupBy { it.second }.maxWithOrNull(compareBy<Map.Entry<String, List<Triple<TxnEntity, String, Float>>>> { it.value.size }
             .thenByDescending { e -> e.value.minOf { it.third } }) ?: return null
         val cat = best.value.mapNotNull { it.first.categoryId }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
-        return Guess(best.key, cat, true)
+        // 至少記過兩次、且占這個地點紀錄的六成以上才算有把握（校園、商場同一地點有很多家店）
+        val sure = best.value.size >= 2 && best.value.size * 10 >= near.size * 6
+        return Guess(best.key, cat, true, sure = sure)
     }
 
     private const val UA = "Ledgerly/2.1 (Android personal finance app)"

@@ -115,12 +115,14 @@ import kotlinx.coroutines.launch
 @Composable
 fun AdvisorScreen(nav: NavController) {
     // 第一次打開這頁：逐一介紹四個分頁
+    val tourAi = repo.settings.value.aiEnabled
     com.enwei.moneymanager.ui.components.PageTour("advisor", listOf(
         com.enwei.moneymanager.ui.components.Coach.Step("adv.tab0", "今日", "每日報告：大盤概況、可考慮的標的（含依據、時光機推估與進出場建議）與持股應採取的動作。報告每日自動產生，也可手動更新。"),
         com.enwei.moneymanager.ui.components.Coach.Step("adv.tab1", "問 AI", "以自然語言詢問個股、產業或自己的持股，AI 會參考新聞與營收資料回答，回覆中的個股可直接點開 K 線。"),
         com.enwei.moneymanager.ui.components.Coach.Step("adv.tab2", "新聞", "自動蒐集並標註的新聞：依題材整理重點，標示偏多或偏空，點選可閱讀內容。"),
         com.enwei.moneymanager.ui.components.Coach.Step("adv.tab3", "紀律", "資金配置（長線、可投入、預留）、持股的停損停利狀態與自訂的交易紀律；大盤階段提示目前適合加碼或減碼。"),
-    ))
+    // AI 關閉時沒有「今日」與「問 AI」分頁，不介紹
+    ).filter { tourAi || it.target !in setOf("adv.tab0", "adv.tab1") })
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("股票助理", { nav.popBackStack() }) }) { pad ->
         Box(Modifier.padding(pad)) { AdvisorContent(nav) }
     }

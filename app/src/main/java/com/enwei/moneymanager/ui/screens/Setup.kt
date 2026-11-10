@@ -74,7 +74,7 @@ object Setup {
         if (android.os.Build.VERSION.SDK_INT >= 35) add(Item("notif.sensitive", "notif", "讀取受保護的通知內容", "Android 15 起，部分銀行通知內容會被系統隱藏", false, "設定"))
         add(Item("map.location", "map", "位置權限", "記錄付款地點並推薦附近店家", true, "開啟"))
         if (android.os.Build.VERSION.SDK_INT >= 29) add(Item("map.background", "map", "背景位置（一律允許）", "未開啟 App 時，通知記帳亦可記錄地點", false, "設定"))
-        add(Item("map.places", "map", "店家搜尋（Google Places）", "提升店家搜尋的準確度；未設定時使用已記錄的店家", false, "設定"))
+        add(Item("map.places", "map", "店家搜尋（Google Places）", "提升店家搜尋的準確度；未設定時使用 OpenStreetMap 與已記錄的店家", false, "設定"))
         add(Item("ai.key", "ai", "AI 金鑰或自架伺服器", "判讀複雜通知與產生報告所需", true, "設定"))
         add(Item("backup.folder", "backup", "自動備份資料夾", "資料夾權限失效時，自動備份將暫停", true, "重新選擇"))
     }

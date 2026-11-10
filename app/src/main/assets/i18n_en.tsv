@@ -2741,7 +2741,7 @@ Android 15 起，部分銀行通知內容會被系統隱藏	From Android 15, som
 背景位置（一律允許）	Background location (allow all the time)
 未開啟 App 時，通知記帳亦可記錄地點	Lets notification recording capture location when the app is closed
 店家搜尋（Google Places）	Merchant search (Google Places)
-提升店家搜尋的準確度；未設定時使用已記錄的店家	More accurate merchant search; without it, saved merchants are used
+提升店家搜尋的準確度；未設定時使用 OpenStreetMap 與已記錄的店家	More accurate store search; without it, OpenStreetMap and your recorded stores are used
 AI 金鑰或自架伺服器	AI key or self-hosted server
 判讀複雜通知與產生報告所需	Needed to read complex notifications and write reports
 自動備份資料夾	Automatic backup folder
@@ -3239,3 +3239,4 @@ OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金
 偏空	Bearish
 中性	Neutral
 其他財經	Other finance
+（店家依位置推測，不確定）	(store guessed from location, uncertain)

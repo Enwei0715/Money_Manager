@@ -1381,6 +1381,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             !PlaceHints.hasBackground(appCtx) && here == null -> PlaceHints.note("位置權限不是「一律允許」，App 在背景時拿不到位置")
             here == null -> PlaceHints.note("${merchant ?: amountText}：拿不到目前位置（定位關閉或訊號不足）")
         }
+        // 店名是依附近地圖上的店推測的，或這個地點記過好幾家店、分不出是哪一家：沒有把握，放待確認由使用者確認
+        var guessedNearby = false
         if (here != null) {
             // 店名是 AI 自己編的（通知裡根本沒有這幾個字，例如只有金額的通知被填成「消費」「Payment」）也當成沒有店名
             fun norm(t: String) = t.replace(Regex("\\s"), "").lowercase()
@@ -1397,7 +1399,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                     }
                     ?: if (weak) PlaceHints.nearbyPlace(here)?.let { pl -> PlaceHints.Guess(pl.name, placeCategory(pl.kind), false, pl.kind) } else null
                 if (g != null) {
-                    if (weak) merchant = g.merchant
+                    if (weak) { merchant = g.merchant; if (!g.fromHistory || !g.sure) guessedNearby = true }
                     if (catGuessed) categoryId = g.categoryId ?: suggestCategory(g.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId ?: categoryId
                     aiNote += if (g.fromHistory) "（依位置：常在這裡記「${g.merchant}」）" else "（依位置推測：附近的「${g.merchant}」）"
                     PlaceHints.note("$amountText → 「${g.merchant}」" + if (g.fromHistory) "（過去紀錄）" else "（附近店家）")
@@ -1410,6 +1412,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             p.kind == ParsedKind.TRANSFER_OUT || p.kind == ParsedKind.TRANSFER_IN -> "（單邊轉帳，不確定是不是真正的收支）"
             categoryId == null -> "（沒有分類）"
             NotificationParser.isPromo(raw) -> "（內容像促銷）"
+            guessedNearby -> "（店家依位置推測，不確定）"
             else -> null
         }
         val finalStatus = if (status == TxnStatus.CONFIRMED && unsure != null) TxnStatus.PENDING else status
