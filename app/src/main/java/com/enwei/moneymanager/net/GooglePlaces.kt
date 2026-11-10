@@ -135,7 +135,8 @@ object PlaceSearch {
     suspend fun search(q: String, near: Pair<Double, Double>?, limit: Int = 8): List<Mapbox.Place> = when {
         GooglePlaces.enabled -> GooglePlaces.search(q, near, limit)
         Mapbox.enabled -> Mapbox.search(q, near, limit)
-        else -> emptyList()
+        // 沒有金鑰：用 OpenStreetMap（Overpass）在附近 3 公里內依名稱找，免費但資料較少、回應較慢
+        else -> if (near != null && q.trim().length >= 2) com.enwei.moneymanager.data.PlaceHints.overpassSearch(q.trim(), near.first, near.second, 3000).take(limit) else emptyList()
     }
 
     suspend fun nearby(lat: Double, lon: Double): List<Mapbox.Place> = when {

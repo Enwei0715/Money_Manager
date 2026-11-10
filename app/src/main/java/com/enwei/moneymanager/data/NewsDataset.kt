@@ -40,6 +40,8 @@ data class NewsItem(
     val tries: Int = 0,
     /** 完全相同的來源內容合併後的篇數。 */
     val duplicateCount: Int = 1,
+    /** 本機依關鍵字標註（沒有使用 AI）；之後 AI 可用時會重新標註 */
+    val local: Boolean = false,
 )
 
 /** 新聞重點：同一事件只算一次，並保存涵蓋的新聞 id 以核對是否漏讀。 */
@@ -602,13 +604,14 @@ class NewsDataset(context: Context) {
         val big = GroqAi.bigContext(GroqAi.AiTask.NEWS_TAG)
         val maxChars = if (big) 18_000 else 2_500
         val maxBatches = if (big) 40 else 15
-        val pendingCount = load().items.count { !it.tagged }
+        val pendingCount = load().items.count { !it.tagged || it.local }
         val total = pendingCount.coerceAtMost(maxBatches)
         for (i in 0 until maxBatches) {
             // 每一批之前檢查時間預算與網路：停下時已完成的批次都已寫入，下一輪接續
             if (stop()) return done
             // thread：可讀大量資料時每次 20 則（標題＋內文頭尾各 200 字），否則依字數限制
-            val todo = load().items.filter { !it.tagged }.sortedByDescending { it.tries }
+            // 本機標註過的也交給 AI 重新標（還沒標過的先）
+            val todo = load().items.filter { !it.tagged || it.local }.sortedWith(compareBy<NewsItem> { it.local }.thenByDescending { it.tries })
             val batch = if (big) takeNewsBatch(todo.take(20), 12_000) else takeNewsBatch(todo, maxChars)
             if (batch.isEmpty()) break
             onProgress(i, maxOf(total, i + 1))
@@ -634,7 +637,7 @@ class NewsDataset(context: Context) {
             }
             update { st ->
                 st.copy(items = st.items.map { n ->
-                    completeTags[n.id]?.let { t -> n.copy(tagged = true, symbols = (t.symbols + com.enwei.moneymanager.net.TwData.codesIn(n.title, 4)).distinct(), theme = NewsFilter.themeName(t.theme), sentiment = t.sentiment, importance = t.importance, note = t.note) }
+                    completeTags[n.id]?.let { t -> n.copy(tagged = true, local = false, symbols = (t.symbols + com.enwei.moneymanager.net.TwData.codesIn(n.title, 4)).distinct(), theme = NewsFilter.themeName(t.theme), sentiment = t.sentiment, importance = t.importance, note = t.note) }
                         ?: if (n.id in ids) n.copy(tries = n.tries + 1) else n
                 })
             }
@@ -744,6 +747,76 @@ class NewsDataset(context: Context) {
         return done
     }
 
+    // ---------- 不使用 AI 的整理（免費模式）----------
+
+    /**
+     * 本機標註：依關鍵字判斷題材、多空，依標題找出提到的個股，依相關度給重要性。
+     * 不花任何 AI 額度；之後 AI 可用時這些新聞會重新標註。回傳標註則數。
+     */
+    suspend fun tagLocal(): Int {
+        runCatching { com.enwei.moneymanager.net.TwData.stockList(com.enwei.moneymanager.MoneyApp.instance) }
+        var n = 0
+        update { st ->
+            val items = st.items.map { x ->
+                if (x.tagged) return@map x
+                n++
+                val score = NewsFilter.score(x)
+                x.copy(
+                    tagged = true, local = true,
+                    symbols = com.enwei.moneymanager.net.TwData.codesIn(x.title, 4),
+                    theme = NewsFilter.localTheme(x.title, x.content),
+                    sentiment = NewsFilter.localSentiment(x.title),
+                    importance = (when { score >= 12 -> 4; score >= 8 -> 3; score >= 5 -> 2; else -> 1 } + if (x.duplicateCount >= 4) 1 else 0).coerceAtMost(5),
+                )
+            }
+            if (n == 0) st else st.copy(items = items)
+        }
+        return n
+    }
+
+    /**
+     * 本機重點：近 3 天每天、每個題材取最重要、不重複的標題當重點（最多 8 則）。
+     * 已有 AI 整理的重點不動；內容沒變的不重寫。回傳整理了幾組。
+     */
+    suspend fun digestLocal(): Int {
+        val st = load()
+        val groups = recent(st, 3).groupBy { it.day() to it.theme }.filter { (k, l) ->
+            val old = st.digests["${k.first}|${k.second}"]
+            old == null || (old.v < 2 && old.contentHash != groupContentHash(l))
+        }
+        if (groups.isEmpty()) return 0
+        update { s ->
+            var m = s.digests
+            groups.forEach { (k, list) ->
+                val seen = ArrayList<Set<String>>()
+                val pts = list.sortedWith(compareByDescending<NewsItem> { it.importance }.thenByDescending { it.duplicateCount }.thenByDescending { it.epochSec })
+                    .filter { x -> val g = NewsFilter.grams(x.title); if (seen.any { NewsFilter.similar(it, g) }) false else { seen += g; true } }
+                    .take(8)
+                    .map { DigestPoint(it.note.ifBlank { it.title.substringBeforeLast(" - ") }.take(80), it.symbols, it.sentiment, it.duplicateCount, listOf(it.id)) }
+                m = m + ("${k.first}|${k.second}" to ThemeDigest(k.first, k.second, list.size, pts, System.currentTimeMillis(), groupContentHash(list), v = 1))
+            }
+            val keep = java.time.LocalDate.now().minusDays(KEEP_DAYS.toLong())
+            s.copy(digests = m.filterValues { d -> runCatching { java.time.LocalDate.parse(d.day) }.getOrNull()?.isAfter(keep) == true })
+        }
+        return groups.size
+    }
+
+    /** 本機大局：近 2 天則數最多的題材各一行（則數、偏多或偏空、最重要的一則）。 */
+    suspend fun overviewLocal(): Boolean {
+        val st = load()
+        val cutoff = java.time.LocalDate.now().minusDays(2).toString()
+        val lines = st.digests.values.filter { it.day >= cutoff && it.points.isNotEmpty() }.groupBy { it.theme }
+            .entries.sortedByDescending { e -> e.value.sumOf { it.count } }.take(6).map { (theme, days) ->
+                val pts = days.flatMap { it.points }
+                val mood = pts.sumOf { it.sentiment * it.count }.let { if (it > 1) "偏多" else if (it < -1) "偏空" else "中性" }
+                val top = days.maxByOrNull { it.day }?.points?.firstOrNull()?.text.orEmpty()
+                "${theme.ifBlank { "其他" }}（${days.sumOf { it.count }} 則，$mood）：$top"
+            }
+        if (lines.isEmpty() || lines == st.overview) return false
+        update { it.copy(overview = lines, overviewAt = System.currentTimeMillis()) }
+        return true
+    }
+
     /**
      * grid：把所有題材的重點彙整成市場大局（一次呼叫）。重點有更新、或上次整理超過 3 小時才重做。
      */
@@ -825,7 +898,8 @@ class NewsDataset(context: Context) {
      * 且距上次整理超過 6 小時才重整，避免每多一則就整塊重做、很快用完 AI 每日額度。
      */
     fun needsDigest(old: ThemeDigest?, list: List<NewsItem>): Boolean =
-        old == null || old.v < 2 || (System.currentTimeMillis() - old.updatedAt > 6 * 3600_000L && list.size >= old.count + maxOf(3, old.count * 3 / 10))
+        // 本機整理的重點（v=1）：有 AI 時才需要重做；沒有 AI 時就算完成
+        old == null || (old.v < 2 && GroqAi.enabled) || (System.currentTimeMillis() - old.updatedAt > 6 * 3600_000L && list.size >= old.count + maxOf(3, old.count * 3 / 10))
 
     fun coverage(st: NewsStore): Coverage {
         val since = recentSince(3)
@@ -839,7 +913,7 @@ class NewsDataset(context: Context) {
         val digested = groups.entries.sumOf { (key, items) -> if (needsDigest(st.digests[key], items)) 0 else items.size }
         return Coverage(
             recent = current.size,
-            pending = current.count { !it.tagged },
+            pending = current.count { !it.tagged || (it.local && GroqAi.enabled) },
             digested = digested,
         )
     }
@@ -999,6 +1073,36 @@ object NewsFilter {
         "車禍", "命案", "詐騙集團", "地震", "天氣", "氣象", "星座", "運勢", "食譜", "美食", "旅遊景點", "寵物", "八卦", "選情",
     )
     private val trusted = listOf("經濟日報", "工商時報", "鉅亨", "MoneyDJ", "中央社", "財訊", "商業周刊", "今周刊", "自由財經", "Yahoo股市", "Yahoo奇摩股市", "數位時代", "科技新報", "Bloomberg", "Reuters", "路透")
+
+    /** 本機題材：依關鍵字對應（由具體到一般），都不符合時歸到「其他財經」 */
+    private val localThemes = listOf(
+        "AI伺服器" to listOf("AI伺服器", "伺服器", "輝達", "NVIDIA", "GPU", "CoWoS", "ASIC", "資料中心", "散熱", "機器人", "人工智慧"),
+        "半導體" to listOf("半導體", "晶圓", "晶片", "台積電", "製程", "封測", "記憶體", "DRAM", "IC設計", "矽"),
+        "電動車" to listOf("電動車", "特斯拉", "Tesla", "車用", "電池", "充電樁"),
+        "航運" to listOf("航運", "貨櫃", "散裝", "運價", "航空", "海運"),
+        "金融" to listOf("金控", "銀行", "壽險", "保險", "證券", "金融股"),
+        "生技醫療" to listOf("生技", "新藥", "醫療", "藥證", "疫苗", "臨床"),
+        "能源原物料" to listOf("油價", "原油", "黃金", "鋼鐵", "塑化", "原物料", "銅價", "綠能", "太陽能", "風電", "電價"),
+        "房市營建" to listOf("房市", "營建", "房價", "建商", "預售屋", "房貸"),
+        "ETF與股利" to listOf("ETF", "配息", "除息", "股利", "殖利率", "填息"),
+        "財報營收" to listOf("營收", "財報", "EPS", "獲利", "法說", "毛利"),
+        "匯率" to listOf("匯率", "新台幣", "美元", "日圓", "升值", "貶值"),
+        "總體經濟" to listOf("央行", "利率", "降息", "升息", "通膨", "CPI", "GDP", "PMI", "Fed", "聯準會", "景氣", "關稅", "出口", "經濟成長"),
+        "美股國際" to listOf("美股", "道瓊", "那斯達克", "標普", "費半", "華爾街", "陸股", "日股", "港股"),
+        "大盤" to listOf("大盤", "加權", "台股", "指數", "外資", "三大法人", "成交量", "融資", "國安基金"),
+    )
+    fun localTheme(title: String, content: String): String {
+        val t = title + " " + content.take(200)
+        return localThemes.firstOrNull { (_, ks) -> ks.any { t.contains(it, ignoreCase = true) } }?.first ?: "其他財經"
+    }
+
+    private val up = listOf("漲停", "創高", "新高", "大漲", "上修", "利多", "看好", "優於預期", "買超", "調升", "飆", "噴出", "報喜", "轉盈", "成長")
+    private val down = listOf("跌停", "重挫", "大跌", "下修", "利空", "虧損", "衰退", "賣超", "調降", "不如預期", "裁員", "違約", "崩", "示警", "轉虧", "下滑")
+    /** 本機多空：標題的利多詞與利空詞誰多（−1、0、+1） */
+    fun localSentiment(title: String): Int {
+        val a = up.count { title.contains(it) }; val b = down.count { title.contains(it) }
+        return if (a > b) 1 else if (b > a) -1 else 0
+    }
 
     /** 和投資有關：有財經詞或提到個股；有娛樂、體育、社會詞又沒有個股時不收。 */
     fun relevant(title: String, content: String): Boolean {

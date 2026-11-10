@@ -27,9 +27,10 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val repo = MoneyApp.repo
         val s = repo.settings.value
-        if (!s.featureStocks || !s.advisorDaily || !GroqAi.enabled) return Result.success()
+        // 沒有 AI 時也會蒐集並在手機上整理新聞（不花額度）；自動更新開關關閉時不跑
+        if (!s.featureStocks || !s.advisorDaily) return Result.success()
         // 連續失敗後暫停中：等使用者按「恢復」或暫停時間過了再跑
-        if (AiHealth.backgroundPaused()) return Result.success()
+        if (GroqAi.enabled && AiHealth.backgroundPaused()) return Result.success()
         if (AiHealth.networkProblem() != null) return Result.success()
         // 使用者正在手動更新或產生報告：不重複執行
         if (ReportJob.state.value?.running == true) return Result.success()
@@ -102,7 +103,7 @@ class NewsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             else -> { AiHealth.record(true); finish(null) }
         }
         val today = LocalDate.now().toEpochDay()
-        if (stopped == null && LocalTime.now().hour >= 7 && st.report?.day != today && ds.recent(st, 3).size >= 100) {
+        if (GroqAi.enabled && stopped == null && LocalTime.now().hour >= 7 && st.report?.day != today && ds.recent(st, 3).size >= 100) {
             ReportJob.start(applicationContext, userInitiated = false)
         }
         return Result.success()

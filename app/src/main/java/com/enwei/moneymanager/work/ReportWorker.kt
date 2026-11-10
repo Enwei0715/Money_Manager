@@ -182,6 +182,13 @@ object ReportJob {
             }
             // 資料集完整了：只更新新聞時，若今天還沒有報告（早上 7 點後）就接著產生報告
             val today = java.time.LocalDate.now().toEpochDay()
+            if (!GroqAi.enabled) {
+                // 沒有 AI：新聞已在手機上整理好，不產生每日報告
+                stopWatchdog()
+                state.value = State("新聞已更新（未使用 AI）：共 ${st.items.size} 則", start, running = false, refreshOnly = true)
+                if (notifyProgress) context.getSystemService(android.app.NotificationManager::class.java).cancel(NOTICE_ID)
+                return null
+            }
             if (refreshOnly && (st.report?.day == today || java.time.LocalTime.now().hour < 7)) {
                 stopWatchdog()
                 state.value = State("資料集已更新：共 ${st.items.size} 則", start, running = false, refreshOnly = true)

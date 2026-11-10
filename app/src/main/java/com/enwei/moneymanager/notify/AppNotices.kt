@@ -41,7 +41,9 @@ enum class NoticeKind(
     fun available(s: AppSettings): Boolean = when (this) {
         RECORDED -> s.featureNotif
         STOCK -> s.featureStocks
-        REPORT, PROGRESS -> s.featureStocks && s.aiEnabled
+        REPORT -> s.featureStocks && s.aiEnabled
+        // 新聞更新的進度：沒有 AI 時也會蒐集新聞
+        PROGRESS -> s.featureStocks
         BUDGET, BILLS -> true
         UPDATE -> com.enwei.moneymanager.BuildConfig.SELF_UPDATE
     }

@@ -120,6 +120,8 @@ fun MerchantPlacesScreen(nav: NavController) {
         return current.filter { it != name && it.contains(key, ignoreCase = true) && branchy(it) }.sorted()
     }
     var branchFor by remember { mutableStateOf<String?>(null) }
+    // 搜尋選到名稱不同的店：等使用者決定要不要改名
+    var pendingPick by remember { mutableStateOf<Triple<Place, String, Pair<Double, Double>>?>(null) }
 
     // Google 地圖：開啟搜尋 → 分享、複製連結 → 回到這裡自動讀剪貼簿
     var googleFor by remember { mutableStateOf<String?>(null) }
@@ -238,7 +240,7 @@ fun MerchantPlacesScreen(nav: NavController) {
             }
             items(places, key = { it.name }) { p ->
                 Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { if (p.source == "多個結果" && (mbOn || gOn)) searching = p else open = p }
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { if (p.source == "多個結果") searching = p else open = p }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -289,7 +291,9 @@ fun MerchantPlacesScreen(nav: NavController) {
                         Text("${p.source}・點地圖可以修改", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 6.dp, bottom = 4.dp))
                     }
-                    if (mbOn || gOn) action("搜尋店家") { searching = p } else action("自動找") { autoFind(listOf(p.name)) }
+                    // 搜尋店家：有金鑰用 Google／Mapbox，沒有就用 OpenStreetMap
+                    action("搜尋店家") { searching = p }
+                    if (p.loc == null && !(mbOn || gOn)) action("自動找") { autoFind(listOf(p.name)) }
                     if (p.loc == null) action("在地圖上點選") { picking = p }
                     action("改名") { renaming = p }
                     if (!more) Text("其他方式", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -343,17 +347,37 @@ fun MerchantPlacesScreen(nav: NavController) {
     searching?.let { p ->
         MapboxSearchDialog(p.name, p.loc ?: PlaceHints.anchors(ctx).firstOrNull() ?: (25.0136 to 121.5414)) { hit ->
             searching = null
-            if (hit != null) scope.launch {
-                // 選了店：位置存成這家店，店名也改成正確名稱（所有交易一起改）
-                val to = hit.name.trim()
-                if (to != p.name) {
-                    val n = repo.renameMerchant(p.name, to)
-                    PlaceHints.clearMerchantPin(p.name); PlaceHints.clearMerchantGeo(p.name)
-                    android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("已改名為「$to」（$n 筆）"), android.widget.Toast.LENGTH_SHORT).show()
-                }
-                PlaceHints.setMerchantPin(to, hit.lat, hit.lon, "搜尋"); tick++
+            if (hit != null) {
+                val to = cleanPlaceName(hit.name)
+                // 名稱不同時先問：只設定位置，還是連店名一起改（不會默默把所有同名交易改掉）
+                if (to != p.name) pendingPick = Triple(p, to, hit.lat to hit.lon)
+                else { PlaceHints.setMerchantPin(p.name, hit.lat, hit.lon, "搜尋"); tick++ }
             }
         }
+    }
+    pendingPick?.let { (p, to, ll) ->
+        AlertDialog(
+            onDismissRequest = { pendingPick = null },
+            title = { Text("套用這家店") },
+            text = { Text("「${p.name}」共 ${p.count} 筆交易。\n選到的店：$to", fontSize = AppText.body) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingPick = null
+                    scope.launch {
+                        val n = repo.renameMerchant(p.name, to)
+                        PlaceHints.clearMerchantPin(p.name); PlaceHints.clearMerchantGeo(p.name)
+                        PlaceHints.setMerchantPin(to, ll.first, ll.second, "搜尋"); tick++
+                        android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("已改名為「$to」（$n 筆）"), android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text("改名並設定位置") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pendingPick = null
+                    PlaceHints.setMerchantPin(p.name, ll.first, ll.second, "搜尋"); tick++
+                }) { Text("只設定位置") }
+            },
+        )
     }
 
     renaming?.let { p ->
@@ -538,11 +562,12 @@ private fun BranchDialog(
     var picked by remember(name, list.size) { mutableStateOf(list.map { it.id }.toSet()) }
     var q by remember(name) { mutableStateOf(name) }
     var results by remember { mutableStateOf<List<com.enwei.moneymanager.net.Mapbox.Place>?>(null) }
-    val online = com.enwei.moneymanager.net.PlaceSearch.online
-    LaunchedEffect(q, online) {
-        if (!online || q.trim().length < 2) { results = emptyList(); return@LaunchedEffect }
+    // 有金鑰用 Google／Mapbox；沒有就用 OpenStreetMap（免費，較慢，所以等久一點再查）
+    val keyed = com.enwei.moneymanager.net.PlaceSearch.online
+    LaunchedEffect(q) {
+        if (q.trim().length < 2) { results = emptyList(); return@LaunchedEffect }
         results = null
-        kotlinx.coroutines.delay(500)
+        kotlinx.coroutines.delay(if (keyed) 500 else 1200)
         results = com.enwei.moneymanager.net.PlaceSearch.search(q.trim(), near, 8)
     }
     val fmt = remember { java.text.SimpleDateFormat("yyyy/M/d HH:mm", java.util.Locale.TAIWAN) }
@@ -587,16 +612,14 @@ private fun BranchDialog(
                 item {
                     Text("搜尋分店", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
-                    if (online) androidx.compose.material3.OutlinedTextField(q, { q = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    else Text("設定 Google Places 或 Mapbox 金鑰後，可搜尋附近的分店；也可先選擇曾記錄的分店。",
-                        fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (online && results == null) Text("搜尋中…", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-                    if (online && results?.isEmpty() == true && q.trim().length >= 2) Text("找不到結果，可改用其他關鍵字。", fontSize = AppText.caption,
+                    androidx.compose.material3.OutlinedTextField(q, { q = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (results == null) Text("搜尋中…", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                    if (results?.isEmpty() == true && q.trim().length >= 2) Text(if (keyed) "找不到結果，可改用其他關鍵字。" else "OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金鑰。", fontSize = AppText.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                 }
                 items(results.orEmpty(), key = { "r${it.name}${it.lat}" }) { r ->
                     Column(Modifier.fillMaxWidth().clickable(enabled = picked.isNotEmpty()) {
-                        onPick(picked.toList(), r.name, r.lat to r.lon)
+                        onPick(picked.toList(), cleanPlaceName(r.name), r.lat to r.lon)
                         picked = emptySet()
                     }.padding(vertical = 8.dp)) {
                         Text(r.name, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -609,4 +632,12 @@ private fun BranchDialog(
         },
         confirmButton = { TextButton(onClick = onClose) { Text("完成") } },
     )
+}
+
+/** 地圖服務回傳的店名常帶廣告詞（「｜直營」「-永和必吃…」）：只留店名本身 */
+internal fun cleanPlaceName(raw: String): String {
+    var m = raw.split('|', '｜').first().trim()
+    m = m.replace(Regex("（[^）]*、[^）]*）"), "")
+    m = m.replace(Regex("([）)])\\s*-\\s*\\S.*$"), "$1")
+    return m.trim(' ', '-').ifBlank { raw.trim() }
 }

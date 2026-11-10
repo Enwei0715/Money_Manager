@@ -141,22 +141,17 @@ fun AdvisorContent(nav: NavController) {
     LaunchedEffect(Unit) { runCatching { MoneyApp.news.load() } }
     val loadError by MoneyApp.news.loadError.collectAsStateWithLifecycle()
     val store = live ?: NewsStore()
-    // 設定裡關掉 AI：今日報告、問 AI、新聞整理都要 AI，只留「資金紀律」
+    // 設定裡關掉 AI：今日報告與問 AI 需要 AI；新聞改在手機上依關鍵字整理（不花額度），紀律照常
     val aiOn = repo.settings.flow.collectAsStateWithLifecycle().value.aiEnabled
-    if (!aiOn) {
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            Text("AI 功能已關閉", fontSize = AppText.caption,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-            PlanTab(nav)
-        }
-        return
-    }
+    // 分頁（名稱 → 內容編號）：沒有 AI 時只留新聞與紀律
+    val tabs = if (aiOn) listOf("今日" to 0, "問 AI" to 1, "新聞" to 2, "紀律" to 3) else listOf("新聞" to 2, "紀律" to 3)
+    val shownTab = if (tabs.any { it.second == tab }) tab else tabs.first().second
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()
         com.enwei.moneymanager.ui.components.CollapsingTop(Modifier.fillMaxSize(), header = { Column {
-        com.enwei.moneymanager.ui.ChromeScale { TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface) {
-            listOf("今日", "問 AI", "新聞", "紀律").forEachIndexed { i, t ->
-                Tab(tab == i, { tab = i }, modifier = Modifier.then(Modifier.coachTarget("adv.tab$i")), text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = AppText.body, group = fitGroup1) },
+        com.enwei.moneymanager.ui.ChromeScale { TabRow(selectedTabIndex = tabs.indexOfFirst { it.second == shownTab }.coerceAtLeast(0), containerColor = MaterialTheme.colorScheme.surface) {
+            tabs.forEach { (t, i) ->
+                Tab(shownTab == i, { tab = i }, modifier = Modifier.then(Modifier.coachTarget("adv.tab$i")), text = { com.enwei.moneymanager.ui.components.FitText(t, fontSize = AppText.body, group = fitGroup1) },
                     selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } }
@@ -168,7 +163,7 @@ fun AdvisorContent(nav: NavController) {
             }
         }
         } }) {
-        when (tab) {
+        when (shownTab) {
             0 -> TodayTab(nav, store) {}
             1 -> ChatTab(nav, store) {}
             2 -> NewsTab(nav, store)
@@ -1210,7 +1205,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = listState, contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (view == 0) {
                 if (store.items.isEmpty()) item {
-                    Text("還沒有新聞。按上方「立即更新」開始蒐集" + (if (!GroqAi.enabled) "（需要先設定 AI 金鑰）" else "") + "。",
+                    Text("尚無新聞。點選右上角的資訊圖示，再按「立即更新」開始蒐集。",
                         fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp))
                 }
                 // grid：市場大局（所有題材重點的彙整）
@@ -1348,10 +1343,14 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 Box(Modifier.blockSurface(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("自動更新與每日報告", fontSize = AppText.body, modifier = Modifier.weight(1f))
-                            Switch(checked = settings.advisorDaily, onCheckedChange = { enabled -> repo.settings.update { it.copy(advisorDaily = enabled) } }, enabled = aiReady)
+                            Text(if (aiReady) "自動更新與每日報告" else "自動更新新聞", fontSize = AppText.body, modifier = Modifier.weight(1f))
+                            Switch(checked = settings.advisorDaily, onCheckedChange = { enabled -> repo.settings.update { it.copy(advisorDaily = enabled) } })
                         }
-                        if (!aiReady) TextButton(onClick = { infoOpen = false; nav.navigate("ai") }) { Text("前往 AI 設定 ›", fontSize = AppText.caption) }
+                        // 沒有 AI：新聞照常蒐集，在手機上依關鍵字分題材；設定 AI 後才有摘要與每日報告
+                        if (!aiReady) {
+                            Text("未使用 AI：新聞依關鍵字整理。設定 AI 後可產生摘要與每日報告。", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            TextButton(onClick = { infoOpen = false; nav.navigate("ai") }) { Text("前往 AI 設定 ›", fontSize = AppText.caption) }
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 4.dp)) {
                             listOf(1, 3, 6).forEach { h ->
                                 FilterChip(settings.newsIntervalHours == h, {
@@ -1382,7 +1381,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        enabled = GroqAi.enabled && job?.running != true && reportWork?.running != true,
+                        enabled = job?.running != true && reportWork?.running != true,
                         onClick = { com.enwei.moneymanager.work.ReportJob.startNow(ctx, refreshOnly = true) },
                         modifier = Modifier.weight(1f),
                     ) { Text("立即更新") }
@@ -2042,7 +2041,6 @@ private fun NewsScheduleInfo() {
         val need = listOf(if (settings.aiWifiOnly) "Wi-Fi" else "網路連線", "電量不低").joinToString("、")
         when {
             !settings.advisorDaily -> add("背景自動更新已關閉（上方開關）")
-            !GroqAi.enabled -> add("沒有可用的 AI 金鑰，背景不會更新")
             health.paused(now) -> add("${health.pauseReason ?: "背景 AI 已暫停"}；${hm.format(java.util.Date(health.pausedUntil))} 恢復")
             info == null -> add("背景排程尚未建立（重開 App 會建立）")
             info!!.state == androidx.work.WorkInfo.State.RUNNING -> add("背景更新執行中")

@@ -454,6 +454,12 @@ suspend fun Repository.refreshNews(
             runCatching { ds.overview() }
         }
         budget?.stopReason?.let { onStep("暫停：$it") }
+    } else {
+        // 沒有可用的 AI：在手機上依關鍵字分題材、標代號與多空，整理各題材的重點與大局（不花任何額度）
+        onStep("整理新聞（未使用 AI）…")
+        ds.tagLocal()
+        ds.digestLocal()
+        ds.overviewLocal()
     }
     return added
 }

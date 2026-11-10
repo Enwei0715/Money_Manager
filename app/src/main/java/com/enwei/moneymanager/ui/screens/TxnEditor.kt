@@ -284,7 +284,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         // 附近的店：有 Mapbox 金鑰用 Mapbox，否則用 OpenStreetMap（Overpass）
         if (com.enwei.moneymanager.net.PlaceSearch.online) {
             val mb = com.enwei.moneymanager.net.PlaceSearch.nearby(loc.latitude, loc.longitude)
-            placeLocs = placeLocs + mb.associate { it.name to (it.lat to it.lon) }
+            placeLocs = placeLocs + mb.associate { cleanPlaceName(it.name) to (it.lat to it.lon) }
             // 還沒依位置帶入店名：Google／Mapbox 找到 30 公尺內的店，名稱和記過的店對得上（例如「美麗潔美學牙醫診所 | …」對「美麗潔美學牙醫診所」）就用你記的店名
             if (merchant.isBlank()) {
                 fun norm(x: String) = x.lowercase().replace(Regex("[\\s\\-－·・()（）|｜]"), "")
@@ -293,7 +293,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     names.firstOrNull { n -> norm(n).let { it.length >= 3 && (pn.contains(it) || it.contains(pn)) } }
                 }?.let { mine -> merchant = mine; merchantAuto = true }
             }
-            nearby = (hist + known + mb.map { it.name }).distinct().take(10)
+            nearby = (hist + known + mb.map { cleanPlaceName(it.name) }).distinct().take(10)
             if (mb.isEmpty()) nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
         } else nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
     }
@@ -659,7 +659,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 if (merchantFocused && mbResults.isNotEmpty() && type != TxnType.TRANSFER) Column(Modifier.fillMaxWidth().padding(start = placeIndent, end = 16.dp, top = 4.dp)) {
                     mbResults.take(5).forEach { r ->
                         Column(Modifier.fillMaxWidth().clickable {
-                            merchant = r.name; merchantAuto = false; merchantAt = r.lat to r.lon; mbResults = emptyList(); focusManager.clearFocus()
+                            merchant = cleanPlaceName(r.name); merchantAuto = false; merchantAt = r.lat to r.lon; mbResults = emptyList(); focusManager.clearFocus()
                         }.padding(vertical = 6.dp)) {
                             Text(r.name, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
                             Text(listOfNotNull(r.meters?.let { if (it < 1000) "${it.toInt()} 公尺" else "%.1f 公里".format(it / 1000) }, r.address.ifBlank { null }).joinToString("・"),
