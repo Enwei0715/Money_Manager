@@ -1589,8 +1589,7 @@ private fun PlanTab(nav: NavController) {
             val ai = store?.report?.holdings.orEmpty().associateBy { it.symbol }
             s.holdings.forEach { h ->
                 if (settings.investPlan.disciplineOn && settings.investPlan.guardOn) {
-                    GuardRow(h, nav) { editGuard = h }
-                    ai[h.symbol]?.let { AiHoldLine(it) }
+                    GuardRow(h, ai[h.symbol], nav, last = h == s.holdings.last()) { editGuard = h }
                 } else HoldingCard(h, ai[h.symbol], settings.investPlan.disciplineOn, nav)
             }
         }
@@ -1674,57 +1673,81 @@ private fun PlanTab(nav: NavController) {
     editGuard?.let { h -> GuardDialog(h, settings.investPlan.guards[h.symbol] ?: com.enwei.moneymanager.data.GuardState()) { editGuard = null } }
 }
 
-/** 一檔持股的保本＋移動停利：保本與市值、多賺股數、停利價、60 分 K 均線、日均線趨勢與建議動作。 */
+/**
+ * 一檔持股的保本＋移動停利：標題、紀律與 AI 的動作標籤、重點數字；展開後看完整數字、均線與 AI 理由。
+ * 點標題列展開／收合（不顯示點擊波紋）；每檔之間以分隔線隔開，AI 建議放在同一檔裡。
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun GuardRow(h: com.enwei.moneymanager.data.HoldingPlan, nav: NavController, onEdit: () -> Unit) {
+private fun GuardRow(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwei.moneymanager.data.AdvisorHolding?, nav: NavController, last: Boolean, onEdit: () -> Unit) {
     val gi = h.guardInput
     val g = h.guard
     fun f(v: Double?) = v?.let { "%.2f".format(it) } ?: "?"
-    // 預設只看重點（建議動作、多賺股數與停利價），點一下展開完整數字
+    fun n(v: Double) = "%,.0f".format(v)
     var open by rememberSaveable(h.symbol) { mutableStateOf(g?.triggered == true) }
-    Column(Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        // 第一行：名稱（不被擠成直排）＋展開；第二行：紀律動作標籤
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    val quiet = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // 標題列：名稱＋展開
+        Row(
+            Modifier.fillMaxWidth().clickable(interactionSource = quiet, indication = null) { open = !open },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text("${h.symbol} ${h.name.orEmpty()}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             com.enwei.moneymanager.ui.components.FoldToggle(open, modifier = Modifier.padding(start = 6.dp))
         }
-        if (g != null) Surface(
-            color = if (g.triggered) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
-            shape = RoundedCornerShape(4.dp),
-        ) {
-            Text(
-                (if (g.triggered) g.action.label.substringBefore('：') + "：賣 ${g.sellShares.toLong()} 股" else g.action.label.substringBefore('，')),
-                fontSize = AppText.caption, maxLines = 2, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            )
+        // 動作標籤：紀律與 AI 並排
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (g != null) Surface(
+                color = if (g.triggered) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(4.dp),
+            ) {
+                Text(
+                    (if (g.triggered) g.action.label.substringBefore('：') + "：賣 ${g.sellShares.toLong()} 股" else g.action.label.substringBefore('，')),
+                    fontSize = AppText.caption, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+            if (ai != null) Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
+                Text("AI：${ai.action}", fontSize = AppText.caption, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+            }
         }
-        if (gi == null || g == null) { Text("讀不到現價", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
-        Text(
-            if (g.excessShares >= 1) "多賺 ${g.excessShares.toLong()} 股 · 停利價 ${f(g.takeProfit)}"
-            else if (g.excessValue > 0) "多賺 ${"%,.0f".format(g.excessValue)} 元，還不到一股" else "比成本少 ${"%,.0f".format(-g.excessValue)} 元",
-            fontSize = AppText.secondary, color = if (g.excessValue >= 0) StockUp else StockDown,
-        )
-        if (open) {
+        if (gi == null || g == null) {
+            Text("讀不到現價", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
             Text(
-                "${"%.0f".format(gi.shares)} 股 · 現價 ${f(gi.price)} · 市值 ${"%,.0f".format(gi.shares * gi.price)} · 保本 ${"%,.0f".format(gi.principal)}" +
-                    (if (h.autoPrincipal) "（自動）" else "") + (g.peak?.let { " · 最高 ${f(it)}" } ?: ""),
-                fontSize = AppText.secondary,
+                if (g.excessShares >= 1) "多賺 ${g.excessShares.toLong()} 股 · 停利價 ${f(g.takeProfit)}"
+                else if (g.excessValue > 0) "多賺 ${n(g.excessValue)} 元，還不到一股" else "比成本少 ${n(-g.excessValue)} 元",
+                fontSize = AppText.body, color = if (g.excessValue >= 0) StockUp else StockDown,
             )
-            Text(
-                "60 分 K：20MA ${f(gi.hourMa20)}" + (gi.hourMa20?.let { if (gi.price < it) "（跌破）" else "（之上）" } ?: "") +
-                    "、50MA ${f(gi.hourMa50)}" + (gi.hourMa50?.let { if (gi.price < it) "（跌破）" else "（之上）" } ?: "") +
-                    (gi.reduceAt?.let { " · 減碼價 ${f(it)}" } ?: ""),
-                fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            h.trend?.let { Text("日 K：${it.summary}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            Text(g.note, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row {
-                TextButton(onClick = onEdit) { Text("設定保本與停利", fontSize = AppText.caption) }
-                TextButton(onClick = { nav.navigate("stock/${h.symbol}") }) { Text("看 K 線", fontSize = AppText.caption) }
+            if (open) {
+                // 細節放在淡底色的區塊裡，和標題、重點分開
+                Column(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    @Composable fun kv(k: String, v: String) = Row {
+                        Text(k, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(64.dp))
+                        Text(v, fontSize = AppText.caption, modifier = Modifier.weight(1f))
+                    }
+                    kv("持股", "${"%.0f".format(gi.shares)} 股 · 現價 ${f(gi.price)}")
+                    kv("市值", n(gi.shares * gi.price) + (g.peak?.let { " · 最高 ${f(it)}" } ?: ""))
+                    kv("保本", n(gi.principal) + if (h.autoPrincipal) "（自動）" else "")
+                    kv("60 分 K", "20MA ${f(gi.hourMa20)}" + (gi.hourMa20?.let { if (gi.price < it) "（跌破）" else "（之上）" } ?: "") +
+                        "、50MA ${f(gi.hourMa50)}" + (gi.hourMa50?.let { if (gi.price < it) "（跌破）" else "（之上）" } ?: "") +
+                        (gi.reduceAt?.let { " · 減碼價 ${f(it)}" } ?: ""))
+                    h.trend?.let { kv("日 K", it.summary) }
+                    kv("紀律", g.note)
+                    ai?.let { kv("AI", com.enwei.moneymanager.data.stripCites(it.reason)) }
+                }
+                Row {
+                    TextButton(onClick = onEdit) { Text("設定保本與停利", fontSize = AppText.caption) }
+                    TextButton(onClick = { nav.navigate("stock/${h.symbol}") }) { Text("看 K 線", fontSize = AppText.caption) }
+                }
             }
         }
     }
-    androidx.compose.material3.HorizontalDivider()
+    if (!last) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 /** 改一檔的保本金額、手動停利價、減碼價；也可以重設移動停利的最高價。 */
