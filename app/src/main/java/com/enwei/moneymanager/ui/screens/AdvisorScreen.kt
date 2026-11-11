@@ -273,7 +273,7 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
             Text("設定 AI 金鑰後即可產生報告。", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
             TextButton(onClick = { nav.navigate("ai") }) { Text("設定 AI") }
         }
-        if (r != null) ReportBody(r, newsById, nav)
+        if (r != null) ReportBody(r, newsById, nav, onTrack = if ((listOfNotNull(store.report) + store.history).any { it.picks.isNotEmpty() }) ({ showTrack = true }) else null)
         Disclaimer()
         Spacer(Modifier.height(24.dp))
     }
@@ -345,7 +345,7 @@ private fun SubHead(text: String) =
     Text(text, fontSize = AppText.caption, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
 
 @Composable
-private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>, nav: NavController) {
+private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymanager.data.NewsItem>, nav: NavController, onTrack: (() -> Unit)? = null) {
     // 分段：重點（摘要、大盤、資金、檢查）／個股／持股／新聞，每段一個畫面看得完
     var rtab by com.enwei.moneymanager.ui.components.rememberTab("advisor.report")
     com.enwei.moneymanager.ui.components.SubTabs(
@@ -388,9 +388,9 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
             fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (r.track.isNotBlank()) Text(r.track, fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
         // 推薦追蹤：過去每天推薦的股票到現在漲跌多少
-        if ((listOfNotNull(store.report) + store.history).any { it.picks.isNotEmpty() })
+        if (onTrack != null)
             Text("推薦追蹤：查看每天推薦的股票與目前漲跌 ›", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { showTrack = true }.padding(vertical = 4.dp))
+                modifier = Modifier.clickable { onTrack() }.padding(vertical = 4.dp))
         if (r.scanned > 0) Text("全市場 ${r.scanned} 檔依趨勢、法人籌碼、基本面、消息、風險評分後挑選", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     // ② 大盤 K 線與題材熱度
