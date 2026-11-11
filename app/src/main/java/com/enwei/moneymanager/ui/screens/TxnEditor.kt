@@ -245,6 +245,23 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         if (sg != null && id == 0L && (categoryId == null || catAuto)) { categoryId = sg.categoryId; catAuto = true }
     }
 
+    // 帳戶依習慣帶入：這家店過去最常用的帳戶（最近十筆裡至少兩筆、六成以上）。
+    // 自己選過帳戶就不再更動（只會改寫由這裡帶入的值）
+    var autoAccount by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(merchant, type, history.size) {
+        if (id != 0L || type == TxnType.TRANSFER || initialAccountId != null) return@LaunchedEffect
+        if (accountId != null && accountId != autoAccount) return@LaunchedEffect
+        val usable = lk.accounts.filter { !it.archived && it.type != com.enwei.moneymanager.data.AccountType.LOAN }.map { it.id }.toSet()
+        val m = merchant.trim()
+        val recent = if (m.length < 2) emptyList() else history.asSequence()
+            .filter { it.type == type && it.status == TxnStatus.CONFIRMED && it.merchant?.trim() == m && it.accountId in usable }
+            .sortedByDescending { it.date }.take(10).toList()
+        val top = recent.groupingBy { it.accountId!! }.eachCount().maxByOrNull { it.value }
+        // 沒有這家店的紀錄就不帶入（不拿「上一次用的帳戶」來猜，避免默默記錯帳戶）
+        val pick = top?.takeIf { it.value >= 2 && it.value * 10 >= recent.size * 6 }?.key
+        if (pick != null && pick != accountId) { accountId = pick; autoAccount = pick }
+    }
+
     // 預算：選了分類後顯示這個月這個大分類（與總預算）還剩多少、記這筆之後剩多少
     var budget by remember { mutableStateOf<List<com.enwei.moneymanager.data.BudgetUse>>(emptyList()) }
     LaunchedEffect(categoryId, type, date, settings.budgets) {

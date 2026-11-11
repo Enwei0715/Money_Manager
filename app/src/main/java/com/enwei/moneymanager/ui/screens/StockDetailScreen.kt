@@ -1173,25 +1173,28 @@ private fun ProjectionCard(b: DailyBars) {
     val vol = kotlin.math.sqrt(rets.map { (it - rets.average()) * (it - rets.average()) }.average())
     val ahead = 20
     val last = close.last()
-    val mid = (1..ahead).map { k -> last * kotlin.math.exp(slope * k) }
-    val upB = (1..ahead).map { k -> last * kotlin.math.exp(slope * k + vol * kotlin.math.sqrt(k.toDouble())) }
-    val loB = (1..ahead).map { k -> last * kotlin.math.exp(slope * k - vol * kotlin.math.sqrt(k.toDouble())) }
-    // 情境模擬：用近半年真實的日漲跌，5 日一塊重新抽樣，走出 200 條可能的路；取 10%／50%／90% 當悲觀／基準／樂觀
+    // 統計區間（平滑）：用近 60 日的日波動，加上近 120 日的平均漲跌（只取一半，且不超過半個標準差，避免把最近的急漲急跌直接往後延伸）。
+    // 第 k 天的區間＝目前價 × exp(漂移×k ± 1.28×波動×√k)，也就是八成機率會落在裡面；不畫一條條隨機走勢，線才不會上上下下。
     val sim = remember(System.identityHashCode(b)) {
-        val r = close.takeLast(127).zipWithNext { a, c -> kotlin.math.ln(c / a) }
-        val rnd = java.util.Random(close.size.toLong() * 31 + (last * 100).toLong())
-        val paths = List(200) {
-            val out = DoubleArray(ahead); var v = last; var k = 0
-            while (k < ahead) {
-                val st = rnd.nextInt((r.size - 5).coerceAtLeast(1))
-                for (j in 0 until 5) { if (k >= ahead) break; v *= kotlin.math.exp(r[(st + j).coerceAtMost(r.lastIndex)]); out[k++] = v }
-            }
-            out
+        val r = close.takeLast(121).zipWithNext { a, c -> kotlin.math.ln(c / a) }
+        val r60 = r.takeLast(60)
+        val m60 = r60.average()
+        val sigma = kotlin.math.sqrt(r60.map { (it - m60) * (it - m60) }.average()).coerceAtLeast(1e-4)
+        val cap = 0.5 * sigma / kotlin.math.sqrt(ahead.toDouble())
+        val mu = (r.average() * 0.5).coerceIn(-cap, cap)
+        val z = 1.2816
+        fun q(zz: Double) = (1..ahead).map { k -> last * kotlin.math.exp(mu * k + zz * sigma * kotlin.math.sqrt(k.toDouble())) }
+        // 20 日後高於目前價的機率：常態分布的累積機率
+        val d = mu * ahead / (sigma * kotlin.math.sqrt(ahead.toDouble()))
+        fun cdf(x: Double): Double {
+            val t = 1 / (1 + 0.2316419 * kotlin.math.abs(x))
+            val poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))))
+            val v = 1 - kotlin.math.exp(-x * x / 2) / kotlin.math.sqrt(2 * Math.PI) * poly
+            return if (x >= 0) v else 1 - v
         }
-        fun pct(q: Double) = (0 until ahead).map { k -> paths.map { it[k] }.sorted().let { xs -> xs[((xs.size - 1) * q).toInt()] } }
-        Triple(paths, listOf(pct(0.1), pct(0.5), pct(0.9)), paths.count { it.last() > last } * 100 / paths.size)
+        listOf(q(-z), q(0.0), q(z)) to (cdf(d) * 100).toInt()
     }
-    val (simPaths, simQ, upProb) = sim
+    val (simQ, upProb) = sim
     val total = close.size
     val showFrom = (trend?.start?.minus(5) ?: (total - 60)).coerceIn(0, (total - 40).coerceAtLeast(0)).coerceAtLeast(total - 120)
     val endIdx = (total - 1 + ahead).toDouble()
@@ -1210,7 +1213,7 @@ private fun ProjectionCard(b: DailyBars) {
                 )
             } else {
                 val trendPct = (kotlin.math.exp(slope * ahead) - 1) * 100
-                Text("線型較亂，畫不出明確的趨勢線，改看下方的情境模擬（近 $nn 日趨勢約 ${"%+.1f".format(trendPct)}%）",
+                Text("線型較亂，畫不出明確的趨勢線，改看下方的統計區間（近 $nn 日趨勢約 ${"%+.1f".format(trendPct)}%）",
                     fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             val up = StockUp; val down = StockDown
@@ -1227,16 +1230,19 @@ private fun ProjectionCard(b: DailyBars) {
                 val hi = all.max(); val lo = all.min(); val r = (hi - lo).takeIf { it > 0 } ?: 1.0
                 fun y(v: Double) = ((hi - v) / r * size.height).toFloat()
                 fun x(i: Double) = ((i - showFrom) * w + w / 2).toFloat()
-                // 情境模擬：200 條淡淡的可能走勢（超出畫面的部分截掉）
+                // 統計區間：悲觀到樂觀之間塗上淡色，中間一條基準線；邊界用細線
                 clipRect {
-                    simPaths.forEach { pth ->
-                        var px = x((total - 1).toDouble()); var py = y(last)
-                        pth.forEachIndexed { k, v -> val nx = x((total + k).toDouble()); val ny = y(v); drawLine(midCol.copy(alpha = 0.06f), Offset(px, py), Offset(nx, ny), 1.2f); px = nx; py = ny }
+                    val x0 = x((total - 1).toDouble()); val y0 = y(last)
+                    val area = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(x0, y0)
+                        simQ[2].forEachIndexed { k, v -> lineTo(x((total + k).toDouble()), y(v)) }
+                        simQ[0].indices.reversed().forEach { k -> lineTo(x((total + k).toDouble()), y(simQ[0][k])) }
+                        close()
                     }
-                    // 悲觀／基準／樂觀三條線
-                    listOf(simQ[0] to down, simQ[1] to midCol, simQ[2] to up).forEach { (q, colr) ->
-                        var px = x((total - 1).toDouble()); var py = y(last)
-                        q.forEachIndexed { k, v -> val nx = x((total + k).toDouble()); val ny = y(v); drawLine(colr, Offset(px, py), Offset(nx, ny), 2.5f); px = nx; py = ny }
+                    drawPath(area, midCol.copy(alpha = 0.10f))
+                    listOf(Triple(simQ[0], down, 1.6f), Triple(simQ[2], up, 1.6f), Triple(simQ[1], midCol, 2.6f)).forEach { (q, colr, wd) ->
+                        var px = x0; var py = y0
+                        q.forEachIndexed { k, v -> val nx = x((total + k).toDouble()); val ny = y(v); drawLine(colr, Offset(px, py), Offset(nx, ny), wd); px = nx; py = ny }
                     }
                 }
                 // K 棒
@@ -1291,7 +1297,7 @@ private fun ProjectionCard(b: DailyBars) {
                     }
                 }
             }
-            Text("20 天後收高的機率約 $upProb%（200 次模擬）・統計推估，僅供參考", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("八成機率落在悲觀與樂觀之間；20 日後高於目前價的機率約 $upProb%。依近期波動推估，僅供參考。", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
