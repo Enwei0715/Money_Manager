@@ -217,6 +217,8 @@ object TabRequest {
     var accountsSection by androidx.compose.runtime.mutableStateOf<Int?>(null)
     var advisorSub by androidx.compose.runtime.mutableStateOf<Int?>(null)
     var txnsTab by androidx.compose.runtime.mutableStateOf<Int?>(null)
+    /** 要帶進「問 AI」輸入框的問題（例如從推薦追蹤請 AI 檢討） */
+    var chatQuestion by androidx.compose.runtime.mutableStateOf<String?>(null)
 }
 
 /** 打開路由：「advisor」「advisor:子頁」切到帳戶→助理，「review」切到交易→檢討，其他分頁用切換、其餘畫面照常開啟。 */

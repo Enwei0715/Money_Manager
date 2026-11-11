@@ -3247,3 +3247,20 @@ OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金
 八成機率落在悲觀與樂觀之間；20 日後高於目前價的機率約	80% chance of ending between bearish and bullish; chance of being above today's price in 20 days:
 %。依近期波動推估，僅供參考。	%. Estimated from recent volatility; for reference only.
 改看下方的統計區間（近	see the statistical range below (last
+推薦追蹤：查看每天推薦的股票與目前漲跌 ›	Pick tracker: each day's picks and their change since ›
+推薦追蹤	Pick tracker
+近 7 天	Last 7 days
+近 30 天	Last 30 days
+近 90 天	Last 90 days
+這段期間沒有推薦紀錄。	No picks in this period.
+讀取目前股價…	Loading current prices…
+讀不到目前股價，請稍後再試。	Couldn't load current prices; try again later.
+推薦檔次	Picks
+平均漲跌	Avg. change
+上漲比例	Share up
+最好：	Best:
+最差：	Worst:
+請 AI 檢討這些推薦 ›	Ask AI to review these picks ›
+推薦價	Pick price
+現價	Now
+以推薦當時的價格與現在的股價計算，同一天重複推薦的只算一次；事後統計，不代表之後的表現。	Based on the price when picked and the current price; repeat picks on the same day count once. Past results don't predict future performance.

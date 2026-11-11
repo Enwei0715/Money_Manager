@@ -225,6 +225,8 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     // 正在看的歷史報告（建立時間）；null 表示最新一份
     var viewing by rememberSaveable { mutableStateOf<Long?>(null) }
     var showHistory by remember { mutableStateOf(false) }
+    var showTrack by remember { mutableStateOf(false) }
+    if (showTrack) PickTrackSheet(store, nav) { showTrack = false }
     val r = viewing?.let { v -> store.history.find { it.createdAt == v } } ?: store.report
     val old = r != null && r !== store.report
     val recentCount by androidx.compose.runtime.produceState(0, System.identityHashCode(store)) {
@@ -385,6 +387,10 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
         if (r.regime.isNotBlank()) Text("大盤：" + r.regime.substringAfterLast("→ ").let { l -> "$l（${r.regime.substringBeforeLast("→").trim().trimEnd('，')}）" },
             fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (r.track.isNotBlank()) Text(r.track, fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
+        // 推薦追蹤：過去每天推薦的股票到現在漲跌多少
+        if ((listOfNotNull(store.report) + store.history).any { it.picks.isNotEmpty() })
+            Text("推薦追蹤：查看每天推薦的股票與目前漲跌 ›", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { showTrack = true }.padding(vertical = 4.dp))
         if (r.scanned > 0) Text("全市場 ${r.scanned} 檔依趨勢、法人籌碼、基本面、消息、風險評分後挑選", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     // ② 大盤 K 線與題材熱度
@@ -710,6 +716,10 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
+    // 其他頁面帶過來的問題（例如推薦追蹤的檢討）：放進輸入框，由使用者按送出
+    LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.chatQuestion) {
+        com.enwei.moneymanager.ui.TabRequest.chatQuestion?.let { input = it; com.enwei.moneymanager.ui.TabRequest.chatQuestion = null }
+    }
     var confirmClear by remember { mutableStateOf(false) }
     var showThreads by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
@@ -2248,3 +2258,108 @@ private fun PipelineSteps(step: String, refreshOnly: Boolean) =
 
 /** 篩選清單的一列：鍵、顯示名稱、則數、平均多空。 */
 private data class Quad(val a: String, val b: String, val c: Int, val d: Double)
+
+
+/** 推薦追蹤的一筆：某一天推薦的某檔股票與當時價格 */
+private data class TrackRow(val day: Long, val pick: com.enwei.moneymanager.data.StockPick)
+
+/**
+ * 推薦追蹤：把所有報告的推薦依「日期」整理（同一天多份報告的同一檔只算一次，取當天第一次的價格），
+ * 用現在的股價算出每檔的漲跌，上方是整體統計（檔數、平均、上漲比例、最好與最差）。
+ * 只是事後統計，不代表之後的表現。
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun PickTrackSheet(store: NewsStore, nav: NavController, onClose: () -> Unit) {
+    var span by com.enwei.moneymanager.ui.components.rememberTab("advisor.track", 1)
+    val days = listOf(7, 30, 90)[span.coerceIn(0, 2)]
+    val today = java.time.LocalDate.now().toEpochDay()
+    val rows = remember(System.identityHashCode(store), days) {
+        val seen = HashSet<String>()
+        (listOfNotNull(store.report) + store.history).filter { it.day >= today - days }.sortedBy { it.createdAt }
+            .flatMap { rep -> rep.picks.filter { it.price != null && it.price > 0 && seen.add("${rep.day}|${it.symbol}") }.map { TrackRow(rep.day, it) } }
+    }
+    // 現在的股價：一次查完所有推薦過的代號
+    var prices by remember { mutableStateOf<Map<String, Double>?>(null) }
+    val symbols = remember(rows) { rows.map { it.pick.symbol }.distinct() }
+    LaunchedEffect(symbols) {
+        prices = null
+        prices = if (symbols.isEmpty()) emptyMap() else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                com.enwei.moneymanager.net.QuoteService.fetch(symbols.map { com.enwei.moneymanager.core.Market.TW to it })
+                    .associate { it.key.substringAfter(':') to it.price }
+            }.getOrDefault(emptyMap())
+        }
+    }
+    fun ret(x: TrackRow): Double? = prices?.get(x.pick.symbol)?.takeIf { it > 0 }?.let { (it / x.pick.price!! - 1) * 100 }
+    val rets = rows.mapNotNull { x -> ret(x)?.let { x to it } }
+    val aiOn = repo.settings.flow.collectAsStateWithLifecycle().value.aiEnabled
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onClose, containerColor = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("推薦追蹤", fontSize = AppText.title, fontWeight = FontWeight.SemiBold)
+            com.enwei.moneymanager.ui.components.SubTabs(listOf("近 7 天", "近 30 天", "近 90 天"), span.coerceIn(0, 2)) { span = it }
+            when {
+                rows.isEmpty() -> Text("這段期間沒有推薦紀錄。", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp))
+                prices == null -> Text("讀取目前股價…", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                rets.isEmpty() -> Text("讀不到目前股價，請稍後再試。", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else -> {
+                    val avg = rets.map { it.second }.average()
+                    val best = rets.maxBy { it.second }; val worst = rets.minBy { it.second }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        @Composable fun tile(value: String, label: String, col: Color = MaterialTheme.colorScheme.onSurface) {
+                            Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), modifier = Modifier.weight(1f)) {
+                                Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                                    Text(value, fontSize = AppText.title, fontWeight = FontWeight.SemiBold, color = col, maxLines = 1)
+                                    Text(label, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                }
+                            }
+                        }
+                        tile("${rets.size}", "推薦檔次")
+                        tile("%+.1f%%".format(avg), "平均漲跌", if (avg >= 0) StockUp else StockDown)
+                        tile("${rets.count { it.second > 0 } * 100 / rets.size}%", "上漲比例")
+                    }
+                    Text("最好：${best.first.pick.symbol} ${best.first.pick.name} ${"%+.1f".format(best.second)}%　最差：${worst.first.pick.symbol} ${worst.first.pick.name} ${"%+.1f".format(worst.second)}%",
+                        fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (aiOn) TextButton(onClick = {
+                        val lines = rets.sortedByDescending { it.second }.take(40).joinToString("\n") { (x, v) ->
+                            "${java.time.LocalDate.ofEpochDay(x.day)} ${x.pick.symbol} ${x.pick.name}（${x.pick.style}）推薦價 ${x.pick.price} → ${"%+.1f".format(v)}%"
+                        }
+                        com.enwei.moneymanager.ui.TabRequest.chatQuestion = "請檢討近 $days 天的推薦表現：哪些類型選得好、哪些不好，之後選股該怎麼調整？\n平均 ${"%+.1f".format(avg)}%，上漲比例 ${rets.count { it.second > 0 } * 100 / rets.size}%。\n$lines"
+                        com.enwei.moneymanager.ui.TabRequest.advisorSub = 1
+                        onClose()
+                    }) { Text("請 AI 檢討這些推薦 ›", fontSize = AppText.caption) }
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            // 依日期列出（新到舊）；同一天裡漲最多的在前
+            androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                rows.groupBy { it.day }.entries.sortedByDescending { it.key }.forEach { (day, list) ->
+                    val dayRets = list.mapNotNull { ret(it) }
+                    item(key = "d$day") {
+                        Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            val d = java.time.LocalDate.ofEpochDay(day)
+                            Text("${d.monthValue}/${d.dayOfMonth}　${list.size} 檔", fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            if (dayRets.isNotEmpty()) dayRets.average().let { a ->
+                                Text("平均 ${"%+.1f".format(a)}%", fontSize = AppText.caption, color = if (a >= 0) StockUp else StockDown)
+                            }
+                        }
+                    }
+                    items(list.sortedByDescending { ret(it) ?: -999.0 }, key = { "r$day|${it.pick.symbol}" }) { x ->
+                        val v = ret(x); val now = prices?.get(x.pick.symbol)
+                        Row(Modifier.fillMaxWidth().clickable { onClose(); nav.navigate("stock/${x.pick.symbol}") }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("${x.pick.symbol} ${x.pick.name}", fontSize = AppText.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                Text(listOfNotNull(x.pick.style.ifBlank { null }, x.pick.score?.let { "$it 分" }, "推薦價 ${"%.2f".format(x.pick.price)}", now?.let { "現價 ${"%.2f".format(it)}" }).joinToString(" · "),
+                                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            }
+                            Text(v?.let { "%+.1f%%".format(it) } ?: "—", fontSize = AppText.body, color = if ((v ?: 0.0) >= 0) StockUp else StockDown)
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    }
+                }
+                item { Text("以推薦當時的價格與現在的股價計算，同一天重複推薦的只算一次；事後統計，不代表之後的表現。", fontSize = AppText.label,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp, bottom = 24.dp)) }
+            }
+        }
+    }
+}
