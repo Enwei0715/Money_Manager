@@ -204,10 +204,27 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val r = db.txns().upsert(t)
         if (t.status == TxnStatus.CONFIRMED) learnMerchant(t)
         if (before?.status == TxnStatus.PENDING && t.status == TxnStatus.CONFIRMED) learnFromConfirmed(t)
+        // 通知記的交易被改到別的帳戶：記住通知裡的卡號末四碼屬於這個帳戶，下次同一張卡直接記對
+        if (before != null && t.source == TxnSource.NOTIFICATION && t.accountId != null && before.accountId != t.accountId) runCatching { learnCardLast4(t) }
         // 預算跨過 80%／100% 時提醒
         if (before == null || before.status != TxnStatus.CONFIRMED || before.amount != t.amount || before.categoryId != t.categoryId)
             runCatching { checkBudgetAlert(t) }
         return if (t.id == 0L) r else t.id
+    }
+
+    private val last4InText = Regex("(?:末四碼|末4碼|尾號|末碼|後四碼|卡號末四碼|末五碼|末5碼)\\s*[:：]?\\s*\\*{0,4}(\\d{4,5})")
+
+    /**
+     * 從使用者的修正學習「卡號末四碼 → 帳戶」：通知原文只出現一組末四碼、還沒有帳戶登記這組號碼、
+     * 而且改到的帳戶（銀行或信用卡）還沒有末四碼時，才把它記到該帳戶。不同的人、不同的卡都適用，不用事先設定。
+     */
+    private suspend fun learnCardLast4(t: TxnEntity) {
+        val l4 = last4InText.findAll(t.rawText.orEmpty()).map { it.groupValues[1].takeLast(4) }.distinct().toList().singleOrNull() ?: return
+        val accounts = db.accounts().all()
+        if (accounts.any { it.cardLast4 == l4 }) return
+        val acc = accounts.firstOrNull { it.id == t.accountId } ?: return
+        if (!acc.cardLast4.isNullOrBlank() || acc.type !in setOf(AccountType.BANK, AccountType.CREDIT_CARD)) return
+        db.accounts().upsert(acc.copy(cardLast4 = l4))
     }
 
     suspend fun deleteTxn(id: Long) {
