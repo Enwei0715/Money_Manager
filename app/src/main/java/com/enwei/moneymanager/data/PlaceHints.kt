@@ -304,10 +304,13 @@ object PlaceHints {
     /** 人就在這家店：已知位置（手動指定或找到的）在 [within] 公尺內、且記過的店，取最近的一家 */
     fun storeHere(loc: Location, names: Set<String>, within: Float = 50f): String? {
         val all = merchantGeo().mapNotNull { (k, v) -> v?.let { k to it } }.toMap() + merchantPins()
-        return all.filter { it.key in names }
+        val near = all.filter { it.key in names }
             .map { (k, v) -> k to dist(loc.latitude, loc.longitude, v.first, v.second) }
             .filter { it.second <= within + loc.accuracy.coerceAtMost(30f) }
-            .minByOrNull { it.second }?.first
+            .sortedBy { it.second }
+        // 範圍內有好幾家記過的店、距離又差不多（美食街、商場）：分不出是哪一家，不自動帶入
+        if (near.size >= 2 && near[1].second - near[0].second < 20f) return null
+        return near.firstOrNull()?.first
     }
 
     fun historyNear(ctx: Context, loc: Location, txns: List<TxnEntity>, radius: Float = 150f): List<String> {

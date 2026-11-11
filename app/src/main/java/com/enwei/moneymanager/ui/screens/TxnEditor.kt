@@ -265,6 +265,37 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     val knownPlaces = remember { com.enwei.moneymanager.data.PlaceHints.merchantGeo().mapNotNull { (k, v) -> v?.let { k to it } }.toMap() + com.enwei.moneymanager.data.PlaceHints.merchantPins() }
     // Mapbox：打字時搜尋附近的店
     var mbResults by remember { mutableStateOf<List<com.enwei.moneymanager.net.Mapbox.Place>>(emptyList()) }
+    fun normName(x: String) = x.lowercase().replace(Regex("[\\s\\-－·・()（）|｜]"), "")
+    // 依你自己的記帳習慣：有些人把攤位寫在「說明」、店家寫美食街或賣場（例如 說明「泰刻」＋店家「第一餐廳」）。
+    // 過去至少兩筆、且七成以上都是同一個店家的說明，視為「攤位 → 店家」的固定寫法；沒有這種習慣的人不受影響。
+    val stallOwner = remember(history) {
+        history.asSequence().filter { it.type == TxnType.EXPENSE && !it.merchant.isNullOrBlank() && !it.note.isNullOrBlank() }
+            .map { it.note!!.split('・', '·').first().trim() to it.merchant!!.trim() }
+            .filter { (stall, m) -> stall.length in 2..12 && stall != m }
+            .groupBy({ it.first }, { it.second })
+            .mapNotNull { (stall, ms) ->
+                val top = ms.groupingBy { it }.eachCount().maxByOrNull { it.value } ?: return@mapNotNull null
+                if (top.value >= 2 && top.value * 10 >= ms.size * 7) stall to top.key else null
+            }.toMap()
+    }
+    // 定位完成時（幾秒後）要用到最新的習慣對應，不是畫面剛開時還沒載入的空白
+    val stallOwnerNow = androidx.compose.runtime.rememberUpdatedState(stallOwner)
+    /** 地圖或推薦的店名 → 依習慣拆成（店家, 說明）：店名含有你習慣寫在說明的攤位時，店家用對應的那一家 */
+    fun splitByHabit(placeName: String): Pair<String, String?> {
+        val clean = cleanPlaceName(placeName)
+        val key = normName(clean)
+        val owners = stallOwnerNow.value
+        val stall = owners.keys.filter { normName(it).let { n -> n.length >= 2 && key.contains(n) } }.maxByOrNull { it.length }
+        return if (stall != null) owners.getValue(stall) to stall else clean to null
+    }
+    /** 點選推薦或搜尋結果：帶入店家；攤位依習慣放到說明（說明已有內容時不覆蓋） */
+    fun pickPlace(placeName: String, at: Pair<Double, Double>?) {
+        val (m, stall) = splitByHabit(placeName)
+        merchant = m; merchantAuto = false
+        if (stall != null && note.isBlank()) note = stall
+        // 位置是攤位的位置：只有店家就是這個地點時才記成店家的位置
+        merchantAt = if (stall == null) at else null
+    }
     LaunchedEffect(Unit) {
         if (id != 0L || !settings.locationHints) return@LaunchedEffect
         val appCtx = com.enwei.moneymanager.MoneyApp.instance
@@ -287,11 +318,19 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             placeLocs = placeLocs + mb.associate { cleanPlaceName(it.name) to (it.lat to it.lon) }
             // 還沒依位置帶入店名：Google／Mapbox 找到 30 公尺內的店，名稱和記過的店對得上（例如「美麗潔美學牙醫診所 | …」對「美麗潔美學牙醫診所」）就用你記的店名
             if (merchant.isBlank()) {
-                fun norm(x: String) = x.lowercase().replace(Regex("[\\s\\-－·・()（）|｜]"), "")
-                mb.filter { (it.meters ?: 999f) <= 30f }.sortedBy { it.meters ?: 999f }.firstNotNullOfOrNull { p ->
-                    val pn = norm(p.name)
-                    names.firstOrNull { n -> norm(n).let { it.length >= 3 && (pn.contains(it) || it.contains(pn)) } }
-                }?.let { mine -> merchant = mine; merchantAuto = true }
+                // 30 公尺內、和你的紀錄對得上的店（店家名稱，或習慣寫在說明的攤位）
+                val cands = mb.filter { (it.meters ?: 999f) <= 30f }.mapNotNull { p ->
+                    val pn = normName(p.name)
+                    names.firstOrNull { n -> normName(n).let { it.length >= 3 && (pn.contains(it) || it.contains(pn)) } }?.let { it to null as String? }
+                        ?: splitByHabit(p.name).takeIf { it.second != null }
+                }
+                // 只有全部指向同一個店家才自動帶入；有好幾家（美食街）就不猜，留給下方的推薦讓你點
+                val ms = cands.map { it.first }.distinct()
+                if (ms.size == 1) {
+                    merchant = ms.first(); merchantAuto = true
+                    val stalls = cands.mapNotNull { it.second }.distinct()
+                    if (stalls.size == 1 && cands.size == 1 && note.isBlank()) note = stalls.first()
+                }
             }
             nearby = (hist + known + mb.map { cleanPlaceName(it.name) }).distinct().take(10)
             if (mb.isEmpty()) nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
@@ -302,7 +341,15 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         if (!settings.locationHints || !merchantFocused || merchant.trim().length < 2 || merchantAt != null || !com.enwei.moneymanager.net.PlaceSearch.online) { mbResults = emptyList(); return@LaunchedEffect }
         kotlinx.coroutines.delay(600)
         val c = hereLoc?.let { it.latitude to it.longitude } ?: com.enwei.moneymanager.data.PlaceHints.anchors(com.enwei.moneymanager.MoneyApp.instance).firstOrNull()
-        mbResults = com.enwei.moneymanager.net.PlaceSearch.search(merchant, c, 6).filter { it.name != merchant }
+        // 只留相關的結果：名稱和輸入的字有共同的兩個字（或英文單字），或就在 300 公尺內；
+        // 否則地圖會回傳只有一個字相同、好幾公里外的地方
+        val q = normName(merchant)
+        val grams = (0 until (q.length - 1).coerceAtLeast(0)).map { q.substring(it, it + 2) }.filter { g -> g.any { ch -> ch.code > 0x2E80 } }.toSet()
+        val words = merchant.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length >= 4 }.toSet()
+        mbResults = com.enwei.moneymanager.net.PlaceSearch.search(merchant, c, 6).filter { r ->
+            val rn = normName(r.name)
+            r.name != merchant && ((r.meters ?: 99_999f) <= 300f || grams.any { rn.contains(it) } || (grams.isEmpty() && words.any { rn.contains(it) }))
+        }
     }
     data class Guess(val categoryId: Long, val merchant: String?, val score: Double, val count: Int)
     val guesses = remember(amountMinor, type, history, accountId) {
@@ -650,7 +697,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         Surface(
                             shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius),
                             color = if (merchant == n) color.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.clickable { merchant = n; merchantAuto = false; merchantAt = placeLocs[n]; focusManager.clearFocus() },
+                            modifier = Modifier.clickable { pickPlace(n, placeLocs[n]); focusManager.clearFocus() },
                         ) { Text(n, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1) }
                     }
                 }
@@ -659,7 +706,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 if (merchantFocused && mbResults.isNotEmpty() && type != TxnType.TRANSFER) Column(Modifier.fillMaxWidth().padding(start = placeIndent, end = 16.dp, top = 4.dp)) {
                     mbResults.take(5).forEach { r ->
                         Column(Modifier.fillMaxWidth().clickable {
-                            merchant = cleanPlaceName(r.name); merchantAuto = false; merchantAt = r.lat to r.lon; mbResults = emptyList(); focusManager.clearFocus()
+                            pickPlace(r.name, r.lat to r.lon); mbResults = emptyList(); focusManager.clearFocus()
                         }.padding(vertical = 6.dp)) {
                             Text(r.name, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
                             Text(listOfNotNull(r.meters?.let { if (it < 1000) "${it.toInt()} 公尺" else "%.1f 公里".format(it / 1000) }, r.address.ifBlank { null }).joinToString("・"),

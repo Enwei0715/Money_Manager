@@ -1345,10 +1345,19 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         // 多個 App 同時通知同一筆消費（例如信用卡 + 支付 App）：不重複記帳，
         // 但先記的那筆只有支付工具名稱（LINE Pay）、這則有真正的店名（銀行通知的「實際商店名稱」）時，補上店名與分類
         nearby.firstOrNull { it.type == type && kotlin.math.abs(it.date - occurred) <= 3 * 60_000 }?.let { other ->
-            if (weakMerchant(other.merchant) && !weakMerchant(p.merchant)) {
-                val cat = suggestCategory(p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId ?: other.categoryId
-                return merged(other, other.copy(merchant = p.merchant, categoryId = cat),
-                    "${type.label} $amountText ${p.merchant}（同一筆，從另一則通知補上店名）")
+            // 實際扣款的帳戶：支付 App 的通知先到時先記在電子錢包，接著銀行／信用卡也通知同一筆
+            // （錢包綁卡付款，錢其實是從卡片扣的）→ 帳戶改成那張卡或那個銀行帳戶。
+            // 不論哪一家錢包、哪一家銀行都適用；反過來（銀行先到、錢包後到）則保留銀行帳戶。
+            val otherAcc = accounts.firstOrNull { it.id == other.accountId }
+            val funded = account != null && account.id != other.accountId && account.type != AccountType.EWALLET &&
+                (otherAcc == null || otherAcc.type == AccountType.EWALLET)
+            val betterName = weakMerchant(other.merchant) && !weakMerchant(p.merchant)
+            if (funded || betterName) {
+                val name = if (betterName) p.merchant else other.merchant
+                val cat = if (betterName) suggestCategory(p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId ?: other.categoryId else other.categoryId
+                return merged(other, other.copy(accountId = if (funded) account!!.id else other.accountId, merchant = name, categoryId = cat),
+                    "${type.label} $amountText ${name.orEmpty()}（同一筆" +
+                        (if (funded) "，實際由 ${account!!.name} 扣款" else "") + (if (betterName) "，從另一則通知補上店名" else "") + "）")
             }
             log.insert(logAs("DUPLICATE", other.id))
             return null

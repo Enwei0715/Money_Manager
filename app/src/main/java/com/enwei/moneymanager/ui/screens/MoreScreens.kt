@@ -640,7 +640,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         gone -> "交易已刪除" to MaterialTheme.colorScheme.onSurfaceVariant
                         pending -> "待確認" to Color(0xFFFFA000)
                         e.result == "RECORDED" -> "已記帳" to MaterialTheme.colorScheme.primary
-                        e.result == "MERGED" -> "合併為轉帳" to MaterialTheme.colorScheme.primary
+                        e.result == "MERGED" -> "已合併" to MaterialTheme.colorScheme.primary
                         e.result == "STOCK" -> "股票成交" to MaterialTheme.colorScheme.primary
                         e.result == "STOCK_PENDING" -> "股票待確認" to Color(0xFFFFA000)
                         e.result == "DUPLICATE" -> "重複略過" to MaterialTheme.colorScheme.onSurfaceVariant
