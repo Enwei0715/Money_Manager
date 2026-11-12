@@ -227,7 +227,7 @@ object ReportJob {
                         listOf(r.stage, r.outlook.takeIf { it.isNotBlank() }?.let { tr("短期") + " " + it }).filterNotNull().filter { it.isNotBlank() }.joinToString("・").ifBlank { null },
                         r.picks.takeIf { it.isNotEmpty() }?.let { ps -> tr("今天可以考慮") + "：" + ps.take(5).joinToString("、") { "${it.symbol} ${it.name}" } },
                         r.holdings.takeIf { it.isNotEmpty() }?.let { hs -> tr("持股動作") + "：" + hs.take(4).joinToString("、") { "${it.symbol} ${it.action}" } },
-                        tr("點一下看完整報告"),
+                        tr("點選看完整報告"),
                     ))
             }
             r

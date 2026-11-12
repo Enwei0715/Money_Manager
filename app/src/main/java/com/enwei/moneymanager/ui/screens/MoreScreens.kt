@@ -291,7 +291,7 @@ private fun installedApps(ctx: Context): List<AppEntry> {
 fun NotificationSettingsScreen(nav: NavController) {
     // 第一次打開這頁：介紹三個分頁
     com.enwei.moneymanager.ui.components.PageTour("notif", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step("nf.tab0", "紀錄", "列出讀取到的每則通知與處理結果（已記帳、待確認或略過）；辨識不正確時可「教它辨識」，下次即自動套用。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("nf.tab0", "紀錄", "列出讀取到的每則通知與處理結果（已記帳、待確認或略過）；辨識不正確時可「設定辨識方式」，下次即自動套用。"),
         com.enwei.moneymanager.ui.components.Coach.Step("nf.tab1", "來源 App", "指定要讀取的銀行、信用卡與支付 App；未勾選的 App 不會被讀取。"),
         com.enwei.moneymanager.ui.components.Coach.Step("nf.tab2", "進階", "地點測試、通知辨識測試與貼上通知測試；Android 15 被隱藏的通知內容，可在此依步驟開啟讀取。"),
     ))
@@ -328,7 +328,7 @@ fun NotificationSettingsScreen(nav: NavController) {
     val txnIds = remember(txns) { txns.map { it.id }.toHashSet() }
     fun loadNotes() = testScope.launch {
         val n = TxnNotificationListener.activeNotes()
-        testMsg = if (n == null) "還讀不到通知列：請確認已開啟通知存取權（開啟後可能要稍等幾秒）" else if (n.isEmpty()) "通知列目前沒有通知" else null
+        testMsg = if (n == null) "仍無法讀取通知列：請確認已開啟通知存取權（開啟後可能要稍等幾秒）" else if (n.isEmpty()) "通知列目前沒有通知" else null
         val list = n.orEmpty()
         val pv = repo.previewBatch(list.map { Repository.NotePreview(it.pkg, it.title, it.text, it.postedAt) })
         // 看得出是交易的排前面
@@ -379,7 +379,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                             testMsg = r?.let { "已記下：${it.message}" } ?: "沒有記下（可能已經記過了）"
                         }
                     }) { Text("記下這筆") }
-                    if (!desc.startsWith("LINE 聊天")) TextButton(onClick = { teach = nn }) { Text("教它辨識") }
+                    if (!desc.startsWith("LINE 聊天")) TextButton(onClick = { teach = nn }) { Text("設定辨識方式") }
                 }
             }
         }
@@ -610,14 +610,11 @@ fun NotificationSettingsScreen(nav: NavController) {
             }
             }
             if (tab == 0) {
-                // 篩選：全部／已記帳／待確認／略過／無法辨識
+                // 篩選：全部／已記帳／待確認／略過／無法辨識（單選，用和其他頁一樣的子分頁）
                 val filters = listOf("全部", "已記帳", "待確認", "略過", "無法辨識")
                 item {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        filters.forEachIndexed { i, l ->
-                            androidx.compose.material3.FilterChip(logFilter == i, { logFilter = i; allLog = false }, label = { Text(l, fontSize = AppText.caption) })
-                        }
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        com.enwei.moneymanager.ui.components.SubTabs(filters, logFilter) { logFilter = it; allLog = false }
                     }
                 }
                 fun deleted(e: com.enwei.moneymanager.data.NotificationLogEntity) =
@@ -638,7 +635,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     val pending = e.txnId in pendingIds
                     val (label, col) = when {
                         gone -> "交易已刪除" to MaterialTheme.colorScheme.onSurfaceVariant
-                        pending -> "待確認" to Color(0xFFFFA000)
+                        pending -> "待確認" to MaterialTheme.colorScheme.primary
                         e.result == "RECORDED" -> "已記帳" to MaterialTheme.colorScheme.primary
                         e.result == "MERGED" -> "已合併" to MaterialTheme.colorScheme.primary
                         e.result == "STOCK" -> "股票成交" to MaterialTheme.colorScheme.primary
@@ -670,17 +667,17 @@ fun NotificationSettingsScreen(nav: NavController) {
                         }) {
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("${labelOf[e.packageName] ?: e.packageName} · ${timeFmt.format(Date(e.postedAt))}", fontSize = AppText.label,
+                                Text("${labelOf[e.packageName] ?: knownAppNames[e.packageName] ?: e.packageName.substringAfterLast('.')} · ${timeFmt.format(Date(e.postedAt))}", fontSize = AppText.label,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1)
                                 Text(label, fontSize = AppText.label, color = col,
                                     modifier = Modifier.background(col.copy(alpha = 0.12f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
                             }
                             Text(listOfNotNull(e.title, e.text).joinToString(" "), fontSize = AppText.secondary, maxLines = 2,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            if (gone) Text("點一下重新記帳", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
+                            if (gone) Text("點選重新記帳", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
                             else if (e.result == "UNPARSED" && com.enwei.moneymanager.core.NotificationParser.parseStockFillPartial(e.title, e.text) != null)
-                                Text("點一下放到股票交易待確認", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
-                            else if (e.result in setOf("UNPARSED", "CANDIDATE", "PROMO")) Text("點一下教它這是交易", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
+                                Text("點選放到股票交易待確認", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
+                            else if (e.result in setOf("UNPARSED", "CANDIDATE", "PROMO")) Text("點選設定為交易", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
@@ -717,7 +714,7 @@ fun NotificationSettingsScreen(nav: NavController) {
         }
         AlertDialog(
             onDismissRequest = { teach = null },
-            title = { Text("教它辨識") },
+            title = { Text("設定辨識方式") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -1322,7 +1319,7 @@ private fun LocationTest(onSetup: () -> Unit = {}) {
                 suggestKey = false
                 try {
                     add("定位權限：" + (if (ph.hasPermission(ctx)) "已允許" else "未允許"), ph.hasPermission(ctx))
-                    add("背景位置：" + (if (ph.hasBackground(ctx)) "一律允許" else "未設為一律允許（App 沒開著時讀不到）"), ph.hasBackground(ctx))
+                    add("背景位置：" + (if (ph.hasBackground(ctx)) "一律允許" else "未設為一律允許（App 沒開著時無法取得）"), ph.hasBackground(ctx))
                     val locJob = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).async { runCatching { ph.current(ctx) }.getOrNull() }
                     val loc = kotlinx.coroutines.withTimeoutOrNull(10_000) { locJob.await() }
                     if (loc == null) add("目前位置：10 秒內拿不到（請確認手機的定位已開啟，或到室外再試）", false)
@@ -1366,3 +1363,11 @@ private fun LocationTest(onSetup: () -> Unit = {}) {
         }
     }
 }
+
+
+/** 常見來源 App 的名稱（手機上沒有安裝、讀不到 App 名稱時用） */
+internal val knownAppNames = mapOf(
+    "jp.naver.line.android" to "LINE", "com.google.android.gm" to "Gmail", "com.google.android.apps.messaging" to "訊息",
+    "com.samsung.android.messaging" to "訊息", "com.cathaybk.mymobibank.android" to "國泰世華", "com.esunbank" to "玉山銀行",
+    "com.chb.mobilebank" to "彰化銀行", "tw.com.post.ap" to "行動郵局", "com.jkos.app" to "街口支付",
+)

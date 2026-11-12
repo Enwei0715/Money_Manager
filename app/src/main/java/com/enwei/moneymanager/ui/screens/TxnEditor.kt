@@ -676,7 +676,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("猜你是", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("建議", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     guesses.forEach { g ->
                         val sel = categoryId == g.categoryId && (g.merchant == null || merchant == g.merchant)
                         androidx.compose.material3.FilterChip(sel, {

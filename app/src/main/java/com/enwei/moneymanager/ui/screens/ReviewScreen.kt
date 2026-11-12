@@ -268,7 +268,13 @@ fun ReviewContent(
             if (rt == 0 && d.top.isNotEmpty()) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 12.dp)) {
                     Text("最大三筆支出", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp))
-                    d.top.take(3).forEach { t -> MmTxnRow(t, lk) { nav.navigate("txn/${t.id}") } }
+                    // 每筆標上日期：同一家店同金額的兩筆才分得出是不同天
+                    d.top.take(3).forEach { t ->
+                        val day = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                        Text("${day.monthValue}/${day.dayOfMonth}（${com.enwei.moneymanager.core.Recurrence.weekdayName(day.dayOfWeek)}）",
+                            fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, top = 6.dp))
+                        MmTxnRow(t, lk) { nav.navigate("txn/${t.id}") }
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))

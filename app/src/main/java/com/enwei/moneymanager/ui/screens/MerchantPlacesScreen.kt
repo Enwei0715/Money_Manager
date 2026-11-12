@@ -310,7 +310,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                             scope.launch {
                                 val l = kotlinx.coroutines.withTimeoutOrNull(8000) { PlaceHints.current(ctx) }
                                 if (l != null) { PlaceHints.setMerchantPin(p.name, l.latitude, l.longitude, "定位"); tick++ }
-                                else android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("讀不到目前位置"), android.widget.Toast.LENGTH_SHORT).show()
+                                else android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("無法取得目前位置"), android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
                         action("不是實體店（不放地圖）") { PlaceHints.setExcluded(p.name, true); tick++ }

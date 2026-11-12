@@ -72,7 +72,7 @@ object QuickActions {
                     if (u.left >= 0) tr("剩") + " " + Money.withSymbol(u.left, repo.settings.value.baseCurrency)
                     else tr("超出") + " " + Money.withSymbol(-u.left, repo.settings.value.baseCurrency)
             },
-            if (pending) tr("點一下確認或修改") else if (t.categoryId == null && t.type != TxnType.TRANSFER) tr("還沒有分類，可直接按下方按鈕") else null,
+            if (pending) tr("點選確認或修改") else if (t.categoryId == null && t.type != TxnType.TRANSFER) tr("還沒有分類，可直接按下方按鈕") else null,
         )
         val b = AppNotices.builder(
             context, NoticeKind.RECORDED, notifId(t.id),

@@ -3345,3 +3345,51 @@ OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金
 記錯了	Wrong
 這個月還沒有交易	No transactions this month
 已刪除一筆交易	Transaction deleted
+看不出是交易（找不到金額，或沒有「消費／付款／入帳」等字樣）。若這是交易通知，按「設定辨識方式」。	Doesn't look like a transaction (no amount, or no words like "purchase / payment / deposit"). If it is one, tap "Teach it".
+看不懂的格式可以按「設定辨識方式」，之後同樣標題的通知就會照你教的記帳。	For unknown formats tap "Teach it"; notifications with the same title will then be recorded the way you taught.
+仍無法讀取通知列：請確認已開啟通知存取權（開啟後可能要稍等幾秒）	Can't read notifications yet: make sure notification access is on (it may take a few seconds)
+點選新增支出	Tap to add an expense
+設定辨識方式	Teach it
+也讀到這些金額，點選可改用：	Also found these amounts, tap to use one:
+顯示通知列上每一則通知會怎麼記；漏記的可以補記，看不懂的可以設定辨識方式。	Shows how each notification in the shade would be recorded; record missed ones or teach unknown formats.
+點選前往更新	Tap to update
+無法取得這檔股票的價格資料（代號可能不正確）	No price data for this stock (code may be wrong)
+無法取得現價	No price
+怎麼收的（自動分析常見收法，點選選用）	How you received it (common ways, tap to pick)
+怎麼付的（自動分析常見付法，點選選用）	How you paid (common ways, tap to pick)
+拖動方框移動位置，拖右下角的圓點改大小，點選可以挑大小，✕ 移除。	Drag a tile to move it, drag the corner dot to resize, tap to pick a size, ✕ to remove.
+建議	Maybe
+無法取得股票清單（需要網路）；也可以直接輸入完整代號	Can't load the stock list (needs network); you can enter a full code
+無法取得這幾檔的營收資料	Couldn't load revenue for these stocks
+點選修改	Tap to edit
+點選重新記帳	Tap to record again
+點選設定為交易	Tap to teach it this is a transaction
+點選看個股	tap to open the stock
+拖動方框到任何空格，放開就固定在那裡；拖右下角的圓點改大小，點選可以挑大小，✕ 移除。	Drag a tile to any empty cell and it stays there; drag the corner dot to resize, tap to pick a size, ✕ to remove.
+點選確認或修改	Tap to confirm or edit
+點選看這個月的收支檢討	Tap to see this month's review
+點選查看帳戶	Tap to view the account
+點選看 K 線與紀律	Tap to see the chart and rules
+點選看完整報告	Tap to see the full report
+點選看完整回覆	Tap to see the full reply
+點選看這個月的收支分析	Tap to see this month's analysis
+點選放到股票交易待確認	Tap to move to pending stock trades
+接下來依序介紹各項功能的位置，可隨時點選「略過全部」。	The following steps show where each feature is. Tap "Skip all" at any time.
+略過全部	Skip all
+無法取得這幾檔的營收資料（需要網路，或資料來源暫時無法連線）	Revenue data unavailable (network required, or the source is temporarily unreachable)
+無法取得目前位置	Couldn't get current location
+列出讀取到的每則通知與處理結果（已記帳、待確認或略過）；辨識不正確時可「設定辨識方式」，下次即自動套用。	Lists every notification read and its result (recorded, pending or skipped); if recognition is wrong, use "Teach" and it applies next time.
+可選擇到期時直接記錄，或放入「待確認」由你確認金額後再記錄；分期付款也在此設定。	Record automatically when due, or place in "Pending" for you to confirm the amount; instalments are set here too.
+接下來依序介紹各頁面，以及你在設定中選擇開啟的功能。可隨時點選「略過全部」，日後於「設定 → 關於 → 新手導覽」重新查看。	Next we'll walk through each page and the features you chose to turn on. Tap "Skip all" at any time; replay later in Settings → About → Tour.
+開始導覽	Take the tour
+未設為一律允許（App 沒開著時無法取得）	Not "Allow all the time" (unavailable when the app is closed)
+無法取得目前股價，請稍後再試。	Couldn't load current prices; try again later.
+可選擇到期時直接記錄，或放入「待確認」由你確認金額後再記錄；設定結束日期即可記錄固定期數的分期。	Record automatically when due, or send to Pending to confirm the amount first. Set an end date to record a fixed number of installments.
+點選逐筆確認或修改	Tap to review and confirm
+設定辨識方式	Set recognition
+建議	Suggested
+點選設定為交易	Tap to set as a transaction
+開始導覽	Start tour
+略過全部	Skip all
+買賣點	Signals
+看全部新聞	See all news

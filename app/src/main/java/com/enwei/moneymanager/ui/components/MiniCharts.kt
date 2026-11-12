@@ -229,12 +229,14 @@ fun SignedBars(title: String, rows: List<Triple<String, Double, String>>, pos: C
         rows.forEach { (name, v, label) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(name, fontSize = AppText.label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(88.dp))
-                Row(Modifier.weight(1f).height(10.dp).background(track, RoundedCornerShape(3.dp))) {
+                Row(Modifier.weight(1f).height(14.dp).background(track, RoundedCornerShape(3.dp)), verticalAlignment = Alignment.CenterVertically) {
                     val f = (kotlin.math.abs(v) / max).toFloat().coerceIn(0.02f, 1f)
                     // 左半邊放負值、右半邊放正值
                     Box(Modifier.weight(1f).height(10.dp)) {
                         if (v < 0) Box(Modifier.align(Alignment.CenterEnd).fillMaxWidth(f).height(10.dp).background(neg, RoundedCornerShape(3.dp)))
                     }
+                    // 中間的零軸：左邊是跌、右邊是漲
+                    Box(Modifier.width(1.dp).height(14.dp).background(MaterialTheme.colorScheme.onSurfaceVariant))
                     Box(Modifier.weight(1f).height(10.dp)) {
                         if (v >= 0) Box(Modifier.fillMaxWidth(f).height(10.dp).background(pos, RoundedCornerShape(3.dp)))
                     }
@@ -351,7 +353,7 @@ fun RevenueCompare(symbols: List<String>, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("月營收年增率比較", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
         if (rows == null) { Text("讀取營收中…", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
-        if (rows.isEmpty()) { Text("讀不到這幾檔的營收資料（需要網路，或資料來源暫時無法連線）", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
+        if (rows.isEmpty()) { Text("無法取得這幾檔的營收資料（需要網路，或資料來源暫時無法連線）", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
         val max = rows.maxOf { kotlin.math.abs(it.second) }.takeIf { it > 0 } ?: 1.0
         rows.sortedByDescending { it.second }.forEach { (name, v, label) ->
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

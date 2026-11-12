@@ -68,7 +68,7 @@ object GroqAi {
     enum class AiTask(val label: String, val desc: String, val lite: Boolean, val userText: Boolean = true) {
         NOTIFY("通知判讀", "規則看不懂的銀行／支付通知", true, userText = false),
         NAMING("商家命名與分類", "代碼商家換成好讀名稱、挑分類", true),
-        TEACH("教它辨識", "先幫你判斷通知的類型與帳戶", true),
+        TEACH("設定辨識方式", "先幫你判斷通知的類型與帳戶", true),
         DUPLICATE("重複交易判斷", "通知、錢包、手動重複記的同一筆", true),
         COMPANY("公司說明", "股票資訊頁的公司業務", true),
         WALLET("錢包畫面整理", "版面規則看不懂的交易紀錄畫面", true, userText = false),

@@ -118,7 +118,7 @@ fun DisciplineChart(symbol: String, modifier: Modifier = Modifier) {
                 }
             }
         }
-        Text("━ 月線　━ 季線　●買／●賣＝紀律買賣點（點一下看個股）", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("━ 月線　━ 季線　●買／●賣＝紀律買賣點（點選看個股）", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         st?.let { s ->
             Text(s.verdict, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold,
                 color = when (s.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface })

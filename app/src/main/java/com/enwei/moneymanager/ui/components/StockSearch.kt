@@ -51,7 +51,7 @@ fun StockSearch(onPick: (TwData.StockInfo) -> Unit, maxHeight: Dp = 360.dp, auto
         OutlinedTextField(q, { q = it.take(20) }, label = { Text(autoFocusHint) }, singleLine = true, modifier = Modifier.fillMaxWidth())
         if (loading) Text("搜尋中…", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
         if (!loading && q.isNotBlank() && results.isEmpty()) {
-            Text(if (failed) "讀不到股票清單（需要網路）；也可以直接輸入完整代號" else "找不到符合的股票", fontSize = AppText.caption,
+            Text(if (failed) "無法取得股票清單（需要網路）；也可以直接輸入完整代號" else "找不到符合的股票", fontSize = AppText.caption,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
             // 直接輸入代號也能用
             if (q.trim().uppercase().matches(Regex("[0-9]{4,6}[A-Z]?|[A-Z][A-Z.\\-]{0,5}"))) Text("使用代號 ${q.trim().uppercase()} ›", fontSize = AppText.body,

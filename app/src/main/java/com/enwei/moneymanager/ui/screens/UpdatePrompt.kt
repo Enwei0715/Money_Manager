@@ -97,7 +97,8 @@ fun UpdatePrompt() {
         },
         text = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                val list = sections.asReversed().let { if (showAll) it else it.take(3) }
+                // 更新說明最新的段落在最上面：依原順序取前幾段
+                val list = sections.let { if (showAll) it else it.take(3) }
                 Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     list.forEach { (title, lines) ->
                         androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = androidx.compose.foundation.shape.RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)) {
@@ -148,9 +149,11 @@ fun UpdatePrompt() {
 internal fun parseNotes(notes: String): List<Pair<String, List<String>>> {
     val out = ArrayList<Pair<String, MutableList<String>>>()
     notes.lines().map { it.trim() }.filter { it.isNotEmpty() }.forEach { l ->
-        if (l.startsWith("【")) out += l.trim('【', '】') to mutableListOf()
+        // 「### 標題」「## 標題」也是段落標題；條列開頭的「・」「- 」去掉
+        val h = l.trimStart('#').trim()
+        if (l.startsWith("【") || l.startsWith("#")) out += h.trim('【', '】') to mutableListOf()
         else if (out.isEmpty()) { if (!l.contains("更新說明")) out += "" to mutableListOf(l) }
-        else out.last().second += l
+        else out.last().second += l.removePrefix("・").removePrefix("- ").trim()
     }
     return out.filter { it.second.isNotEmpty() || it.first.isNotBlank() }
 }

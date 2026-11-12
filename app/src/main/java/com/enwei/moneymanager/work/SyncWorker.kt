@@ -165,7 +165,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 list.take(4).map { x ->
                     "${x.date.monthValue}/${x.date.dayOfMonth} ${x.from.name}：" + com.enwei.moneymanager.ui.tr("扣") + " ${M.withSymbol(x.needed, x.from.currency)}，" +
                         com.enwei.moneymanager.ui.tr("還差") + " ${M.withSymbol(x.shortBy, x.from.currency)}"
-                } + com.enwei.moneymanager.ui.tr("點一下查看帳戶"))
+                } + com.enwei.moneymanager.ui.tr("點選查看帳戶"))
         }
 
         /** 待確認的交易放超過一天：晚上 7 點後提醒一次（一天最多一次），避免帳越積越多。 */
@@ -180,7 +180,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             repo.settings.update { it.copy(pendingNudgeDay = today) }
             com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.RECORDED, 9330,
                 com.enwei.moneymanager.ui.tr("有待確認的交易") + "（${pending.size}）",
-                com.enwei.moneymanager.ui.tr("點一下逐筆確認或修改"), "pending", emptyList())
+                com.enwei.moneymanager.ui.tr("點選逐筆確認或修改"), "pending", emptyList())
         }
 
         /**

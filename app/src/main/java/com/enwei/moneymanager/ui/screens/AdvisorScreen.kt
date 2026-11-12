@@ -1218,6 +1218,13 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                         fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp))
                 }
                 // grid：市場大局（所有題材重點的彙整）
+                // 有新聞但還沒整理出重點、題材：說明狀況並引導到「全部」看原始新聞，不讓畫面空白
+                if (store.items.isNotEmpty() && store.overview.isEmpty() && stats.important.isEmpty() && themes.isEmpty()) item {
+                    Column(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("已蒐集 ${store.items.size} 則新聞，重點整理中。", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        androidx.compose.material3.OutlinedButton(onClick = { view = 1 }) { Text("看全部新聞") }
+                    }
+                }
                 if (store.overview.isNotEmpty()) item {
                     com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1720,7 +1727,7 @@ private fun GuardRow(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwei.m
             }
         }
         if (gi == null || g == null) {
-            Text("讀不到現價", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("無法取得現價", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             Text(
                 if (g.excessShares >= 1) "多賺 ${g.excessShares.toLong()} 股 · 停利價 ${f(g.takeProfit)}"
@@ -2301,7 +2308,7 @@ private fun PickTrack(store: NewsStore, nav: NavController) {
         com.enwei.moneymanager.ui.components.SubTabs(listOf("近 7 天", "近 30 天", "近 90 天"), span.coerceIn(0, 2)) { span = it }
         when {
             rows.isEmpty() -> Text("這段期間沒有推薦紀錄。", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            rets.isEmpty() -> Text(if (fetched == null) "讀取目前股價…" else "讀不到目前股價，請稍後再試。", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            rets.isEmpty() -> Text(if (fetched == null) "讀取目前股價…" else "無法取得目前股價，請稍後再試。", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             else -> {
                 val avg = rets.map { it.second }.average()
                 val best = rets.maxBy { it.second }; val worst = rets.minBy { it.second }

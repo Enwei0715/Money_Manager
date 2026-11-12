@@ -107,7 +107,7 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
             out.forEach { (sym, title, text) ->
                 com.enwei.moneymanager.notify.AppNotices.show(context, com.enwei.moneymanager.notify.NoticeKind.STOCK, 9400 + Math.floorMod(sym.hashCode(), 500),
                     com.enwei.moneymanager.notify.AppNotices.builder(context, com.enwei.moneymanager.notify.NoticeKind.STOCK, 9400 + Math.floorMod(sym.hashCode(), 500), tr(title), tr(text), "stock/$sym",
-                        listOf(tr(text), tr("點一下看 K 線與紀律"))).setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH))
+                        listOf(tr(text), tr("點選看 K 線與紀律"))).setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH))
             }
         }
 
@@ -119,9 +119,9 @@ class StockAlertWorker(context: Context, params: WorkerParameters) : CoroutineWo
             val r = runCatching { com.enwei.moneymanager.net.Updater.latest(s.githubToken) }.getOrNull() ?: return
             if (!com.enwei.moneymanager.net.Updater.isNewer(r) || r.versionCode <= s.updateNotified || r.versionCode == s.updateSkipped) return
             repo.settings.update { it.copy(updateNotified = r.versionCode) }
-            com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.UPDATE, 9330, tr("有新版本") + " ${r.tag}", tr("點一下前往更新"), "settings",
+            com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.UPDATE, 9330, tr("有新版本") + " ${r.tag}", tr("點選前往更新"), "settings",
                 com.enwei.moneymanager.ui.screens.parseNotes(r.notes).take(2).flatMap { (h, items) -> listOf("【$h】") + items.take(3).map { "・$it" } }
-                    .ifEmpty { listOf(tr("點一下前往更新")) })
+                    .ifEmpty { listOf(tr("點選前往更新")) })
         }
     }
 }

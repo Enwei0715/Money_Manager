@@ -822,7 +822,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val p = aiOverride ?: learned?.parse(title, text)
             ?: NotificationParser.parse(title, text)
             ?: (if (!aiHandled && enabled && com.enwei.moneymanager.net.GroqAi.enabled) com.enwei.moneymanager.net.GroqAi.parseNotification(title, text)?.also { aiParsed = true } else null)
-            ?: return false to "看不出是交易（找不到金額，或沒有「消費／付款／入帳」等字樣）。若這是交易通知，按「教它辨識」。"
+            ?: return false to "看不出是交易（找不到金額，或沒有「消費／付款／入帳」等字樣）。若這是交易通知，按「設定辨識方式」。"
         val accounts = db.accounts().all().filter { !it.archived }
         val raw0 = listOfNotNull(title, text).joinToString("\n")
         val account = resolveAccount(pkg, p, raw0, learned, bankSrc, accounts)

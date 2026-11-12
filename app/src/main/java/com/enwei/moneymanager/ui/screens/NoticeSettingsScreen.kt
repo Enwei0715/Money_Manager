@@ -141,9 +141,9 @@ private fun sample(ctx: android.content.Context, k: NoticeKind) {
             listOf(tr("分類") + "：" + tr("餐飲"), tr("帳戶") + "：LINE Pay", tr("預算") + "：" + tr("總預算") + " " + tr("已用") + " 8%"))
         NoticeKind.BUDGET -> AppNotices.post(ctx, k, id, tr("餐飲 已用 80% 預算"), "$ 4,000 / $ 5,000・" + tr("剩") + " $ 1,000", "review")
         NoticeKind.BILLS -> AppNotices.post(ctx, k, id, tr("借貸提醒"), tr("範例：3 天後要還款"), "accounts")
-        NoticeKind.STOCK -> AppNotices.post(ctx, k, id, tr("範例：2330 跌破停利價"), tr("點一下看 K 線與紀律"), "invest")
-        NoticeKind.REPORT -> AppNotices.post(ctx, k, id, tr("今日投資報告已更新"), tr("點一下看完整報告"), "advisor:0")
+        NoticeKind.STOCK -> AppNotices.post(ctx, k, id, tr("範例：2330 跌破停利價"), tr("點選看 K 線與紀律"), "invest")
+        NoticeKind.REPORT -> AppNotices.post(ctx, k, id, tr("今日投資報告已更新"), tr("點選看完整報告"), "advisor:0")
         NoticeKind.PROGRESS -> AppNotices.post(ctx, k, id, tr("產生投資報告中"), tr("範例進度"), "advisor:0")
-        NoticeKind.UPDATE -> AppNotices.post(ctx, k, id, tr("有新版本"), tr("點一下前往更新"), "settings")
+        NoticeKind.UPDATE -> AppNotices.post(ctx, k, id, tr("有新版本"), tr("點選前往更新"), "settings")
     }
 }

@@ -183,7 +183,7 @@ object Onboarding {
                         Button(onClick = {
                             if (!last) scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } else finish(tour = true)
                         }, modifier = Modifier.weight(1f).height(48.dp)) {
-                            Text(if (!last) "下一步（${pager.currentPage + 1}/${pages.size}）" else "帶我逛一圈", fontSize = AppText.section)
+                            Text(if (!last) "下一步（${pager.currentPage + 1}/${pages.size}）" else "開始導覽", fontSize = AppText.section)
                         }
                     }
                 }

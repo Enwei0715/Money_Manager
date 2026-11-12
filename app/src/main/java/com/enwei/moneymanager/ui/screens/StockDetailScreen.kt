@@ -61,6 +61,8 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.enwei.moneymanager.MoneyApp
@@ -220,7 +222,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 }
             }
             val b = bars
-            if (!loading && b == null) Text("讀不到這檔股票的價格資料（代號可能不正確）", color = MaterialTheme.colorScheme.error)
+            if (!loading && b == null) Text("無法取得這檔股票的價格資料（代號可能不正確）", color = MaterialTheme.colorScheme.error)
             if (b != null && b.close.isNotEmpty()) {
                 val c = b.close
                 val last = c.last()
@@ -463,7 +465,9 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                         maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                         color = when (stt?.bias) { 1 -> StockUp; -1 -> StockDown; else -> MaterialTheme.colorScheme.onSurface })
                                     if (hourly) com.enwei.moneymanager.ui.components.HelpIcon("移動停利是什麼", com.enwei.moneymanager.ui.components.HelpText.TRAIL)
-                                    androidx.compose.material3.Switch(showSignals, { showSignals = it }, Modifier.scale(0.75f))
+                                    // 開關旁寫清楚它控制什麼
+                                    Text("買賣點", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    androidx.compose.material3.Switch(showSignals, { showSignals = it }, Modifier.scale(0.75f).semantics { contentDescription = "在 K 線上顯示紀律買賣點" })
                                 }
                                 if (showSignals) {
                                     stt?.let { st ->

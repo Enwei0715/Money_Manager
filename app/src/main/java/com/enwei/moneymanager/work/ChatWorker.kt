@@ -80,7 +80,7 @@ object ChatJob {
         val clean = com.enwei.moneymanager.data.stripCites(text).trim()
         com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.REPORT, 9340, tr("股票助理回覆了"),
             clean.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(80), "advisor:1",
-            listOf(clean.take(400), tr("點一下看完整回覆")))
+            listOf(clean.take(400), tr("點選看完整回覆")))
     }
 
 }

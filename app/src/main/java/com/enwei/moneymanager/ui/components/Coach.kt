@@ -63,7 +63,7 @@ object Coach {
     private data class S(val need: String?, val step: Step)
 
     private fun all(stocks: Boolean, ai: Boolean, split: Boolean) = listOf(
-        S(null, Step(null, "功能導覽", "接下來依序介紹各頁面，以及你在設定中選擇開啟的功能。可隨時點選「跳過全部」，日後於「設定 → 關於 → 新手導覽」重新查看。")),
+        S(null, Step(null, "功能導覽", "接下來依序介紹各頁面，以及你在設定中選擇開啟的功能。可隨時點選「略過全部」，日後於「設定 → 關於 → 新手導覽」重新查看。")),
         S(null, Step("tab.txns", "交易", "每日的收入與支出依日期排列；點選交易可查看與修改。", tab = "txns")),
         S(null, Step("txns.summary", "本月總覽", "本月的收入、支出與結餘；設定預算後，可在此查看使用比例與每日可用金額。", tab = "txns")),
         S(null, Step("fab.add", "新增交易", "輸入金額，選擇分類與帳戶即可儲存；上方可切換支出、收入、轉帳" + (if (stocks) "與股票" else "") + "。" +
@@ -189,7 +189,7 @@ fun CoachOverlay(onTab: (String) -> Unit) {
                 }
                 Text(st.body, fontSize = AppText.body)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    if (i < steps.lastIndex) TextButton(onClick = { Coach.stop(); if (!Coach.pageMode) onTab("txns") }) { Text(if (Coach.pageMode) "略過" else "跳過全部") }
+                    if (i < steps.lastIndex) TextButton(onClick = { Coach.stop(); if (!Coach.pageMode) onTab("txns") }) { Text(if (Coach.pageMode) "略過" else "略過全部") }
                     Spacer(Modifier.weight(1f))
                     if (i > 0) TextButton(onClick = { Coach.prev() }) { Text("上一步") }
                     Button(onClick = { Coach.next() }) { Text(if (i < steps.lastIndex) "下一步" else if (Coach.pageMode) "知道了" else "開始使用") }
