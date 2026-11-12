@@ -115,8 +115,9 @@ def back(wait=1.2):
 
 
 def scroll(times=1):
-    for _ in range(times):
-        adb("input swipe 540 1700 540 600 400")
+    """正數往下捲、負數往上捲"""
+    for _ in range(abs(times)):
+        adb("input swipe 540 1700 540 600 400" if times > 0 else "input swipe 540 600 540 1700 400")
         time.sleep(0.8)
 
 
@@ -204,9 +205,11 @@ def main():
 
     # ④ 個股頁
     launch(); tap("資產", exact=True); tap("股票", exact=True); tap("持股"); time.sleep(3)
-    tap("2330"); time.sleep(3); shot("holding_2330")
-    tap("K 線與資訊"); time.sleep(12); shot("stock_2330")
+    # 持股直接打開個股頁（上方是「我的持股」卡片）
+    tap("2330"); time.sleep(12); shot("holding_2330")
     scroll(2); shot("stock_2330_mid")
+    # 「分析」分段：營收、趨勢推估
+    scroll(-6); tap("分析", exact=True); time.sleep(4); shot("stock_2330_analysis")
     scroll(3); shot("stock_2330_projection")
     back()
 

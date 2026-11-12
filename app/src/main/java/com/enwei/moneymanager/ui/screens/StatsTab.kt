@@ -175,6 +175,8 @@ fun StatsTab(nav: NavController) {
     val sum = byCat.sumOf { it.second }
 
     val topScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    // 切換「分類／分析」時把收起的頂列放回來：分析內容短、不能捲動時，否則就找不到切換期間的箭頭
+    LaunchedEffect(view) { topScroll.state.heightOffset = 0f }
     Scaffold(modifier = Modifier.nestedScroll(topScroll.nestedScrollConnection), containerColor = MaterialTheme.colorScheme.background, topBar = {
         com.enwei.moneymanager.ui.ChromeScale { TopAppBar(
             scrollBehavior = topScroll,

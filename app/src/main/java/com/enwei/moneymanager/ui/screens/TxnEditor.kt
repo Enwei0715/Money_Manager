@@ -1058,8 +1058,8 @@ private fun BottomPanel(
 ) {
     var currencyMenu by remember { mutableStateOf(false) }
     // 顏色跟隨主題（深淺色、主題色），不再固定黑底與藍紫色
-    val headerBg = MaterialTheme.colorScheme.inverseSurface
-    val onHeader = MaterialTheme.colorScheme.inverseOnSurface
+    val headerBg = MaterialTheme.colorScheme.surfaceVariant
+    val onHeader = MaterialTheme.colorScheme.onSurfaceVariant
     val barBg = MaterialTheme.colorScheme.primaryContainer
     val onBar = MaterialTheme.colorScheme.onPrimaryContainer
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).navigationBarsPadding()) {
