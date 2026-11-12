@@ -1,6 +1,7 @@
 package com.enwei.moneymanager.ui.screens
 
 import com.enwei.moneymanager.ui.components.coachTarget
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.outlined.Notifications
 import com.enwei.moneymanager.ui.AppText
@@ -257,6 +258,23 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                 "RSI" to (Technicals.rsi(c)?.let { "%.0f".format(it) } ?: "-"),
                             ),
                         )
+                    }
+                }
+                // 我的持股：有持有時在最上方看到股數、均價與損益（持股明細合進這一頁，不用另開一頁）
+                if (held.isNotEmpty()) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth().clickable { nav.navigate("holding/TW/$symbol") }) {
+                    val sh = held.sumOf { it.shares }
+                    val avg = held.sumOf { it.avgCost * it.shares } / sh
+                    val pnl = held.sumOf { it.unrealized }
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("我的持股", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("%,.0f 股・均價 %.2f".format(sh, avg), fontSize = AppText.body)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("預估損益", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("%+,.0f".format(pnl), fontSize = AppText.body, color = if (pnl >= 0) StockUp else StockDown)
+                        }
+                        Icon(androidx.compose.material.icons.Icons.Filled.ChevronRight, "持股明細", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 // 分段：走勢（K 線、強弱）／分析（營收、趨勢推估、持股紀律）／資訊（除權息、提醒、公司、新聞），每段一個畫面看得完

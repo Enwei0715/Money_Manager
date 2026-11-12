@@ -134,12 +134,26 @@ fun StatsTab(nav: NavController) {
         com.enwei.moneymanager.ui.components.Coach.Step("st.period", "期間", "左右箭頭切換上一期或下一期；點選中間的期間名稱可回到本期（自訂期間時則重新選擇期間）。"),
         com.enwei.moneymanager.ui.components.Coach.Step("st.kind", "類型與期間長度", "切換支出或收入，以及每週、每月、每年或自訂期間。"),
         com.enwei.moneymanager.ui.components.Coach.Step("st.pie", "分類比例", "圓餅圖顯示各分類所佔比例；下方清單點選分類可查看子分類與明細交易。"),
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "更多分析", "往下捲動可查看每月比較與收支趨勢；選擇自訂期間可比較任意兩段時間。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "每月比較與分析", "往下捲動可查看近 6 個月比較；上方「分析」分頁整理支出總覽、與前期的變化及消費習慣。"),
     ))
     val lk = rememberLookups()
     // 期間與收支種類都記住，下次回來維持上次的檢視
     var period by com.enwei.moneymanager.ui.components.rememberChoice("stats.period", Period.entries, Period.MONTH)
     var anchor by rememberSaveable { mutableStateOf(LocalDate.now()) }
+    // 統計頁是所有分析的家：「分類」看比例與每月比較，「分析」是收支檢討（原本在交易頁）
+    var view by com.enwei.moneymanager.ui.components.rememberTab("stats.view", 0)
+    var reviewSpan by rememberSaveable { mutableStateOf(com.enwei.moneymanager.data.ReviewSpan.MONTH) }
+    LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.statsView) {
+        com.enwei.moneymanager.ui.TabRequest.statsView?.let { view = it; com.enwei.moneymanager.ui.TabRequest.statsView = null }
+    }
+    // 分析檢視：上一期／下一期依檢討的期間（月、季、年）移動
+    fun step(n: Int) {
+        anchor = if (view == 1) when (reviewSpan) {
+            com.enwei.moneymanager.data.ReviewSpan.QUARTER -> anchor.plusMonths(3L * n)
+            com.enwei.moneymanager.data.ReviewSpan.YEAR -> anchor.plusYears(n.toLong())
+            else -> anchor.plusMonths(n.toLong())
+        } else shift(period, anchor, n)
+    }
     // 同一天內保留你選的期間；隔天再打開時回到本期（避免停在上個月卻沒發現）
     var anchorDay by rememberSaveable { mutableStateOf(LocalDate.now()) }
     LaunchedEffect(Unit) { if (anchorDay != LocalDate.now()) { anchor = LocalDate.now(); anchorDay = LocalDate.now() } }
@@ -167,14 +181,20 @@ fun StatsTab(nav: NavController) {
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, scrolledContainerColor = MaterialTheme.colorScheme.surface),
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(x = (-12).dp).coachTarget("st.period")) {
-                    if (period != Period.CUSTOM) IconButton(onClick = { anchor = shift(period, anchor, -1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
-                    Text(range.title, fontSize = if (period == Period.CUSTOM) AppText.section else AppText.title, fontWeight = FontWeight.SemiBold,
+                    if (period != Period.CUSTOM || view == 1) IconButton(onClick = { step(-1) }) { Icon(Icons.Filled.ChevronLeft, "上一期") }
+                    val ym = Periods.monthOf(anchor, settings.monthStartDay)
+                    val title = if (view == 1) when (reviewSpan) {
+                        com.enwei.moneymanager.data.ReviewSpan.QUARTER -> "${ym.year}年Q${(ym.monthValue - 1) / 3 + 1}"
+                        com.enwei.moneymanager.data.ReviewSpan.YEAR -> "${ym.year}年"
+                        else -> "${ym.year}年${ym.monthValue}月"
+                    } else range.title
+                    Text(title, fontSize = if (period == Period.CUSTOM && view == 0) AppText.section else AppText.title, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable { if (period == Period.CUSTOM) pickRange = true else anchor = LocalDate.now() })
-                    if (period != Period.CUSTOM) IconButton(onClick = { anchor = shift(period, anchor, 1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
+                    if (period != Period.CUSTOM || view == 1) IconButton(onClick = { step(1) }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                 }
             },
             actions = {
-                Box(Modifier.padding(end = 8.dp)) {
+                if (view == 0) Box(Modifier.padding(end = 8.dp)) {
                     Row(
                         Modifier.coachTarget("st.kind").border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(8.dp)).clickable { menu = true }
                             .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
@@ -190,6 +210,14 @@ fun StatsTab(nav: NavController) {
         ) }
     }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
+            Box(Modifier.background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 6.dp)) {
+                com.enwei.moneymanager.ui.components.SubTabs(listOf("分類", "分析"), view) { view = it }
+            }
+            if (view == 1) {
+                val ym = Periods.monthOf(anchor, settings.monthStartDay)
+                ReviewContent(nav, reviewSpan to ym) { reviewSpan = it }
+                return@Column
+            }
             val tabs = listOf(TxnType.INCOME to totals.income, TxnType.EXPENSE to totals.expense)
             val idx = tabs.indexOfFirst { it.first == kind }
             val fitGroup1 = com.enwei.moneymanager.ui.components.rememberFitGroup()

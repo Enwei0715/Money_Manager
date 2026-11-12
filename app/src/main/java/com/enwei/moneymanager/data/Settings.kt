@@ -760,11 +760,6 @@ class SettingsStore(context: Context) {
         state.value = read()
     }
 
-    /**
-     * 修改設定。必須同步：背景同步（匯率、報價、假日、備份時間）和畫面上的修改可能同時發生，
-     * 不同步時兩邊都以舊設定為基礎各自整份寫回，後寫的會把先寫的蓋掉（例如剛改的設定在重開後又變回去）。
-     */
-    @Synchronized
     /** 報價時間每次更新只寫這一個值，不必重寫整份設定（盤中每 30 秒一次） */
     @Synchronized
     fun setLastQuoteUpdate(at: Long) {
@@ -772,6 +767,11 @@ class SettingsStore(context: Context) {
         state.value = state.value.copy(lastQuoteUpdate = at)
     }
 
+    /**
+     * 修改設定。必須同步：背景同步（匯率、報價、假日、備份時間）和畫面上的修改可能同時發生，
+     * 不同步時兩邊都以舊設定為基礎各自整份寫回，後寫的會把先寫的蓋掉（例如剛改的設定在重開後又變回去）。
+     */
+    @Synchronized
     fun update(block: (AppSettings) -> AppSettings) {
         val s = block(state.value).copy(subcategoryOn = true)
         if (s == state.value) return

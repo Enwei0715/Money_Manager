@@ -194,7 +194,10 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                 }
             } else {
                 item(key = "hh") { StockHeader("持股 ${open.size} 檔", Money.withSymbol(totalValue, lk.base)) }
-                items(open, key = { "${it.market}:${it.symbol}" }) { h -> HoldingRow(h) { nav.navigate("holding/${h.market}/${h.symbol}") } }
+                // 一檔股票一個頁面：台股直接打開個股頁（走勢、分析、資訊，持股明細在頁面下方）；美股沒有 K 線資料，維持持股明細
+                items(open, key = { "${it.market}:${it.symbol}" }) { h ->
+                    HoldingRow(h) { nav.navigate(if (h.market == Market.TW) "stock/${h.symbol}" else "holding/${h.market}/${h.symbol}") }
+                }
             }
             item(key = "brk") {
                 Row(

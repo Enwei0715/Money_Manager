@@ -170,7 +170,8 @@ fun weekdayColor(d: DayOfWeek, default: Color): Color = when (d) {
 private fun inRange(d: LocalDate, r: Pair<LocalDate, LocalDate>) = !d.isBefore(r.first) && !d.isAfter(r.second)
 
 // 「每月」「總計」「備註」分頁已拿掉：備註改從「＋」新增（記一筆的類型選「備註」），預算移到「檢討」
-private val subTabs = listOf("每日", "日曆", "分析")
+// 「分析」已移到統計頁（所有分析集中在同一處）
+private val subTabs = listOf("每日", "日曆")
 private val NavyHighlight = Color(0xFF3F4570)
 
 /** 交易列表的多選：長按一筆開始選取，之後點一下切換；[enabled] 由交易頁的「每日」開啟。 */
@@ -186,9 +187,11 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     val lk = rememberLookups()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val accounts by repo.accounts.collectAsStateWithLifecycle(emptyList())
-    var tab by com.enwei.moneymanager.ui.components.rememberTab("txns.tab", initialTab.coerceIn(0, 2))
+    var tab by com.enwei.moneymanager.ui.components.rememberTab("txns.tab", initialTab.coerceIn(0, 1))
+    // 舊版記住的是「分析」（第 3 個分頁，已移到統計頁）：改回每日
+    LaunchedEffect(Unit) { if (tab > 1) tab = 0 }
     LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.txnsTab) {
-        com.enwei.moneymanager.ui.TabRequest.txnsTab?.let { tab = it; com.enwei.moneymanager.ui.TabRequest.txnsTab = null }
+        com.enwei.moneymanager.ui.TabRequest.txnsTab?.let { tab = it.coerceAtMost(1); com.enwei.moneymanager.ui.TabRequest.txnsTab = null }
     }
     var month by rememberSaveable { mutableStateOf(Periods.monthOf(LocalDate.now(), repo.settings.value.monthStartDay)) }
     // 同一天內保留你翻到的月份；隔天再打開時回到本月

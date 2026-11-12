@@ -223,6 +223,8 @@ object TabRequest {
     var txnsTab by androidx.compose.runtime.mutableStateOf<Int?>(null)
     /** 要帶進「問 AI」輸入框的問題（例如從推薦追蹤請 AI 檢討） */
     var chatQuestion by androidx.compose.runtime.mutableStateOf<String?>(null)
+    /** 打開統計頁時要切到哪個檢視（1＝分析） */
+    var statsView by androidx.compose.runtime.mutableStateOf<Int?>(null)
 }
 
 /** 打開路由：「advisor」「advisor:子頁」切到帳戶→助理，「review」切到交易→檢討，其他分頁用切換、其餘畫面照常開啟。 */
@@ -235,7 +237,7 @@ fun NavController.openRoute(r: String) {
             TabRequest.advisorSub = r.substringAfter(':', "").toIntOrNull()
             openTab("assistant")
         }
-        r == "review" -> { TabRequest.txnsTab = 2; openTab("txns") }
+        r == "review" -> { TabRequest.statsView = 1; openTab("stats") }
         tabs.any { it.route == r } -> openTab(r)
         else -> navigate(r)
     }
@@ -251,7 +253,7 @@ private val tabs = listOf(
     Tab("stats", "統計", com.enwei.moneymanager.ui.components.LineIcons.ToolBars),
     Tab("accounts", "資產", com.enwei.moneymanager.ui.components.LineIcons.IcWallet),
     // 股票助理獨立成一個分頁（不再放在帳戶裡）；股票功能關閉時不顯示
-    Tab("assistant", "助理", com.enwei.moneymanager.ui.components.LineIcons.ToolAi),
+    Tab("assistant", "投資", com.enwei.moneymanager.ui.components.LineIcons.ToolAi),
     Tab("more", "工具", com.enwei.moneymanager.ui.components.LineIcons.IcGrid),
 )
 
