@@ -979,7 +979,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     /** 交割款通知的金額（元）：「交割」加上扣款／入帳金額；不是交割款回傳 null。 */
     private fun settlementOf(title: String?, text: String?): Long? {
         val all = listOfNotNull(title, text).joinToString(" ")
-        if (!all.contains("交割")) return null
+        // 要是交割款本身的通知（交割款、交割金額、應付／應收交割…）；「轉入證券交割帳戶」的薪資、股利不算
+        if (!Regex("交割(款|金額|扣款|淨額)|應[付收]交割|交割日").containsMatchIn(all)) return null
+        if (listOf("股利", "股息", "配息", "薪資", "薪轉").any { all.contains(it) }) return null
         return Regex("([0-9][0-9,]{0,12})\\s*元").findAll(all).mapNotNull { it.groupValues[1].replace(",", "").toLongOrNull() }.firstOrNull { it > 0 }
             ?: Regex("(?:NT\\$|\\$)\\s*([0-9][0-9,]{0,12})").find(all)?.groupValues?.get(1)?.replace(",", "")?.toLongOrNull()
     }
@@ -1350,6 +1352,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                     return insert(base.copy(type = TxnType.TRANSFER, toAccountId = card.id, merchant = "${card.name} 卡費"), "RECORDED",
                         "卡費 $amountText：${account?.name ?: "?"} → ${card.name}")
                 }
+                // 有好幾張卡、分不出是哪一張：記成轉帳待確認（請選擇轉入的卡），不要記成支出，否則和卡上的刷卡支出重複計算
+                if (cards.isNotEmpty()) return insert(base.copy(type = TxnType.TRANSFER, toAccountId = null, merchant = "信用卡卡費", status = TxnStatus.PENDING,
+                    note = "（請選擇繳款的信用卡）"), "RECORDED", "卡費 $amountText（請選擇繳款的信用卡）")
             }
             ParsedKind.NORMAL -> Unit
         }

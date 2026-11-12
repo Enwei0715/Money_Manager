@@ -220,7 +220,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             }
             val b = bars
             if (!loading && b == null) Text("讀不到這檔股票的價格資料（代號可能不正確）", color = MaterialTheme.colorScheme.error)
-            if (b != null) {
+            if (b != null && b.close.isNotEmpty()) {
                 val c = b.close
                 val last = c.last()
                 val prev = c.getOrNull(c.size - 2) ?: last

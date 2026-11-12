@@ -408,11 +408,15 @@ private fun AppScaffold(nav: NavHostController) {
                 AccountDetailScreen(nav, e.arguments!!.getLong("id"))
             }
             composable("catstat/{cat}/{kind}/{period}/{anchor}") { e ->
-                val a = e.arguments!!
-                CategoryStatScreen(
-                    nav, a.getString("cat")!!.toLong(), TxnType.valueOf(a.getString("kind")!!),
-                    Period.valueOf(a.getString("period")!!), a.getString("anchor")!!.toLong(),
-                )
+                // 參數不完整（例如捷徑或舊連結）時回上一頁，不閃退
+                val a = e.arguments
+                val cat = a?.getString("cat")?.toLongOrNull()
+                val kind = runCatching { TxnType.valueOf(a?.getString("kind").orEmpty()) }.getOrNull()
+                val period = runCatching { Period.valueOf(a?.getString("period").orEmpty()) }.getOrNull()
+                val anchor = a?.getString("anchor")?.toLongOrNull()
+                if (cat == null || kind == null || period == null || anchor == null) {
+                    androidx.compose.runtime.LaunchedEffect(Unit) { nav.popBackStack() }
+                } else CategoryStatScreen(nav, cat, kind, period, anchor)
             }
             composable(
                 "txn/{id}?type={type}&date={date}&account={account}&to={to}&amount={amount}&split={split}",

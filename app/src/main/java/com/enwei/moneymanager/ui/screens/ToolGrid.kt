@@ -248,7 +248,7 @@ fun ToolGrid(
     if (sel != null) {
         val (cw, ch) = sizeOf(sel)
         Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            Text("「${tools.first { it.id == sel }.label}」的大小", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("「${tools.firstOrNull { it.id == sel }?.label.orEmpty()}」的大小", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(1 to 1, 2 to 1, 3 to 1, 1 to 2, 2 to 2).forEach { (w, h) ->
                     FilterChip(cw == w && ch == h, { place[sel]?.let { p -> onResize(sel, w, h, moveTile(place, sel, p.row, p.col, w, h)) } }, label = { Text("$w×$h") })
