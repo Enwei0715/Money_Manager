@@ -26,7 +26,7 @@ suspend fun Repository.budgetUse(categoryId: Long?, at: Long = System.currentTim
     val day = Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()).toLocalDate()
     val range = Periods.month(Periods.monthOf(day, s.monthStartDay), s.monthStartDay)
     val txns = db.txns().all().filter { t ->
-        t.type == TxnType.EXPENSE && t.id != excludeId &&
+        t.type == TxnType.EXPENSE && t.id != excludeId && t.accountId?.toString() !in s.statsExcluded &&
             Instant.ofEpochMilli(t.date).atZone(ZoneId.systemDefault()).toLocalDate().let { !it.isBefore(range.first) && !it.isAfter(range.second) }
     }
     val out = ArrayList<BudgetUse>()

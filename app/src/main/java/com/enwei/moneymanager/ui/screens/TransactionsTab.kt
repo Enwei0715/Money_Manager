@@ -142,11 +142,16 @@ data class Totals(val income: Long, val expense: Long) {
     val total get() = income - expense
 }
 
+/** 這筆交易要不要算進收支統計：帳戶設成「不計入收支統計」的不算。 */
+fun TxnEntity.inStats(excluded: Set<String> = repo.settings.value.statsExcluded): Boolean =
+    excluded.isEmpty() || accountId?.toString() !in excluded
+
 fun totalsOf(list: List<TxnEntity>, fx: FxConverter): Totals {
     var i = 0L
     var e = 0L
+    val ex = repo.settings.value.statsExcluded
     list.forEach {
-        if (it.status != TxnStatus.CONFIRMED) return@forEach
+        if (it.status != TxnStatus.CONFIRMED || !it.inStats(ex)) return@forEach
         when (it.type) {
             TxnType.INCOME -> i += fx.convert(it.amount, it.currency)
             TxnType.EXPENSE -> e += fx.convert(it.amount, it.currency)
@@ -1128,7 +1133,7 @@ fun MemoDialog(memo: Memo, onSaved: () -> Unit = {}, onDismiss: () -> Unit) {
 
 /** 一天的支出（基準幣別）。 */
 private fun dailyExpense(all: List<TxnEntity>, lk: Lookups, from: LocalDate, to: LocalDate): Map<LocalDate, Long> =
-    all.asSequence().filter { it.type == TxnType.EXPENSE && it.status == com.enwei.moneymanager.data.TxnStatus.CONFIRMED }
+    all.asSequence().filter { it.type == TxnType.EXPENSE && it.status == com.enwei.moneymanager.data.TxnStatus.CONFIRMED && it.inStats() }
         .map { it.date.toLocalDate() to lk.fx.convert(it.amount, it.currency) }
         .filter { (d, _) -> !d.isBefore(from) && !d.isAfter(to) }
         .groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }

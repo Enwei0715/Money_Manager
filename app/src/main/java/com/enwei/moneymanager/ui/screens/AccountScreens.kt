@@ -83,6 +83,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
     var autopayDay by remember { mutableStateOf("") }
     var autopayFrom by remember { mutableStateOf<Long?>(null) }
     var includeNet by remember { mutableStateOf(true) }
+    var inStats by remember { mutableStateOf(true) }
     var archived by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var typeMenu by remember { mutableStateOf(false) }
@@ -130,6 +131,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
         limit = if (a.creditLimit > 0) Money.fromMinor(a.creditLimit).stripTrailingZeros().toPlainString() else ""
         last4 = a.cardLast4.orEmpty(); statementDay = a.statementDay?.toString().orEmpty(); dueDay = a.dueDay?.toString().orEmpty(); autopayDay = a.autopayDay?.toString().orEmpty()
         autopayFrom = a.autopayFromId; includeNet = a.includeInNetWorth; archived = a.archived
+        inStats = a.id.toString() !in repo.settings.value.statsExcluded
     }
     val isCard = type == AccountType.CREDIT_CARD
     val sDay = statementDay.toIntOrNull()?.takeIf { it in 1..31 }
@@ -351,8 +353,17 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(thickness = 10.dp, color = MaterialTheme.colorScheme.background)
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("計入總額", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+                Text("計入淨資產", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 Switch(includeNet, { includeNet = it }, colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary, checkedThumbColor = Color.White))
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            // 和淨資產分開：例如代管、公司代墊的帳戶，餘額要看但收支不算自己的
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("計入收支統計", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+                    Text("關閉後，此帳戶的收入與支出不計入統計、每月收支與預算", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(inStats, { inStats = it }, colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary, checkedThumbColor = Color.White))
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(Modifier.fillMaxWidth().clickable { archived = !archived }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -388,6 +399,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                                 cardBank = if (type == AccountType.CREDIT_CARD && bank != null) st.cardBank + (savedId to bank.code) else st.cardBank - savedId,
                                 cardDueOffset = if (type == AccountType.CREDIT_CARD && dueOffset != null) st.cardDueOffset + (savedId to dueOffset!!)
                                 else st.cardDueOffset - savedId,
+                                statsExcluded = if (inStats) st.statsExcluded - savedId.toString() else st.statsExcluded + savedId.toString(),
                             )
                         }
                         if (type != AccountType.BROKERAGE) repo.settings.update { st -> st.copy(brokerRebates = st.brokerRebates - savedId) }

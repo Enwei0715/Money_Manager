@@ -206,10 +206,24 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         if (before?.status == TxnStatus.PENDING && t.status == TxnStatus.CONFIRMED) learnFromConfirmed(t)
         // 通知記的交易被改到別的帳戶：記住通知裡的卡號末四碼屬於這個帳戶，下次同一張卡直接記對
         if (before != null && t.source == TxnSource.NOTIFICATION && t.accountId != null && before.accountId != t.accountId) runCatching { learnCardLast4(t) }
+        // 通知記的店名被改掉：記住「通知店名 → 改成的店名」，之後同一家店的通知直接用改過的名字，舊交易一併統一
+        if (before != null && t.source == TxnSource.NOTIFICATION) runCatching { learnMerchantAlias(before.merchant, t.merchant) }
         // 預算跨過 80%／100% 時提醒
         if (before == null || before.status != TxnStatus.CONFIRMED || before.amount != t.amount || before.categoryId != t.categoryId)
             runCatching { checkBudgetAlert(t) }
         return if (t.id == 0L) r else t.id
+    }
+
+    /**
+     * 只在舊店名本身就指出某一家分店時才學（例如「統康生活超市台北師大店」）：
+     * 「全家便利商店」「LINE Pay」這類連鎖總名或支付工具名稱可能是任何一家店，不能一律換成同一個名字。
+     */
+    private suspend fun learnMerchantAlias(old: String?, new: String?) {
+        val from = old?.trim().orEmpty(); val to = new?.trim().orEmpty()
+        if (from.isEmpty() || to.isEmpty() || from == to || weakMerchant(from)) return
+        if (!Regex(".{3,}[^商書飯藥酒]店$|.{3,}分公司$").containsMatchIn(from)) return
+        settings.update { it.copy(merchantAlias = it.merchantAlias + (from to to)) }
+        db.txns().renameMerchant(from, to)
     }
 
     private val last4InText = Regex("(?:末四碼|末4碼|尾號|末碼|後四碼|卡號末四碼|末五碼|末5碼)\\s*[:：]?\\s*\\*{0,4}(\\d{4,5})")
@@ -826,15 +840,15 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     /** 這則通知要記到哪個帳戶：教過的格式 → 卡號末四碼 → 指定的帳戶 → LINE → 同一家銀行的帳戶 → 預設帳戶。 */
     private fun resolveAccount(
         pkg: String, p: com.enwei.moneymanager.core.ParsedTransaction, raw: String, learned: LearnedSource?,
-        bankSrc: BankDirectory.Bank?, accounts: List<AccountEntity>,
+        bankSrc: BankDirectory.Bank?, accounts: List<AccountEntity>, fallback: Boolean = true,
     ): AccountEntity? {
         val s = settings.value
         return learned?.accountId?.let { id -> accounts.firstOrNull { it.id == id } }
             ?: p.cardLast4?.let { l4 -> accounts.firstOrNull { it.cardLast4 == l4 } }
             ?: s.notifAccountMap[pkg]?.let { id -> accounts.firstOrNull { it.id == id } }
             ?: (if (pkg == LINE_PACKAGE) accounts.firstOrNull { it.type != AccountType.CREDIT_CARD && it.name.contains("line", ignoreCase = true) } else null)
-            ?: bankSrc?.let { bankAccount(it, wantsCard(p, raw), accounts) }
-            ?: accounts.firstOrNull { it.id == s.defaultAccountId }
+            ?: bankSrc?.let { bankAccount(it, wantsCard(p, raw), accounts, debit = raw.contains("金融卡")) }
+            ?: (if (fallback) accounts.firstOrNull { it.id == s.defaultAccountId } else null)
     }
 
     /** 一則通知在測試頁的試算結果。 */
@@ -909,10 +923,12 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         p.kind == ParsedKind.NORMAL && (p.cardLast4 != null || listOf("刷卡", "信用卡", "簽帳金融卡消費").any { raw.contains(it) } && !raw.contains("轉出"))
 
     /** 這家銀行對應的帳戶：信用卡消費找信用卡，其餘找存款帳戶（優先銀行類）。 */
-    private fun bankAccount(bank: BankDirectory.Bank, card: Boolean, accounts: List<AccountEntity>): AccountEntity? {
+    private fun bankAccount(bank: BankDirectory.Bank, card: Boolean, accounts: List<AccountEntity>, debit: Boolean = false): AccountEntity? {
         val list = accounts.filter { BankDirectory.matches(bank, it.name) }
-        return if (card) list.firstOrNull { it.type == AccountType.CREDIT_CARD }
-        else list.filter { it.type != AccountType.CREDIT_CARD }.let { l -> l.firstOrNull { it.type == AccountType.BANK } ?: l.firstOrNull() }
+        val deposit = list.filter { it.type != AccountType.CREDIT_CARD }.let { l -> l.firstOrNull { it.type == AccountType.BANK } ?: l.firstOrNull() }
+        // 金融卡（簽帳卡）消費是從存款帳戶扣：沒有登記成信用卡時記到這家銀行的存款帳戶
+        return if (card) list.firstOrNull { it.type == AccountType.CREDIT_CARD } ?: (if (debit) deposit else null)
+        else deposit
     }
 
     /**
@@ -1366,31 +1382,46 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             // （錢包綁卡付款，錢其實是從卡片扣的）→ 帳戶改成那張卡或那個銀行帳戶。
             // 不論哪一家錢包、哪一家銀行都適用；反過來（銀行先到、錢包後到）則保留銀行帳戶。
             val otherAcc = accounts.firstOrNull { it.id == other.accountId }
-            val funded = account != null && account.id != other.accountId && account.type != AccountType.EWALLET &&
-                (otherAcc == null || otherAcc.type == AccountType.EWALLET)
+            // 只用有根據的帳戶（卡號末四碼、教過的來源、銀行名稱），不用「預設帳戶」：預設帳戶不是這張卡
+            val sure = resolveAccount(pkg, p, raw0, learned, bankSrc, accounts, fallback = false)
+            val walletFirst = otherAcc == null || otherAcc.type == AccountType.EWALLET
+            val funded = sure != null && sure.id != other.accountId && sure.type != AccountType.EWALLET && walletFirst
+            // 銀行／信用卡也通知了同一筆，但對不到帳戶（沒登記這張卡）：不能當重複丟掉，
+            // 改成待確認並註明實際扣款的卡，使用者選好帳戶後會記住這組末四碼
+            val fromCard = pkg != LINE_PACKAGE && (p.cardLast4 != null || bankSrc != null)
+            if (!funded && sure == null && fromCard && walletFirst) {
+                val card = listOfNotNull(bankSrc?.key, p.cardLast4?.let { "末四碼 $it" }).joinToString(" ").ifBlank { "銀行卡" }
+                val hint = "（實際由 $card 扣款，請選擇帳戶）"
+                val name = if (weakMerchant(other.merchant) && !weakMerchant(p.merchant)) p.merchant else other.merchant
+                return merged(other, other.copy(merchant = name, status = TxnStatus.PENDING,
+                    note = listOfNotNull(other.note?.takeIf { it.isNotBlank() && !it.contains(hint) }, hint).joinToString(" ")),
+                    "${type.label} $amountText ${name.orEmpty()}（同一筆，實際由 $card 扣款，請選擇帳戶）")
+            }
             val betterName = weakMerchant(other.merchant) && !weakMerchant(p.merchant)
             if (funded || betterName) {
                 val name = if (betterName) p.merchant else other.merchant
                 val cat = if (betterName) suggestCategory(p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId ?: other.categoryId else other.categoryId
-                return merged(other, other.copy(accountId = if (funded) account!!.id else other.accountId, merchant = name, categoryId = cat),
+                return merged(other, other.copy(accountId = if (funded) sure!!.id else other.accountId, merchant = name, categoryId = cat),
                     "${type.label} $amountText ${name.orEmpty()}（同一筆" +
-                        (if (funded) "，實際由 ${account!!.name} 扣款" else "") + (if (betterName) "，從另一則通知補上店名" else "") + "）")
+                        (if (funded) "，實際由 ${sure!!.name} 扣款" else "") + (if (betterName) "，從另一則通知補上店名" else "") + "）")
             }
             log.insert(logAs("DUPLICATE", other.id))
             return null
         }
         val tagged = if (p.kind == ParsedKind.TRANSFER_OUT || p.kind == ParsedKind.TRANSFER_IN) "$TRANSFER_TAG\n$raw" else raw
-        var merchant = p.merchant ?: when (p.kind) {
+        // 店名對照：使用者曾把銀行通知裡的這個店名改成別的名字（例如公司登記名稱 → 店家招牌名稱），直接用改過的名字
+        val aliased = p.merchant?.trim()?.let { s.merchantAlias[it] }
+        var merchant = aliased ?: p.merchant ?: when (p.kind) {
             ParsedKind.TRANSFER_OUT -> "轉出"
             ParsedKind.TRANSFER_IN -> "轉入"
             else -> null
         }
         // 轉出／轉入多半是自己帳戶間的轉帳（之後會合併），不猜分類
-        var categoryId = if (p.kind == ParsedKind.NORMAL) suggestCategory(p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId else null
+        var categoryId = if (p.kind == ParsedKind.NORMAL) suggestCategory(aliased ?: p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId else null
         // 規則挑不出分類，或商家名稱是代碼（例如「GOOGLE*WALLET TEMP」）：請 AI 命名並挑分類
         var aiNote = if (aiParsed) "（AI 判讀，請確認）" else ""
         val pm = p.merchant
-        if (p.kind == ParsedKind.NORMAL && pm != null && (categoryId == null || looksRaw(pm))) {
+        if (p.kind == ParsedKind.NORMAL && pm != null && (categoryId == null || (aliased == null && looksRaw(pm)))) {
             aiNameAndCategory(pm, type, occurred)?.let { (name, cat) ->
                 if (name != null && looksRaw(pm)) merchant = name
                 if (categoryId == null && cat != null) { categoryId = cat; aiNote += "（分類由 AI 推測）" }

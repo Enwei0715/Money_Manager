@@ -391,6 +391,10 @@ data class AppSettings(
     val aiUsageTokens: Long = 0,
     /** 使用者標記「不是重複」的交易組合（"小id-大id"） */
     val dupDismissed: Set<String> = emptySet(),
+    /** 不計入收支統計的帳戶 id（統計、每月收支、預算都不算這些帳戶的收入與支出） */
+    val statsExcluded: Set<String> = emptySet(),
+    /** 店名對照：銀行通知裡的店名 → 使用者改成的店名（使用者改過一次就記住，之後同一個店名自動套用） */
+    val merchantAlias: Map<String, String> = emptyMap(),
     val investPlan: InvestPlanSettings = InvestPlanSettings(),
     /** 股價提醒：代號 → 目標價／停損價 */
     val priceAlerts: Map<String, PriceAlert> = emptyMap(),
@@ -611,6 +615,8 @@ class SettingsStore(context: Context) {
         fundingWarnKey = prefs.getString("fundingWarnKey", "")!!,
         aiModelHard = prefs.getString("aiModelHard", "openai/gpt-oss-120b")!!,
         dupDismissed = prefs.getStringSet("dupDismissed", emptySet())!!.toSet(),
+        statsExcluded = prefs.getStringSet("statsExcluded", emptySet())!!.toSet(),
+        merchantAlias = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("merchantAlias", "{}")!!) }.getOrDefault(emptyMap()),
         loans = runCatching { json.decodeFromString(loanSerializer, prefs.getString("loans", "{}")!!) }.getOrDefault(emptyMap()),
         loanWarnKey = prefs.getString("loanWarnKey", "")!!,
         advisorDaily = prefs.getBoolean("advisorDaily", true),
@@ -809,6 +815,8 @@ class SettingsStore(context: Context) {
             .putString("fundingWarnKey", s.fundingWarnKey)
             .putString("aiModelHard", s.aiModelHard)
             .putStringSet("dupDismissed", s.dupDismissed)
+            .putStringSet("statsExcluded", s.statsExcluded)
+            .putString("merchantAlias", json.encodeToString(strMapSerializer, s.merchantAlias))
             .putString("loans", json.encodeToString(loanSerializer, s.loans))
             .putString("loanWarnKey", s.loanWarnKey)
             .putString("reviews", json.encodeToString(reviewSerializer, s.reviews))

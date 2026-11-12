@@ -3271,3 +3271,6 @@ OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金
 推薦	picked
 即時	Live
 · 每 30 秒更新	 · updates every 30 s
+計入淨資產	Include in net worth
+計入收支統計	Include in income & expense stats
+關閉後，此帳戶的收入與支出不計入統計、每月收支與預算	When off, this account's income and expenses are left out of stats, monthly totals and budgets

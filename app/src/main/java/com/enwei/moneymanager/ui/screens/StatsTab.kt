@@ -150,7 +150,7 @@ fun StatsTab(nav: NavController) {
     val range = remember(period, anchor, customStart, customEnd, settings.monthStartDay, settings.weekStartDay) {
         rangeOf(period, anchor, customStart to customEnd)
     }
-    val inRange = remember(all, range) { all.filter { it.status == TxnStatus.CONFIRMED }.inRange(range) }
+    val inRange = remember(all, range, settings.statsExcluded) { all.filter { it.status == TxnStatus.CONFIRMED && it.inStats(settings.statsExcluded) }.inRange(range) }
     val totals = totalsOf(inRange, lk.fx)
     val byCat = inRange.filter { it.type == kind }.groupBy { lk.rootId(it.categoryId) }
         .map { (cid, list) -> cid to list.sumOf { lk.fx.convert(it.amount, it.currency) } }
