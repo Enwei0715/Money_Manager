@@ -201,7 +201,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
             com.enwei.moneymanager.ui.ChromeScale { TopAppBar(
                 scrollBehavior = topScroll,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, scrolledContainerColor = MaterialTheme.colorScheme.surface),
-                title = { Text(listOf("帳戶", "股票").getOrElse(section) { "帳戶" }) },
+                title = { Text("資產") },
                 navigationIcon = {
                     if (showBack) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
                 },
@@ -209,7 +209,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                   if (section == 1) {
                     IconButton(onClick = { nav.navigate("stocksearch") }) { Icon(Icons.Outlined.Search, "搜尋股票") }
                     IconButton(onClick = { refreshTick++ }) { Icon(Icons.Filled.Refresh, "更新股價") }
-                    IconButton(onClick = { nav.navigate("stockfees") }) { Icon(Icons.Outlined.Settings, "手續費與月退") }
+                    IconButton(onClick = { nav.navigate("stockfees") }) { Icon(com.enwei.moneymanager.ui.components.LineIcons.ToolReceipt, "手續費與月退") }
                     IconButton(onClick = { nav.navigate("trade/0") }) { Icon(Icons.Filled.Add, "新增股票交易") }
                   } else {
                     IconButton(onClick = { nav.navigate("totalstats") }) { Icon(Icons.Outlined.BarChart, "總資產統計") }

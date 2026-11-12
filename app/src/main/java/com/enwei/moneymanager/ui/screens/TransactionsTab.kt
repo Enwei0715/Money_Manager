@@ -191,6 +191,11 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         com.enwei.moneymanager.ui.TabRequest.txnsTab?.let { tab = it; com.enwei.moneymanager.ui.TabRequest.txnsTab = null }
     }
     var month by rememberSaveable { mutableStateOf(Periods.monthOf(LocalDate.now(), repo.settings.value.monthStartDay)) }
+    // 同一天內保留你翻到的月份；隔天再打開時回到本月
+    var monthDay by rememberSaveable { mutableStateOf(LocalDate.now()) }
+    LaunchedEffect(Unit) {
+        if (monthDay != LocalDate.now()) { month = Periods.monthOf(LocalDate.now(), repo.settings.value.monthStartDay); monthDay = LocalDate.now() }
+    }
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
     val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
@@ -458,8 +463,8 @@ private fun SummaryCell(label: String, value: String, color: Color, modifier: Mo
 object TxnScroll {
     val state = androidx.compose.foundation.lazy.LazyListState()
     var lastRange: Pair<LocalDate, LocalDate>? = null
-    /** 由切換分頁設定：下次顯示時回到最上面 */
-    var toTop = true
+    /** 再點一次「交易」分頁：回到最上面（狀態值，已在交易頁時也會觸發） */
+    var toTop by androidx.compose.runtime.mutableStateOf(true)
     /** 等內容載入完成後要回到最上面（使用者開始捲動就取消） */
     var pendingTop = true
     /** 離開清單（點進明細、記帳）時停在哪一天、離那天頂端多遠；回來時資料載入完再回到那裡 */
@@ -475,10 +480,12 @@ object TxnScroll {
  */
 @Composable
 private fun DailyViewAnchor(range: Pair<LocalDate, LocalDate>, contentKey: Int) {
-    LaunchedEffect(range) {
-        if (TxnScroll.toTop || TxnScroll.lastRange != range) TxnScroll.pendingTop = true
+    LaunchedEffect(range, TxnScroll.toTop) {
+        val tapped = TxnScroll.toTop
+        if (tapped || TxnScroll.lastRange != range) TxnScroll.pendingTop = true
         TxnScroll.toTop = false
         TxnScroll.lastRange = range
+        if (tapped) TxnScroll.state.animateScrollToItem(0)
     }
     LaunchedEffect(range, contentKey) {
         if (TxnScroll.pendingTop) TxnScroll.state.scrollToItem(0)
@@ -542,7 +549,9 @@ private fun DailyView(
             }
             Spacer(Modifier.height(8.dp))
         }
-        if (allDays.isEmpty() && carry == 0L) item { NoData() }
+        if (allDays.isEmpty() && carry == 0L) item {
+            NoData("這個月還沒有交易", action = "記一筆" to { nav.navigate("txn/0") })
+        }
         allDays.forEach { day -> item(key = "d$day") { DayBlock(day, days[day].orEmpty(), lk, nav, trades = tradeDays[day].orEmpty(), memos = memoDays[day].orEmpty(), onMemo = onMemo) } }
         if (carry != 0L) item {
             Column(Modifier.padding(top = 8.dp).background(MaterialTheme.colorScheme.surface)) {
@@ -559,11 +568,14 @@ private fun DailyView(
 }
 
 @Composable
-fun NoData(text: String = "沒有資料") {
+fun NoData(text: String = "沒有資料", action: Pair<String, () -> Unit>? = null) {
+    // 空白狀態：一句說明＋（有的話）一個下一步按鈕
     Column(Modifier.fillMaxWidth().padding(top = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // 自己的空白圖示（不沿用舊 App 的貓咪對話框）
         Icon(com.enwei.moneymanager.ui.components.LineIcons.Inbox, null, tint = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.size(64.dp))
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = AppText.body, modifier = Modifier.padding(top = 12.dp))
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body, modifier = Modifier.padding(top = 12.dp))
+        action?.let { (label, go) ->
+            androidx.compose.material3.OutlinedButton(onClick = go, modifier = Modifier.padding(top = 12.dp)) { Text(label) }
+        }
     }
 }
 

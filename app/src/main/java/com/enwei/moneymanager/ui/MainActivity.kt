@@ -105,7 +105,6 @@ import com.enwei.moneymanager.ui.screens.TotalStatsScreen
 import com.enwei.moneymanager.ui.screens.TradeEditScreen
 import com.enwei.moneymanager.ui.screens.TransactionsTab
 import com.enwei.moneymanager.ui.screens.TxnEditScreen
-import com.enwei.moneymanager.ui.screens.ToolSettingsScreen
 
 class MainActivity : androidx.fragment.app.FragmentActivity() {
     private val pendingRoute = mutableStateOf<String?>(null)
@@ -289,8 +288,8 @@ private fun BottomTabs(current: String?, onSelect: (String) -> Unit) = ChromeSca
  * 其他分頁的狀態是存在起始頁底下的，還原會把剛離開的分頁（例如統計）又帶回來，看起來就像按了沒反應。
  */
 internal fun NavController.openTab(route: String) {
-    // 從其他分頁切回「交易」：清單回到最新的交易
-    if (route == "txns" && currentDestination?.route != "txns") com.enwei.moneymanager.ui.screens.TxnScroll.toTop = true
+    // 切回「交易」時保留原本的位置；已經在交易頁再點一次「交易」才回到最新的交易
+    if (route == "txns" && currentDestination?.route == "txns") com.enwei.moneymanager.ui.screens.TxnScroll.toTop = true
     val start = graph.findStartDestination()
     if (route == start.route) {
         if (!popBackStack(start.id, inclusive = false)) navigate(route) { launchSingleTop = true }
@@ -320,7 +319,6 @@ private fun AppScaffold(nav: NavHostController) {
     // 從其他分頁（按分頁列或返回鍵）回到「交易」：每日清單回到最新的交易；從記帳、明細返回則保留位置
     val prevRoute = remember { arrayOf<String?>(null) }
     if (current != prevRoute[0]) {
-        if (current == "txns" && tabs.any { it.route == prevRoute[0] }) com.enwei.moneymanager.ui.screens.TxnScroll.toTop = true
         prevRoute[0] = current
     }
     val showBar = !imeOpen && !editing
@@ -336,7 +334,9 @@ private fun AppScaffold(nav: NavHostController) {
         containerColor = MaterialTheme.colorScheme.background,
         // 外層只負責底部分頁列；狀態列與導覽列的留白交給各頁自己的標題列處理，才會依手機實際高度自動調整
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = {
+        bottomBar = { Column {
+            // 刪除後的「已刪除・復原」提示，放在分頁列上方
+            com.enwei.moneymanager.ui.components.UndoBar()
             if (showBar) Column {
             androidx.compose.animation.AnimatedVisibility(
                 !barHidden,
@@ -356,7 +356,7 @@ private fun AppScaffold(nav: NavHostController) {
                 // 記帳、帳戶等編輯畫面不顯示，避免擠在 App 內鍵盤和儲存按鈕下方
                 com.enwei.moneymanager.ui.components.AiStatusBar(nav, padNav = true) { r -> nav.openRoute(r) }
             }
-        },
+        } },
     ) { inner ->
         NavHost(
             nav, startDestination = "txns",
@@ -392,12 +392,10 @@ private fun AppScaffold(nav: NavHostController) {
             composable("spendmap") { com.enwei.moneymanager.ui.screens.SpendMapScreen(nav) }
             composable("merchants") { com.enwei.moneymanager.ui.screens.MerchantPlacesScreen(nav) }
             composable("setup") { com.enwei.moneymanager.ui.screens.SetupScreen(nav) }
-            composable("smart") { com.enwei.moneymanager.ui.screens.SetupScreen(nav) }
             composable("debts") { com.enwei.moneymanager.ui.screens.DebtsScreen(nav) }
             composable("config?g={g}", arguments = listOf(navArgument("g") { type = NavType.StringType; defaultValue = "" })) { e ->
                 ConfigScreen(nav, e.arguments?.getString("g")?.takeIf { it.isNotBlank() })
             }
-            composable("tool-order") { ToolSettingsScreen(nav) }
             composable("ai-hub") { AiHubScreen(nav) }
             // 股票搜尋：名稱或代號
             composable("stocksearch") {

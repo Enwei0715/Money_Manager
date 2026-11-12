@@ -187,7 +187,8 @@ private val cfgGroups = listOf(
     CfgGroup("stocks", "股票", com.enwei.moneymanager.ui.components.LineIcons.ToolCandles, listOf("股票"), visible = { it.featureStocks }),
     CfgGroup("notify", "通知", com.enwei.moneymanager.ui.components.LineIcons.ToolBell, listOf("通知"), route = "notices"),
     CfgGroup("data", "安全與資料", com.enwei.moneymanager.ui.components.LineIcons.IcLock, listOf("安全", "資料")),
-    CfgGroup("update", "App 更新", com.enwei.moneymanager.ui.components.LineIcons.ToolUpdate, listOf("關於"), route = "settings"),
+    // 「關於」：新手導覽、回報問題、隱私權政策、App 更新（原本卡片直接跳到更新頁，這幾項找不到）
+    CfgGroup("update", "關於", com.enwei.moneymanager.ui.components.LineIcons.ToolUpdate, listOf("關於")),
 )
 
 @Composable
@@ -246,7 +247,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                                 val desc = when (g.id) {
                                     "accounts" -> "帳戶、分類、預算"; "entry" -> "記帳方式、期間、幣別"; "display" -> "主題、字體、列表"
                                     "features" -> "開關各項功能"; "autorecord" -> "通知、錢包畫面"; "ai" -> "金鑰、模型、語氣"
-                                    "stocks" -> "手續費、紀律"; "notify" -> "七種通知"; "data" -> "密碼、備份還原"; else -> "版本與更新"
+                                    "stocks" -> "手續費、紀律"; "notify" -> "七種通知"; "data" -> "密碼、備份還原"; else -> "導覽、回報、更新"
                                 }
                                 com.enwei.moneymanager.ui.components.AppCard(Modifier.weight(1f).height(72.dp).clickable { nav.navigate(g.route ?: "config?g=${g.id}") }) {
                                     Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {

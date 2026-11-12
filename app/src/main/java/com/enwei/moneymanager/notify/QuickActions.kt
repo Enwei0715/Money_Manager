@@ -92,7 +92,9 @@ object QuickActions {
                 .addRemoteInput(RemoteInput.Builder(KEY_NOTE).setLabel(tr("這筆是什麼？")).build())
                 .build(),
         )
-        repo.frequentCategories(t.type, 2, t.categoryId).forEachIndexed { i, c ->
+        // 「記錯了」：直接打開這筆交易修改；通知最多三個按鈕，分類快捷保留一個
+        if (!pending) b.addAction(0, tr("記錯了"), AppNotices.openIntent(context, "txn/${t.id}", notifId(t.id) * 10 + 7))
+        repo.frequentCategories(t.type, if (pending) 2 else 1, t.categoryId).forEachIndexed { i, c ->
             val pi = PendingIntent.getBroadcast(
                 context, notifId(t.id) * 10 + i,
                 Intent(context, TxnActionReceiver::class.java).setAction(ACTION_CATEGORY).putExtra(EXTRA_TXN, t.id).putExtra(EXTRA_CAT, c.id),

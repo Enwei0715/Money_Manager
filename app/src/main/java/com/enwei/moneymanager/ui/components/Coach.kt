@@ -129,7 +129,11 @@ object Coach {
                 else -> true
             }
         }.toSet()
-        active = all("stocks" in on, "ai" in on, "split" in on).filter { it.need == null || it.need in on }.map { it.step }
+        // 工具格的步驟只介紹實際放在工具格上的工具（照著導覽一定找得到）
+        val toolsShown = s?.let { st -> st.toolOrder.toSet() - st.hiddenTools }
+        active = all("stocks" in on, "ai" in on, "split" in on).filter { it.need == null || it.need in on }
+            .filter { x -> val t = x.step.target; t == null || !t.startsWith("tool.") || toolsShown == null || t.removePrefix("tool.") in toolsShown }
+            .map { it.step }
         step = 0
     }
     fun stop() { step = -1 }

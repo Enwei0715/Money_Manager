@@ -316,7 +316,7 @@ data class AppSettings(
     val widgetTheme: Int = 0,
     val widgetOpacity: Int = 100,
     /** 工具首頁的顯示順序（僅保存入口 id，不影響工具資料）。 */
-    val toolOrder: List<String> = listOf("pending", "recurring", "fx", "backup", "ai-hub", "merchants"),
+    val toolOrder: List<String> = listOf("pending", "recurring", "budget", "notif", "fx", "backup", "ai-hub", "merchants"),
     /** 工具首頁隱藏的入口 id。 */
     val hiddenTools: Set<String> = emptySet(),
     /** 工具頁用寬格（兩格寬、顯示摘要）的工具 */

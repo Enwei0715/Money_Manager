@@ -874,7 +874,15 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     ) { Text(if (original?.status == TxnStatus.PENDING) "確認入帳" else "儲存") }
                     val smallPad = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp), contentPadding = smallPad) {
+                        OutlinedButton(onClick = {
+                            // 直接刪除、回到上一頁，下方顯示「已刪除・復原」5 秒（不先跳確認框）
+                            val gone = original
+                            scope.launch {
+                                repo.deleteTxn(id)
+                                nav.popBackStack()
+                                if (gone != null) com.enwei.moneymanager.ui.components.Undo.show(com.enwei.moneymanager.ui.tr("已刪除一筆交易")) { repo.restoreTxn(gone) }
+                            }
+                        }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(6.dp), contentPadding = smallPad) {
                             Text("刪除", color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
                         }
                         OutlinedButton(onClick = {

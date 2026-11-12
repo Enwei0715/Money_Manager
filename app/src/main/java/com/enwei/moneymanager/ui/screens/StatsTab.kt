@@ -140,6 +140,9 @@ fun StatsTab(nav: NavController) {
     // 期間與收支種類都記住，下次回來維持上次的檢視
     var period by com.enwei.moneymanager.ui.components.rememberChoice("stats.period", Period.entries, Period.MONTH)
     var anchor by rememberSaveable { mutableStateOf(LocalDate.now()) }
+    // 同一天內保留你選的期間；隔天再打開時回到本期（避免停在上個月卻沒發現）
+    var anchorDay by rememberSaveable { mutableStateOf(LocalDate.now()) }
+    LaunchedEffect(Unit) { if (anchorDay != LocalDate.now()) { anchor = LocalDate.now(); anchorDay = LocalDate.now() } }
     var kind by com.enwei.moneymanager.ui.components.rememberChoice("stats.kind", TxnType.entries, TxnType.EXPENSE)
     var menu by remember { mutableStateOf(false) }
     var customStart by rememberSaveable { mutableStateOf(LocalDate.now().withDayOfMonth(1)) }

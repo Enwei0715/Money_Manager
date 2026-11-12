@@ -210,7 +210,11 @@ fun MoneyTheme(
     // 系統字級照實套用（最大 200%，Android 14 起的上限），弱視或長輩放大字體時內文一定跟著變大；
     // 高度固定的工具列另用 [ChromeScale] 限制，不會被撐變形
     CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale * BASE_UI_SCALE, base.fontScale.coerceIn(0.85f, 2f) * textScale)) {
-        MaterialTheme(colorScheme = if (dark) p.dark else p.light, typography = typo, shapes = Themes.shapes(corner), content = content)
+        MaterialTheme(colorScheme = if (dark) p.dark else p.light, typography = typo, shapes = Themes.shapes(corner)) {
+            // 全 App 不使用點擊波紋（使用者偏好簡潔、不要點擊特效）
+            @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+            CompositionLocalProvider(androidx.compose.material3.LocalRippleConfiguration provides null, content = content)
+        }
     }
 }
 

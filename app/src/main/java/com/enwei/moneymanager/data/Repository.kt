@@ -272,6 +272,11 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         db.txns().delete(id)
     }
 
+    /** 復原剛刪除的交易（保留原本的 id，通知紀錄等關聯不會斷） */
+    suspend fun restoreTxn(t: TxnEntity) {
+        db.txns().upsert(t)
+    }
+
     /** 最近 90 天最常用的分類（通知上的一鍵分類按鈕用）。 */
     suspend fun frequentCategories(type: TxnType, limit: Int, exclude: Long?): List<CategoryEntity> {
         val since = System.currentTimeMillis() - 90L * 24 * 3600 * 1000
