@@ -102,7 +102,8 @@ object Coach {
 
     /** 第一次來到 [id] 這個頁面時走一次 [steps]；看過就不再出現 */
     fun page(id: String, steps: List<Step>) {
-        if (step >= 0 || seen.getBoolean(id, false) || steps.isEmpty()) return
+        // __all__：自動化介面檢查時關掉所有頁面介紹
+        if (step >= 0 || seen.getBoolean(id, false) || seen.getBoolean("__all__", false) || steps.isEmpty()) return
         seen.edit().putBoolean(id, true).apply()
         active = steps; pageMode = true; step = 0
     }

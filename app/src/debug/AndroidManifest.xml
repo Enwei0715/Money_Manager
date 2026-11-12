@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 只在測試版（debug）才有：自動化介面檢查用，正式版不含 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver android:name=".DebugHooks" android:exported="true">
+            <intent-filter>
+                <action android:name="com.enwei.moneymanager.DEMO" />
+                <action android:name="com.enwei.moneymanager.NOTIFY" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
