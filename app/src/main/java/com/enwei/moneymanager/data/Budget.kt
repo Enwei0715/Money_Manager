@@ -30,7 +30,7 @@ suspend fun Repository.budgetUse(categoryId: Long?, at: Long = System.currentTim
         range.first.atStartOfDay(zone).toInstant().toEpochMilli(),
         range.second.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1,
     ).filter { t ->
-        t.type == TxnType.EXPENSE && t.id != excludeId && t.accountId?.toString() !in s.statsExcluded &&
+        t.type == TxnType.EXPENSE && t.status == TxnStatus.CONFIRMED && t.id != excludeId && t.accountId?.toString() !in s.statsExcluded &&
             Instant.ofEpochMilli(t.date).atZone(ZoneId.systemDefault()).toLocalDate().let { !it.isBefore(range.first) && !it.isAfter(range.second) }
     }
     val out = ArrayList<BudgetUse>()
@@ -50,7 +50,7 @@ suspend fun Repository.budgetSuggestions(months: Int = 3): Map<Long, Long> {
     val from = Periods.month(cur.minusMonths(months.toLong()), s.monthStartDay).first
     val to = Periods.month(cur.minusMonths(1), s.monthStartDay).second
     val txns = db.txns().all().filter { t ->
-        t.type == TxnType.EXPENSE && t.status == TxnStatus.CONFIRMED &&
+        t.type == TxnType.EXPENSE && t.status == TxnStatus.CONFIRMED && t.accountId?.toString() !in s.statsExcluded &&
             Instant.ofEpochMilli(t.date).atZone(ZoneId.systemDefault()).toLocalDate().let { !it.isBefore(from) && !it.isAfter(to) }
     }
     if (txns.isEmpty()) return emptyMap()

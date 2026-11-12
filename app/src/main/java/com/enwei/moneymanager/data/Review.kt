@@ -207,7 +207,8 @@ private suspend fun Repository.spendingReviewImpl(span: ReviewSpan, offset: Int)
     val conv = this.fx.first()
     val zone = ZoneId.systemDefault()
     val (range, title, key) = reviewPeriod(span, offset, s.monthStartDay)
-    val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED && it.type != TxnType.TRANSFER }
+    // 「不計入收支統計」的帳戶不算（和統計頁一致）
+    val txns = db.txns().all().filter { it.status == TxnStatus.CONFIRMED && it.type != TxnType.TRANSFER && it.accountId?.toString() !in s.statsExcluded }
     val cats = db.categories().all().associateBy { it.id }
     fun day(t: TxnEntity) = java.time.Instant.ofEpochMilli(t.date).atZone(zone).toLocalDate()
     fun inRange(t: TxnEntity, r: Pair<LocalDate, LocalDate>) = day(t).let { !it.isBefore(r.first) && !it.isAfter(r.second) }

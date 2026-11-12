@@ -218,12 +218,21 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 只在舊店名本身就指出某一家分店時才學（例如「統康生活超市台北師大店」）：
      * 「全家便利商店」「LINE Pay」這類連鎖總名或支付工具名稱可能是任何一家店，不能一律換成同一個名字。
      */
+    private val sharedVenueWords = listOf("百貨", "三越", "微風", "遠百", "SOGO", "sogo", "誠品", "商場", "購物中心", "outlet", "Outlet",
+        "車站", "轉運站", "機場", "美食街", "美食廣場", "夜市", "市場", "大樓", "廣場", "園區", "大學", "醫院")
+
+    /** 移除一筆店名對照（設定頁管理用） */
+    fun removeMerchantAlias(from: String) = settings.update { it.copy(merchantAlias = it.merchantAlias - from) }
+
     private suspend fun learnMerchantAlias(old: String?, new: String?) {
         val from = old?.trim().orEmpty(); val to = new?.trim().orEmpty()
         if (from.isEmpty() || to.isEmpty() || from == to || weakMerchant(from)) return
         if (!Regex(".{3,}[^商書飯藥酒]店$|.{3,}分公司$").containsMatchIn(from)) return
+        // 百貨、商場、車站、美食街的刷卡名稱是很多專櫃共用的，改其中一筆不代表整個商場都是那家店
+        if (sharedVenueWords.any { from.contains(it) }) return
         settings.update { it.copy(merchantAlias = it.merchantAlias + (from to to)) }
-        db.txns().renameMerchant(from, to)
+        // 只統一通知記下的同名交易；手動記的交易不動
+        db.txns().renameNotificationMerchant(from, to)
     }
 
     private val last4InText = Regex("(?:末四碼|末4碼|尾號|末碼|後四碼|卡號末四碼|末五碼|末5碼)\\s*[:：]?\\s*\\*{0,4}(\\d{4,5})")
@@ -1031,11 +1040,29 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
     }
 
+    /** 通知記帳一次只處理一批：兩批同時進來時不會互相看不到對方剛記的那筆而重複記帳 */
+    private val ingestLock = kotlinx.coroutines.sync.Mutex()
+    private suspend inline fun <T> kotlinx.coroutines.sync.Mutex.withLockCompat(block: () -> T): T {
+        lock(); try { return block() } finally { unlock() }
+    }
+
     suspend fun ingestNotificationBatch(notices: List<NotificationInput>): List<IngestResult?> {
         if (notices.isEmpty()) return emptyList()
-        val ai = classifyNotificationBatch(notices)
-        return notices.mapIndexed { index, notice ->
-            ingestNotification(notice.pkg, notice.title, notice.text, notice.postedAt, aiOverride = ai.parsed[index], aiHandled = index in ai.handled)
+        return ingestLock.withLockCompat {
+            // AI 判讀失敗（網路、額度）不影響規則能讀的通知：當成沒有 AI 結果繼續
+            val ai = try { classifyNotificationBatch(notices) } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) { com.enwei.moneymanager.net.GroqAi.NotificationBatchResult(emptyMap(), emptySet()) }
+            notices.mapIndexed { index, notice ->
+                // 一則出錯不影響同一批的其他通知；出錯的那則留下紀錄，可在通知記帳頁重新記帳
+                try {
+                    ingestNotification(notice.pkg, notice.title, notice.text, notice.postedAt, aiOverride = ai.parsed[index], aiHandled = index in ai.handled)
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+                    android.util.Log.e("Repository", "ingest failed", e)
+                    runCatching { db.notificationLog().insert(NotificationLogEntity(packageName = notice.pkg, title = notice.title, text = notice.text,
+                        postedAt = notice.postedAt, result = "ERROR")) }
+                    null
+                }
+            }
         }
     }
 
@@ -1046,6 +1073,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             if (notice.pkg == GMAIL_PACKAGE || isRedacted(notice.text) || NotificationParser.parseStockFill(notice.title, notice.text) != null) {
                 return@mapIndexedNotNull null
             }
+            // 驗證碼、密碼這類敏感通知：不送給 AI
+            if (NotificationParser.shouldIgnore(NotificationParser.clean(listOfNotNull(notice.title, notice.text).joinToString(" ")))) return@mapIndexedNotNull null
             val learned = s.learnedFor(notice.pkg, notice.title, notice.text)
             if (s.promoSigs.any { it.matches(notice.pkg, listOfNotNull(notice.title, notice.text).joinToString("\n")) }) return@mapIndexedNotNull null
             if (learned?.parse(notice.title, notice.text) != null || NotificationParser.parse(notice.title, notice.text) != null) {
@@ -1064,6 +1093,14 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     @Volatile private var lastLogPrune = 0L
 
+    private val knownCurrencies = setOf("TWD", "USD", "JPY", "EUR", "HKD", "CNY", "KRW", "GBP", "SGD", "AUD", "CAD", "THB", "MYR")
+
+    /** 金額是否真的出現在原文中（AI 判讀的金額要對得上原文的數字才可信） */
+    private fun amountInText(text: String, minor: Long): Boolean =
+        Regex("[0-9][0-9,]*(?:\\.[0-9]+)?").findAll(text.replace("，", ",")).any { m ->
+            Money.parseMinor(m.value.trimEnd(','))?.let { it == minor } == true
+        }
+
     suspend fun ingestNotification(
         pkg: String, title: String?, text: String?, postedAt: Long, force: Boolean = false,
         aiOverride: com.enwei.moneymanager.core.ParsedTransaction? = null,
@@ -1077,6 +1114,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val s = settings.value
         val log = db.notificationLog()
         // 同一則通知可能因更新而重複送達
+        // 系統重送同一則通知（內容完全相同、10 分鐘內）：第一則已經處理過，這則略過
         if (!force && log.countSame(pkg, title, text, postedAt - 10 * 60_000) > 0) return null
         // 通知紀錄：記成交易的保留 60 天；沒有記帳的（略過、非付款通知）保留 7 天
         // 每小時最多清一次：每則通知（包含其他 App 的一般通知）都跑兩次 DELETE 太耗電
@@ -1186,7 +1224,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         // 通知內有交易時間時，以「金額＋時間」去重：同一筆交易的通知晚點再跳一次也不會重複記帳
         // 方向要算進去：自己兩個帳戶互轉時，轉出與轉入通知常是同一秒、同金額，不能被當成重複
         val sign = if (p.type == ParsedType.INCOME) "+" else "-"
-        val key = p.occurredAt?.let { "N:$sign${p.amountMinor}:${it.withNano(0)}" }
+        // 加上卡號末四碼（沒有就用來源 App）：兩張卡同一分鐘刷同金額不會被當成同一筆
+        val key = p.occurredAt?.let { "N:$sign${p.amountMinor}:${it.withNano(0)}:${p.cardLast4 ?: pkg}" }
         if (key != null && db.txns().byExternalKey(key) != null) { log.insert(logAs("DUPLICATE")); return null }
 
         val raw0 = listOfNotNull(title, text).joinToString("\n")
@@ -1209,10 +1248,16 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             if (autoDiv.any { p.amountMinor in (it * 0.975).toLong() - 100..it + 100 }) { log.insert(logAs("DUPLICATE")); return null }
         }
         // 有網路：直接記帳（AI 判讀要有把握、而且找得到帳戶）；沒網路或不確定：放「待確認」
+        // 帳戶是「預設帳戶」而不是依卡號、來源或銀行名稱對到的，也放待確認（沒有證據）
+        val accountByEvidence = resolveAccount(pkg, p, raw0, learned, bankSrc, accounts, fallback = false)
+        // AI 判讀的金額一定要出現在通知原文裡，幣別要是認得的幣別，否則不直接入帳
+        val aiAmountOk = !aiParsed || amountInText(raw0, p.amountMinor)
+        val aiCurrencyOk = !aiParsed || p.currency in knownCurrencies
         val status = when {
             !online || offlineRetry -> TxnStatus.PENDING
             account == null -> TxnStatus.PENDING
-            aiParsed && !p.confident -> TxnStatus.PENDING
+            accountByEvidence == null -> TxnStatus.PENDING
+            aiParsed && (!p.confident || !aiAmountOk || !aiCurrencyOk) -> TxnStatus.PENDING
             else -> TxnStatus.CONFIRMED
         }
         val raw = listOfNotNull(title, text).joinToString("\n")
@@ -1440,11 +1485,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         var categoryId = if (p.kind == ParsedKind.NORMAL) suggestCategory(aliased ?: p.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId else null
         // 規則挑不出分類，或商家名稱是代碼（例如「GOOGLE*WALLET TEMP」）：請 AI 命名並挑分類
         var aiNote = if (aiParsed) "（AI 判讀，請確認）" else ""
+        // AI 替代碼店名取了名字或挑了分類：沒有對照依據，放待確認
+        var aiGuessed = false
         val pm = p.merchant
         if (p.kind == ParsedKind.NORMAL && pm != null && (categoryId == null || (aliased == null && looksRaw(pm)))) {
             aiNameAndCategory(pm, type, occurred)?.let { (name, cat) ->
-                if (name != null && looksRaw(pm)) merchant = name
-                if (categoryId == null && cat != null) { categoryId = cat; aiNote += "（分類由 AI 推測）" }
+                if (name != null && looksRaw(pm)) { merchant = name; aiGuessed = true }
+                if (categoryId == null && cat != null) { categoryId = cat; aiNote += "（分類由 AI 推測）"; aiGuessed = true }
             }
         }
         // 依位置推測店家：剛跳出的付款通知、店家沒寫（或只寫支付工具名稱）或分類不明時，用過去在這個地點記過的店家，沒有就查附近的店
@@ -1460,6 +1507,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
         // 店名是依附近地圖上的店推測的，或這個地點記過好幾家店、分不出是哪一家：沒有把握，放待確認由使用者確認
         var guessedNearby = false
+        // 分類是用同一地點「別家店」的分類補上的：只是推測
+        var catFromPlace = false
         if (here != null) {
             // 店名是 AI 自己編的（通知裡根本沒有這幾個字，例如只有金額的通知被填成「消費」「Payment」）也當成沒有店名
             fun norm(t: String) = t.replace(Regex("\\s"), "").lowercase()
@@ -1471,13 +1520,19 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 val allTx = db.txns().all()
                 val g = PlaceHints.fromHistory(appCtx, here, allTx)
                     // 已知位置的店（手動指定或用店名找到的）：離得夠近就直接用
+                    // 已知位置的店只靠距離（80 公尺內最近一家）：不是確定的證據，標成不確定
                     ?: PlaceHints.knownNear(here, allTx.mapNotNull { it.merchant?.trim() }.toSet(), 80f).firstOrNull()?.let { m ->
-                        PlaceHints.Guess(m, allTx.lastOrNull { it.merchant?.trim() == m && it.categoryId != null }?.categoryId, true)
+                        PlaceHints.Guess(m, allTx.lastOrNull { it.merchant?.trim() == m && it.categoryId != null }?.categoryId, true, sure = false)
                     }
                     ?: if (weak) PlaceHints.nearbyPlace(here)?.let { pl -> PlaceHints.Guess(pl.name, placeCategory(pl.kind), false, pl.kind) } else null
                 if (g != null) {
                     if (weak) { merchant = g.merchant; if (!g.fromHistory || !g.sure) guessedNearby = true }
-                    if (catGuessed) categoryId = g.categoryId ?: suggestCategory(g.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId ?: categoryId
+                    if (catGuessed) {
+                        val before = categoryId
+                        categoryId = g.categoryId ?: suggestCategory(g.merchant, type, occurred, p.amountMinor, account?.id)?.categoryId ?: categoryId
+                        // 店名是通知寫的、分類卻是照這個地點別家店填的：不確定
+                        if (!weak && categoryId != before) catFromPlace = true
+                    }
                     aiNote += if (g.fromHistory) "（依位置：常在這裡記「${g.merchant}」）" else "（依位置推測：附近的「${g.merchant}」）"
                     PlaceHints.note("$amountText → 「${g.merchant}」" + if (g.fromHistory) "（過去紀錄）" else "（附近店家）")
                 } else PlaceHints.note("$amountText：這附近沒有過去紀錄，OpenStreetMap 也查不到 50 公尺內的店（已記下位置，補上店家後下次就會用）")
@@ -1490,11 +1545,15 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             categoryId == null -> "（沒有分類）"
             NotificationParser.isPromo(raw) -> "（內容像促銷）"
             guessedNearby -> "（店家依位置推測，不確定）"
+            catFromPlace -> "（分類依同地點其他店家推測）"
+            aiGuessed -> "（店名或分類由 AI 推測）"
             secondSame -> "（同一來源三分鐘內第二筆同金額，請確認不是重複）"
+            aiParsed && !aiAmountOk -> "（AI 判讀的金額不在通知原文中）"
+            account != null && accountByEvidence == null -> "（帳戶為預設帳戶，請確認）"
             else -> null
         }
         val finalStatus = if (status == TxnStatus.CONFIRMED && unsure != null) TxnStatus.PENDING else status
-        if (finalStatus != status) aiNote += "$unsure，放待確認"
+        if (finalStatus != status || (unsure != null && status == TxnStatus.PENDING)) aiNote += "$unsure，放待確認"
         // 依你的記帳習慣：通知寫的是攤位（例如「京都」），而你習慣把攤位寫在說明、店家寫餐廳 → 照你的寫法拆開
         var habitNote: String? = null
         if (type == TxnType.EXPENSE) habitSplit(merchant)?.let { (owner, stall) ->
@@ -1879,8 +1938,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 t.accountId != null && it.accountId == t.accountId && kotlin.math.abs(it.date - t.date) <= window && it.currency == t.currency
         }.filter { a ->
             val card = a.toAccountId?.let { cards[it] }
-            val hint = listOf("卡費", "信用卡", "繳款", "扣繳", "自扣", "代繳").any { text.contains(it) } ||
-                (card != null && card.name.take(2).length == 2 && text.contains(card.name.take(2)))
+            // 要明確寫到卡費（卡費、卡款、信用卡帳款、自動扣繳），或寫出這張卡的完整名稱／末四碼；
+            // 只寫「繳款」「代繳」可能是水電、學費，銀行名稱也會出現在一般轉出通知，都不算
+            val hint = listOf("卡費", "卡款", "信用卡帳款", "信用卡款", "自動扣繳").any { text.contains(it) } ||
+                (card != null && (text.contains(card.name.trim()) || (!card.cardLast4.isNullOrBlank() && text.contains(card.cardLast4!!))))
             // 一定要提到卡費、扣繳或那張卡：只有金額相同可能是房租、學費等真實支出，併入會把它刪掉
             hint && (a.amount == t.amount || kotlin.math.abs(a.amount - t.amount) <= a.amount * 0.05)
         }.minByOrNull { kotlin.math.abs(it.amount - t.amount) * 10 + kotlin.math.abs(it.date - t.date) / 86_400_000 } ?: return null
@@ -2226,8 +2287,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                                 ),
                             )
                             changed++
-                        } else if (!frozen && old.cashAmount != cashAmt || old.shares != shares || old.cashAccountId != lot.cashAccountId ||
-                            old.brokerAccountId != lot.brokerAccountId || old.note != note || old.name != lot.name
+                        } else if (!frozen && (old.cashAmount != cashAmt || old.shares != shares || old.cashAccountId != lot.cashAccountId ||
+                            old.brokerAccountId != lot.brokerAccountId || old.note != note || old.name != lot.name)
                         ) {
                             db.stocks().upsertTrade(old.copy(cashAmount = cashAmt, shares = shares, cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId, note = note, name = lot.name))
                             changed++

@@ -118,7 +118,7 @@ fun ChartFilterPage(
     var tab by remember { mutableStateOf(if (initial.accounts.isNotEmpty() && initial.incomeCats.isEmpty() && initial.expenseCats.isEmpty()) 2 else 1) }
     val draft = ChartFilter(month, incomeSel, expenseSel, accSel)
     val inPeriod = remember(all, month, startDay) {
-        all.filter { it.status == TxnStatus.CONFIRMED && ChartFilter(month).inPeriod(it, startDay) }
+        all.filter { it.status == TxnStatus.CONFIRMED && it.inStats() && ChartFilter(month).inPeriod(it, startDay) }
     }
     fun conv(t: TxnEntity) = lk.fx.convert(t.amount, t.currency)
     val totalIncome = inPeriod.filter { it.type == TxnType.INCOME }.sumOf { conv(it) }

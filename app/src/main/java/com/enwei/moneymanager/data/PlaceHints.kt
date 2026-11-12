@@ -317,6 +317,8 @@ object PlaceHints {
         val byId = txns.associateBy { it.id }
         return load(ctx).mapNotNull { s ->
             val t = byId[s.txnId] ?: return@mapNotNull null
+            // 只用已確認的交易當證據：待確認的店名可能本身就是推測的，用它再推測會越錯越多
+            if (t.status != TxnStatus.CONFIRMED) return@mapNotNull null
             val m = t.merchant?.trim()?.takeIf { it.length >= 2 } ?: return@mapNotNull null
             if (dist(loc.latitude, loc.longitude, s.lat, s.lon) > radius + loc.accuracy.coerceAtMost(60f)) null else m
         }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }.take(6)

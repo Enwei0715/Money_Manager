@@ -615,7 +615,8 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
             score = c.score, scores = listOf(c.sTrend, c.sChip, c.sFund, c.sNews, c.sRisk),
             simTarget = sim?.target, simStop = sim?.stop, simNone = sim?.none, simExpR = sim?.expR,
             stopPrice = sim?.stopPrice, targetPrice = sim?.targetPrice,
-            stop = p.stop.ifBlank { sim?.let { "跌破 ${"%.1f".format(it.stopPrice)}" }.orEmpty() },
+            // 停損一律用 App 依波動算的價位（AI 寫的停損文字可能是隨意的數字）
+            stop = sim?.let { "跌破 ${"%.1f".format(it.stopPrice)}" } ?: p.stop,
         )
     }
     val keyNews = r.keyNews.mapNotNull { k -> k.id.toIntOrNull()?.let { imp.getOrNull(it) }?.let { KeyNews(it.id, k.why) } }
@@ -624,7 +625,9 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
     fun rn(t: String) = renumberCites(t, imp, ids)
     val trend = rn(r.trend); val summary = rn(r.summary); val allocation = rn(r.allocation)
     val picks2 = picks.map { it.copy(reason = rn(it.reason.replace("[n]", "").trim())) }
-    val holdings2 = r.holdings.map { it.copy(reason = rn(it.reason)) }
+    // 持股建議只保留真的持有的股票（AI 偶爾會寫出沒有持有的代號）
+    val heldCodes = candidates.filter { it.holding }.map { it.code }.toSet()
+    val holdings2 = r.holdings.filter { h -> heldCodes.isEmpty() || heldCodes.any { h.symbol.contains(it) } }.map { it.copy(reason = rn(it.reason)) }
     keyNews.forEach { if (it.id !in ids) ids += it.id }
     val report = r.copy(trend = trend, summary = summary, allocation = allocation, picks = picks2, holdings = holdings2, cites = ids, keyNews = keyNews, createdAt = System.currentTimeMillis(), day = LocalDate.now().toEpochDay(), newsCount = ds.recent(st, 3).size,
         regime = regime.text, track = track, indexAt = indexCloses.lastOrNull(), scanned = universe.size)

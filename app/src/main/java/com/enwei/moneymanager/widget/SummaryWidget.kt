@@ -62,7 +62,7 @@ class SummaryWidget : AppWidgetProvider() {
             val (start, end) = Periods.month(month, s.monthStartDay)
             val txns = repo.allTxns().filter {
                 val d = it.date.toLocalDate()
-                it.status == TxnStatus.CONFIRMED && !d.isBefore(start) && !d.isAfter(end)
+                it.status == TxnStatus.CONFIRMED && !d.isBefore(start) && !d.isAfter(end) && it.accountId?.toString() !in s.statsExcluded
             }
             val expense = txns.filter { it.type == TxnType.EXPENSE }
             val expenseTotal = expense.sumOf { fx.convert(it.amount, it.currency) }

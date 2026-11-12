@@ -114,6 +114,9 @@ interface TxnDao {
     suspend fun detachAccount(accountId: Long)
 
     /** 店名改成正確名稱（所有交易一起改） */
+    @Query("UPDATE transactions SET merchant = :to WHERE TRIM(merchant) = :from AND source = 'NOTIFICATION'")
+    suspend fun renameNotificationMerchant(from: String, to: String): Int
+
     @Query("UPDATE transactions SET merchant = :to WHERE TRIM(merchant) = :from")
     suspend fun renameMerchant(from: String, to: String): Int
 

@@ -82,7 +82,8 @@ object Widgets {
         val s = MoneyApp.repo.settings.value
         val (start, end) = Periods.month(Periods.monthOf(LocalDate.now(), s.monthStartDay), s.monthStartDay)
         val txns = MoneyApp.repo.allTxns().filter {
-            val d = it.date.toLocalDate(); it.status == TxnStatus.CONFIRMED && !d.isBefore(start) && !d.isAfter(end)
+            val d = it.date.toLocalDate()
+            it.status == TxnStatus.CONFIRMED && !d.isBefore(start) && !d.isAfter(end) && it.accountId?.toString() !in s.statsExcluded
         }
         return Triple(txns, start, end)
     }

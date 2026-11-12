@@ -1101,8 +1101,12 @@ object NewsFilter {
     private val up = listOf("漲停", "創高", "新高", "大漲", "上修", "利多", "看好", "優於預期", "買超", "調升", "飆", "噴出", "報喜", "轉盈", "成長")
     private val down = listOf("跌停", "重挫", "大跌", "下修", "利空", "虧損", "衰退", "賣超", "調降", "不如預期", "裁員", "違約", "崩", "示警", "轉虧", "下滑")
     /** 本機多空：標題的利多詞與利空詞誰多（−1、0、+1） */
+    /** 否定說法先換成相反的意思：「不看好」「不如預期」都算利空 */
+    private val negations = listOf("不看好" to "利空", "不如預期" to "利空", "未如預期" to "利空", "不再成長" to "衰退", "不漲" to "下滑")
+
     fun localSentiment(title: String): Int {
-        val a = up.count { title.contains(it) }; val b = down.count { title.contains(it) }
+        val t = negations.fold(title) { acc, (from, to) -> acc.replace(from, to) }
+        val a = up.count { t.contains(it) }; val b = down.count { t.contains(it) }
         return if (a > b) 1 else if (b > a) -1 else 0
     }
 

@@ -24,6 +24,7 @@ class TxnNotificationListener : NotificationListenerService() {
     private val pendingLock = Any()
     private val pendingNotes = LinkedHashMap<String, ActiveNote>()
     private var flushJob: Job? = null
+    private var firstPendingAt = 0L
 
     override fun onListenerConnected() {
         super.onListenerConnected()
@@ -59,13 +60,18 @@ class TxnNotificationListener : NotificationListenerService() {
         val app = application as MoneyApp
         synchronized(pendingLock) {
             pendingNotes["${sbn.packageName}:${sbn.key}:${sbn.postTime}"] = ActiveNote(sbn.packageName, title, text, sbn.postTime)
+            // 等 0.9 秒收齊同一筆交易的多則通知；但通知一直進來時，最多等 3 秒或 20 則就先處理，不會一直延後
+            if (firstPendingAt == 0L) firstPendingAt = System.currentTimeMillis()
+            val waited = System.currentTimeMillis() - firstPendingAt
+            val wait = if (pendingNotes.size >= 20 || waited >= 3000) 0L else 900L
             flushJob?.cancel()
             flushJob = app.appScope.launch {
-                delay(900)
+                delay(wait)
                 val batch = synchronized(pendingLock) {
                     pendingNotes.values.toList().also {
                         pendingNotes.clear()
                         flushJob = null
+                        firstPendingAt = 0L
                     }
                 }
                 if (batch.isEmpty()) return@launch

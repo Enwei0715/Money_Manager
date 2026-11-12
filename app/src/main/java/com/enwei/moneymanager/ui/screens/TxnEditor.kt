@@ -237,10 +237,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     var memoNew by remember { mutableStateOf(false) }
     var catSuggest by remember { mutableStateOf<com.enwei.moneymanager.core.CategorySuggester.Suggestion?>(null) }
     var catAuto by remember { mutableStateOf(false) }
-    LaunchedEffect(merchant, type, amountMinor, accountId) {
+    LaunchedEffect(merchant, type, amountMinor, accountId, date, time) {
         if (type == TxnType.TRANSFER) { catSuggest = null; return@LaunchedEffect }
         kotlinx.coroutines.delay(300)
-        val sg = repo.suggestCategory(merchant.ifBlank { null }, type, System.currentTimeMillis(), amountMinor ?: 0, accountId)
+        val at = date.atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val sg = repo.suggestCategory(merchant.ifBlank { null }, type, at, amountMinor ?: 0, accountId)
         catSuggest = sg
         if (sg != null && id == 0L && (categoryId == null || catAuto)) { categoryId = sg.categoryId; catAuto = true }
     }
@@ -393,10 +394,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         typeHist.filter { !it.note.isNullOrBlank() && !it.merchant.isNullOrBlank() }
             .groupBy({ it.merchant!!.trim() }, { it.note!!.trim() })
     }
-    val guesses = remember(amountMinor, guessPool, accountId) {
+    val guesses = remember(amountMinor, guessPool, accountId, time) {
         val amt = amountMinor
         if (amt == null || type == TxnType.TRANSFER || id != 0L) emptyList() else {
-            val hourNow = LocalTime.now().hour
+            val hourNow = time.hour
             val now = System.currentTimeMillis()
             guessPool.asSequence()
                 .filter { kotlin.math.abs(it.amount - amt) <= maxOf(amt / 10, 100) }
@@ -415,9 +416,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     }
     // 只有金額時的推測：已有店名（自己填的或依位置帶入的）就以店名為準，不用金額覆蓋；
     // 至少兩筆相近的紀錄一致才自動帶入分類，店名只列在建議裡讓你點選，不自動填（避免 200 元掛號費被填成捷運）
-    LaunchedEffect(guesses, merchant) {
+    LaunchedEffect(guesses, merchant, catSuggest) {
         val g = guesses.firstOrNull() ?: return@LaunchedEffect
-        if (merchant.isNotBlank() || g.count < 2) return@LaunchedEffect
+        if (merchant.isNotBlank() || g.count < 2 || catSuggest != null) return@LaunchedEffect
+        val total = guesses.sumOf { it.count }
+        if (g.count * 10 < total * 6) return@LaunchedEffect
         if (categoryId == null || catAuto) { categoryId = g.categoryId; catAuto = true }
     }
 

@@ -628,7 +628,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         1 -> (e.result == "RECORDED" || e.result == "MERGED" || e.result == "STOCK") && !deleted(e) && e.txnId !in pendingIds
                         2 -> e.txnId in pendingIds || e.result == "OFFLINE"
                         3 -> e.result == "PROMO" || e.result == "DUPLICATE" || e.result == "CANDIDATE" || deleted(e)
-                        4 -> e.result == "UNPARSED"
+                        4 -> e.result == "UNPARSED" || e.result == "ERROR"
                         else -> true
                     }
                 }
@@ -647,6 +647,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         e.result == "SETTLE" -> "交割款（不記帳）" to MaterialTheme.colorScheme.onSurfaceVariant
                         e.result == "PROMO" -> "促銷略過" to MaterialTheme.colorScheme.onSurfaceVariant
                         e.result == "UNPARSED" -> "無法辨識" to MaterialTheme.colorScheme.error
+                        e.result == "ERROR" -> "處理失敗・點選重試" to MaterialTheme.colorScheme.error
                         e.result == "OFFLINE" -> "等網路後判讀" to Color(0xFFFFA000)
                         else -> "未啟用來源" to MaterialTheme.colorScheme.onSurfaceVariant
                     }
@@ -654,7 +655,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         modifier = Modifier.fillMaxWidth().listRow().clickable {
                             when {
                                 !gone && e.txnId != null && (e.result == "RECORDED" || e.result == "MERGED") -> nav.navigate("txn/${e.txnId}")
-                                gone -> testScope.launch {
+                                gone || e.result == "ERROR" -> testScope.launch {
                                     val r = repo.ingestNotification(e.packageName, e.title, e.text, e.postedAt, force = true)
                                     testMsg = r?.let { "已重新記帳：${it.message}" } ?: "沒有記下（看不出是交易）"
                                 }

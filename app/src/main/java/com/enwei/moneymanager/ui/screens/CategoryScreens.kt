@@ -127,6 +127,23 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
+            // 店名對照：把通知裡的店名改過一次後學到的（通知店名 → 你用的店名），可以刪除
+            val aliasMap = repo.settings.flow.collectAsStateWithLifecycle().value.merchantAlias
+            if (kind == TxnType.EXPENSE && aliasMap.isNotEmpty()) {
+                Text("店名對照（通知店名 → 記帳店名）", fontSize = com.enwei.moneymanager.ui.AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 6.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                aliasMap.entries.sortedBy { it.key }.forEach { (from, to) ->
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                            Text(to)
+                            Text(from, fontSize = com.enwei.moneymanager.ui.AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        androidx.compose.material3.TextButton(onClick = { repo.removeMerchantAlias(from) }) { Text("移除", color = Color(0xFFE5484D)) }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
             Spacer(Modifier.height(32.dp))
         }
     }
