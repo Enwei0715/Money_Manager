@@ -219,6 +219,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     suspend fun saveTxn(t: TxnEntity): Long {
         val before = if (t.id != 0L) db.txns().get(t.id) else null
         val r = db.txns().upsert(t)
+        // 準確度統計（只在本機）：通知記的交易被改了哪一欄
+        if (before != null) AutoAccuracy.onEdit(before, t)
         // 交易已經存好了：之後的學習步驟出錯不能讓呼叫端以為沒存成功（否則會重存一筆）
         if (t.status == TxnStatus.CONFIRMED) runCatching { learnMerchant(t) }
         if (before?.status == TxnStatus.PENDING && t.status == TxnStatus.CONFIRMED) runCatching { learnFromConfirmed(t) }
@@ -269,12 +271,22 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     suspend fun deleteTxn(id: Long) {
+        val t = db.txns().get(id)
         db.txns().delete(id)
+        if (t != null && t.source == TxnSource.NOTIFICATION) {
+            AutoAccuracy.onDelete(t)
+            // 通知紀錄保留這則通知，標成「已刪除」，之後還看得到、可以重新記帳
+            runCatching { db.notificationLog().setResultForTxn(id, if (t.status == TxnStatus.PENDING) "DISMISSED" else "DELETED") }
+        }
     }
 
     /** 復原剛刪除的交易（保留原本的 id，通知紀錄等關聯不會斷） */
     suspend fun restoreTxn(t: TxnEntity) {
         db.txns().upsert(t)
+        if (t.source == TxnSource.NOTIFICATION) {
+            AutoAccuracy.onRestore(t)
+            runCatching { db.notificationLog().setResultForTxn(t.id, "RECORDED") }
+        }
     }
 
     /** 最近 90 天最常用的分類（通知上的一鍵分類按鈕用）。 */

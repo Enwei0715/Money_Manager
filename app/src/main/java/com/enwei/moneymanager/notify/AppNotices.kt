@@ -24,7 +24,7 @@ enum class NoticeKind(
 ) {
     RECORDED("records", "自動記帳結果", "每筆從通知自動記下或待確認的交易，可在通知上直接改分類、寫說明", GROUP_LEDGER,
         NotificationManager.IMPORTANCE_LOW, NotificationCompat.CATEGORY_STATUS),
-    BUDGET("budget", "預算提醒", "支出跨過預算 80%、100% 時提醒一次", GROUP_LEDGER,
+    BUDGET("budget", "預算與月報", "支出跨過預算 80%、100% 時提醒一次；每月初整理上個月的收支", GROUP_LEDGER,
         NotificationManager.IMPORTANCE_DEFAULT, NotificationCompat.CATEGORY_REMINDER),
     BILLS("bills", "卡費與借貸", "扣款帳戶餘額不足、借貸要收付或快到期", GROUP_LEDGER,
         NotificationManager.IMPORTANCE_DEFAULT, NotificationCompat.CATEGORY_REMINDER),

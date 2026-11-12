@@ -16,6 +16,7 @@ import com.enwei.moneymanager.data.Repository
 import com.enwei.moneymanager.net.FxService
 import com.enwei.moneymanager.net.QuoteService
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.first
 
 /** 每隔數小時：產生週期交易、信用卡自動扣繳、更新匯率與股價。 */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -31,6 +32,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         runCatching { warnLoans(applicationContext, repo) }
         runCatching { warnCardDue(applicationContext, repo) }
         runCatching { nudgePending(applicationContext, repo) }
+        runCatching { monthRecap(applicationContext, repo) }
         runCatching { StockAlertWorker.checkUpdate(applicationContext) }
         if (isStopped) return Result.success()
         val ok = runCatching { refreshMarket(repo) }.isSuccess
@@ -181,6 +183,44 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.RECORDED, 9330,
                 com.enwei.moneymanager.ui.tr("有待確認的交易") + "（${pending.size}）",
                 com.enwei.moneymanager.ui.tr("點選逐筆確認或修改"), "pending", emptyList())
+        }
+
+        /**
+         * 每月一次的月報：記帳週期結束後第一天（早上 9 點後）通知上一期支出與前一期比較，點選開統計頁「分析」。
+         * 只在本機計算；上一期沒有任何支出時不通知。
+         */
+        suspend fun monthRecap(context: Context, repo: Repository) {
+            val now = java.time.LocalDateTime.now()
+            if (now.hour < 9) return
+            val s = repo.settings.value
+            val D = com.enwei.moneymanager.core.Periods
+            val cur = D.monthOf(now.toLocalDate(), s.monthStartDay)
+            val last = cur.minusMonths(1); val prev = cur.minusMonths(2)
+            val prefs = context.getSharedPreferences("nudges", Context.MODE_PRIVATE)
+            if (prefs.getString("recap", null) == last.toString()) return
+            // 只在新一期的前三天通知，避免裝好 App 第一次跑時補發很久以前的月報
+            val (curStart, _) = D.month(cur, s.monthStartDay)
+            if (now.toLocalDate().isAfter(curStart.plusDays(2))) { prefs.edit().putString("recap", last.toString()).apply(); return }
+            val fx = repo.fx.first()
+            val zone = java.time.ZoneId.systemDefault()
+            suspend fun spent(ym: java.time.YearMonth): Long {
+                val (a, b) = D.month(ym, s.monthStartDay)
+                return repo.db.txns().between(a.atStartOfDay(zone).toInstant().toEpochMilli(), b.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1)
+                    .filter { it.type == com.enwei.moneymanager.data.TxnType.EXPENSE && it.status == com.enwei.moneymanager.data.TxnStatus.CONFIRMED && it.accountId?.toString() !in s.statsExcluded }
+                    .sumOf { fx.convert(it.amount, it.currency) }
+            }
+            val a = spent(last)
+            prefs.edit().putString("recap", last.toString()).apply()
+            if (a <= 0) return
+            val b = spent(prev)
+            val M = com.enwei.moneymanager.core.Money
+            val cmp = if (b > 0) {
+                val pct = ((a - b) * 100 / b).toInt()
+                when { pct > 0 -> "，比前一期多 $pct%"; pct < 0 -> "，比前一期少 ${-pct}%"; else -> "，和前一期差不多" }
+            } else ""
+            com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.BUDGET, 9350,
+                com.enwei.moneymanager.ui.tr("上個月收支整理好了"),
+                com.enwei.moneymanager.ui.tr("支出") + " ${M.withSymbol(a, s.baseCurrency)}$cmp", "review", emptyList())
         }
 
         /**

@@ -398,6 +398,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            if (enabled && tab == 0) item { AutoAccuracyCard(txns) }
             if (!enabled) item {
                 com.enwei.moneymanager.ui.components.AppCard(
                     Modifier.fillMaxWidth().padding(16.dp),
@@ -618,7 +619,8 @@ fun NotificationSettingsScreen(nav: NavController) {
                     }
                 }
                 fun deleted(e: com.enwei.moneymanager.data.NotificationLogEntity) =
-                    (e.result == "RECORDED" || e.result == "MERGED") && e.txnId != null && e.txnId !in txnIds
+                    e.result == "DELETED" || e.result == "DISMISSED" ||
+                        (e.result == "RECORDED" || e.result == "MERGED") && e.txnId != null && e.txnId !in txnIds
                 val pendingIds = txns.filter { it.status == com.enwei.moneymanager.data.TxnStatus.PENDING }.map { it.id }.toHashSet()
                 val shown = log.filter { e ->
                     when (logFilter) {
@@ -634,6 +636,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                     val gone = deleted(e)
                     val pending = e.txnId in pendingIds
                     val (label, col) = when {
+                        e.result == "DISMISSED" -> "待確認已刪除" to MaterialTheme.colorScheme.onSurfaceVariant
                         gone -> "交易已刪除" to MaterialTheme.colorScheme.onSurfaceVariant
                         pending -> "待確認" to MaterialTheme.colorScheme.primary
                         e.result == "RECORDED" -> "已記帳" to MaterialTheme.colorScheme.primary
@@ -1371,3 +1374,31 @@ internal val knownAppNames = mapOf(
     "com.samsung.android.messaging" to "訊息", "com.cathaybk.mymobibank.android" to "國泰世華", "com.esunbank" to "玉山銀行",
     "com.chb.mobilebank" to "彰化銀行", "tw.com.post.ap" to "行動郵局", "com.jkos.app" to "街口支付",
 )
+
+/**
+ * 自動記帳準確度（本月）：通知記下的交易中，有幾筆完全沒被修改。
+ * 數字只存在這支手機，用來讓你知道自動記帳可以信任到什麼程度、哪一欄最常要改。
+ */
+@Composable
+private fun AutoAccuracyCard(txns: List<com.enwei.moneymanager.data.TxnEntity>) {
+    val ym = remember { java.time.YearMonth.now() }
+    val zone = remember { java.time.ZoneId.systemDefault() }
+    val fixes = remember(txns) { com.enwei.moneymanager.data.AutoAccuracy.corrections(ym) }
+    val touched = remember(txns) { com.enwei.moneymanager.data.AutoAccuracy.touched(ym) }
+    val auto = remember(txns) {
+        txns.count { it.source == com.enwei.moneymanager.data.TxnSource.NOTIFICATION &&
+            java.time.YearMonth.from(java.time.Instant.ofEpochMilli(it.date).atZone(zone)) == ym }
+    }
+    val deleted = fixes[com.enwei.moneymanager.data.AutoAccuracy.Field.DELETED] ?: 0
+    val total = auto + deleted
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (total == 0) {
+            Text("本月還沒有自動記帳的交易", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@Column
+        }
+        val ok = (total - touched).coerceAtLeast(0)
+        Text("本月自動記帳 $total 筆，$ok 筆不用修改（${ok * 100 / total}%）", fontSize = AppText.secondary)
+        val parts = com.enwei.moneymanager.data.AutoAccuracy.Field.entries.mapNotNull { f -> fixes[f]?.takeIf { it > 0 }?.let { "${f.label} $it" } }
+        if (parts.isNotEmpty()) Text("修改過：" + parts.joinToString("・"), fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}

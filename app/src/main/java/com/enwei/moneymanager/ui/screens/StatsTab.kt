@@ -152,7 +152,7 @@ fun StatsTab(nav: NavController) {
             com.enwei.moneymanager.data.ReviewSpan.QUARTER -> anchor.plusMonths(3L * n)
             com.enwei.moneymanager.data.ReviewSpan.YEAR -> anchor.plusYears(n.toLong())
             else -> anchor.plusMonths(n.toLong())
-        } else shift(period, anchor, n)
+        } else shift(period, anchor, n.toLong())
     }
     // 同一天內保留你選的期間；隔天再打開時回到本期（避免停在上個月卻沒發現）
     var anchorDay by rememberSaveable { mutableStateOf(LocalDate.now()) }

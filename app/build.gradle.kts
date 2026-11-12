@@ -41,10 +41,14 @@ android {
         create("github") {
             dimension = "dist"
             buildConfigField("Boolean", "SELF_UPDATE", "true")
+            // 贊助連結（只在 GitHub 版顯示；空字串＝不顯示）
+            buildConfigField("String", "SPONSOR_URL", "\"\"")
         }
         create("play") {
             dimension = "dist"
             buildConfigField("Boolean", "SELF_UPDATE", "false")
+            // Play 版不放外部贊助連結（Play 付款政策）
+            buildConfigField("String", "SPONSOR_URL", "\"\"")
         }
     }
 

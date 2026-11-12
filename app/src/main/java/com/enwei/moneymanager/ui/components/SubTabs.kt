@@ -36,7 +36,7 @@ fun SubTabs(options: List<String>, selected: Int, modifier: Modifier = Modifier,
                     .background(if (sel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant, inner)
                     // 可點高度約 44dp；讀屏念成「分頁、已選取」
                     .clickable(role = androidx.compose.ui.semantics.Role.Tab) { onSelect(i) }
-                    .semantics { selected = sel }
+                    .semantics { this.selected = sel }
                     .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center,
             ) {

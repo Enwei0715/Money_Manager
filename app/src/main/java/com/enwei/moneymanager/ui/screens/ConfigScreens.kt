@@ -414,6 +414,10 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                     runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
                         android.net.Uri.parse("https://github.com/${BuildConfig.UPDATE_REPO}/blob/HEAD/PRIVACY_POLICY.md"))) }
                 }
+                // 贊助：只有 GitHub 版、而且設定了連結才出現；不贊助也不會少任何功能
+                com.enwei.moneymanager.data.Features.sponsorUrl?.let { url ->
+                    cfg("支持開發") { runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) } }
+                }
                 cfg("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.1.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
                 Spacer(Modifier.height(32.dp))
             }
