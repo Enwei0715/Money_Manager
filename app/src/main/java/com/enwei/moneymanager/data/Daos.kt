@@ -88,6 +88,10 @@ interface TxnDao {
     @Query("SELECT * FROM transactions")
     suspend fun all(): List<TxnEntity>
 
+    /** 一段時間內的交易（date 有索引）：通知記帳比對用，不必整表載入 */
+    @Query("SELECT * FROM transactions WHERE date BETWEEN :from AND :to")
+    suspend fun between(from: Long, to: Long): List<TxnEntity>
+
     @Query("SELECT * FROM transactions WHERE externalKey = :key LIMIT 1")
     suspend fun byExternalKey(key: String): TxnEntity?
 

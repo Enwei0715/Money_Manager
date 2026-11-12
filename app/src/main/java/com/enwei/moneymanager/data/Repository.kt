@@ -1189,7 +1189,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         // 同一則通知隔幾小時又跳出（內文完全相同）：已經記過或已合併成轉帳的不再處理
         val dayMs = 24L * 3600 * 1000
         val rawWindow = if (p.occurredAt != null) dayMs else 30L * 60 * 1000
-        if (db.txns().all().any { it.rawText != null && kotlin.math.abs(it.date - occurred) <= rawWindow && it.rawText.contains(raw0) }) {
+        if (db.txns().between(occurred - rawWindow, occurred + rawWindow).any { it.rawText != null && it.rawText.contains(raw0) }) {
             log.insert(logAs("DUPLICATE")); return null
         }
         val accounts = db.accounts().all().filter { !it.archived }
@@ -1213,7 +1213,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
         val raw = listOfNotNull(title, text).joinToString("\n")
         val window = 10 * 60_000L
-        val nearby = db.txns().all().filter {
+        val nearby = db.txns().between(occurred - window, occurred + window).filter {
             it.source == TxnSource.NOTIFICATION && it.amount == p.amountMinor && kotlin.math.abs(it.date - occurred) <= window
         }
 
@@ -1366,7 +1366,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             }
         }
         // 錢包畫面先讀到、或自己先手動記了同一筆：合併成一筆（帳戶以通知為準，商家名稱保留較完整的）
-        if (p.kind == ParsedKind.NORMAL) db.txns().all().firstOrNull {
+        if (p.kind == ParsedKind.NORMAL) db.txns().between(occurred - 86_400_000L, occurred + 86_400_000L).firstOrNull {
             it.type == type && it.amount == p.amountMinor &&
                 (kotlin.math.abs(it.date - occurred) <= 15L * 60 * 1000 ||
                     // 錢包畫面只有日期（記在當天 0:00）
