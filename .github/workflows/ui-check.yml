@@ -4,7 +4,7 @@ name: UI check
 on:
   push:
     branches: ["ccr-*"]
-    paths-ignore: ["RELEASE_NOTES.md"]
+    paths-ignore: ["RELEASE_NOTES.md", "research_notes/**", "reports/**"]
   workflow_dispatch:
 
 permissions:
