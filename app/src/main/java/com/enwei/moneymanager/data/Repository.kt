@@ -1443,8 +1443,14 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
         val finalStatus = if (status == TxnStatus.CONFIRMED && unsure != null) TxnStatus.PENDING else status
         if (finalStatus != status) aiNote += "$unsure，放待確認"
+        // 依你的記帳習慣：通知寫的是攤位（例如「京都」），而你習慣把攤位寫在說明、店家寫餐廳 → 照你的寫法拆開
+        var habitNote: String? = null
+        if (type == TxnType.EXPENSE) habitSplit(merchant)?.let { (owner, stall) ->
+            merchant = owner; habitNote = stall
+            if (categoryId == null) categoryId = suggestCategory(owner, type, occurred, p.amountMinor, account?.id)?.categoryId
+        }
         val result = insert(
-            base.copy(type = type, merchant = merchant, rawText = if (aiParsed) "$tagged\n$AI_TAG" else tagged, categoryId = categoryId, status = finalStatus),
+            base.copy(type = type, merchant = merchant, note = habitNote ?: base.note, rawText = if (aiParsed) "$tagged\n$AI_TAG" else tagged, categoryId = categoryId, status = finalStatus),
             "RECORDED", "${type.label} $amountText ${merchant.orEmpty()}$aiNote",
         )
         // 記下這筆的位置：之後在同一地點付款就能推測店家
@@ -1489,6 +1495,29 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val words = PlaceHints.categoryWords(kind).ifEmpty { return null }
         val cats = db.categories().all().filter { it.kind == TxnType.EXPENSE && !it.archived }
         return words.firstNotNullOfOrNull { w -> cats.firstOrNull { it.name.contains(w) }?.id }
+    }
+
+    private fun normHabit(x: String) = x.lowercase().replace(Regex("[\\s\\-－·・()（）|｜]"), "")
+
+    /**
+     * 你的「攤位寫說明、店家寫餐廳」習慣：過去至少兩筆、七成以上同一個說明配同一個店家時成立。
+     * [name] 和某個攤位相符（相同、包含，或是攤位名稱的開頭，例如「京都」對「京都日式料理」）而且只對到一家店時，
+     * 回傳（店家, 攤位）；沒有這種習慣或對不上就回傳 null。
+     */
+    suspend fun habitSplit(name: String?): Pair<String, String>? {
+        val n = name?.trim()?.let(::normHabit)?.takeIf { it.length >= 2 } ?: return null
+        val owners = db.txns().all().asSequence()
+            .filter { it.type == TxnType.EXPENSE && !it.merchant.isNullOrBlank() && !it.note.isNullOrBlank() }
+            .map { it.note!!.split('・', '·').first().trim() to it.merchant!!.trim() }
+            .filter { (stall, m) -> stall.length in 2..12 && stall != m }
+            .groupBy({ it.first }, { it.second })
+            .mapNotNull { (stall, ms) ->
+                val top = ms.groupingBy { it }.eachCount().maxByOrNull { it.value } ?: return@mapNotNull null
+                if (top.value >= 2 && top.value * 10 >= ms.size * 7) stall to top.key else null
+            }.toMap()
+        if (owners.values.any { normHabit(it) == n }) return null
+        val hits = owners.filter { (stall, _) -> val k = normHabit(stall); k == n || n.contains(k) || k.startsWith(n) }
+        return hits.values.distinct().singleOrNull()?.let { owner -> owner to hits.filterValues { it == owner }.keys.maxBy { it.length } }
     }
 
     private fun weakMerchant(m: String?): Boolean = m.isNullOrBlank() || CategoryGuesser.isGenericMerchant(m) || looksRaw(m) ||
