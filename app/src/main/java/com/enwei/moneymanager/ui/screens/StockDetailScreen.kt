@@ -49,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.nativeCanvas
@@ -1221,29 +1222,38 @@ private fun ProjectionCard(b: DailyBars) {
             val midCol = MaterialTheme.colorScheme.primary
             val resCol = Color(0xFFAB47BC); val supCol = Color(0xFF26A69A)
             val pivotCol = MaterialTheme.colorScheme.onSurfaceVariant
-            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(170.dp)) {
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(170.dp).clipToBounds()) {
                 val n = total - showFrom
-                val slots = n + ahead
-                val w = size.width / slots
+                // 歷史 K 棒占左邊 72%，未來 20 天占右邊 28%：區間有足夠的寬度，不會擠成一支喇叭
+                val histW = size.width * 0.72f
+                val w = histW / n
                 val lines = trend?.let { t -> listOf(t.upper.at(showFrom.toDouble()), t.upper.at(endIdx), t.lower.at(showFrom.toDouble()), t.lower.at(endIdx)) }.orEmpty()
-                val all = (showFrom until total).flatMap { listOf(b.high[it], b.low[it]) } + simQ[0] + simQ[2] + lines
-                val hi = all.max(); val lo = all.min(); val r = (hi - lo).takeIf { it > 0 } ?: 1.0
+                // 縱軸以 K 棒與趨勢線為主；區間最多再往外多留 35%，太寬的部分截掉，不把 K 棒壓扁
+                val base = (showFrom until total).flatMap { listOf(b.high[it], b.low[it]) } + lines
+                val bHi = base.max(); val bLo = base.min(); val pad = (bHi - bLo) * 0.35
+                val hi = minOf(maxOf(bHi, simQ[2].max()), bHi + pad); val lo = maxOf(minOf(bLo, simQ[0].min()), bLo - pad)
+                val r = (hi - lo).takeIf { it > 0 } ?: 1.0
                 fun y(v: Double) = ((hi - v) / r * size.height).toFloat()
-                fun x(i: Double) = ((i - showFrom) * w + w / 2).toFloat()
-                // 統計區間：悲觀到樂觀之間塗上淡色，中間一條基準線；邊界用細線
+                val xToday = (n - 1) * w + w / 2
+                val wF = (size.width - xToday - 2f) / ahead
+                fun x(i: Double): Float = if (i <= total - 1) ((i - showFrom) * w + w / 2).toFloat() else (xToday + (i - (total - 1)) * wF).toFloat()
+                val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
+                // 今天的位置：一條淡淡的直線分開過去與推估
+                drawLine(pivotCol.copy(alpha = 0.25f), Offset(xToday, 0f), Offset(xToday, size.height), 1.5f, pathEffect = dash)
+                // 統計區間：一塊柔和的淡色區域，上下緣細線，中間一條基準線（同一個顏色，不用紅綠）
                 clipRect {
-                    val x0 = x((total - 1).toDouble()); val y0 = y(last)
-                    val area = androidx.compose.ui.graphics.Path().apply {
-                        moveTo(x0, y0)
-                        simQ[2].forEachIndexed { k, v -> lineTo(x((total + k).toDouble()), y(v)) }
+                    val x0 = xToday; val y0 = y(last)
+                    fun curve(q: List<Double>) = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(x0, y0); q.forEachIndexed { k, v -> lineTo(x((total + k).toDouble()), y(v)) }
+                    }
+                    val area = curve(simQ[2]).apply {
                         simQ[0].indices.reversed().forEach { k -> lineTo(x((total + k).toDouble()), y(simQ[0][k])) }
-                        close()
+                        lineTo(x0, y0); close()
                     }
-                    drawPath(area, midCol.copy(alpha = 0.10f))
-                    listOf(Triple(simQ[0], down, 1.6f), Triple(simQ[2], up, 1.6f), Triple(simQ[1], midCol, 2.6f)).forEach { (q, colr, wd) ->
-                        var px = x0; var py = y0
-                        q.forEachIndexed { k, v -> val nx = x((total + k).toDouble()); val ny = y(v); drawLine(colr, Offset(px, py), Offset(nx, ny), wd); px = nx; py = ny }
-                    }
+                    drawPath(area, midCol.copy(alpha = 0.12f))
+                    drawPath(curve(simQ[2]), midCol.copy(alpha = 0.45f), style = Stroke(1.5f))
+                    drawPath(curve(simQ[0]), midCol.copy(alpha = 0.45f), style = Stroke(1.5f))
+                    drawPath(curve(simQ[1]), midCol, style = Stroke(2.5f, pathEffect = dash))
                 }
                 // K 棒
                 for (i in showFrom until total) {
@@ -1254,7 +1264,6 @@ private fun ProjectionCard(b: DailyBars) {
                     val top = y(maxOf(o, c)); val bot = y(minOf(o, c))
                     drawRect(colr, Offset(cx - w * 0.35f, top), Size(w * 0.7f, maxOf(1f, bot - top)))
                 }
-                val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
                 if (trend != null) {
                     // 壓力線、支撐線：實線畫到今天，往後延伸為虛線
                     listOf(trend.upper to resCol, trend.lower to supCol).forEach { (ln, colr) ->
