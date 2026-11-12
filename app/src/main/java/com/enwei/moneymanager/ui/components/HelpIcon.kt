@@ -23,8 +23,9 @@ import com.enwei.moneymanager.ui.AppText
 @Composable
 fun HelpIcon(title: String, body: String, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
-    IconButton(onClick = { open = true }, modifier = modifier.size(32.dp)) {
-        Icon(Icons.AutoMirrored.Outlined.HelpOutline, "說明", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+    // 圖示小、可點範圍至少 40dp（手指好按），讀屏念出是哪一項的說明
+    IconButton(onClick = { open = true }, modifier = modifier.size(40.dp)) {
+        Icon(Icons.AutoMirrored.Outlined.HelpOutline, "說明：$title", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
     }
     if (open) AlertDialog(
         onDismissRequest = { open = false },
@@ -53,12 +54,12 @@ object HelpText {
 
 過去的波動不代表未來，只用來判斷「這個停損停利設定合不合理」。"""
 
-    const val PROJECTION = """趨勢推估把三種想法畫在一起：
+    const val PROJECTION = """趨勢推估有兩種看法，用上方切換：
 
-• 趨勢線：找出最近的波段高低點，連成壓力線與支撐線，往後延伸 20 天（通道、楔形、三角收斂等型態）。
-• 20 日後範圍：圖右邊的直條。依最近 60 個交易日的波動，算出 20 個交易日後「八成機率會落在裡面」的價格範圍；虛線從今天的價格連到中間的基準點。
-  － 樂觀＝區間上緣；基準＝中間；悲觀＝區間下緣。波動越大的股票，區間越寬。
+• 統計區間（預設）：依近 60 個交易日的漲跌幅算出波動，從今天往右展開成扇形色帶，代表 20 個交易日後「八成機率會落在裡面」的價格範圍。
+  － 上緣＝樂觀、中間虛線＝基準、下緣＝悲觀，右端標出價位，和下方三欄相同。
   － 近期的漲跌趨勢只取一半計入，不會把最近的急漲或急跌直接往後延伸。
+• 型態線：找出圖上標了日期與價格的波段高點、低點，分別連成壓力線與支撐線，往後延伸 20 個交易日（通道、楔形、三角收斂等型態）。線型太亂時不提供。
 • 高於目前價的機率：依同一組統計算出 20 日後收盤高於今天的機率。
 
 這是統計推估，不是預測；遇到重大消息時走勢可能完全不同。"""

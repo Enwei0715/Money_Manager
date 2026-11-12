@@ -1244,34 +1244,50 @@ private fun ProjectionCard(b: DailyBars) {
                     fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             val up = StockUp; val down = StockDown
-            val bandCol = MaterialTheme.colorScheme.primary.copy(alpha = if (trend != null) 0.08f else 0.18f)
             val midCol = MaterialTheme.colorScheme.primary
             val resCol = Color(0xFFAB47BC); val supCol = Color(0xFF26A69A)
             val pivotCol = MaterialTheme.colorScheme.onSurfaceVariant
-            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(170.dp).clipToBounds()) {
+            val textCol = MaterialTheme.colorScheme.onSurface
+            val labelBg = MaterialTheme.colorScheme.surface
+            // 兩種看法分開畫，不疊在一起：「統計區間」（近期波動，所有股票都有）／「型態線」（波段高低點連線，畫得出來時才有）
+            var mode by remember { mutableStateOf(0) }
+            if (trend != null) com.enwei.moneymanager.ui.components.SubTabs(listOf("統計區間", "型態線"), mode) { mode = it }
+            val showTrend = trend != null && mode == 1
+            fun dayLabel(i: Int): String = b.days.getOrNull(i)?.let { java.time.LocalDate.ofEpochDay(it) }?.let { "${it.monthValue}/${it.dayOfMonth}" } ?: ""
+            // 資料依據：讀取了哪一段 K 線、算什麼
+            Text(
+                if (showTrend) "依據 ${dayLabel(showFrom)}～${dayLabel(total - 1)} 的波段高點（壓力線）與低點（支撐線）連線，往後延伸 20 個交易日"
+                else "依據近 60 個交易日的漲跌幅算出波動，推估 20 個交易日後八成機率的價格範圍",
+                fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(190.dp).clipToBounds()) {
+                val k = 10.sp.toPx() / 20f
+                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f * k }
+                fun argb(c: Color) = android.graphics.Color.argb(255, (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
+                /** 圖上的小標籤：底色＋文字，貼齊右邊或指定位置 */
+                fun tag(text: String, xRight: Float, yMid: Float, colr: Color) {
+                    paint.color = argb(colr)
+                    val tw = paint.measureText(text)
+                    val x0 = (xRight - tw - 8f * k).coerceAtLeast(0f)
+                    drawRoundRect(labelBg.copy(alpha = 0.9f), Offset(x0, yMid - 12f * k), Size(tw + 8f * k, 22f * k), androidx.compose.ui.geometry.CornerRadius(4f, 4f))
+                    drawContext.canvas.nativeCanvas.drawText(text, x0 + 4f * k, yMid + 6f * k, paint)
+                }
                 val n = total - showFrom
-                // 歷史 K 棒占左邊 80%，右邊 20% 畫 20 日後的推估
-                val histW = size.width * 0.80f
+                // 歷史 K 棒占左邊 72%，右邊畫 20 日後
+                val histW = size.width * 0.72f
                 val w = histW / n
-                val lines = trend?.let { t -> listOf(t.upper.at(showFrom.toDouble()), t.upper.at(endIdx), t.lower.at(showFrom.toDouble()), t.lower.at(endIdx)) }.orEmpty()
-                // 縱軸包含 K 棒、趨勢線與推估範圍，K 棒維持清楚（範圍太寬時上下各最多多留 45%）
-                val base = (showFrom until total).flatMap { listOf(b.high[it], b.low[it]) } + lines
-                val bHi = base.max(); val bLo = base.min(); val pad = (bHi - bLo) * 0.45
-                val hi = minOf(maxOf(bHi, simQ[2].last()), bHi + pad); val lo = maxOf(minOf(bLo, simQ[0].last()), bLo - pad)
+                val lines = if (showTrend) trend!!.let { t -> listOf(t.upper.at(showFrom.toDouble()), t.upper.at(endIdx), t.lower.at(showFrom.toDouble()), t.lower.at(endIdx)) } else emptyList()
+                val base = (showFrom until total).flatMap { listOf(b.high[it], b.low[it]) } + lines + (if (!showTrend) listOf(simQ[0].last(), simQ[2].last()) else emptyList())
+                val bHi = base.max(); val bLo = base.min(); val pad = (bHi - bLo) * 0.08
+                val hi = bHi + pad; val lo = bLo - pad
                 val r = (hi - lo).takeIf { it > 0 } ?: 1.0
                 fun y(v: Double) = ((hi - v) / r * size.height).toFloat().coerceIn(2f, size.height - 2f)
                 val xToday = (n - 1) * w + w / 2
-                val wF = (size.width - xToday - 14f) / ahead
+                val wF = (size.width - xToday - 8f) / ahead
                 fun x(i: Double): Float = if (i <= total - 1) ((i - showFrom) * w + w / 2).toFloat() else (xToday + (i - (total - 1)) * wF).toFloat()
                 val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
-                // 20 日後的推估：從今天收盤畫一條虛線到「基準」，在第 20 天畫一根直條：上端＝樂觀、下端＝悲觀（八成機率落在中間）
-                val xEnd = x(endIdx); val yHi = y(simQ[2].last()); val yLo = y(simQ[0].last()); val yMid = y(simQ[1].last())
-                drawRect(midCol.copy(alpha = 0.10f), Offset(xEnd - 9f, yHi), Size(18f, (yLo - yHi).coerceAtLeast(1f)))
-                drawLine(up, Offset(xEnd - 9f, yHi), Offset(xEnd + 9f, yHi), 3f)
-                drawLine(down, Offset(xEnd - 9f, yLo), Offset(xEnd + 9f, yLo), 3f)
-                drawLine(midCol.copy(alpha = 0.5f), Offset(xEnd, yHi), Offset(xEnd, yLo), 1.5f)
-                drawLine(midCol, Offset(xToday, y(last)), Offset(xEnd, yMid), 2.5f, pathEffect = dash)
-                drawCircle(midCol, radius = 5f, center = Offset(xEnd, yMid))
+                // 今天的分隔線
+                drawLine(pivotCol.copy(alpha = 0.4f), Offset(xToday, 0f), Offset(xToday, size.height), 1f, pathEffect = dash)
                 // K 棒
                 for (i in showFrom until total) {
                     val o = b.open[i]; val c = b.close[i]
@@ -1281,26 +1297,55 @@ private fun ProjectionCard(b: DailyBars) {
                     val top = y(maxOf(o, c)); val bot = y(minOf(o, c))
                     drawRect(colr, Offset(cx - w * 0.35f, top), Size(w * 0.7f, maxOf(1f, bot - top)))
                 }
-                if (trend != null) {
-                    // 壓力線、支撐線：實線畫到今天，往後延伸為虛線
-                    listOf(trend.upper to resCol, trend.lower to supCol).forEach { (ln, colr) ->
-                        val s0 = maxOf(trend.start, showFrom).toDouble(); val today = (total - 1).toDouble()
+                // 目前價：水平虛線＋標籤
+                drawLine(textCol.copy(alpha = 0.5f), Offset(0f, y(last)), Offset(xToday, y(last)), 1f, pathEffect = dash)
+                if (!showTrend) {
+                    // 統計區間：從今天展開的扇形色帶（越往後越寬），上緣＝樂觀、下緣＝悲觀、中間虛線＝基準
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(xToday, y(last))
+                        simQ[2].forEachIndexed { i, v -> lineTo(x((total + i).toDouble()), y(v)) }
+                        simQ[0].indices.reversed().forEach { i -> lineTo(x((total + i).toDouble()), y(simQ[0][i])) }
+                        close()
+                    }
+                    drawPath(path, midCol.copy(alpha = 0.14f))
+                    val upPath = androidx.compose.ui.graphics.Path().apply { moveTo(xToday, y(last)); simQ[2].forEachIndexed { i, v -> lineTo(x((total + i).toDouble()), y(v)) } }
+                    val loPath = androidx.compose.ui.graphics.Path().apply { moveTo(xToday, y(last)); simQ[0].forEachIndexed { i, v -> lineTo(x((total + i).toDouble()), y(v)) } }
+                    val midPath = androidx.compose.ui.graphics.Path().apply { moveTo(xToday, y(last)); simQ[1].forEachIndexed { i, v -> lineTo(x((total + i).toDouble()), y(v)) } }
+                    drawPath(upPath, up, style = Stroke(2f))
+                    drawPath(loPath, down, style = Stroke(2f))
+                    drawPath(midPath, midCol, style = Stroke(2f, pathEffect = dash))
+                    // 右端標出三個價位，和下方三欄數字一致
+                    tag("樂觀 %.0f".format(simQ[2].last()), size.width, y(simQ[2].last()) + 10f * k, up)
+                    tag("基準 %.0f".format(simQ[1].last()), size.width, y(simQ[1].last()), midCol)
+                    tag("悲觀 %.0f".format(simQ[0].last()), size.width, y(simQ[0].last()) - 10f * k, down)
+                } else {
+                    val t = trend!!
+                    // 型態線：實線畫到今天，往後延伸為虛線；線尾標名稱與 20 日後價位
+                    listOf(Triple(t.upper, resCol, "壓力線"), Triple(t.lower, supCol, "支撐線")).forEach { (ln, colr, name) ->
+                        val s0 = maxOf(t.start, showFrom).toDouble(); val today = (total - 1).toDouble()
                         drawLine(colr, Offset(x(s0), y(ln.at(s0))), Offset(x(today), y(ln.at(today))), 3f)
                         drawLine(colr, Offset(x(today), y(ln.at(today))), Offset(x(endIdx), y(ln.at(endIdx))), 3f, pathEffect = dash)
+                        tag("$name %.0f".format(ln.at(endIdx)), size.width, y(ln.at(endIdx)) + (if (name == "壓力線") 12f else -12f) * k, colr)
                     }
-                    // 波段高低點
-                    trend.pivots.filter { it.index >= showFrom }.forEach { p ->
-                        drawCircle(pivotCol, radius = 5f, center = Offset(x(p.index.toDouble()), y(p.price)), style = Stroke(2f))
+                    // 用來畫線的波段高低點：圓圈旁標日期與價格
+                    t.pivots.filter { it.index >= showFrom }.forEach { p ->
+                        val px = x(p.index.toDouble()); val py = y(p.price)
+                        drawCircle(pivotCol, radius = 5f, center = Offset(px, py), style = Stroke(2f))
+                        paint.color = argb(pivotCol)
+                        val label = "${dayLabel(p.index)} %.0f".format(p.price)
+                        val tw = paint.measureText(label)
+                        val lx = (px - tw / 2).coerceIn(0f, xToday - tw)
+                        drawContext.canvas.nativeCanvas.drawText(label, lx, if (p.high) py - 9f * k else py + 22f * k, paint)
                     }
                 }
+                tag("目前 %.0f".format(last), xToday - 4f, y(last), textCol)
             }
-            // 圖例：右邊直條＝20 日後的推估範圍
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (trend != null) {
-                    Text("━ 壓力線", fontSize = AppText.label, color = resCol)
-                    Text("━ 支撐線", fontSize = AppText.label, color = supCol)
-                }
-                Text("┃ 20 日後範圍（● 基準）", fontSize = AppText.label, color = midCol)
+            // 時間軸：資料起點、今天、20 個交易日後
+            Row(Modifier.fillMaxWidth()) {
+                Text(dayLabel(showFrom), fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(0.72f))
+                Text("今天", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.weight(0.28f))
+                Text("20 日後", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             // 三種情境的 20 日後價格
             androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

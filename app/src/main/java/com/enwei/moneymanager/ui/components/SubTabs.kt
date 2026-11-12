@@ -13,6 +13,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,7 +34,10 @@ fun SubTabs(options: List<String>, selected: Int, modifier: Modifier = Modifier,
             Box(
                 Modifier.weight(1f)
                     .background(if (sel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant, inner)
-                    .clickable { onSelect(i) }.padding(vertical = 7.dp),
+                    // 可點高度約 44dp；讀屏念成「分頁、已選取」
+                    .clickable(role = androidx.compose.ui.semantics.Role.Tab) { onSelect(i) }
+                    .semantics { selected = sel }
+                    .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(label, fontSize = AppText.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis,

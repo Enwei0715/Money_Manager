@@ -109,7 +109,7 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
                     Text("已學習的商家分類", fontSize = com.enwei.moneymanager.ui.AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     if (picked.isNotEmpty()) {
                         androidx.compose.material3.TextButton(onClick = { picked = emptySet() }) { Text("取消") }
-                        androidx.compose.material3.TextButton(onClick = { confirmRules = true }) { Text("刪除 ${picked.size} 個", color = Color(0xFFE5484D)) }
+                        androidx.compose.material3.TextButton(onClick = { confirmRules = true }) { Text("刪除 ${picked.size} 個", color = MaterialTheme.colorScheme.error) }
                     } else androidx.compose.material3.TextButton(onClick = { picked = myRules.map { it.keyword }.toSet() }) { Text("全選") }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -139,7 +139,7 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
                             Text(to)
                             Text(from, fontSize = com.enwei.moneymanager.ui.AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        androidx.compose.material3.TextButton(onClick = { repo.removeMerchantAlias(from) }) { Text("移除", color = Color(0xFFE5484D)) }
+                        androidx.compose.material3.TextButton(onClick = { repo.removeMerchantAlias(from) }) { Text("移除", color = MaterialTheme.colorScheme.error) }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -158,7 +158,7 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
                 val keys = picked
                 scope.launch { keys.forEach { repo.deleteRule(it) } }
                 picked = emptySet(); confirmRules = false
-            }) { Text("刪除", color = Color(0xFFE5484D)) }
+            }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
         },
         dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmRules = false }) { Text("取消") } },
     )
