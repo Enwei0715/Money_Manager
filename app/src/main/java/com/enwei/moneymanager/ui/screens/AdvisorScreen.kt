@@ -643,7 +643,8 @@ fun PickCard(
                 if (p.reason.isNotBlank()) PointList(p.reason, cites, newsById)
             }
             // ⑤ 操作：進場、停損、金額，與按鈕
-            section("操作")
+            // 沒有進場、停損、金額時不放「操作」小標，只留按鈕
+            if (p.entry.isNotBlank() || p.stop.isNotBlank() || p.amount != null) section("操作")
             if (p.entry.isNotBlank() || p.stop.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f)) {
                     Text("進場", fontSize = AppText.label, color = muted)
@@ -810,7 +811,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
             }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 12.dp, bottom = 72.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 // 空白對話：歡迎卡片＋四個常見問題（點一下就問）
                 if (store.chat.isEmpty()) item {
                     Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally,
@@ -1842,6 +1843,7 @@ fun CitedText(
 ) {
     val link = MaterialTheme.colorScheme.primary
     val annotated = remember(text, ids, System.identityHashCode(newsById)) {
+        val text = cleanSourceTags(text)
         androidx.compose.ui.text.buildAnnotatedString {
             var last = 0
             citeGroup.findAll(text).forEach { m ->
@@ -2363,3 +2365,12 @@ private fun PickTrackSheet(store: NewsStore, nav: NavController, onClose: () -> 
         }
     }
 }
+
+
+/**
+ * AI 偶爾把內部資料來源的標記寫進回覆（「[個股2344、36]」「[紀律」）：這些不是新聞編號，畫面上拿掉。
+ * 純數字的新聞編號（[1]、[2, 3]）保留，照常可點。
+ */
+private val sourceTag = Regex("\\s*[\\[［【](?!\\s*\\d{1,3}(?:\\s*[,，、]\\s*\\d{1,3})*\\s*[\\]］】])[^\\[\\]［］【】\\n]{1,30}[\\]］】]")
+private val openTag = Regex("\\s*[\\[［【][^\\[\\]［］【】\\n]{0,24}$", RegexOption.MULTILINE)
+internal fun cleanSourceTags(t: String): String = t.replace(sourceTag, "").replace(openTag, "")
