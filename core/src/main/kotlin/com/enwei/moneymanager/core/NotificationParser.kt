@@ -49,8 +49,13 @@ data class PartialStockFill(
 object NotificationParser {
 
     private val ignoreKeywords = listOf(
-        "驗證碼", "密碼", "一次性", "認證碼", "交易失敗", "未成功", "失敗", "取消交易", "已取消",
+        "驗證碼", "一次性密碼", "認證碼", "交易失敗", "未成功", "失敗",
     )
+    /** 「密碼為 123456」「密碼：…」才是密碼通知；交易通知結尾的「請勿洩漏密碼」不算 */
+    private val passwordNotice = Regex("密碼\\s*(為|是|[:：])")
+    /** 取消交易：同時寫了退款、刷退時是退錢給你（收入），其他取消通知略過 */
+    private val cancelled = Regex("取消交易|交易已取消|已取消")
+    private val refundWords = listOf("退款", "刷退", "退回原卡", "退貨")
     /** 行銷字眼：只有在通知不像實際交易（沒有卡號末碼、刷卡或消費金額）時才當成廣告略過，「享優惠回饋」的消費照記 */
     private val softIgnore = listOf("登入", "優惠", "活動", "抽獎", "限時", "加碼")
     private val txnEvidence = Regex("末[四4五5]碼|(刷卡|消費)(金額)?[:：]?\\s*(新臺幣|新台幣|台幣|NT|\\$|TWD|[0-9])|已扣款|付款完成|交易金額")
@@ -96,7 +101,7 @@ object NotificationParser {
         "HK$" to "HKD", "HKD" to "HKD", "港幣" to "HKD",
         "CNY" to "CNY", "RMB" to "CNY", "人民幣" to "CNY",
         "KRW" to "KRW", "韓元" to "KRW", "GBP" to "GBP", "£" to "GBP", "英鎊" to "GBP",
-        "SGD" to "SGD", "AUD" to "AUD", "THB" to "THB",
+        "SGD" to "SGD", "S$" to "SGD", "AUD" to "AUD", "A$" to "AUD", "CAD" to "CAD", "C$" to "CAD", "THB" to "THB", "MYR" to "MYR", "RM" to "MYR",
         "¥" to "JPY", "$" to "TWD",
     )
 
@@ -105,8 +110,14 @@ object NotificationParser {
         "(" + currencyTokens.joinToString("|") { Regex.escape(it.first) } + ")\\s*:?\\s*" + number,
         RegexOption.IGNORE_CASE,
     )
-    private val suffixedAmount = Regex("$number\\s*(元|圓|円)")
+    private val suffixedAmount = Regex("$number\\s*(美元|美金|日圓|日幣|港幣|歐元|元|圓|円)")
     private val notAmountContext = listOf("餘額", "額度", "累積", "累計", "回饋", "紅利", "點數", "可用")
+
+    /** 自己的卡號／帳號末四碼：前面寫「至」「轉入」「收款」的是對方帳號，不算 */
+    fun ownLast4(full: String): String? = cardLast4Regex.findAll(full).firstOrNull { m ->
+        val before = full.substring(maxOf(0, m.range.first - 12), m.range.first)
+        listOf("至", "轉入", "收款", "對方", "入帳帳號").none { before.contains(it) }
+    }?.groupValues?.get(1)?.takeLast(4)
 
     private val cardLast4Regex = Regex("(?:末四碼|末4碼|尾號|末碼|後四碼|卡號末四碼|末五碼|末5碼)\\s*[:：]?\\s*\\*{0,4}(\\d{4,5})")
 
@@ -126,6 +137,8 @@ object NotificationParser {
 
     fun shouldIgnore(text: String): Boolean =
         ignoreKeywords.any { text.contains(it, ignoreCase = true) } || otpWord.containsMatchIn(text) ||
+            passwordNotice.containsMatchIn(text) ||
+            (cancelled.containsMatchIn(text) && refundWords.none { text.contains(it) }) ||
             (softIgnore.any { text.contains(it) } && !txnEvidence.containsMatchIn(text)) ||
             englishIgnore.any { text.contains(it, ignoreCase = true) }
 
@@ -187,14 +200,18 @@ object NotificationParser {
         val has = { list: List<String> -> list.any { full.contains(it, ignoreCase = true) } }
         val (type, kind) = when {
             // 退款、退貨即使含「消費」字樣仍屬收入
-            full.contains("退款") || full.contains("退貨") || full.contains("refund", ignoreCase = true) -> ParsedType.INCOME to ParsedKind.NORMAL
+            full.contains("退款") || full.contains("退貨") || full.contains("刷退") || full.contains("refund", ignoreCase = true) -> ParsedType.INCOME to ParsedKind.NORMAL
+            // 薪資、獎金、利息、股利是真正的收入，不是自己帳戶間的轉入
+            listOf("薪資", "薪轉", "獎金", "利息", "股利", "股息").any { full.contains(it) } && !full.contains("轉出") -> ParsedType.INCOME to ParsedKind.NORMAL
             // 信用卡款自動扣繳／繳款（銀行帳戶扣款，不是刷卡消費）
             // 「以信用卡繳費」「信用卡繳水電費」是用卡付帳單（刷卡消費），不是繳卡費
             (full.contains("卡款") || full.contains("卡費") || full.contains("信用卡帳款") || full.contains("繳信用卡") ||
-                (full.contains("信用卡") && !Regex("(以|用|使用)信用卡").containsMatchIn(full))) &&
+                (full.contains("信用卡") && !Regex("(以|用|使用)信用卡|信用卡代繳").containsMatchIn(full))) &&
                 (full.contains("扣繳") || full.contains("繳款") || full.contains("繳費")) && !full.contains("刷卡") ->
                 ParsedType.EXPENSE to ParsedKind.CARD_PAYMENT
             // 「提款卡消費」是用提款卡付款，不是提款
+            // 電子支付「提領至銀行帳戶」是把錢轉回銀行（轉帳），不是領現金
+            Regex("提領至|提領到|轉回銀行").containsMatchIn(full) -> ParsedType.EXPENSE to ParsedKind.TRANSFER_OUT
             full.replace("提款卡", "").let { w -> withdrawalKeywords.any { w.contains(it, ignoreCase = true) } } && !full.contains("存入") &&
                 !full.contains("轉帳") && !full.contains("轉出") ->
                 ParsedType.EXPENSE to ParsedKind.WITHDRAWAL
@@ -218,7 +235,7 @@ object NotificationParser {
                 englishMerchant.find(listOfNotNull(title, text).joinToString("\n"))?.groupValues?.get(1)?.trim()?.trimEnd('.')
                     ?: findMerchant(full)
             } else null,
-            cardLast4 = cardLast4Regex.find(full)?.groupValues?.get(1)?.takeLast(4),
+            cardLast4 = ownLast4(full),
             kind = kind,
             occurredAt = findDateTime(full, now),
             walletHint = wallet,
@@ -239,7 +256,7 @@ object NotificationParser {
             type = type, amountMinor = amount, currency = currency,
             merchant = englishMerchant.find(listOfNotNull(title, text).joinToString("\n"))?.groupValues?.get(1)?.trim()?.trimEnd('.')
                 ?: findMerchant(full),
-            cardLast4 = cardLast4Regex.find(full)?.groupValues?.get(1)?.takeLast(4),
+            cardLast4 = ownLast4(full),
             kind = kind, occurredAt = findDateTime(full, now),
         )
     }
@@ -273,12 +290,20 @@ object NotificationParser {
         val candidates = mutableListOf<Candidate>()
         prefixedAmount.findAll(text).forEach { m ->
             val token = m.groupValues[1]
+            // 「A$」「S$」以外沒列出的「X$」（前面緊接英文字母）：幣別不明，不當成台幣
+            if (token == "$" && m.range.first > 0 && text[m.range.first - 1].isLetter()) return@forEach
             val currency = currencyTokens.first { it.first.equals(token, ignoreCase = true) }.second
             Money.parseMinor(m.groupValues[2])?.let { candidates += Candidate(m.range.first, it, currency) }
         }
         suffixedAmount.findAll(text).forEach { m ->
-            val currency = if (m.groupValues[2] == "円") "JPY" else "TWD"
+            val currency = when (m.groupValues[2]) {
+                "円", "日圓", "日幣" -> "JPY"; "美元", "美金" -> "USD"; "港幣" -> "HKD"; "歐元" -> "EUR"; else -> "TWD"
+            }
             Money.parseMinor(m.groupValues[1])?.let { candidates += Candidate(m.range.first, it, currency) }
+        }
+        // 「100 美元，約新台幣 3,200 元」：實際扣的是台幣，用台幣金額
+        Regex("(約|折合|折算)\\s*(新臺幣|新台幣|台幣|NT\\$)").find(text)?.let { hint ->
+            candidates.filter { it.currency == "TWD" && it.index >= hint.range.first }.minByOrNull { it.index }?.let { return it.minor to it.currency }
         }
         return candidates
             .sortedBy { it.index }
@@ -289,6 +314,9 @@ object NotificationParser {
             ?.let { it.minor to it.currency }
     }
 
+    /** 「於國外消費」「於網路消費」的國外、網路是地點，不是店名 */
+    private val placeWords = setOf("國外", "國內", "網路", "線上", "境外", "實體", "海外", "台灣", "臺灣")
+
     internal fun findMerchant(text: String): String? {
         // 只寫支付工具（LINE Pay、街口…）的先記著，有真正的店名就用店名
         var generic: String? = null
@@ -297,7 +325,7 @@ object NotificationParser {
                 val candidate = m.groupValues[1].trim().trim('「', '」', '【', '】', '(', ')', '（', '）')
                     .replace(Regex("^\\d{1,4}/\\d{1,2}(?:/\\d{1,2})?(?:\\s*\\d{1,2}:\\d{2}(?::\\d{2})?)?\\s*"), "") // 去掉開頭的日期時間
                     .trim()
-                if (candidate.length >= 2 && !dateLike.matches(candidate) &&
+                if (candidate.length >= 2 && !dateLike.matches(candidate) && candidate !in placeWords &&
                     !candidate.startsWith("NT") && !candidate.contains("$")
                 ) {
                     if (CategoryGuesser.isGenericMerchant(candidate)) { if (generic == null) generic = candidate } else return candidate

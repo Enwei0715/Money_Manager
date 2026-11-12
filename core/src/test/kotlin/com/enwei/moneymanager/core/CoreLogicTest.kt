@@ -377,6 +377,63 @@ class CategorySuggesterTest {
         assertEquals(StockSide.SELL, fill!!.side)
     }
 
+    @Test fun recheckAccuracyCases() {
+        // 金額溢位：超過上限回傳 null，不會變成負數或亂數
+        assertNull(Money.parseMinor("99999999999999999"))
+        assertEquals(12_345_600L, Money.parseMinor("123456"))
+        // 電支提領到銀行是轉帳，不是領現金
+        assertEquals(ParsedKind.TRANSFER_OUT, NotificationParser.parse("悠遊付", "悠遊付提領至銀行帳戶 NT$1,000 成功")!!.kind)
+        // 交易取消並刷退：退款收入
+        val refund = NotificationParser.parse("國泰世華", "您的信用卡末四碼5678 交易已取消 NT$500 刷退")
+        assertEquals(ParsedType.INCOME, refund!!.type)
+        assertNull(NotificationParser.parse("國泰世華", "您的訂單已取消"))
+        // 「一次性通知」「請勿洩漏密碼」不是驗證碼
+        assertEquals(ParsedKind.NORMAL, NotificationParser.parse("郵局", "您的金融卡於 11/12 在家樂福 消費 NT$1,200 成功，此為一次性通知")!!.kind)
+        assertNotNull(NotificationParser.parse("台新", "刷卡消費 NT$300 成功，請勿洩漏密碼"))
+        assertNull(NotificationParser.parse("台新", "您的密碼為 123456"))
+        // 信用卡代繳電費是刷卡消費
+        assertEquals(ParsedKind.NORMAL, NotificationParser.parse("台電", "信用卡代繳台電電費 繳費成功 NT$1,280")!!.kind)
+        // 轉帳的收款帳號末四碼不是自己的卡
+        assertNull(NotificationParser.parse("郵局", "ATM轉帳轉出 NT$5,000 至 012 帳號末四碼1234")!!.cardLast4)
+        assertEquals("5908", NotificationParser.parse("銀行", "末四碼5908刷卡台幣60元")!!.cardLast4)
+        // 薪資匯入是收入，不是單邊轉入
+        val salary = NotificationParser.parse("銀行", "薪資匯入 NT$45,000")!!
+        assertEquals(ParsedType.INCOME, salary.type); assertEquals(ParsedKind.NORMAL, salary.kind)
+        // 國外、網路不是店名
+        assertNull(NotificationParser.parse("銀行", "末四碼1234於網路消費 NT$299")!!.merchant)
+        // 外幣
+        assertEquals("AUD", NotificationParser.parse("銀行", "A$50.00 消費成功 末四碼1234")!!.currency)
+        assertEquals(320_000L to "TWD", NotificationParser.findAmount("刷卡消費 100美元，約新台幣3,200元"))
+        assertEquals("USD", NotificationParser.findAmount("刷卡消費 100美元")!!.second)
+    }
+
+    @Test fun categoryKeywordFalsePositives() {
+        val c = listOf(
+            CategorySuggester.Cat(1, "飲食", null),
+            CategorySuggester.Cat(12, "午餐", 1), CategorySuggester.Cat(13, "晚餐", 1), CategorySuggester.Cat(14, "宵夜", 1),
+            CategorySuggester.Cat(2, "交通", null), CategorySuggester.Cat(21, "停車", 2),
+            CategorySuggester.Cat(3, "住宿", null),
+        )
+        // 飯店不是吃飯、Sketch 不是 ETC 停車、全家福海產不是全家便利商店、Seven Seas 不是 7-11
+        assertEquals(3L, CategorySuggester.suggest("君悅飯店", at(21), c)?.categoryId)
+        assertEquals(null, CategorySuggester.suggest("Sketch Coffee Lab", at(21), c)?.categoryId?.takeIf { it == 21L })
+        assertEquals("全家福海產", CategorySuggester.canonical("全家福海產"))
+        assertEquals("711", CategorySuggester.canonical("7-ELEVEN 師大店"))
+        assertEquals(false, CategorySuggester.canonical("Seven Seas Bistro") == "711")
+        assertEquals(null, CategorySuggester.suggest("鍋爐維修行", at(21), c))
+        // 晚上 9 點仍是晚餐，10 點後才是宵夜
+        assertEquals(13L, CategorySuggester.suggest("鼎泰豐", at(21), c)?.categoryId)
+        assertEquals(14L, CategorySuggester.suggest("鼎泰豐", at(23), c)?.categoryId)
+    }
+
+    @Test fun twTaxCases() {
+        assertEquals(0.0, StockCalc.twTax("00679B", 100000.0), 0.0)
+        assertEquals(100.0, StockCalc.twTax("0050", 100000.0), 0.0)
+        assertEquals(100.0, StockCalc.twTax("020020", 100000.0), 0.0)
+        assertEquals(150.0, StockCalc.twTax("2330", 100000.0, dayTrade = true), 0.0)
+        assertEquals(300.0, StockCalc.twTax("2330", 100000.0), 0.0)
+    }
+
     @Test fun brunchOnlyInLateMorning() {
         // 早午餐排在午餐前面：下午兩點仍是午餐，上午十點才是早午餐
         val c = listOf(

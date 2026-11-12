@@ -6,14 +6,25 @@ import java.text.DecimalFormat
 
 /** 金額一律以「最小單位 ×100」的 Long 儲存，避免浮點誤差。 */
 object Money {
-    fun toMinor(value: BigDecimal): Long = value.setScale(2, RoundingMode.HALF_UP).movePointRight(2).toLong()
+    /** 金額上限：一千億（避免輸入過長數字時 Long 溢位變成負數或亂數） */
+    val MAX_MINOR: Long = 100_000_000_000L * 100
 
-    fun toMinor(value: Double): Long = toMinor(BigDecimal.valueOf(value))
+    /** 轉成最小單位；超過上限時回傳 null（使用者輸入用，避免溢位變成負數或亂數） */
+    fun toMinorOrNull(value: BigDecimal): Long? {
+        val scaled = value.setScale(2, RoundingMode.HALF_UP).movePointRight(2)
+        if (scaled.abs() > BigDecimal.valueOf(MAX_MINOR)) return null
+        return scaled.toLong()
+    }
+
+    /** 轉成最小單位（程式內部計算用）：超過上限時夾在上限，不會溢位 */
+    fun toMinor(value: BigDecimal): Long = toMinorOrNull(value) ?: if (value.signum() < 0) -MAX_MINOR else MAX_MINOR
+
+    fun toMinor(value: Double): Long = if (value.isFinite()) toMinor(BigDecimal.valueOf(value)) else 0L
 
     fun parseMinor(text: String): Long? {
         val cleaned = text.replace(",", "").replace("，", "").trim()
         if (cleaned.isEmpty()) return null
-        return cleaned.toBigDecimalOrNull()?.let(::toMinor)
+        return cleaned.toBigDecimalOrNull()?.let { toMinorOrNull(it) }
     }
 
     fun fromMinor(minor: Long): BigDecimal = BigDecimal.valueOf(minor, 2)

@@ -52,9 +52,10 @@ object CategorySuggester {
             votes.maxByOrNull { it.value }?.let { (id, _) ->
                 byId[id]?.let { return Suggestion(meal(it, at, cats).id, "依過去「$m」的記帳紀錄") }
             }
-            // 3. 內建關鍵字
+            // 3. 內建關鍵字（英文字要是完整的字：Sketch 不算 etc；中文單字有排除詞：飯店不算飯、鍋爐不算鍋）
+            val raw = Normalizer.normalize(m, Normalizer.Form.NFKC).lowercase()
             for (g in groups) {
-                if (g.keywords.none { canonical(it).let { k -> k.isNotEmpty() && key.contains(k) } }) continue
+                if (g.keywords.none { keywordHit(it, key, raw) }) continue
                 val c = findCat(g.targets, cats) ?: continue
                 return Suggestion(if (g.meal) meal(c, at, cats).id else c.id, "依商家名稱推測")
             }
@@ -75,8 +76,21 @@ object CategorySuggester {
 
     // ---------- 商家名稱比對 ----------
 
+    /** 含這些字時，單字關鍵字（飯、麵、鍋、餃…）不算吃的 */
+    private val notFood = listOf("飯店", "酒店", "旅店", "旅館", "民宿", "鍋爐", "飯盒工廠", "電鍋")
+
+    private fun keywordHit(kw: String, key: String, raw: String): Boolean {
+        val k = canonical(kw).takeIf { it.isNotEmpty() } ?: return false
+        if (kw.all { it.code < 128 } && kw.any { it.isLetter() }) {
+            // 英文：前後不能接英文字母
+            return Regex("(?<![a-z])" + Regex.escape(kw.lowercase()) + "(?![a-z])").containsMatchIn(raw)
+        }
+        if (k.length == 1 && notFood.any { key.contains(it) }) return false
+        return key.contains(k)
+    }
+
     private val aliases = listOf(
-        "711" to listOf("7-eleven", "7eleven", "7-11", "711", "統一超商", "seven"),
+        "711" to listOf("7-eleven", "7eleven", "7-11", "711", "統一超商", "seven-eleven", "seveneleven"),
         "全家" to listOf("全家", "familymart", "family mart"),
         "萊爾富" to listOf("萊爾富", "hilife"),
         "星巴克" to listOf("星巴克", "starbucks"),
@@ -92,7 +106,10 @@ object CategorySuggester {
     /** 正規化：全形轉半形、小寫、去掉空白標點與「門市／分店」等字尾；常見連鎖店換成同一個名稱。 */
     fun canonical(s: String): String {
         val n = Normalizer.normalize(s, Normalizer.Form.NFKC).lowercase()
-        aliases.forEach { (c, list) -> if (list.any { n.contains(it) }) return c }
+        val compact = n.replace(Regex("[\\s]"), "")
+        aliases.forEach { (c, list) ->
+            if (list.any { a -> val ac = a.replace(" ", ""); compact.startsWith(ac) && !(c == "全家" && compact.startsWith("全家福")) }) return c
+        }
         return n.replace(Regex("[\\s\\p{Punct}，。、・·（）()【】「」]"), "")
             .replace(Regex("(股份有限公司|有限公司|門市|分店|分公司|直營店)$"), "")
     }
@@ -115,6 +132,7 @@ object CategorySuggester {
             listOf("訂閱", "數位", "會員", "娛樂", "entertainment")),
         Group(listOf("咖啡", "星巴克", "路易莎", "cama", "85度c", "50嵐", "可不可", "清心", "迷客夏", "茶湯會", "五十嵐", "麻古", "鶴茶樓", "得正", "coco都可", "飲料", "手搖"),
             listOf("飲料", "咖啡", "手搖", "drinks", "drink", "coffee") + food),
+        Group(listOf("飯店", "酒店", "旅館", "旅店", "民宿", "hotel", "hostel", "motel", "inn", "airbnb"), listOf("住宿", "旅館", "travel", "旅遊")),
         Group(listOf("麵包", "烘焙", "甜點", "蛋糕", "點心"), listOf("點心", "甜點", "零食", "下午茶", "snack") + food),
         Group(listOf("711", "全家", "萊爾富", "ok超商", "okmart"), listOf("便利商店", "超商") + food, meal = true),
         Group(listOf("ubereats", "foodpanda", "麥當勞", "肯德基", "摩斯", "漢堡王", "必勝客", "達美樂", "拿坡里", "八方雲集", "四海遊龍", "鬍鬚張", "爭鮮", "壽司郎", "藏壽司", "王品", "瓦城", "鼎泰豐",
@@ -203,7 +221,7 @@ object CategorySuggester {
         in 9..10 -> listOf(Meal.BRUNCH, Meal.BREAKFAST, Meal.LUNCH)
         in 11..14 -> listOf(Meal.LUNCH, Meal.BRUNCH)
         in 15..16 -> listOf(Meal.TEA, Meal.LUNCH, Meal.DINNER)
-        in 17..20 -> listOf(Meal.DINNER)
+        in 17..21 -> listOf(Meal.DINNER)
         else -> listOf(Meal.LATE, Meal.DINNER)
     }
 

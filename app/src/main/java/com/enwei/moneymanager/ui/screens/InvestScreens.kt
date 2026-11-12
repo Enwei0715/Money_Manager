@@ -583,13 +583,17 @@ fun TradeEditScreen(
     val feeSettings = settings.feeSettings.let { fs -> broker?.feeDiscount?.let { fs.copy(discount = it) } ?: fs }
     // 自動估算手續費與交易稅（可手動覆寫）
     val fillParts = fills.split('+', '＋', ',', ' ').mapNotNull { it.trim().toDoubleOrNull() }.filter { it > 0 }
-    LaunchedEffect(market, symbol, side, shares, price, feeSettings, fills) {
+    LaunchedEffect(market, symbol, side, shares, price, feeSettings, fills, date) {
         if (feeEdited) return@LaunchedEffect
         if (original != null && loadedInputs == listOf(market, symbol, side, shares, price, fills, brokerId)) return@LaunchedEffect
         val p = price.replace(",", "").toDoubleOrNull() ?: return@LaunchedEffect
         if (shares > 0 && (side == StockSide.BUY || side == StockSide.SELL)) {
             val parts = fillParts.takeIf { it.size > 1 && kotlin.math.abs(it.sum() - shares) < 1e-6 } ?: listOf(shares)
-            val est = parts.map { StockCalc.estimate(market, symbol, side, it, p, feeSettings) }
+            // 同一天先買後賣同一檔（現股當沖）：交易稅減半
+            val dayTrade = side == StockSide.SELL && allTrades.any {
+                it.side == StockSide.BUY && it.market == market && it.symbol.equals(symbol.trim(), true) && it.date == date.toEpochDay() && it.id != original?.id
+            }
+            val est = parts.map { StockCalc.estimate(market, symbol, side, it, p, feeSettings, dayTrade) }
             fee = formatPlain(est.sumOf { it.first }); tax = formatPlain(est.sumOf { it.second })
         }
     }

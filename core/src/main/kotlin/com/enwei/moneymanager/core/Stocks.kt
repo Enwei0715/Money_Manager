@@ -70,19 +70,28 @@ object StockCalc {
     /** 不足 1000 股的交易算零股 */
     fun isOddLot(shares: Double) = shares < 1000
 
+    /** 債券 ETF（代號 00 開頭、B 結尾，例如 00679B）：證券交易稅停徵 */
+    fun isBondEtf(symbol: String) = symbol.startsWith("00") && symbol.endsWith("B", ignoreCase = true)
+
+    /** ETN（指數投資證券，6 碼 02 開頭，例如 020020）：稅率同 ETF 0.1% */
+    fun isEtn(symbol: String) = symbol.length == 6 && symbol.startsWith("02")
+
     fun twTax(symbol: String, amount: Double, dayTrade: Boolean = false): Double {
         val rate = when {
-            isTwEtf(symbol) -> 0.001
+            isBondEtf(symbol) -> 0.0
+            isTwEtf(symbol) || isEtn(symbol) -> 0.001
             dayTrade -> 0.0015
             else -> 0.003
         }
         return floor(amount * rate)
     }
 
-    fun estimate(market: Market, symbol: String, side: StockSide, shares: Double, price: Double, settings: FeeSettings): Pair<Double, Double> {
+    fun estimate(
+        market: Market, symbol: String, side: StockSide, shares: Double, price: Double, settings: FeeSettings, dayTrade: Boolean = false,
+    ): Pair<Double, Double> {
         val amount = shares * price
         return when (market) {
-            Market.TW -> twFee(amount, settings, isOddLot(shares)) to (if (side == StockSide.SELL) twTax(symbol, amount) else 0.0)
+            Market.TW -> twFee(amount, settings, isOddLot(shares)) to (if (side == StockSide.SELL) twTax(symbol, amount, dayTrade) else 0.0)
             Market.US -> settings.usFeePerTrade to 0.0
         }
     }
