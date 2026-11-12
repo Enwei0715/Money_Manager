@@ -1005,7 +1005,7 @@ private fun Bubble(
         // AI 回覆下方的小動作：複製、分享、重新產生（最後一則）
         if (!m.fromUser) Row(verticalAlignment = Alignment.CenterVertically) {
             val full = text + m.points.joinToString("") { "\n・" + com.enwei.moneymanager.data.stripCites(it) }
-            androidx.compose.material3.IconButton(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(full)) }, modifier = Modifier.size(36.dp)) {
+            androidx.compose.material3.IconButton(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(full)) }, modifier = Modifier.size(44.dp)) {
                 androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.ContentCopy, "複製", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             androidx.compose.material3.IconButton(onClick = {
@@ -1014,7 +1014,7 @@ private fun Bubble(
             }, modifier = Modifier.size(36.dp)) {
                 androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Share, "分享", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (onRegenerate != null) androidx.compose.material3.IconButton(onClick = onRegenerate, modifier = Modifier.size(36.dp)) {
+            if (onRegenerate != null) androidx.compose.material3.IconButton(onClick = onRegenerate, modifier = Modifier.size(44.dp)) {
                 androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Refresh, "重新產生", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(m.time)), fontSize = AppText.label,
