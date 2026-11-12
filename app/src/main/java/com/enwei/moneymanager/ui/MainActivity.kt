@@ -495,7 +495,8 @@ private fun CrashReportDialog() {
     val file = remember { java.io.File(ctx.filesDir, MoneyApp.CRASH_FILE) }
     var text by remember { mutableStateOf(runCatching { file.takeIf { it.exists() }?.readText() }.getOrNull()) }
     val t = text ?: return
-    fun dismiss() { runCatching { file.delete() }; text = null }
+    // 關掉後改名保留一份，之後「設定 → 回報問題」仍可附上
+    fun dismiss() { runCatching { file.renameTo(java.io.File(ctx.filesDir, "last_crash_prev.txt")) }; text = null }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = ::dismiss,
         title = { Text("上次 App 意外關閉") },
@@ -512,6 +513,11 @@ private fun CrashReportDialog() {
                 dismiss()
             }) { Text("複製") }
         },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = ::dismiss) { Text("關閉") } },
+        dismissButton = {
+            androidx.compose.foundation.layout.Row {
+                androidx.compose.material3.TextButton(onClick = { com.enwei.moneymanager.ui.screens.shareProblemReport(ctx); dismiss() }) { Text("回報") }
+                androidx.compose.material3.TextButton(onClick = ::dismiss) { Text("關閉") }
+            }
+        },
     )
 }

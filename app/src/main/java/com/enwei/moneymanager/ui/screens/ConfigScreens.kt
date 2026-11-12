@@ -406,6 +406,8 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
 
                 sec("關於")
                 cfg("新手導覽") { com.enwei.moneymanager.ui.components.Onboarding.show.value = true }
+                // 回報問題：附上版本、裝置與最近一次閃退紀錄（不含任何帳務資料），用分享選單傳給開發者
+                cfg("回報問題") { shareProblemReport(ctx) }
                 cfg("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.1.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
                 Spacer(Modifier.height(32.dp))
             }
@@ -462,14 +464,34 @@ private fun PinPad(title: String, entered: Int, error: Boolean, onDigit: (Char) 
 fun LockScreen(hash: String, title: String = "請輸入密碼", biometric: Boolean = false, onUnlock: () -> Unit) {
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
+    // 連續輸錯：第 5 次起每次要等一段時間（30 秒起倍增，最多 10 分鐘），避免被逐一試出 4 位數密碼
+    var wrong by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+    var lockedUntil by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0L) }
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    androidx.compose.runtime.LaunchedEffect(lockedUntil) {
+        while (System.currentTimeMillis() < lockedUntil) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(500) }
+        now = System.currentTimeMillis()
+    }
+    val waitSec = ((lockedUntil - now) / 1000).toInt()
     val ctx = LocalContext.current
     if (biometric) androidx.compose.runtime.LaunchedEffect(Unit) { promptBiometric(ctx, onUnlock) }
-    PinPad(title, pin.length, error, onDigit = { d ->
-        if (pin.length >= 4) return@PinPad
+    PinPad(if (waitSec > 0) "請等待 $waitSec 秒後再試" else title, pin.length, error, onDigit = { d ->
+        if (pin.length >= 4 || System.currentTimeMillis() < lockedUntil) return@PinPad
         pin += d
         error = false
         if (pin.length == 4) {
-            if (hashPasscode(pin) == hash) onUnlock() else { error = true; pin = "" }
+            if (com.enwei.moneymanager.data.checkPasscode(pin, hash)) {
+                // 舊版雜湊：換成新格式
+                if (com.enwei.moneymanager.data.isLegacyPasscode(hash)) {
+                    val upgraded = hashPasscode(pin)
+                    repo.settings.update { it.copy(passcodeHash = upgraded) }
+                }
+                wrong = 0
+                onUnlock()
+            } else {
+                error = true; pin = ""; wrong++
+                if (wrong >= 5) lockedUntil = System.currentTimeMillis() + minOf(600_000L, 30_000L shl (wrong - 5))
+            }
         }
     }, onBack = { pin = pin.dropLast(1) }, onBio = if (biometric) ({ promptBiometric(ctx, onUnlock) }) else null)
 }
@@ -706,4 +728,26 @@ fun PasscodeScreen(nav: NavController) {
         "要求密碼", listOf(0, 30, 60, 300, 900).map { it to lockDelayLabel(it) }, s.lockDelaySec,
         "離開 App 超過這段時間再回來，就需要輸入密碼。", onDismiss = { pickDelay = false },
     ) { v -> repo.settings.update { it.copy(lockDelaySec = v) } }
+}
+
+
+/** 組出回報內容（版本、Android 版本、機型、最近一次閃退紀錄），交給系統分享選單。不含帳務資料。 */
+fun shareProblemReport(ctx: android.content.Context) {
+    val dir = ctx.filesDir
+    val crash = listOf(com.enwei.moneymanager.MoneyApp.CRASH_FILE, "last_crash_prev.txt")
+        .map { java.io.File(dir, it) }.firstOrNull { it.exists() }?.let { runCatching { it.readText().take(6000) }.getOrNull() }
+    val body = buildString {
+        appendLine("帳理 ${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）")
+        appendLine("Android ${android.os.Build.VERSION.RELEASE}（API ${android.os.Build.VERSION.SDK_INT}）· ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        appendLine()
+        appendLine("問題描述：")
+        appendLine()
+        if (crash != null) { appendLine("最近一次閃退紀錄："); appendLine(crash) }
+    }
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_SUBJECT, "帳理問題回報 ${BuildConfig.VERSION_NAME}")
+        putExtra(android.content.Intent.EXTRA_TEXT, body)
+    }
+    ctx.startActivity(android.content.Intent.createChooser(send, "回報問題").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
 }

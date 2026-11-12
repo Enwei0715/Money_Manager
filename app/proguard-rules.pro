@@ -14,3 +14,7 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+
+# 閃退紀錄保留原始檔名與行號，配合每版保存的 mapping 檔即可還原成可讀的堆疊
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

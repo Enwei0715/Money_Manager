@@ -84,6 +84,8 @@ jobs:
           # 上架 Google Play 用的 App Bundle（在 Play Console 上傳）
           cp app/build/outputs/bundle/playRelease/app-play-release.aab "dist/Ledgerly-play-2.1.${{ github.run_number }}.aab"
           rm -f app/release.jks
+          # 混淆對照表：還原閃退紀錄用（只放在建置成品，不附在 Release）
+          cp app/build/outputs/mapping/githubRelease/mapping.txt "dist/mapping-2.1.${{ github.run_number }}.txt" || true
 
       - uses: actions/upload-artifact@v4
         with:

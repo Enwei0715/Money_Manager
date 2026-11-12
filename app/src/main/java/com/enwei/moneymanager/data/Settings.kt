@@ -465,8 +465,35 @@ data class AppSettings(
     val passcodeOn get() = passcodeHash.isNotEmpty()
 }
 
-fun hashPasscode(pin: String): String =
+/** 舊版的密碼雜湊（固定鹽、單次 SHA-256）：只用來驗證舊密碼，驗證成功後會換成新格式 */
+private fun legacyHash(pin: String): String =
     MessageDigest.getInstance("SHA-256").digest("mm-salt:$pin".toByteArray()).joinToString("") { "%02x".format(it) }
+
+private fun hexOf(b: ByteArray) = b.joinToString("") { "%02x".format(it) }
+
+private fun pbkdf2(pin: String, salt: ByteArray, iterations: Int): ByteArray {
+    val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, iterations, 256)
+    return javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+}
+
+/** 密碼雜湊：每次隨機鹽＋PBKDF2（格式 pbkdf2:次數:鹽:雜湊），4 位數密碼也無法從雜湊快速反推 */
+fun hashPasscode(pin: String): String {
+    val salt = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+    val n = 60_000
+    return "pbkdf2:" + n + ":" + hexOf(salt) + ":" + hexOf(pbkdf2(pin, salt, n))
+}
+
+/** 驗證密碼（新格式與舊版雜湊都能驗證）。 */
+fun checkPasscode(pin: String, stored: String): Boolean {
+    if (!stored.startsWith("pbkdf2:")) return stored.isNotEmpty() && legacyHash(pin) == stored
+    val parts = stored.split(':')
+    if (parts.size != 4) return false
+    val n = parts[1].toIntOrNull() ?: return false
+    val salt = parts[2].chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+    return MessageDigest.isEqual(hexOf(pbkdf2(pin, salt, n)).toByteArray(), parts[3].toByteArray())
+}
+
+fun isLegacyPasscode(stored: String) = stored.isNotEmpty() && !stored.startsWith("pbkdf2:")
 
 class SettingsStore(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -681,7 +708,7 @@ class SettingsStore(context: Context) {
     @Synchronized
     /** 匯出所有設定（完整備份用）；GitHub Token 屬於憑證，不放進備份檔。 */
     fun exportRaw(): Map<String, kotlinx.serialization.json.JsonElement> = prefs.all.filterKeys {
-        it !in setOf("githubToken", "groqKey", "geminiKey", "groqKeysExtra", "geminiKeysExtra", "openRouterKey", "nvidiaKey", "autoBackupUri", "lastAutoBackup", "lastAutoBackupError")
+        it !in setOf("passcodeHash", "githubToken", "groqKey", "geminiKey", "groqKeysExtra", "geminiKeysExtra", "openRouterKey", "nvidiaKey", "autoBackupUri", "lastAutoBackup", "lastAutoBackupError")
     }.mapNotNull { (k, v) ->
         val e: kotlinx.serialization.json.JsonElement = when (v) {
             is Boolean -> kotlinx.serialization.json.buildJsonObject { put("t", "b"); put("v", v) }
@@ -701,6 +728,8 @@ class SettingsStore(context: Context) {
     @Synchronized
     fun importRaw(map: Map<String, kotlinx.serialization.json.JsonElement>) {
         val token = prefs.getString("githubToken", "")
+        // 密碼鎖只屬於這支手機，不隨備份移動
+        val passcode = prefs.getString("passcodeHash", "")
         val groq = prefs.getString("groqKey", "")
         val gemini = prefs.getString("geminiKey", "")
         val groqX = prefs.getString("groqKeysExtra", "")
@@ -721,7 +750,7 @@ class SettingsStore(context: Context) {
                 "ss" -> (v as? kotlinx.serialization.json.JsonArray)?.let { arr -> ed.putStringSet(k, arr.map { (it as kotlinx.serialization.json.JsonPrimitive).content }.toSet()) }
             }
         }
-        ed.putString("githubToken", token).putString("groqKey", groq).putString("geminiKey", gemini).putString("groqKeysExtra", groqX).putString("geminiKeysExtra", geminiX).putString("autoBackupUri", keepUri).commit()
+        ed.putString("githubToken", token).putString("groqKey", groq).putString("geminiKey", gemini).putString("groqKeysExtra", groqX).putString("geminiKeysExtra", geminiX).putString("autoBackupUri", keepUri).putString("passcodeHash", passcode).commit()
         state.value = read()
     }
 

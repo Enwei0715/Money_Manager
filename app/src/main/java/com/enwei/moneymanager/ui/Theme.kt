@@ -207,7 +207,9 @@ fun MoneyTheme(
     val p = Themes.of(preset)
     AppearancePrefs.corner = corner
     val typo = androidx.compose.runtime.remember(font, tabular) { typographyOf(Themes.family(font), tabular) }
-    CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale * BASE_UI_SCALE, base.fontScale.coerceIn(0.85f, 1.15f) * textScale)) {
+    // 系統字級照實套用（最大 200%，Android 14 起的上限），弱視或長輩放大字體時內文一定跟著變大；
+    // 高度固定的工具列另用 [ChromeScale] 限制，不會被撐變形
+    CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale * BASE_UI_SCALE, base.fontScale.coerceIn(0.85f, 2f) * textScale)) {
         MaterialTheme(colorScheme = if (dark) p.dark else p.light, typography = typo, shapes = Themes.shapes(corner), content = content)
     }
 }
