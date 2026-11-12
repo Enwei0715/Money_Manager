@@ -144,6 +144,9 @@ def settle():
             break
         time.sleep(2)
     adb("input keyevent 82")  # 解鎖
+    # 模擬器的桌面程式（Pixel Launcher）在 CI 上常常沒有回應、跳出對話框擋住畫面：停用它並關掉系統錯誤對話框
+    adb("settings put global hide_error_dialogs 1")
+    adb("pm disable-user --user 0 com.google.android.apps.nexuslauncher")
     time.sleep(20)
     nodes()
 
