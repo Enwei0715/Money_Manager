@@ -1201,7 +1201,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 it.side == StockSide.CASH_DIVIDEND && it.cashAccountId == account.id && it.externalKey?.startsWith("DIV") == true &&
                     day - it.date in -15..75
             }.groupBy { it.date }.values.map { l -> Money.toMinor(l.sumOf { it.cashAmount }) }
-            if (autoDiv.any { kotlin.math.abs(it - p.amountMinor) <= 100 }) { log.insert(logAs("DUPLICATE")); return null }
+            // 銀行入帳可能已扣二代健保補充保費（2.11%）或匯費，比自動除息記的毛額略少
+            if (autoDiv.any { p.amountMinor in (it * 0.975).toLong() - 100..it + 100 }) { log.insert(logAs("DUPLICATE")); return null }
         }
         // 有網路：直接記帳（AI 判讀要有把握、而且找得到帳戶）；沒網路或不確定：放「待確認」
         val status = when {
@@ -1866,14 +1867,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val cards = db.accounts().all().filter { it.type == AccountType.CREDIT_CARD }.associateBy { it.id }
         val ap = (all ?: db.txns().all()).filter {
             it.source == TxnSource.AUTOPAY && it.id != t.id && it.note?.contains("實際扣款") != true &&
-                (t.accountId == null || it.accountId == t.accountId) && kotlin.math.abs(it.date - t.date) <= window && it.currency == t.currency
+                t.accountId != null && it.accountId == t.accountId && kotlin.math.abs(it.date - t.date) <= window && it.currency == t.currency
         }.filter { a ->
             val card = a.toAccountId?.let { cards[it] }
             val hint = listOf("卡費", "信用卡", "繳款", "扣繳", "自扣", "代繳").any { text.contains(it) } ||
                 (card != null && card.name.take(2).length == 2 && text.contains(card.name.take(2)))
-            // 金額相同：通知沒提到卡費時只認前後 3 天；金額略有差異（排程估的和實扣不同）：要提到卡費
-            if (a.amount == t.amount) hint || kotlin.math.abs(a.date - t.date) <= 3L * 86_400_000
-            else hint && kotlin.math.abs(a.amount - t.amount) <= a.amount * 0.05
+            // 一定要提到卡費、扣繳或那張卡：只有金額相同可能是房租、學費等真實支出，併入會把它刪掉
+            hint && (a.amount == t.amount || kotlin.math.abs(a.amount - t.amount) <= a.amount * 0.05)
         }.minByOrNull { kotlin.math.abs(it.amount - t.amount) * 10 + kotlin.math.abs(it.date - t.date) / 86_400_000 } ?: return null
         val actual = java.time.Instant.ofEpochMilli(t.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
         val updated = ap.copy(

@@ -49,9 +49,11 @@ data class PartialStockFill(
 object NotificationParser {
 
     private val ignoreKeywords = listOf(
-        "驗證碼", "OTP", "密碼", "一次性", "認證碼", "交易失敗", "未成功", "失敗", "取消交易", "已取消",
-        "登入", "優惠", "活動", "抽獎", "限時", "加碼",
+        "驗證碼", "密碼", "一次性", "認證碼", "交易失敗", "未成功", "失敗", "取消交易", "已取消",
     )
+    /** 行銷字眼：只有在通知不像實際交易（沒有卡號末碼、刷卡或消費金額）時才當成廣告略過，「享優惠回饋」的消費照記 */
+    private val softIgnore = listOf("登入", "優惠", "活動", "抽獎", "限時", "加碼")
+    private val txnEvidence = Regex("末[四4五5]碼|(刷卡|消費)(金額)?[:：]?\\s*(新臺幣|新台幣|台幣|NT|\\$|TWD|[0-9])|已扣款|付款完成|交易金額")
 
     private val incomeKeywords = listOf(
         "入帳", "轉入", "存入", "收款", "退款", "退貨", "薪資", "匯入", "收到", "已收", "入金", "返還", "回饋入帳",
@@ -119,8 +121,13 @@ object NotificationParser {
     )
     private val dateLike = Regex("^[0-9/:\\-.\\s年月日時分上下午AMPamp]+$")
 
+    /** OTP 要是獨立的字：「HOTPOT」「Hotpot 火鍋」這類店名裡剛好有 otp 不算 */
+    private val otpWord = Regex("(?<![A-Za-z])OTP(?![A-Za-z])", RegexOption.IGNORE_CASE)
+
     fun shouldIgnore(text: String): Boolean =
-        ignoreKeywords.any { text.contains(it, ignoreCase = true) } || englishIgnore.any { text.contains(it, ignoreCase = true) }
+        ignoreKeywords.any { text.contains(it, ignoreCase = true) } || otpWord.containsMatchIn(text) ||
+            (softIgnore.any { text.contains(it) } && !txnEvidence.containsMatchIn(text)) ||
+            englishIgnore.any { text.contains(it, ignoreCase = true) }
 
     // 行銷推播常見的字眼（「最高享 23% 回饋」「最後機會」「記得打開」…）
     private val promoWords = listOf(
@@ -182,10 +189,15 @@ object NotificationParser {
             // 退款、退貨即使含「消費」字樣仍屬收入
             full.contains("退款") || full.contains("退貨") || full.contains("refund", ignoreCase = true) -> ParsedType.INCOME to ParsedKind.NORMAL
             // 信用卡款自動扣繳／繳款（銀行帳戶扣款，不是刷卡消費）
-            (full.contains("卡款") || full.contains("卡費") || full.contains("信用卡")) &&
+            // 「以信用卡繳費」「信用卡繳水電費」是用卡付帳單（刷卡消費），不是繳卡費
+            (full.contains("卡款") || full.contains("卡費") || full.contains("信用卡帳款") || full.contains("繳信用卡") ||
+                (full.contains("信用卡") && !Regex("(以|用|使用)信用卡").containsMatchIn(full))) &&
                 (full.contains("扣繳") || full.contains("繳款") || full.contains("繳費")) && !full.contains("刷卡") ->
                 ParsedType.EXPENSE to ParsedKind.CARD_PAYMENT
-            has(withdrawalKeywords) && !full.contains("存入") -> ParsedType.EXPENSE to ParsedKind.WITHDRAWAL
+            // 「提款卡消費」是用提款卡付款，不是提款
+            full.replace("提款卡", "").let { w -> withdrawalKeywords.any { w.contains(it, ignoreCase = true) } } && !full.contains("存入") &&
+                !full.contains("轉帳") && !full.contains("轉出") ->
+                ParsedType.EXPENSE to ParsedKind.WITHDRAWAL
             has(topupKeywords) -> if (has(debitKeywords)) ParsedType.EXPENSE to ParsedKind.TOPUP_OUT else ParsedType.INCOME to ParsedKind.TOPUP_IN
             has(transferOutKeywords) -> ParsedType.EXPENSE to ParsedKind.TRANSFER_OUT
             has(transferInKeywords) -> ParsedType.INCOME to ParsedKind.TRANSFER_IN
@@ -296,6 +308,8 @@ object NotificationParser {
     }
 
     private val sideRegex = Regex("(買進|賣出|現股買進|現股賣出|買入|賣|買)")
+    /** 欄位名稱「買賣別」「買/賣」本身含買字，判斷方向前先拿掉 */
+    private fun sideText(full: String) = full.replace(Regex("買賣別|買\\s*/\\s*賣|買賣"), " ")
     private val symbolRegex = Regex("(?<![0-9])([0-9]{4,6}[A-Z]?)(?![0-9])\\s*([\\u4e00-\\u9fa5A-Za-z0-9\\-]{0,12})")
     private val bracketRegex = Regex("[【\\[［]\\s*([0-9]{4,6}[A-Z]?)\\s*([\\u4e00-\\u9fa5A-Za-z\\-]{0,12})\\s*[】\\]］]")
     private val sharesRegex = Regex("([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(張|股)")
@@ -316,7 +330,7 @@ object NotificationParser {
         if (listOf("委託", "成交通知", "成交回報", "已成交", "成交嘍", "成交囉", "成交了", "成交確認").none { full.contains(it) }) return null
         if (listOf("成交量", "成交值", "成交金額創", "史上", "新低", "新高", "暴量", "爆量").any { full.contains(it) }) return null
         if (parseStockFill(title, text) != null) return null
-        val sideToken = sideRegex.find(full)?.value ?: return null
+        val sideToken = sideRegex.find(sideText(full))?.value ?: return null
         val side = if (sideToken.contains("賣")) StockSide.SELL else StockSide.BUY
         val at = fillTimeRegex.findAll(full).firstNotNullOfOrNull { m ->
             val g = m.groupValues
@@ -346,7 +360,7 @@ object NotificationParser {
         val full = clean(listOfNotNull(title, text).joinToString(" ").replace('\n', ' '))
         if (!full.contains("成交")) return null
         if (full.contains("未成交") || full.contains("委託失敗") || full.contains("刪單")) return null
-        val sideToken = sideRegex.find(full)?.value ?: return null
+        val sideToken = sideRegex.find(sideText(full))?.value ?: return null
         val side = if (sideToken.contains("賣")) StockSide.SELL else StockSide.BUY
 
         val sharesMatch = sharesLabelRegex.find(full) ?: sharesRegex.find(full) ?: return null

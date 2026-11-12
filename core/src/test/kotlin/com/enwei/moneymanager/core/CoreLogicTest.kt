@@ -1,6 +1,8 @@
 package com.enwei.moneymanager.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -351,6 +353,28 @@ class CategorySuggesterTest {
             CategorySuggester.Past("麥當勞", 12, at(12).minusDays(200), 18000, 5),
         )
         assertEquals(12L, CategorySuggester.suggest("麥當勞", at(12), c, history = h)?.categoryId)
+    }
+
+    @Test fun parserEdgeCasesFromAudit() {
+        // 店名含 otp 的字樣不是驗證碼
+        val hot = NotificationParser.parse("國泰世華", "您的信用卡末四碼1234於11/12消費NT$520，商店名稱:HOTPOT火鍋")
+        assertNotNull(hot); assertEquals(ParsedKind.NORMAL, hot!!.kind)
+        assertNull(NotificationParser.parse("國泰世華", "您的 OTP 為 123456，金額 NT$520"))
+        // 提款卡消費是付款，不是提款
+        val debit = NotificationParser.parse("郵局", "您的提款卡於11/12消費新臺幣90元")
+        assertEquals(ParsedKind.NORMAL, debit!!.kind)
+        assertEquals(ParsedKind.WITHDRAWAL, NotificationParser.parse("郵局", "ATM提款新臺幣1,000元")!!.kind)
+        // 用信用卡繳水電費是刷卡消費；繳信用卡款才是卡費
+        assertEquals(ParsedKind.NORMAL, NotificationParser.parse("台電", "您以信用卡繳費新臺幣1,200元成功")!!.kind)
+        assertEquals(ParsedKind.CARD_PAYMENT, NotificationParser.parse("國泰世華", "信用卡款自動扣繳新臺幣5,000元")!!.kind)
+        // 含「優惠」但確實是刷卡消費
+        assertEquals(ParsedKind.NORMAL, NotificationParser.parse("國泰世華", "末四碼1234刷卡NT$300，享優惠回饋")!!.kind)
+        assertNull(NotificationParser.parse("國泰世華", "限時優惠活動，刷卡滿NT$3,000送100"))
+        // ATM 轉帳不是提款
+        assertEquals(ParsedKind.TRANSFER_OUT, NotificationParser.parse("郵局", "ATM轉帳轉出新臺幣2,000元")!!.kind)
+        // 「買賣別：賣出」是賣出
+        val fill = NotificationParser.parseStockFill("成交回報", "2330 台積電 買賣別:賣出 成交數量:1000股 成交價:1000")
+        assertEquals(StockSide.SELL, fill!!.side)
     }
 
     @Test fun brunchOnlyInLateMorning() {

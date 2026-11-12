@@ -50,7 +50,7 @@ private val Light = lightColorScheme(
     surfaceContainerHigh = Color(0xFFF4F4F4),
     surfaceContainerHighest = Color(0xFFFFFFFF),
     surfaceContainerLowest = Color(0xFFFFFFFF),
-    onSurfaceVariant = Color(0xFF8A8A8A),
+    onSurfaceVariant = Color(0xFF6B6B6B),
     outlineVariant = Color(0xFFE6E6E6),
 )
 
@@ -84,7 +84,8 @@ private fun lightOf(primary: Color, container: Color, onContainer: Color, bg: Co
     secondary = secondary, secondaryContainer = container.copy(alpha = 0.7f).compositeOver(Color.White), tertiary = muted, tertiaryContainer = Color(0xFFFFF2D6),
     background = bg, surface = Color.White, surfaceVariant = variant, surfaceContainer = Color.White, surfaceContainerLow = Color.White,
     surfaceContainerHigh = variant, surfaceContainerHighest = Color.White, surfaceContainerLowest = Color.White,
-    onSurfaceVariant = muted, outlineVariant = line, outline = line.copy(alpha = 1f).compositeOver(muted.copy(alpha = 0.4f)),
+    // 次要文字調深兩成：小字對比要到 4.5:1 以上
+    onSurfaceVariant = Color(muted.red * 0.8f, muted.green * 0.8f, muted.blue * 0.8f), outlineVariant = line, outline = line.copy(alpha = 1f).compositeOver(muted.copy(alpha = 0.4f)),
 )
 private fun darkOf(primary: Color, onPrimary: Color, container: Color, bg: Color, surface: Color, variant: Color, line: Color, muted: Color, secondary: Color = Color(0xFF7FB0F5)) = darkColorScheme(
     primary = primary, onPrimary = onPrimary, primaryContainer = container, secondary = secondary, secondaryContainer = container,
