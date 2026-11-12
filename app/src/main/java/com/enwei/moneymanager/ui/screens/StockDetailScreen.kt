@@ -763,14 +763,17 @@ private fun CandleChart(
             },
     ) {
         val to = from + n
+        // 圖上文字的縮放：原本以 22px 為基準，改成 11sp（跟著螢幕密度與系統字級），標籤、圓章、間距一起等比放大
+        val k = 11.sp.toPx() / 22f
         val priceH = size.height * 0.75f
         val volTop = size.height * 0.80f
         val hi = (from until to).maxOf { b.high[it] }
         val lo = (from until to).minOf { b.low[it] }
         val range = (hi - lo).takeIf { it > 0 } ?: 1.0
         val cw = size.width / n
-        // 上緣留 28px 給均線圖例
-        fun y(v: Double) = (28.0 + (hi - v) / range * (priceH - 28.0)).toFloat()
+        // 上緣留一行給均線圖例
+        val legendH = 28f * k
+        fun y(v: Double) = (legendH + (hi - v) / range * (priceH - legendH)).toFloat()
         for (k in 0..3) drawLine(grid, Offset(0f, priceH * k / 3), Offset(size.width, priceH * k / 3), 1f)
         val maxVol = (from until to).maxOf { b.volume.getOrNull(it) ?: 0.0 }.takeIf { it > 0 } ?: 1.0
         for (i in 0 until n) {
@@ -804,22 +807,22 @@ private fun CandleChart(
         val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
         levels.forEach { (v, col) -> if (v in lo..hi) drawLine(col, Offset(0f, y(v)), Offset(size.width, y(v)), 2f, pathEffect = dash) }
         // 有名稱的價位線：虛線＋右邊小標籤「移動停損 3851」；不在畫面範圍時貼在上緣或下緣並加箭頭
-        val tagPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f; color = android.graphics.Color.WHITE }
+        val tagPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f * k; color = android.graphics.Color.WHITE }
         fun argb(c: Color) = android.graphics.Color.argb(255, (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
         val usedY = ArrayList<Float>()
         labeledLevels.sortedByDescending { it.first }.forEach { (v, col, name) ->
             val inside = v in lo..hi
-            var ly = when { v > hi -> 14f; v < lo -> priceH - 4f; else -> y(v) }
+            var ly = when { v > hi -> 14f * k; v < lo -> priceH - 4f * k; else -> y(v) }
             if (inside) drawLine(col.copy(alpha = 0.45f), Offset(0f, ly), Offset(size.width, ly), 1.2f, pathEffect = dash)
             // 標籤互相錯開
-            while (usedY.any { kotlin.math.abs(it - ly) < 26f }) ly += 26f
+            while (usedY.any { kotlin.math.abs(it - ly) < 26f * k }) ly += 26f * k
             usedY += ly
             val label = (if (v > hi) "↑" else if (v < lo) "↓" else "") + "$name ${"%.1f".format(v).removeSuffix(".0")}"
             val tw = tagPaint.measureText(label)
             val bgP = android.graphics.Paint().apply { color = argb(col) }
-            val x0 = size.width - tw - 10f
-            drawContext.canvas.nativeCanvas.drawRoundRect(x0, ly - 13f, size.width, ly + 11f, 6f, 6f, bgP)
-            drawContext.canvas.nativeCanvas.drawText(label, x0 + 5f, ly + 6f, tagPaint)
+            val x0 = size.width - tw - 10f * k
+            drawContext.canvas.nativeCanvas.drawRoundRect(x0, ly - 13f * k, size.width, ly + 11f * k, 6f, 6f, bgP)
+            drawContext.canvas.nativeCanvas.drawText(label, x0 + 5f * k, ly + 6f * k, tagPaint)
         }
         // 最新價標籤（右邊）
         run {
@@ -829,12 +832,12 @@ private fun CandleChart(
             val label = "%.2f".format(b.close[lastI])
             val tw = tagPaint.measureText(label)
             drawLine(col.copy(alpha = 0.6f), Offset(0f, ly), Offset(size.width, ly), 1f)
-            drawContext.canvas.nativeCanvas.drawRoundRect(0f, ly - 13f, tw + 10f, ly + 11f, 6f, 6f, android.graphics.Paint().apply { color = argb(col) })
-            drawContext.canvas.nativeCanvas.drawText(label, 5f, ly + 6f, tagPaint)
+            drawContext.canvas.nativeCanvas.drawRoundRect(0f, ly - 13f * k, tw + 10f * k, ly + 11f * k, 6f, 6f, android.graphics.Paint().apply { color = argb(col) })
+            drawContext.canvas.nativeCanvas.drawText(label, 5f * k, ly + 6f * k, tagPaint)
         }
         // 均線圖例（左上）：MA20 3805　MA60 3823…，顏色和線一樣
         run {
-            val lp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f }
+            val lp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f * k }
             var lx = 4f
             maSeries.toSortedMap().forEach { (len, v) ->
                 val cur = v.getOrNull(to - 1) ?: return@forEach
@@ -842,8 +845,8 @@ private fun CandleChart(
                 val arrow = when { prevV == null -> ""; cur > prevV -> "↑"; cur < prevV -> "↓"; else -> "→" }
                 val t = "MA$len ${"%.1f".format(cur)}$arrow"
                 lp.color = argb(maColor(len))
-                drawContext.canvas.nativeCanvas.drawText(t, lx, 20f, lp)
-                lx += lp.measureText(t) + 14f
+                drawContext.canvas.nativeCanvas.drawText(t, lx, 20f * k, lp)
+                lx += lp.measureText(t) + 14f * k
             }
         }
         // 月線與季線交叉：▲ 黃金交叉（K 棒下方）、▼ 死亡交叉（K 棒上方）
@@ -863,27 +866,27 @@ private fun CandleChart(
         }
         // 紀律買賣點：小圓章「買／賣」標在 K 棒下方／上方；只有最新一個與點選的那根才寫出理由，畫面不擠
         // 圓章與標籤用一般字重（粗體在小圓裡會糊成一團）；標籤底下墊一塊底色，不會和 K 棒疊在一起
-        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 26f }
-        val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER }
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 26f * k }
+        val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f * k; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER }
         val latest = signals.maxByOrNull { it.index }?.index
         signals.forEach { sg ->
             val i = sg.index - from
             if (i !in 0 until n) return@forEach
             val cx = i * cw + cw / 2
             val col = if (sg.buy) up else down
-            val r = 13f
-            val cy = if (sg.buy) (y(b.low[sg.index]) + r + 4f).coerceAtMost(priceH - r) else (y(b.high[sg.index]) - r - 4f).coerceAtLeast(r + 28f)
+            val r = 13f * k
+            val cy = if (sg.buy) (y(b.low[sg.index]) + r + 4f).coerceAtMost(priceH - r) else (y(b.high[sg.index]) - r - 4f).coerceAtLeast(r + legendH)
             drawCircle(col, radius = r, center = Offset(cx, cy))
-            drawContext.canvas.nativeCanvas.drawText(if (sg.buy) "買" else "賣", cx, cy + 8f, badge)
+            drawContext.canvas.nativeCanvas.drawText(com.enwei.moneymanager.ui.tr(if (sg.buy) "買" else "賣"), cx, cy + 8f * k, badge)
             if (sg.index == latest || sg.index == selected) {
-                val label = sg.tag.ifBlank { if (sg.buy) "買" else "賣" }
+                val label = com.enwei.moneymanager.ui.tr(sg.tag.ifBlank { if (sg.buy) "買" else "賣" })
                 paint.color = android.graphics.Color.argb(255, (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt())
                 val tw = paint.measureText(label)
                 val tx = (cx - tw / 2).coerceIn(0f, size.width - tw)
-                val ty = if (sg.buy) (cy + r + 26f).coerceAtMost(priceH - 4f) else (cy - r - 8f).coerceAtLeast(46f)
-                drawRoundRect(labelBg.copy(alpha = 0.92f), Offset(tx - 6f, ty - 24f), androidx.compose.ui.geometry.Size(tw + 12f, 32f),
+                val ty = if (sg.buy) (cy + r + 26f * k).coerceAtMost(priceH - 4f) else (cy - r - 8f * k).coerceAtLeast(46f * k)
+                drawRoundRect(labelBg.copy(alpha = 0.92f), Offset(tx - 6f * k, ty - 24f * k), androidx.compose.ui.geometry.Size(tw + 12f * k, 32f * k),
                     androidx.compose.ui.geometry.CornerRadius(6f, 6f))
-                drawRoundRect(col, Offset(tx - 6f, ty - 24f), androidx.compose.ui.geometry.Size(tw + 12f, 32f),
+                drawRoundRect(col, Offset(tx - 6f * k, ty - 24f * k), androidx.compose.ui.geometry.Size(tw + 12f * k, 32f * k),
                     androidx.compose.ui.geometry.CornerRadius(6f, 6f), style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f))
                 drawContext.canvas.nativeCanvas.drawText(label, tx, ty, paint)
             }
@@ -937,6 +940,7 @@ private fun IndicatorChart(b: DailyBars, from: Int, n: Int, kind: Int) {
     val kd = remember(System.identityHashCode(b)) { Technicals.kd(b.high, b.low, b.close) }
     Canvas(Modifier.fillMaxWidth().height(110.dp).padding(top = 6.dp)) {
         val to = from + n
+        val k = 10.sp.toPx() / 20f
         val cw = size.width / n
         fun line(values: List<Double?>, lo: Double, hi: Double, col: Color) {
             val p = Path(); var started = false
@@ -964,9 +968,9 @@ private fun IndicatorChart(b: DailyBars, from: Int, n: Int, kind: Int) {
             }
             1 -> {
                 hline(70.0, 0.0, 100.0); hline(30.0, 0.0, 100.0); line(rsi, 0.0, 100.0, c1)
-                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f; color = android.graphics.Color.GRAY }
-                drawContext.canvas.nativeCanvas.drawText("70 過熱", 4f, size.height * 0.3f - 4f, tp)
-                drawContext.canvas.nativeCanvas.drawText("30 超賣", 4f, size.height * 0.7f + 20f, tp)
+                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f * k; color = android.graphics.Color.GRAY }
+                drawContext.canvas.nativeCanvas.drawText(com.enwei.moneymanager.ui.tr("70 過熱"), 4f, size.height * 0.3f - 4f, tp)
+                drawContext.canvas.nativeCanvas.drawText(com.enwei.moneymanager.ui.tr("30 超賣"), 4f, size.height * 0.7f + 20f * k, tp)
             }
             2 -> {
                 val vals = (from until to).flatMap { listOf(macd.dif[it], macd.signal[it], macd.hist[it]) }
@@ -979,18 +983,18 @@ private fun IndicatorChart(b: DailyBars, from: Int, n: Int, kind: Int) {
                     drawRect((if (h >= 0) up else down).copy(alpha = 0.6f), Offset(i * cw + cw * 0.2f, minOf(y0, y1)), Size(cw * 0.6f, kotlin.math.abs(y1 - y0)))
                 }
                 line(macd.dif, -m, m, c2); line(macd.signal, -m, m, c1)
-                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f }
-                tp.color = android.graphics.Color.argb(255, 255, 160, 0); drawContext.canvas.nativeCanvas.drawText("DIF", 4f, 18f, tp)
-                tp.color = android.graphics.Color.argb(255, 126, 87, 194); drawContext.canvas.nativeCanvas.drawText("DEA", 44f, 18f, tp)
+                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f * k }
+                tp.color = android.graphics.Color.argb(255, 255, 160, 0); drawContext.canvas.nativeCanvas.drawText("DIF", 4f, 18f * k, tp)
+                tp.color = android.graphics.Color.argb(255, 126, 87, 194); drawContext.canvas.nativeCanvas.drawText("DEA", 4f + tp.measureText("DIF ") + 8f, 18f * k, tp)
             }
             else -> {
                 hline(80.0, 0.0, 100.0); hline(20.0, 0.0, 100.0); line(kd.first, 0.0, 100.0, c2); line(kd.second, 0.0, 100.0, c1)
-                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f }
-                tp.color = android.graphics.Color.argb(255, 255, 160, 0); drawContext.canvas.nativeCanvas.drawText("K", 4f, 18f, tp)
-                tp.color = android.graphics.Color.argb(255, 126, 87, 194); drawContext.canvas.nativeCanvas.drawText("D", 22f, 18f, tp)
+                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f * k }
+                tp.color = android.graphics.Color.argb(255, 255, 160, 0); drawContext.canvas.nativeCanvas.drawText("K", 4f, 18f * k, tp)
+                tp.color = android.graphics.Color.argb(255, 126, 87, 194); drawContext.canvas.nativeCanvas.drawText("D", 4f + tp.measureText("K ") + 8f, 18f * k, tp)
                 tp.color = android.graphics.Color.GRAY
-                drawContext.canvas.nativeCanvas.drawText("80", size.width - 28f, size.height * 0.2f - 4f, tp)
-                drawContext.canvas.nativeCanvas.drawText("20", size.width - 28f, size.height * 0.8f + 20f, tp)
+                drawContext.canvas.nativeCanvas.drawText("80", size.width - tp.measureText("80") - 4f, size.height * 0.2f - 4f, tp)
+                drawContext.canvas.nativeCanvas.drawText("20", size.width - tp.measureText("20") - 4f, size.height * 0.8f + 20f * k, tp)
             }
         }
     }
