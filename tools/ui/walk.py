@@ -42,6 +42,15 @@ def nodes(retry=3):
     out = _dump()
     for _ in range(retry):
         texts = " ".join(t for t, _, _, _ in out)
+        # 測試版會偵測到正式版的更新：按「稍後」關掉
+        if "有新版本" in texts:
+            for t, d, x, y in out:
+                if t == "稍後":
+                    adb(f"input tap {x} {y}")
+                    break
+            time.sleep(1.5)
+            out = _dump()
+            continue
         if "isn't responding" not in texts and "沒有回應" not in texts:
             break
         note("[dialog] 系統顯示「沒有回應」，按等待")
