@@ -196,12 +196,12 @@ def main():
     notify("com.test.card", "測試銀行", f"貴賓您好，末四碼5908感謝{md} {hm}刷卡台幣85元，商店名稱:京都")
     launch()
     shot("txns_after_notifications")
-    tap("未分類"); time.sleep(2); shot("txn_linepay_60"); launch()
+    tap("60"); time.sleep(2); shot("txn_linepay_60"); launch()
     tap("台科大第二餐廳"); time.sleep(2); shot("txn_kyoto_85"); launch()
-    tap("工具", exact=True); tap("通知記帳"); time.sleep(2); shot("notif_log"); launch()
+    tap("工具", exact=True); tap("設定", exact=True); tap("自動記帳"); tap("紀錄", exact=True); time.sleep(2); shot("notif_log"); launch()
 
     # ④ 個股頁
-    launch(); tap("資產", exact=True); tap("股票", exact=True); time.sleep(3)
+    launch(); tap("資產", exact=True); tap("股票", exact=True); tap("持股"); time.sleep(3)
     tap("2330"); time.sleep(12); shot("stock_2330")
     scroll(2); shot("stock_2330_mid")
     scroll(3); shot("stock_2330_projection")
