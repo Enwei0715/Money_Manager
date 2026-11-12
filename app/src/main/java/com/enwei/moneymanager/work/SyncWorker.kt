@@ -27,6 +27,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         AiBackgroundWork.runAutoTidy()
         runCatching { warnFunding(applicationContext, repo) }
         runCatching { warnLoans(applicationContext, repo) }
+        runCatching { warnCardDue(applicationContext, repo) }
+        runCatching { nudgePending(applicationContext, repo) }
         runCatching { StockAlertWorker.checkUpdate(applicationContext) }
         val ok = runCatching { refreshMarket(repo) }.isSuccess
         return if (ok || runAttemptCount > 2) Result.success() else Result.retry()
@@ -159,6 +161,41 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                     "${x.date.monthValue}/${x.date.dayOfMonth} ${x.from.name}：" + com.enwei.moneymanager.ui.tr("扣") + " ${M.withSymbol(x.needed, x.from.currency)}，" +
                         com.enwei.moneymanager.ui.tr("還差") + " ${M.withSymbol(x.shortBy, x.from.currency)}"
                 } + com.enwei.moneymanager.ui.tr("點一下查看帳戶"))
+        }
+
+        /** 待確認的交易放超過一天：晚上 7 點後提醒一次（一天最多一次），避免帳越積越多。 */
+        suspend fun nudgePending(context: Context, repo: Repository) {
+            val now = java.time.LocalDateTime.now()
+            if (now.hour < 19) return
+            val today = now.toLocalDate().toEpochDay()
+            if (repo.settings.value.pendingNudgeDay == today) return
+            val pending = repo.allTxns().filter { it.status == com.enwei.moneymanager.data.TxnStatus.PENDING }
+            val old = pending.count { System.currentTimeMillis() - it.date > 24L * 3600_000 }
+            if (old == 0) return
+            repo.settings.update { it.copy(pendingNudgeDay = today) }
+            com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.RECORDED, 9330,
+                com.enwei.moneymanager.ui.tr("有待確認的交易") + "（${pending.size}）",
+                com.enwei.moneymanager.ui.tr("點一下逐筆確認或修改"), "pending", emptyList())
+        }
+
+        /**
+         * 沒有設定自動扣繳的信用卡：繳款日前 3 天內、還有應繳金額時提醒一次（有自動扣繳的會自動記轉帳，不另外提醒）。
+         */
+        suspend fun warnCardDue(context: Context, repo: Repository) {
+            val today = java.time.LocalDate.now()
+            val due = repo.upcomingCardBills(today).filter { (card, date, owed) ->
+                card.autopayFromId == null && owed > 0 && !date.isBefore(today) && !date.isAfter(today.plusDays(3))
+            }
+            val fresh = due.filter { (card, date, _) -> "${card.id}:$date" !in repo.settings.value.cardDueWarned }
+            if (fresh.isEmpty()) return
+            repo.settings.update { st -> st.copy(cardDueWarned = (st.cardDueWarned + fresh.map { "${it.first.id}:${it.second}" }).toList().takeLast(60).toSet()) }
+            val M = com.enwei.moneymanager.core.Money
+            val lines = fresh.map { (card, date, owed) ->
+                "${card.name}：${date.monthValue}/${date.dayOfMonth} " + com.enwei.moneymanager.ui.tr("繳款") + " ${M.withSymbol(owed, card.currency)}"
+            }
+            com.enwei.moneymanager.notify.AppNotices.post(context, com.enwei.moneymanager.notify.NoticeKind.BILLS, 9320,
+                com.enwei.moneymanager.ui.tr("信用卡繳款提醒") + if (lines.size > 1) "（${lines.size}）" else "",
+                lines.first(), "accounts", lines.take(6))
         }
 
         /** 3 天內要收付的借貸款項、14 天內到期或已逾期的借貸（同樣的內容只通知一次）。 */

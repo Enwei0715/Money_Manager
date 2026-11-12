@@ -262,10 +262,11 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val u = t.copy(
             categoryId = categoryId ?: t.categoryId,
             note = note?.trim()?.takeIf { it.isNotEmpty() }?.let { n -> listOfNotNull(t.note?.takeIf { it.isNotBlank() }, n).joinToString("　") } ?: t.note,
-            status = if (categoryId != null) TxnStatus.CONFIRMED else t.status,
+            // 沒有帳戶的交易不能直接確認（和待確認畫面的規則一致），只補上分類
+            status = if (categoryId != null && (t.accountId != null || t.type == TxnType.TRANSFER && t.toAccountId != null)) TxnStatus.CONFIRMED else t.status,
         )
-        db.txns().upsert(u)
-        if (categoryId != null) learnMerchant(u)
+        // 走 saveTxn：學習商家分類與通知格式、檢查預算，和在記帳畫面儲存一樣
+        saveTxn(u)
     }
 
     suspend fun confirmAllPending() {
@@ -273,6 +274,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             db.txns().all().filter { it.status == TxnStatus.PENDING }.forEach {
                 db.txns().upsert(it.copy(status = TxnStatus.CONFIRMED))
                 learnMerchant(it)
+                if (it.type == TxnType.EXPENSE) runCatching { checkBudgetAlert(it.copy(status = TxnStatus.CONFIRMED)) }
             }
         }
         db.txns().all().filter { it.source == TxnSource.NOTIFICATION && it.rawText?.contains(AI_TAG) == true && it.status == TxnStatus.CONFIRMED }
@@ -540,7 +542,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     /** 接受 AI 建議：套用分類。 */
     suspend fun acceptAiSuggestion(sg: AiSuggestion) {
-        db.txns().get(sg.txnId)?.let { t -> if (db.categories().all().any { it.id == sg.categoryId }) db.txns().upsert(t.copy(categoryId = sg.categoryId)) }
+        db.txns().get(sg.txnId)?.let { t -> if (db.categories().all().any { it.id == sg.categoryId }) saveTxn(t.copy(categoryId = sg.categoryId)) }
         settings.update { st -> st.copy(aiSuggestions = st.aiSuggestions.map { if (it.txnId == sg.txnId) it.copy(rejected = true, reason = "已套用") else it }) }
     }
 
@@ -1228,6 +1230,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 return IngestResult("RECORDED", ap.id, "卡費扣繳 ${Money.format(ap.amount, ap.currency)}：${lookupName(ap.toAccountId)}（已有自動扣繳，改為實際扣款日）")
             }
             log.insert(logAs(result, id))
+            // 通知自動記的支出也要檢查預算（原本只有手動儲存才檢查）
+            if (t.type == TxnType.EXPENSE && t.status == TxnStatus.CONFIRMED) runCatching { checkBudgetAlert(t.copy(id = id)) }
             return IngestResult("RECORDED", id, message, pending = t.status == TxnStatus.PENDING)
         }
         suspend fun merged(existing: TxnEntity, updated: TxnEntity, message: String): IngestResult {

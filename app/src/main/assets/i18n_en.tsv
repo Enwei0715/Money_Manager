@@ -3302,3 +3302,6 @@ OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金
 可選擇到期時直接記錄，或放入「待確認」由您確認金額後再記錄；設定結束日期即可記錄固定期數的分期。	Record automatically when due, or send to Pending to confirm the amount first. Set an end date to record a fixed number of installments.
 房租、訂閱、薪資等固定收支，設定週期後於到期日自動記錄，或放入待確認。	Rent, subscriptions, salary and other fixed items are recorded on their due date, or sent to Pending.
 左右箭頭切換上一期或下一期；點選中間的期間名稱可回到本期（自訂期間時則重新選擇期間）。	Use the arrows to move to the previous or next period; tap the period name to return to the current one (or pick a new range for a custom period).
+信用卡繳款提醒	Credit card payment due
+有待確認的交易	Pending transactions
+點一下逐筆確認或修改	Tap to review and confirm

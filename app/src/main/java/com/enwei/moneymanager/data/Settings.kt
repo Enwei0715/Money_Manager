@@ -450,6 +450,10 @@ data class AppSettings(
     val loans: Map<Long, LoanInfo> = emptyMap(),
     /** 上次通知的借貸提醒（避免重複通知） */
     val loanWarnKey: String = "",
+    /** 已提醒過的信用卡繳款（"卡片id:繳款日"），同一期只提醒一次 */
+    val cardDueWarned: Set<String> = emptySet(),
+    /** 上次提醒「待確認放太久」的日期（epochDay），一天最多一次 */
+    val pendingNudgeDay: Long = 0,
     /** AI 判斷過的重複組合（"小id-大id" → 判斷），不再重複詢問 */
     val dupVerdicts: Map<String, DupJudgement> = emptyMap(),
     /** AI 自動整理：背景判斷重複並合併兩筆都是自動記帳的同一筆、確認 AI 判讀的通知後自動學會格式 */
@@ -658,6 +662,8 @@ class SettingsStore(context: Context) {
         merchantAlias = dec("merchantAlias", "{}", strMapSerializer, emptyMap()),
         loans = dec("loans", "{}", loanSerializer, emptyMap()),
         loanWarnKey = prefs.getString("loanWarnKey", "")!!,
+        cardDueWarned = prefs.getStringSet("cardDueWarned", emptySet())!!.toSet(),
+        pendingNudgeDay = prefs.getLong("pendingNudgeDay", 0),
         advisorDaily = prefs.getBoolean("advisorDaily", true),
         reportAiMs = prefs.getLong("reportAiMs", 50_000),
         priceAlerts = dec("priceAlerts", "{}", MapSerializer(String.serializer(), PriceAlert.serializer()), emptyMap()),
@@ -860,6 +866,8 @@ class SettingsStore(context: Context) {
             .putString("merchantAlias", json.encodeToString(strMapSerializer, s.merchantAlias))
             .putString("loans", json.encodeToString(loanSerializer, s.loans))
             .putString("loanWarnKey", s.loanWarnKey)
+            .putStringSet("cardDueWarned", s.cardDueWarned)
+            .putLong("pendingNudgeDay", s.pendingNudgeDay)
             .putString("reviews", json.encodeToString(reviewSerializer, s.reviews))
             .putBoolean("advisorDaily", s.advisorDaily)
             .putLong("reportAiMs", s.reportAiMs)
