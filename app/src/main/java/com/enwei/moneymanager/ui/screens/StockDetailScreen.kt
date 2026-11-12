@@ -118,21 +118,28 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     LaunchedEffect(hourly, count, mas, indicator, showBB) { if (hourly || span == 0) KlinePrefs.save(hourly, count, mas, indicator, showBB) }
     val trades by repo.trades.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
+    // 台股名稱：股票清單載入後換成中文名稱（不顯示 Yahoo 的英文全名）
+    var listReady by remember { mutableStateOf(com.enwei.moneymanager.net.TwData.cached().isNotEmpty()) }
+    LaunchedEffect(Unit) {
+        if (!listReady) { runCatching { com.enwei.moneymanager.net.TwData.stockList(MoneyApp.instance) }; listReady = true }
+    }
     LaunchedEffect(symbol) {
         bars = InvestData.bars(symbol, "5y", tw = market == Market.TW)?.let { b0 ->
             // 一打開就併入即時價（Yahoo 的日 K 可能延遲）
             runCatching { com.enwei.moneymanager.net.QuoteService.live(market, symbol) }.getOrNull()?.let { b0.withLive(it) } ?: b0
         }
+        // 價格與 K 線先顯示，大盤、新聞之後再補（即時報價不必等它們）
+        loading = false
         index = InvestData.bars(if (market == Market.TW) "^TWII" else "^GSPC", "1y")
         val st = MoneyApp.news.load()
         business = st.business[symbol]
         news = MoneyApp.news.about(st, symbol)
-        loading = false
         divs = runCatching { com.enwei.moneymanager.net.QuoteService.fetchDividends(market, symbol) }.getOrDefault(emptyList())
     }
     val held = holdings.values.flatten().filter { it.market == market && it.symbol == symbol && it.shares > 0.0001 }
     // 名稱用股票清單的中文名稱（Yahoo 的是英文全名）
-    val name = held.firstNotNullOfOrNull { it.name } ?: com.enwei.moneymanager.net.TwData.nameOf(symbol) ?: bars?.name
+    val name = (if (market == Market.TW && listReady) com.enwei.moneymanager.net.TwData.nameOf(symbol) else null)
+        ?: held.firstNotNullOfOrNull { it.name } ?: (if (market == Market.TW && !listReady) null else bars?.name)
     // K 線上的參考線：均價、停利價、減碼價、提醒的目標價與停損價
     val levels = buildList {
         // 近 60 日的高點（壓力）與低點（支撐）
@@ -222,6 +229,11 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                 // 報價
                 com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        // 即時報價的時間：畫面開著時每 30 秒自動更新，不用手動刷新
+                        liveAt?.let { t ->
+                            Text("即時 " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.TAIWAN).format(java.util.Date(t)) + " · 每 30 秒更新",
+                                fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         Row {
                             Text("%.2f".format(last), fontSize = AppText.display, color = color, fontWeight = FontWeight.SemiBold)
                             Text("  ${if (chg >= 0) "▲" else "▼"} ${"%.2f".format(kotlin.math.abs(chg))}（${"%+.2f".format(chg / prev * 100)}%）",
@@ -1224,37 +1236,28 @@ private fun ProjectionCard(b: DailyBars) {
             val pivotCol = MaterialTheme.colorScheme.onSurfaceVariant
             androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(170.dp).clipToBounds()) {
                 val n = total - showFrom
-                // 歷史 K 棒占左邊 72%，未來 20 天占右邊 28%：區間有足夠的寬度，不會擠成一支喇叭
-                val histW = size.width * 0.72f
+                // 歷史 K 棒占左邊 80%，右邊 20% 畫 20 日後的推估
+                val histW = size.width * 0.80f
                 val w = histW / n
                 val lines = trend?.let { t -> listOf(t.upper.at(showFrom.toDouble()), t.upper.at(endIdx), t.lower.at(showFrom.toDouble()), t.lower.at(endIdx)) }.orEmpty()
-                // 縱軸以 K 棒與趨勢線為主；區間最多再往外多留 35%，太寬的部分截掉，不把 K 棒壓扁
+                // 縱軸包含 K 棒、趨勢線與推估範圍，K 棒維持清楚（範圍太寬時上下各最多多留 45%）
                 val base = (showFrom until total).flatMap { listOf(b.high[it], b.low[it]) } + lines
-                val bHi = base.max(); val bLo = base.min(); val pad = (bHi - bLo) * 0.35
-                val hi = minOf(maxOf(bHi, simQ[2].max()), bHi + pad); val lo = maxOf(minOf(bLo, simQ[0].min()), bLo - pad)
+                val bHi = base.max(); val bLo = base.min(); val pad = (bHi - bLo) * 0.45
+                val hi = minOf(maxOf(bHi, simQ[2].last()), bHi + pad); val lo = maxOf(minOf(bLo, simQ[0].last()), bLo - pad)
                 val r = (hi - lo).takeIf { it > 0 } ?: 1.0
-                fun y(v: Double) = ((hi - v) / r * size.height).toFloat()
+                fun y(v: Double) = ((hi - v) / r * size.height).toFloat().coerceIn(2f, size.height - 2f)
                 val xToday = (n - 1) * w + w / 2
-                val wF = (size.width - xToday - 2f) / ahead
+                val wF = (size.width - xToday - 14f) / ahead
                 fun x(i: Double): Float = if (i <= total - 1) ((i - showFrom) * w + w / 2).toFloat() else (xToday + (i - (total - 1)) * wF).toFloat()
                 val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
-                // 今天的位置：一條淡淡的直線分開過去與推估
-                drawLine(pivotCol.copy(alpha = 0.25f), Offset(xToday, 0f), Offset(xToday, size.height), 1.5f, pathEffect = dash)
-                // 統計區間：一塊柔和的淡色區域，上下緣細線，中間一條基準線（同一個顏色，不用紅綠）
-                clipRect {
-                    val x0 = xToday; val y0 = y(last)
-                    fun curve(q: List<Double>) = androidx.compose.ui.graphics.Path().apply {
-                        moveTo(x0, y0); q.forEachIndexed { k, v -> lineTo(x((total + k).toDouble()), y(v)) }
-                    }
-                    val area = curve(simQ[2]).apply {
-                        simQ[0].indices.reversed().forEach { k -> lineTo(x((total + k).toDouble()), y(simQ[0][k])) }
-                        lineTo(x0, y0); close()
-                    }
-                    drawPath(area, midCol.copy(alpha = 0.12f))
-                    drawPath(curve(simQ[2]), midCol.copy(alpha = 0.45f), style = Stroke(1.5f))
-                    drawPath(curve(simQ[0]), midCol.copy(alpha = 0.45f), style = Stroke(1.5f))
-                    drawPath(curve(simQ[1]), midCol, style = Stroke(2.5f, pathEffect = dash))
-                }
+                // 20 日後的推估：從今天收盤畫一條虛線到「基準」，在第 20 天畫一根直條：上端＝樂觀、下端＝悲觀（八成機率落在中間）
+                val xEnd = x(endIdx); val yHi = y(simQ[2].last()); val yLo = y(simQ[0].last()); val yMid = y(simQ[1].last())
+                drawRect(midCol.copy(alpha = 0.10f), Offset(xEnd - 9f, yHi), Size(18f, (yLo - yHi).coerceAtLeast(1f)))
+                drawLine(up, Offset(xEnd - 9f, yHi), Offset(xEnd + 9f, yHi), 3f)
+                drawLine(down, Offset(xEnd - 9f, yLo), Offset(xEnd + 9f, yLo), 3f)
+                drawLine(midCol.copy(alpha = 0.5f), Offset(xEnd, yHi), Offset(xEnd, yLo), 1.5f)
+                drawLine(midCol, Offset(xToday, y(last)), Offset(xEnd, yMid), 2.5f, pathEffect = dash)
+                drawCircle(midCol, radius = 5f, center = Offset(xEnd, yMid))
                 // K 棒
                 for (i in showFrom until total) {
                     val o = b.open[i]; val c = b.close[i]
@@ -1275,25 +1278,15 @@ private fun ProjectionCard(b: DailyBars) {
                     trend.pivots.filter { it.index >= showFrom }.forEach { p ->
                         drawCircle(pivotCol, radius = 5f, center = Offset(x(p.index.toDouble()), y(p.price)), style = Stroke(2f))
                     }
-                    // 型態的方向箭頭
-                    if (trend.bias != 0) {
-                        val sx = x((total - 1).toDouble()); val sy = y(last)
-                        val target = if (trend.bias > 0) trend.upper.at(endIdx) else trend.lower.at(endIdx)
-                        val ex = x(endIdx); val ey = y(target)
-                        val arrowCol = if (trend.bias > 0) up else down
-                        drawLine(arrowCol, Offset(sx, sy), Offset(ex, ey), 4f)
-                        val ang = kotlin.math.atan2((ey - sy).toDouble(), (ex - sx).toDouble())
-                        val len = 16.0
-                        listOf(2.6, -2.6).forEach { d ->
-                            drawLine(arrowCol, Offset(ex, ey), Offset((ex - len * kotlin.math.cos(ang + d / 6)).toFloat(), (ey - len * kotlin.math.sin(ang + d / 6)).toFloat()), 4f)
-                        }
-                    }
                 }
             }
-            if (trend != null) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("━ 壓力線", fontSize = AppText.label, color = resCol)
-                Text("━ 支撐線", fontSize = AppText.label, color = supCol)
-                Text("○ 波段高低點", fontSize = AppText.label, color = pivotCol)
+            // 圖例：右邊直條＝20 日後的推估範圍
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (trend != null) {
+                    Text("━ 壓力線", fontSize = AppText.label, color = resCol)
+                    Text("━ 支撐線", fontSize = AppText.label, color = supCol)
+                }
+                Text("┃ 20 日後範圍（● 基準）", fontSize = AppText.label, color = midCol)
             }
             // 三種情境的 20 日後價格
             androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
