@@ -45,7 +45,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 4096 -cores 4
           script: |
             adb install -r app/build/outputs/apk/github/debug/app-github-debug.apk
             SHOTS=shots python3 tools/ui/walk.py || true

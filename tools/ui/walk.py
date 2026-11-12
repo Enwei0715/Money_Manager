@@ -34,8 +34,29 @@ def note(msg):
     log.flush()
 
 
-def nodes():
-    """目前畫面上所有有文字或描述的元件：(文字, 描述, 中心x, 中心y)"""
+DIALOG_BUTTONS = ("Wait", "等待", "Close app", "關閉應用程式", "OK", "確定")
+
+
+def nodes(retry=3):
+    """目前畫面上所有有文字或描述的元件：(文字, 描述, 中心x, 中心y)。系統的「沒有回應」對話框會先關掉。"""
+    out = _dump()
+    for _ in range(retry):
+        texts = " ".join(t for t, _, _, _ in out)
+        if "isn't responding" not in texts and "沒有回應" not in texts:
+            break
+        note("[dialog] 系統顯示「沒有回應」，按等待")
+        for t, d, x, y in out:
+            if t in DIALOG_BUTTONS[:2]:
+                adb(f"input tap {x} {y}")
+                break
+        else:
+            adb("input keyevent 4")
+        time.sleep(3)
+        out = _dump()
+    return out
+
+
+def _dump():
     adb("uiautomator dump /sdcard/ui.xml >/dev/null")
     raw = sh("adb exec-out cat /sdcard/ui.xml")
     out = []
@@ -98,6 +119,7 @@ def launch():
     adb(f"am force-stop {PKG}")
     adb(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1 >/dev/null")
     time.sleep(6)
+    nodes()
 
 
 def notify(pkg, title, text):
@@ -105,7 +127,19 @@ def notify(pkg, title, text):
     time.sleep(3)
 
 
+def settle():
+    """等開機完成、系統安靜下來（模擬器剛開機時桌面常常沒有回應）"""
+    for _ in range(60):
+        if sh("adb shell getprop sys.boot_completed").strip() == "1":
+            break
+        time.sleep(2)
+    adb("input keyevent 82")  # 解鎖
+    time.sleep(20)
+    nodes()
+
+
 def main():
+    settle()
     # 權限與假資料
     for p in ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "POST_NOTIFICATIONS"]:
         adb(f"pm grant {PKG} android.permission.{p}")
