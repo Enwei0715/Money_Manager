@@ -145,5 +145,6 @@ private fun sample(ctx: android.content.Context, k: NoticeKind) {
         NoticeKind.REPORT -> AppNotices.post(ctx, k, id, tr("今日投資報告已更新"), tr("點選看完整報告"), "advisor:0")
         NoticeKind.PROGRESS -> AppNotices.post(ctx, k, id, tr("產生投資報告中"), tr("範例進度"), "advisor:0")
         NoticeKind.UPDATE -> AppNotices.post(ctx, k, id, tr("有新版本"), tr("點選前往更新"), "settings")
+        NoticeKind.BACKUP -> AppNotices.post(ctx, k, id, tr("自動備份失敗"), tr("備份資料夾無法存取，請重新選擇"), "backup")
     }
 }
