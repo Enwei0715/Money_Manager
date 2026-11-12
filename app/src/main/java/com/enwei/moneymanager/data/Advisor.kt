@@ -565,6 +565,25 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
         if (rets.size < 3) "" else "近 30 天推薦 ${rets.size} 檔：平均 ${"%+.1f".format(rets.average())}%，上漲比例 ${rets.count { it > 0 } * 100 / rets.size}%" +
             (idxRets.takeIf { it.isNotEmpty() }?.let { "（同期加權平均 ${"%+.1f".format(it.average())}%）" } ?: "")
     }
+    // 逐檔表現：分長線／短線、列出最好與最差的幾檔和當時的理由，讓 AI 看得出哪一類判斷常出錯，而不只是一個平均數
+    val pickRows = past.flatMap { rep -> rep.picks.mapNotNull { p ->
+        val now = boardBy[p.symbol]?.close; val at = p.price
+        if (now != null && at != null && at > 0) Triple(p, LocalDate.ofEpochDay(rep.day), (now / at - 1) * 100) else null
+    } }
+    val trackDetail = if (pickRows.size < 3) "" else buildString {
+        pickRows.groupBy { it.first.style.ifBlank { "未分類" } }.forEach { (style, l) ->
+            append("$style ${l.size} 檔平均 ${"%+.1f".format(l.map { it.third }.average())}%、上漲 ${l.count { it.third > 0 } * 100 / l.size}%；")
+        }
+        val sorted = pickRows.sortedByDescending { it.third }
+        fun row(t: Triple<StockPick, LocalDate, Double>) = "${t.first.symbol}${t.first.name}（${t.second.monthValue}/${t.second.dayOfMonth} ${t.first.style}）${"%+.1f".format(t.third)}%：${t.first.reason.take(40)}"
+        append("\n表現最好：" + sorted.take(3).joinToString("；") { row(it) })
+        append("\n表現最差：" + sorted.takeLast(3).reversed().joinToString("；") { row(it) })
+    }
+    // 使用者最近一次「檢討推薦表現」得到的結論：之後每天選股都要參考，檢討才有實際作用
+    val lesson = (listOf(st.chat) + st.chatThreads.map { it.msgs }).flatMap { msgs ->
+        msgs.zipWithNext().filter { (q, a) -> q.fromUser && q.text.startsWith("請檢討近") && !a.fromUser }.map { it.second }
+    }.maxByOrNull { it.time }?.takeIf { System.currentTimeMillis() - it.time < 30L * 86_400_000 }
+        ?.let { (listOf(it.text) + it.points).joinToString("；").take(500) }
     val seen = past.take(5).flatMap { it.picks.map { p -> p.symbol } }.groupingBy { it }.eachCount()
     val (digest, imp) = datasetDigest(ds, st, themes = 10, symbols = 0, important = 15)
     val table = buildString {
@@ -574,6 +593,8 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
         appendLine("候選股評分表（全市場 ${universe.size} 檔初篩、${pool.size} 檔細算後的前 ${candidates.size} 檔；分數 0–100；外/投＝外資、投信近 5 日買賣超與連續天數；時光機＝未來 20 個交易日先到目標(+2R)/先到停損(-1R)的機率）：")
         candidates.forEach { appendLine("- " + it.row()) }
         if (track.isNotBlank()) appendLine("過去推薦表現：$track")
+        if (trackDetail.isNotBlank()) appendLine("過去推薦逐檔檢討：$trackDetail")
+        if (lesson != null) appendLine("使用者上次檢討後的結論（選股時要遵守）：$lesson")
         if (seen.isNotEmpty()) appendLine("近幾份報告已推薦（代號×次數）：" + seen.entries.sortedByDescending { it.value }.joinToString("、") { "${it.key}×${it.value}" })
     }
     onStep("⑤ AI 判讀候選表與新聞（${candidates.size} 檔）…")

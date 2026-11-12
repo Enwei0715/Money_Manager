@@ -381,13 +381,24 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         }
     }
     data class Guess(val categoryId: Long, val merchant: String?, val score: Double, val count: Int)
-    val guesses = remember(amountMinor, type, history, accountId) {
+    // 依收支類型先整理一次歷史紀錄（歷史變動時才重算），之後每按一個鍵、打一個字只在這份較小的清單裡找，不再掃描全部交易
+    val typeHist = remember(history, type) { history.filter { it.type == type } }
+    val guessPool = remember(typeHist) {
+        val now = System.currentTimeMillis()
+        typeHist.filter { it.categoryId != null && it.status == TxnStatus.CONFIRMED && now - it.date < 365L * 86_400_000 }
+    }
+    val merchantPool = remember(typeHist) { typeHist.filter { !it.merchant.isNullOrBlank() }.distinctBy { it.merchant } }
+    val noteCounts = remember(typeHist) { typeHist.mapNotNull { it.note?.trim()?.takeIf { n -> n.isNotEmpty() } }.groupingBy { it }.eachCount() }
+    val notesByMerchant = remember(typeHist) {
+        typeHist.filter { !it.note.isNullOrBlank() && !it.merchant.isNullOrBlank() }
+            .groupBy({ it.merchant!!.trim() }, { it.note!!.trim() })
+    }
+    val guesses = remember(amountMinor, guessPool, accountId) {
         val amt = amountMinor
         if (amt == null || type == TxnType.TRANSFER || id != 0L) emptyList() else {
             val hourNow = LocalTime.now().hour
             val now = System.currentTimeMillis()
-            history.asSequence()
-                .filter { it.type == type && it.categoryId != null && it.status == TxnStatus.CONFIRMED && now - it.date < 365L * 86_400_000 }
+            guessPool.asSequence()
                 .filter { kotlin.math.abs(it.amount - amt) <= maxOf(amt / 10, 100) }
                 .groupBy { it.categoryId!! to it.merchant?.trim()?.ifBlank { null } }
                 .map { (k, l) ->
@@ -756,10 +767,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 }
                 // 自動完成：依過去紀錄建議，點選時一併帶入分類與帳戶
                 if (settings.autocomplete && merchantFocused && merchant.isNotBlank()) {
-                    val suggestions = remember(merchant, history, type) {
-                        history.asSequence()
-                            .filter { it.type == type && it.merchant != null && it.merchant.contains(merchant, true) && it.merchant != merchant }
-                            .distinctBy { it.merchant }.take(8).toList()
+                    val suggestions = remember(merchant, merchantPool) {
+                        merchantPool.asSequence()
+                            .filter { it.merchant!!.contains(merchant, true) && it.merchant != merchant }
+                            .take(8).toList()
                     }
                     // 你習慣寫在說明的攤位：打「京都」也會推薦「第二教學大樓餐廳・京都日式料理」，點一下店家與說明一起帶入
                     val stallHits = remember(merchant, stallOwner) {
@@ -798,18 +809,18 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 if (noteFocused && type != TxnType.TRANSFER) {
                     val m = merchant.trim()
                     val typed = note.trim()
-                    val notes = remember(m, typed, history, type) {
-                        val pool = history.asSequence().filter { it.type == type && !it.note.isNullOrBlank() }
-                        val mine = pool.filter { m.isNotEmpty() && it.merchant?.trim() == m }.mapNotNull { it.note?.trim() }
-                        val all = pool.mapNotNull { it.note?.trim() }
-                        val mineList = mine.toList()
+                    val notes = remember(m, typed, noteCounts, notesByMerchant, stallOwner) {
+                        val mineList = if (m.isEmpty()) emptyList() else notesByMerchant[m].orEmpty()
+                        val mineCounts = mineList.groupingBy { it }.eachCount()
                         // 已有店家：只推薦這家店寫過的說明；這家店沒寫過時，不推薦別家店的攤位名稱（例如 Family 不會出現越香）
-                        val base = if (typed.isNotEmpty() || m.isEmpty()) (mineList.asSequence() + all)
-                            else if (mineList.isNotEmpty()) mineList.asSequence()
-                            else all.filter { n -> stallOwner[n].let { it == null || it == m } }
-                        base.filter { it != typed && it.length <= 30 && !it.startsWith("共 ") && (typed.isEmpty() || it.contains(typed, true)) }
-                            .groupingBy { it }.eachCount().entries
-                            .sortedWith(compareByDescending<Map.Entry<String, Int>> { e -> mine.any { it == e.key } }.thenByDescending { it.value })
+                        val base: Map<String, Int> = when {
+                            typed.isNotEmpty() || m.isEmpty() -> (noteCounts.keys + mineCounts.keys).associateWith { (noteCounts[it] ?: 0) + (mineCounts[it] ?: 0) }
+                            mineCounts.isNotEmpty() -> mineCounts
+                            else -> noteCounts.filterKeys { n -> stallOwner[n].let { it == null || it == m } }
+                        }
+                        base.entries.asSequence()
+                            .filter { (n, _) -> n != typed && n.length <= 30 && !n.startsWith("共 ") && (typed.isEmpty() || n.contains(typed, true)) }
+                            .sortedWith(compareByDescending<Map.Entry<String, Int>> { e -> e.key in mineCounts }.thenByDescending { it.value })
                             .map { it.key }.take(8).toList()
                     }
                     if (notes.isNotEmpty()) Row(

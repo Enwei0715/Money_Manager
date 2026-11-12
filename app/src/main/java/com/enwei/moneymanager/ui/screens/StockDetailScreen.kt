@@ -812,7 +812,8 @@ private fun CandleChart(
         val usedY = ArrayList<Float>()
         labeledLevels.sortedByDescending { it.first }.forEach { (v, col, name) ->
             val inside = v in lo..hi
-            var ly = when { v > hi -> 14f * k; v < lo -> priceH - 4f * k; else -> y(v) }
+            // 超出上緣的標籤放在均線圖例那一行的下方，不和圖例疊在一起
+            var ly = when { v > hi -> legendH + 14f * k; v < lo -> priceH - 4f * k; else -> maxOf(y(v), legendH + 14f * k) }
             if (inside) drawLine(col.copy(alpha = 0.45f), Offset(0f, ly), Offset(size.width, ly), 1.2f, pathEffect = dash)
             // 標籤互相錯開
             while (usedY.any { kotlin.math.abs(it - ly) < 26f * k }) ly += 26f * k
@@ -844,6 +845,8 @@ private fun CandleChart(
                 val prevV = v.getOrNull(to - 2)
                 val arrow = when { prevV == null -> ""; cur > prevV -> "↑"; cur < prevV -> "↓"; else -> "→" }
                 val t = "MA$len ${"%.1f".format(cur)}$arrow"
+                // 放不下就不畫，避免最後一個被切掉一半
+                if (lx + lp.measureText(t) > size.width) return@forEach
                 lp.color = argb(maColor(len))
                 drawContext.canvas.nativeCanvas.drawText(t, lx, 20f * k, lp)
                 lx += lp.measureText(t) + 14f * k

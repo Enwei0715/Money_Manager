@@ -2324,7 +2324,7 @@ private fun PickTrack(store: NewsStore, nav: NavController) {
                     val lines = rets.sortedByDescending { it.second }.take(40).joinToString("\n") { (x, v) ->
                         "${java.time.LocalDate.ofEpochDay(x.day)} ${x.pick.symbol} ${x.pick.name}（${x.pick.style}）推薦價 ${x.pick.price} → ${"%+.1f".format(v)}%"
                     }
-                    com.enwei.moneymanager.ui.TabRequest.chatQuestion = "請檢討近 $days 天的推薦表現：哪些類型選得好、哪些不好，之後選股該怎麼調整？\n平均 ${"%+.1f".format(avg)}%，上漲比例 ${rets.count { it.second > 0 } * 100 / rets.size}%。\n$lines"
+                    com.enwei.moneymanager.ui.TabRequest.chatQuestion = "請檢討近 $days 天的推薦表現：哪些類型選得好、哪些不好，之後選股該怎麼調整？請給具體可執行的規則（這次的結論會用於之後的每日選股）。\n平均 ${"%+.1f".format(avg)}%，上漲比例 ${rets.count { it.second > 0 } * 100 / rets.size}%。\n$lines"
                     com.enwei.moneymanager.ui.TabRequest.advisorSub = 1
                 }) { Text("請 AI 檢討這些推薦 ›", fontSize = AppText.caption) }
             }
