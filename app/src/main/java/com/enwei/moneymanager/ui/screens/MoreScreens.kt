@@ -982,7 +982,8 @@ fun BackupScreen(nav: NavController) {
                 TextButton(onClick = {
                     confirmUri = null
                     scope.launch {
-                        status = runCatching {
+                        // 在 App 層執行：離開這頁或畫面旋轉也不會把還原中斷在一半
+                        status = com.enwei.moneymanager.MoneyApp.instance.appScope.async { runCatching {
                             val bytes = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() } }
                             // gzip 開頭 1F 8B：帳理完整備份；否則當作舊版 JSON
                             if (bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
@@ -993,7 +994,7 @@ fun BackupScreen(nav: NavController) {
                                 val b = repo.importJson(bytes.decodeToString())
                                 "已還原：${b.accounts.size} 個帳戶、${b.transactions.size} 筆交易、${b.trades.size} 筆股票交易"
                             }
-                        }.getOrElse { "還原失敗：${it.message}" }
+                        }.getOrElse { "還原失敗：${it.message}" } }.await()
                     }
                 }) { Text("還原") }
             },

@@ -243,6 +243,9 @@ interface NotificationLogDao {
     @Query("SELECT * FROM notification_log")
     suspend fun all(): List<NotificationLogEntity>
 
+    @Query("SELECT COUNT(*) FROM notification_log WHERE txnId = :txnId AND packageName = :pkg")
+    suspend fun countForTxnFromPkg(txnId: Long, pkg: String): Int
+
     @Query("SELECT * FROM notification_log WHERE txnId = :txnId ORDER BY postedAt DESC LIMIT 1")
     suspend fun byTxn(txnId: Long): NotificationLogEntity?
 

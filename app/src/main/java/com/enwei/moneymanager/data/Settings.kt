@@ -491,6 +491,18 @@ class SettingsStore(context: Context) {
     val flow: StateFlow<AppSettings> = state.asStateFlow()
     val value: AppSettings get() = state.value
 
+    /**
+     * 讀一個 JSON 欄位；讀不出來時把原始內容另存到「欄位名.bad」，
+     * 之後 update() 寫回預設值也不會讓這份資料永久消失，可從備份或除錯找回。
+     */
+    private fun <T> dec(key: String, def: String, ser: kotlinx.serialization.KSerializer<T>, fallback: T): T {
+        val raw = prefs.getString(key, def)!!
+        return runCatching { json.decodeFromString(ser, raw) }.getOrElse {
+            if (raw.isNotBlank() && raw != def && !prefs.contains("$key.bad")) prefs.edit().putString("$key.bad", raw).apply()
+            fallback
+        }
+    }
+
     private fun read(): AppSettings {
         val savedPlan = runCatching {
             json.decodeFromString(InvestPlanSettings.serializer(), prefs.getString("investPlan", "")!!)
@@ -512,7 +524,7 @@ class SettingsStore(context: Context) {
                 .putBoolean("stockDisciplineOn", false)
                 .apply()
         }
-        val savedLearned = runCatching { json.decodeFromString(learnedSerializer, prefs.getString("learnedSources", "[]")!!) }.getOrDefault(emptyList())
+        val savedLearned = dec("learnedSources", "[]", learnedSerializer, emptyList())
         val learned = savedLearned.asReversed().map { it.copy(title = learnKey(it.title, null)) }
             .distinctBy { it.pkg to it.title }.asReversed()
         if (learned != savedLearned) {
@@ -543,16 +555,16 @@ class SettingsStore(context: Context) {
         passcodeHash = prefs.getString("passcodeHash", "")!!,
         reminderEnabled = prefs.getBoolean("reminderEnabled", false),
         reminderMinutes = prefs.getInt("reminderMinutes", 21 * 60),
-        bookmarks = runCatching { json.decodeFromString(bookmarkSerializer, prefs.getString("bookmarks", "[]")!!) }.getOrDefault(emptyList()),
+        bookmarks = dec("bookmarks", "[]", bookmarkSerializer, emptyList()),
         carryOver = prefs.getBoolean("carryOver", true),
-        memos = runCatching { json.decodeFromString(memoSerializer, prefs.getString("memos", "[]")!!) }.getOrDefault(emptyList()),
-        budgets = runCatching { json.decodeFromString(budgetSerializer, prefs.getString("budgets", "{}")!!) }.getOrDefault(emptyMap()),
+        memos = dec("memos", "[]", memoSerializer, emptyList()),
+        budgets = dec("budgets", "{}", budgetSerializer, emptyMap()),
         savingsGoal = prefs.getFloat("savingsGoal", -1f).takeIf { it >= 0f }?.toDouble(),
         budgetAlerted = prefs.getStringSet("budgetAlerted", emptySet()).orEmpty().toSet(),
-        notifAccountMap = runCatching { json.decodeFromString(pkgMapSerializer, prefs.getString("notifAccountMap", "{}")!!) }.getOrDefault(emptyMap()),
+        notifAccountMap = dec("notifAccountMap", "{}", pkgMapSerializer, emptyMap()),
         screenPackages = prefs.getStringSet("screenPackages", emptySet())!!.toSet(),
-        screenReadSince = runCatching { json.decodeFromString(pkgMapSerializer, prefs.getString("screenReadSince", "{}")!!) }.getOrDefault(emptyMap()),
-        cashCounts = runCatching { json.decodeFromString(cashSerializer, prefs.getString("cashCounts", "{}")!!) }.getOrDefault(emptyMap()),
+        screenReadSince = dec("screenReadSince", "{}", pkgMapSerializer, emptyMap()),
+        cashCounts = dec("cashCounts", "{}", cashSerializer, emptyMap()),
         themeMode = prefs.getInt("themeMode", 0),
         uiScale = prefs.getFloat("uiScale2", 1f),
         themePreset = prefs.getString("themePreset", "coral")!!,
@@ -604,7 +616,7 @@ class SettingsStore(context: Context) {
         aiAutoRoute = prefs.getBoolean("aiAutoRoute", true),
         geminiModel = prefs.getString("geminiModel", "gemini-flash-latest")!!,
         geminiLiteModel = prefs.getString("geminiLiteModel", "gemini-flash-lite-latest")!!,
-        aiRoutes = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("aiRoutes", "{}")!!) }.getOrDefault(emptyMap()),
+        aiRoutes = dec("aiRoutes", "{}", strMapSerializer, emptyMap()),
         geminiUsageDay = prefs.getLong("geminiUsageDay", 0),
         geminiUsageRequests = prefs.getInt("geminiUsageRequests", 0),
         geminiUsageTokens = prefs.getLong("geminiUsageTokens", 0),
@@ -616,53 +628,53 @@ class SettingsStore(context: Context) {
         aiModelHard = prefs.getString("aiModelHard", "openai/gpt-oss-120b")!!,
         dupDismissed = prefs.getStringSet("dupDismissed", emptySet())!!.toSet(),
         statsExcluded = prefs.getStringSet("statsExcluded", emptySet())!!.toSet(),
-        merchantAlias = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("merchantAlias", "{}")!!) }.getOrDefault(emptyMap()),
-        loans = runCatching { json.decodeFromString(loanSerializer, prefs.getString("loans", "{}")!!) }.getOrDefault(emptyMap()),
+        merchantAlias = dec("merchantAlias", "{}", strMapSerializer, emptyMap()),
+        loans = dec("loans", "{}", loanSerializer, emptyMap()),
         loanWarnKey = prefs.getString("loanWarnKey", "")!!,
         advisorDaily = prefs.getBoolean("advisorDaily", true),
         reportAiMs = prefs.getLong("reportAiMs", 50_000),
-        priceAlerts = runCatching { json.decodeFromString(MapSerializer(String.serializer(), PriceAlert.serializer()), prefs.getString("priceAlerts", "{}")!!) }.getOrDefault(emptyMap()),
-        watchlist = runCatching { json.decodeFromString(ListSerializer(String.serializer()), prefs.getString("watchlist", "[]")!!) }.getOrDefault(emptyList()),
+        priceAlerts = dec("priceAlerts", "{}", MapSerializer(String.serializer(), PriceAlert.serializer()), emptyMap()),
+        watchlist = dec("watchlist", "[]", ListSerializer(String.serializer()), emptyList()),
         calendarDots = prefs.getBoolean("calendarDots", false),
         aiTone = prefs.getInt("aiTone", 0),
         aiWifiOnly = prefs.getBoolean("aiWifiOnly", false),
         newsIntervalHours = prefs.getInt("newsIntervalHours", 3),
         filterStyle = prefs.getInt("filterStyle", 0),
-        lastPicks = runCatching { json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), prefs.getString("lastPicks", "{}")!!) }.getOrDefault(emptyMap()),
+        lastPicks = dec("lastPicks", "{}", MapSerializer(String.serializer(), String.serializer()), emptyMap()),
         cashByDenom = prefs.getBoolean("cashByDenom", true),
         stockAlertsOn = prefs.getBoolean("stockAlertsOn", true),
         featureNotif = prefs.getBoolean("featureNotif", true),
         locationHints = prefs.getBoolean("locationHints", false),
         featureStocks = prefs.getBoolean("featureStocks", true),
         featureSplit = prefs.getBoolean("featureSplit", true),
-        alertsFired = runCatching { json.decodeFromString(MapSerializer(String.serializer(), Long.serializer()), prefs.getString("alertsFired", "{}")!!) }.getOrDefault(emptyMap()),
+        alertsFired = dec("alertsFired", "{}", MapSerializer(String.serializer(), Long.serializer()), emptyMap()),
         notifyUpdates = prefs.getBoolean("notifyUpdates", true),
         updateNotified = prefs.getInt("updateNotified", 0),
         updateSkipped = prefs.getInt("updateSkipped", 0),
         updateCheckLog = prefs.getString("updateCheckLog", "")!!,
         updateAvailable = prefs.getInt("updateAvailable", 0),
-        txnNecessity = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("txnNecessity", "{}")!!) }.getOrDefault(emptyMap()),
+        txnNecessity = dec("txnNecessity", "{}", longStrSerializer, emptyMap()),
         investPlan = plan,
-        stockStyle = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("stockStyle", "{}")!!) }.getOrDefault(emptyMap()),
+        stockStyle = dec("stockStyle", "{}", strMapSerializer, emptyMap()),
         advisorReport = runCatching { json.decodeFromString(AdvisorReport.serializer(), prefs.getString("advisorReport", "")!!) }.getOrNull(),
-        reviews = runCatching { json.decodeFromString(reviewSerializer, prefs.getString("reviews", "{}")!!) }.getOrDefault(emptyMap()),
-        dupVerdicts = runCatching { json.decodeFromString(dupVerdictSerializer, prefs.getString("dupVerdicts", "{}")!!) }.getOrDefault(emptyMap()),
+        reviews = dec("reviews", "{}", reviewSerializer, emptyMap()),
+        dupVerdicts = dec("dupVerdicts", "{}", dupVerdictSerializer, emptyMap()),
         aiAutoTidy = prefs.getBoolean("aiAutoTidy", true),
-        aiTidyLog = runCatching { json.decodeFromString(ListSerializer(String.serializer()), prefs.getString("aiTidyLog", "[]")!!) }.getOrDefault(emptyList()),
+        aiTidyLog = dec("aiTidyLog", "[]", ListSerializer(String.serializer()), emptyList()),
         aiModelVision = prefs.getString("aiModelVision", "qwen/qwen3.8-27b")!!,
         aiUsageDay = prefs.getLong("aiUsageDay", 0),
         aiUsageRequests = prefs.getInt("aiUsageRequests", 0),
         aiUsageTokens = prefs.getLong("aiUsageTokens", 0),
-        aiSuggestions = runCatching { json.decodeFromString(aiSuggestionSerializer, prefs.getString("aiSuggestions", "[]")!!) }.getOrDefault(emptyList()),
-        cardBank = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardBank", "{}")!!) }.getOrDefault(emptyMap()),
-        cardDueOffset = runCatching { json.decodeFromString(longIntSerializer, prefs.getString("cardDueOffset", "{}")!!) }.getOrDefault(emptyMap()),
-        cardShift = runCatching { json.decodeFromString(longStrSerializer, prefs.getString("cardShift", "{}")!!) }.getOrDefault(emptyMap()),
+        aiSuggestions = dec("aiSuggestions", "[]", aiSuggestionSerializer, emptyList()),
+        cardBank = dec("cardBank", "{}", longStrSerializer, emptyMap()),
+        cardDueOffset = dec("cardDueOffset", "{}", longIntSerializer, emptyMap()),
+        cardShift = dec("cardShift", "{}", longStrSerializer, emptyMap()),
         dismissedDividends = prefs.getStringSet("dismissedDividends", emptySet())!!.toSet(),
-        brokerRebates = runCatching { json.decodeFromString(rebateSerializer, prefs.getString("brokerRebates", "{}")!!) }.getOrDefault(emptyMap()),
+        brokerRebates = dec("brokerRebates", "{}", rebateSerializer, emptyMap()),
         learnedSources = learned,
-        promoSigs = runCatching { json.decodeFromString(promoSerializer, prefs.getString("promoSigs", "[]")!!) }.getOrDefault(emptyList()),
-        pendingTrades = runCatching { json.decodeFromString(pendingTradeSerializer, prefs.getString("pendingTrades", "[]")!!) }.getOrDefault(emptyList()),
-        accountGroupNames = runCatching { json.decodeFromString(strMapSerializer, prefs.getString("accountGroupNames", "{}")!!) }.getOrDefault(emptyMap()),
+        promoSigs = dec("promoSigs", "[]", promoSerializer, emptyList()),
+        pendingTrades = dec("pendingTrades", "[]", pendingTradeSerializer, emptyList()),
+        accountGroupNames = dec("accountGroupNames", "{}", strMapSerializer, emptyMap()),
         )
     }
 

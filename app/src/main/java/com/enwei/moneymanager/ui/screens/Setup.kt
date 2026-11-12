@@ -321,7 +321,7 @@ fun AiKeySetupDialog(onClose: () -> Unit) {
                     busy = false
                     if (err == null) onClose() else {
                         msg = "無法使用：$err"
-                        repo.settings.update { if (gemini) it.copy(geminiKey = before.geminiKey) else it.copy(groqKey = before.groqKey) }
+                        repo.settings.update { if (gemini) it.copy(geminiKey = before.geminiKey, aiEnabled = before.aiEnabled) else it.copy(groqKey = before.groqKey, aiEnabled = before.aiEnabled) }
                     }
                 }
             }) { Text(if (busy) "測試中…" else "測試並儲存") }

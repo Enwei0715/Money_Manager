@@ -1058,6 +1058,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         else com.enwei.moneymanager.net.GroqAi.NotificationBatchResult(emptyMap(), emptySet())
     }
 
+    @Volatile private var lastLogPrune = 0L
+
     suspend fun ingestNotification(
         pkg: String, title: String?, text: String?, postedAt: Long, force: Boolean = false,
         aiOverride: com.enwei.moneymanager.core.ParsedTransaction? = null,
@@ -1073,8 +1075,12 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         // 同一則通知可能因更新而重複送達
         if (!force && log.countSame(pkg, title, text, postedAt - 10 * 60_000) > 0) return null
         // 通知紀錄：記成交易的保留 60 天；沒有記帳的（略過、非付款通知）保留 7 天
-        log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
-        log.pruneUnused(System.currentTimeMillis() - 7L * 24 * 3600 * 1000)
+        // 每小時最多清一次：每則通知（包含其他 App 的一般通知）都跑兩次 DELETE 太耗電
+        if (System.currentTimeMillis() - lastLogPrune > 3600_000L) {
+            lastLogPrune = System.currentTimeMillis()
+            log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
+            log.pruneUnused(System.currentTimeMillis() - 7L * 24 * 3600 * 1000)
+        }
         // 銀行寄的 Email：只用來補充轉帳的轉入銀行，不另外記帳（其他 Email 一律不處理）
         // 券商寄來的成交 Email 例外：當成成交通知建立持股
         val fillMail = pkg == GMAIL_PACKAGE && isBrokerFillMail(title, text)
@@ -1219,7 +1225,6 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 return IngestResult("RECORDED", ap.id, "卡費扣繳 ${Money.format(ap.amount, ap.currency)}：${lookupName(ap.toAccountId)}（已有自動扣繳，改為實際扣款日）")
             }
             log.insert(logAs(result, id))
-            log.prune(System.currentTimeMillis() - 60L * 24 * 3600 * 1000)
             return IngestResult("RECORDED", id, message, pending = t.status == TxnStatus.PENDING)
         }
         suspend fun merged(existing: TxnEntity, updated: TxnEntity, message: String): IngestResult {
@@ -1377,7 +1382,12 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
         // 多個 App 同時通知同一筆消費（例如信用卡 + 支付 App）：不重複記帳，
         // 但先記的那筆只有支付工具名稱（LINE Pay）、這則有真正的店名（銀行通知的「實際商店名稱」）時，補上店名與分類
-        nearby.firstOrNull { it.type == type && kotlin.math.abs(it.date - occurred) <= 3 * 60_000 }?.let { other ->
+        // 同一個 App 三分鐘內又來一則同金額、內容不同的通知：多半是連續兩筆同額消費（例如買兩杯飲料分開刷），
+        // 不是另一個 App 對同一筆的通知 → 照樣記下，但放待確認讓使用者確認不是重複
+        var secondSame = false
+        nearby.firstOrNull { it.type == type && kotlin.math.abs(it.date - occurred) <= 3 * 60_000 }
+            ?.takeIf { other -> (log.countForTxnFromPkg(other.id, pkg) == 0).also { if (!it) secondSame = true } }
+            ?.let { other ->
             // 實際扣款的帳戶：支付 App 的通知先到時先記在電子錢包，接著銀行／信用卡也通知同一筆
             // （錢包綁卡付款，錢其實是從卡片扣的）→ 帳戶改成那張卡或那個銀行帳戶。
             // 不論哪一家錢包、哪一家銀行都適用；反過來（銀行先到、錢包後到）則保留銀行帳戶。
@@ -1470,6 +1480,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             categoryId == null -> "（沒有分類）"
             NotificationParser.isPromo(raw) -> "（內容像促銷）"
             guessedNearby -> "（店家依位置推測，不確定）"
+            secondSame -> "（同一來源三分鐘內第二筆同金額，請確認不是重複）"
             else -> null
         }
         val finalStatus = if (status == TxnStatus.CONFIRMED && unsure != null) TxnStatus.PENDING else status

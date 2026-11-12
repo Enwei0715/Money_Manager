@@ -8,6 +8,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
+import kotlinx.serialization.json.encodeToStream
 
 /**
  * 帳理專屬完整備份（.lgbak）：gzip 壓縮的 JSON，包含所有資料表與所有設定。
@@ -90,6 +91,7 @@ object FullBackupIO {
         ed.commit()
     }
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     suspend fun export(repo: Repository, appVersion: String, out: OutputStream) {
         val db = repo.db
         val b = FullBackup(
@@ -108,7 +110,8 @@ object FullBackupIO {
             placeSamples = PlaceHints.exportSamples(com.enwei.moneymanager.MoneyApp.instance),
             advisor = com.enwei.moneymanager.MoneyApp.news.load().let { NewsStore(report = it.report, history = it.history, chat = it.chat, chatThreads = it.chatThreads, business = it.business, historyKeepDays = it.historyKeepDays) },
         )
-        GZIPOutputStream(out).bufferedWriter().use { it.write(json.encodeToString(FullBackup.serializer(), b)) }
+        // 直接串流寫出，不先組成一整個字串（資料多時避免記憶體不足）
+        GZIPOutputStream(out).buffered().use { json.encodeToStream(FullBackup.serializer(), b, it) }
     }
 
     /** 讀取並驗證；不是帳理備份檔時丟出例外。 */
@@ -121,6 +124,13 @@ object FullBackupIO {
 
     /** 以備份完整取代目前所有資料與設定。 */
     suspend fun restore(repo: Repository, b: FullBackup) {
+        // 還原前先把目前的資料存一份在 App 內（files/pre_restore.lgbak），還原結果不對時還能找回
+        runCatching {
+            val f = java.io.File(com.enwei.moneymanager.MoneyApp.instance.filesDir, "pre_restore.lgbak")
+            val tmp = java.io.File(f.path + ".tmp")
+            tmp.outputStream().use { export(repo, com.enwei.moneymanager.BuildConfig.VERSION_NAME, it) }
+            tmp.renameTo(f)
+        }
         val db = repo.db
         db.withTransaction {
             db.txns().clear(); db.accounts().clear(); db.categories().clear()
