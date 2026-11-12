@@ -779,12 +779,12 @@ fun FxScreen(nav: NavController) {
 
     fun refresh() = scope.launch {
         status = "更新中…"
-        status = runCatching { SyncWorker.refreshFx(repo) }.fold({ "已更新" }, { "更新失敗：${it.message}" })
+        status = runCatching { SyncWorker.refreshFx(repo) }.fold({ "已更新" }, { "更新失敗：${com.enwei.moneymanager.ui.friendlyError(it)}" })
     }
     // 畫面開著時每分鐘更新即時匯率
     LaunchedEffect(Unit) {
         while (true) {
-            status = runCatching { SyncWorker.refreshFx(repo) }.fold({ "即時報價" }, { "更新失敗：${it.message}" })
+            status = runCatching { SyncWorker.refreshFx(repo) }.fold({ "即時報價" }, { "更新失敗：${com.enwei.moneymanager.ui.friendlyError(it)}" })
             kotlinx.coroutines.delay(60_000)
         }
     }
@@ -849,10 +849,11 @@ fun BackupScreen(nav: NavController) {
                     ctx.contentResolver.openOutputStream(uri)!!.use { com.enwei.moneymanager.data.FullBackupIO.export(repo, BuildConfig.VERSION_NAME, it) }
                 }
                 "已匯出完整備份"
-            }.getOrElse { "匯出失敗：${it.message}" }
+            }.getOrElse { "匯出失敗：${com.enwei.moneymanager.ui.friendlyError(it)}" }
         }
     }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> confirmUri = uri }
+    var pwBytes by remember { mutableStateOf<ByteArray?>(null) }
     val csvLk = rememberLookups()
     val csvExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -861,7 +862,7 @@ fun BackupScreen(nav: NavController) {
                 val list = repo.allTxns().filter { it.status == com.enwei.moneymanager.data.TxnStatus.CONFIRMED }
                 withContext(Dispatchers.IO) { ctx.contentResolver.openOutputStream(uri)!!.use { it.write(buildCsv(list, csvLk).toByteArray(Charsets.UTF_8)) } }
                 "已匯出 ${list.size} 筆交易"
-            }.getOrElse { "匯出失敗：${it.message}" }
+            }.getOrElse { "匯出失敗：${com.enwei.moneymanager.ui.friendlyError(it)}" }
         }
     }
     var mmUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -877,7 +878,7 @@ fun BackupScreen(nav: NavController) {
                 withContext(Dispatchers.IO) { ctx.contentResolver.openOutputStream(uri)!!.use { o -> tmp.inputStream().use { it.copyTo(o) } } }
                 tmp.delete()
                 "已匯出 .mmbak（Money Manager 備份格式）"
-            }.getOrElse { "匯出失敗：${it.message}" }
+            }.getOrElse { "匯出失敗：${com.enwei.moneymanager.ui.friendlyError(it)}" }
             busy = false
         }
     }
@@ -892,7 +893,7 @@ fun BackupScreen(nav: NavController) {
                 "匯入完成：新增 ${r.accounts} 個帳戶、${r.categories} 個分類、${r.transactions} 筆交易" +
                     (if (r.skipped > 0) "（${r.skipped} 筆已存在略過）" else "") +
                     "、${r.memos} 則備忘、${r.recurring} 個週期設定。\n請到「帳戶」核對餘額；信用卡的結帳日、繳款日已帶入，扣繳帳戶與日期請再確認。"
-            }.getOrElse { "匯入失敗：${it.message}" }
+            }.getOrElse { "匯入失敗：${com.enwei.moneymanager.ui.friendlyError(it)}" }
             busy = false
         }
     }
@@ -941,11 +942,76 @@ fun BackupScreen(nav: NavController) {
             }
             HorizontalDivider()
             Text("帳理完整備份（.lgbak）", style = MaterialTheme.typography.titleMedium)
+            // 備份加密：設定密碼後，匯出與自動備份的檔案都會加密（密碼只存在這支手機）
+            var encOn by remember { mutableStateOf(com.enwei.moneymanager.data.BackupPassword.isSet()) }
+            var encSetup by remember { mutableStateOf(false) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("備份加密")
+                    Text(if (encOn) "已開啟：備份檔需要密碼才能還原" else "關閉：備份檔未加密，請存放在只有你能存取的位置",
+                        fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                androidx.compose.material3.Switch(encOn, { v ->
+                    if (v) encSetup = true else { com.enwei.moneymanager.data.BackupPassword.set(null); encOn = false }
+                })
+            }
+            if (encSetup) {
+                var p1 by remember { mutableStateOf("") }
+                var p2 by remember { mutableStateOf("") }
+                AlertDialog(
+                    onDismissRequest = { encSetup = false },
+                    title = { Text("設定備份密碼") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("換手機還原時需要輸入這組密碼；忘記密碼就無法還原，請妥善保存。", fontSize = AppText.caption,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            androidx.compose.material3.OutlinedTextField(p1, { p1 = it }, singleLine = true, label = { Text("密碼（至少 8 個字元）") },
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+                            androidx.compose.material3.OutlinedTextField(p2, { p2 = it }, singleLine = true, label = { Text("再輸入一次") },
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(enabled = p1.length >= 8 && p1 == p2, onClick = {
+                            com.enwei.moneymanager.data.BackupPassword.set(p1); encOn = true; encSetup = false
+                        }) { Text("設定") }
+                    },
+                    dismissButton = { TextButton(onClick = { encSetup = false }) { Text("取消") } },
+                )
+            }
             Button(onClick = { exporter.launch("帳理備份-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.lgbak") }, modifier = Modifier.fillMaxWidth()) {
                 Text("匯出完整備份（.lgbak）")
             }
             OutlinedButton(onClick = { importer.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
                 Text("從備份還原（.lgbak 或舊版 JSON）")
+            }
+            // 上次還原前自動保存的資料：還原結果不對時可以找回
+            val snap = remember(status) { com.enwei.moneymanager.data.FullBackupIO.snapshotFile().takeIf { it.exists() } }
+            if (snap != null) {
+                var undoAsk by remember { mutableStateOf(false) }
+                TextButton(onClick = { undoAsk = true }) {
+                    Text("復原為上次還原前的資料（" + SimpleDateFormat("M/d HH:mm", Locale.US).format(Date(snap.lastModified())) + "）")
+                }
+                if (undoAsk) AlertDialog(
+                    onDismissRequest = { undoAsk = false },
+                    title = { Text("復原還原前的資料？") },
+                    text = { Text("目前的資料會被上次還原前自動保存的資料取代。") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            undoAsk = false
+                            scope.launch {
+                                status = com.enwei.moneymanager.MoneyApp.instance.appScope.async {
+                                    runCatching {
+                                        val b = withContext(Dispatchers.IO) { snap.inputStream().use { com.enwei.moneymanager.data.FullBackupIO.read(it) } }
+                                        com.enwei.moneymanager.data.FullBackupIO.restore(repo, b, snapshot = false)
+                                        "已復原為還原前的資料"
+                                    }.getOrElse { "復原失敗：${com.enwei.moneymanager.ui.friendlyError(it)}" }
+                                }.await()
+                            }
+                        }) { Text("復原") }
+                    },
+                    dismissButton = { TextButton(onClick = { undoAsk = false }) { Text("取消") } },
+                )
             }
             HorizontalDivider()
             // 交易明細匯出成 Excel 可開的 CSV（原本在交易頁「總計」分頁）
@@ -974,6 +1040,31 @@ fun BackupScreen(nav: NavController) {
             },
         )
     }
+    // 加密備份的密碼輸入
+    pwBytes?.let { bytes ->
+        var pw by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { pwBytes = null },
+            title = { Text("輸入備份密碼") },
+            text = {
+                androidx.compose.material3.OutlinedTextField(pw, { pw = it }, singleLine = true, label = { Text("備份密碼") },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+            },
+            confirmButton = {
+                TextButton(enabled = pw.isNotEmpty(), onClick = {
+                    val entered = pw.toCharArray(); pwBytes = null
+                    scope.launch {
+                        status = com.enwei.moneymanager.MoneyApp.instance.appScope.async { runCatching {
+                            val b = withContext(Dispatchers.IO) { com.enwei.moneymanager.data.FullBackupIO.read(bytes.inputStream(), entered) }
+                            com.enwei.moneymanager.data.FullBackupIO.restore(repo, b)
+                            "已還原完整備份：${b.accounts.size} 個帳戶、${b.transactions.size} 筆交易、${b.trades.size} 筆股票紀錄與所有設定"
+                        }.getOrElse { if (it is com.enwei.moneymanager.data.FullBackupIO.PasswordNeeded) "備份密碼不正確" else "還原失敗：${com.enwei.moneymanager.ui.friendlyError(it)}" } }.await()
+                    }
+                }) { Text("還原") }
+            },
+            dismissButton = { TextButton(onClick = { pwBytes = null }) { Text("取消") } },
+        )
+    }
     confirmUri?.let { uri ->
         AlertDialog(
             onDismissRequest = { confirmUri = null },
@@ -986,16 +1077,22 @@ fun BackupScreen(nav: NavController) {
                         // 在 App 層執行：離開這頁或畫面旋轉也不會把還原中斷在一半
                         status = com.enwei.moneymanager.MoneyApp.instance.appScope.async { runCatching {
                             val bytes = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() } }
-                            // gzip 開頭 1F 8B：帳理完整備份；否則當作舊版 JSON
-                            if (bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
-                                val b = withContext(Dispatchers.IO) { com.enwei.moneymanager.data.FullBackupIO.read(bytes.inputStream()) }
+                            // gzip 開頭 1F 8B 或加密標頭：帳理完整備份；否則當作舊版 JSON
+                            if (com.enwei.moneymanager.data.FullBackupIO.looksLikeBackup(bytes.copyOf(minOf(8, bytes.size)))) {
+                                val b = try {
+                                    withContext(Dispatchers.IO) { com.enwei.moneymanager.data.FullBackupIO.read(bytes.inputStream()) }
+                                } catch (e: com.enwei.moneymanager.data.FullBackupIO.PasswordNeeded) {
+                                    // 加密的備份、這支手機沒有（或不同的）備份密碼：請使用者輸入
+                                    pwBytes = bytes
+                                    throw e
+                                }
                                 com.enwei.moneymanager.data.FullBackupIO.restore(repo, b)
                                 "已還原完整備份：${b.accounts.size} 個帳戶、${b.transactions.size} 筆交易、${b.trades.size} 筆股票紀錄與所有設定"
                             } else {
                                 val b = repo.importJson(bytes.decodeToString())
                                 "已還原：${b.accounts.size} 個帳戶、${b.transactions.size} 筆交易、${b.trades.size} 筆股票交易"
                             }
-                        }.getOrElse { "還原失敗：${it.message}" } }.await()
+                        }.getOrElse { "還原失敗：${com.enwei.moneymanager.ui.friendlyError(it)}" } }.await()
                     }
                 }) { Text("還原") }
             },
@@ -1098,7 +1195,7 @@ fun SettingsScreen(nav: NavController) {
                                 progress = 0f
                                 runCatching { Updater.download(ctx, r!!, token) { p -> progress = p } }
                                     .onSuccess { apk = it; progress = null; install(it) }
-                                    .onFailure { progress = null; updateStatus = "下載失敗：${it.message}" }
+                                    .onFailure { progress = null; updateStatus = "下載失敗：${com.enwei.moneymanager.ui.friendlyError(it)}" }
                             }
                         }) { Text("下載並安裝") }
                         else -> OutlinedButton(enabled = !checking, onClick = { check() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {

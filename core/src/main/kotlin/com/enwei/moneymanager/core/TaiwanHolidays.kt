@@ -17,6 +17,13 @@ data class YearCalendar(
 )
 
 object TaiwanHolidays {
+    /** 台股盤中（營業日 9:00～13:35，台北時間）：盤中才需要頻繁更新報價 */
+    fun isTwTradingTime(now: java.time.ZonedDateTime = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Taipei"))): Boolean {
+        val t = now.withZoneSameInstant(java.time.ZoneId.of("Asia/Taipei"))
+        val hm = t.hour * 60 + t.minute
+        return isBusinessDay(t.toLocalDate()) && hm in 9 * 60..13 * 60 + 35
+    }
+
     private val builtIn: Map<Int, YearCalendar> = mapOf(
         2025 to YearCalendar(
             holidays = mapOf("0101" to "開國紀念日", "0127" to "小年夜", "0128" to "農曆除夕", "0129" to "春節", "0130" to "春節", "0131" to "春節", "0228" to "和平紀念日", "0403" to "補假", "0404" to "兒童節及民族掃墓節", "0501" to "勞動節（金融機構休假）", "0530" to "補假", "0929" to "補假", "1006" to "中秋節", "1010" to "國慶日", "1024" to "補假", "1225" to "行憲紀念日"),

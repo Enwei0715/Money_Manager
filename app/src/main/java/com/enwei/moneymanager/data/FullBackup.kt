@@ -9,6 +9,7 @@ import java.io.OutputStream
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 import kotlinx.serialization.json.encodeToStream
+import kotlinx.serialization.json.decodeFromStream
 
 /**
  * 帳理專屬完整備份（.lgbak）：gzip 壓縮的 JSON，包含所有資料表與所有設定。
@@ -110,26 +111,56 @@ object FullBackupIO {
             placeSamples = PlaceHints.exportSamples(com.enwei.moneymanager.MoneyApp.instance),
             advisor = com.enwei.moneymanager.MoneyApp.news.load().let { NewsStore(report = it.report, history = it.history, chat = it.chat, chatThreads = it.chatThreads, business = it.business, historyKeepDays = it.historyKeepDays) },
         )
-        // 直接串流寫出，不先組成一整個字串（資料多時避免記憶體不足）
-        GZIPOutputStream(out).buffered().use { json.encodeToStream(FullBackup.serializer(), b, it) }
+        // 直接串流寫出，不先組成一整個字串（資料多時避免記憶體不足）；有設定備份密碼時整個檔案加密
+        val pw = BackupPassword.get()
+        val sink = if (pw != null) com.enwei.moneymanager.core.BackupCrypto.encrypt(out, pw) else out
+        GZIPOutputStream(sink).buffered().use { json.encodeToStream(FullBackup.serializer(), b, it) }
     }
 
-    /** 讀取並驗證；不是帳理備份檔時丟出例外。 */
-    fun read(input: InputStream): FullBackup {
-        val text = GZIPInputStream(input).bufferedReader().use { it.readText() }
-        val b = json.decodeFromString(FullBackup.serializer(), text)
+    /** 備份密碼錯誤或沒有輸入 */
+    class PasswordNeeded : IllegalArgumentException("這份備份已加密，請輸入備份密碼")
+
+    /** 讀取並驗證；不是帳理備份檔時丟出例外。加密的備份用 [password]（沒給就用這支手機設定的備份密碼）。 */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    fun read(input: InputStream, password: CharArray? = null): FullBackup {
+        val buf = java.io.BufferedInputStream(input)
+        buf.mark(8)
+        val head = ByteArray(5).also { var n = 0; while (n < 5) { val r = buf.read(it, n, 5 - n); if (r < 0) break; n += r } }
+        buf.reset()
+        val plain: InputStream = if (com.enwei.moneymanager.core.BackupCrypto.isEncrypted(head)) {
+            val pw = password ?: BackupPassword.get() ?: throw PasswordNeeded()
+            com.enwei.moneymanager.core.BackupCrypto.decrypt(buf, pw)
+        } else buf
+        // 串流解析，不先把整份內容讀成一個字串
+        val b = try {
+            GZIPInputStream(plain).buffered().use { json.decodeFromStream(FullBackup.serializer(), it) }
+        } catch (e: Exception) {
+            if (com.enwei.moneymanager.core.BackupCrypto.isEncrypted(head) && e !is kotlinx.serialization.SerializationException) throw PasswordNeeded()
+            throw e
+        }
         require(b.format == FullBackup.FORMAT) { "不是帳理備份檔" }
         return b
     }
 
+    /** 檔案開頭是不是帳理完整備份（gzip 或加密） */
+    fun looksLikeBackup(head: ByteArray): Boolean =
+        (head.size > 2 && head[0] == 0x1f.toByte() && head[1] == 0x8b.toByte()) || com.enwei.moneymanager.core.BackupCrypto.isEncrypted(head)
+
     /** 以備份完整取代目前所有資料與設定。 */
-    suspend fun restore(repo: Repository, b: FullBackup) {
-        // 還原前先把目前的資料存一份在 App 內（files/pre_restore.lgbak），還原結果不對時還能找回
-        runCatching {
-            val f = java.io.File(com.enwei.moneymanager.MoneyApp.instance.filesDir, "pre_restore.lgbak")
+    /** 還原前自動保存的目前資料（還原結果不對時可以一鍵找回） */
+    fun snapshotFile(): java.io.File = java.io.File(com.enwei.moneymanager.MoneyApp.instance.filesDir, "pre_restore.lgbak")
+
+    suspend fun restore(repo: Repository, b: FullBackup, snapshot: Boolean = true) {
+        // 新版 App 做的備份（資料庫版本比這個 App 新）：舊版看不懂新欄位，還原會遺失資料，先請使用者更新
+        val current = repo.db.openHelper.readableDatabase.version
+        require(b.dbVersion <= current) { "這份備份來自較新版本的帳理，請先更新 App 再還原" }
+        // 還原前先把目前的資料存一份在 App 內，存不成功就不還原（避免沒有退路）
+        if (snapshot) {
+            val f = snapshotFile()
             val tmp = java.io.File(f.path + ".tmp")
             tmp.outputStream().use { export(repo, com.enwei.moneymanager.BuildConfig.VERSION_NAME, it) }
-            tmp.renameTo(f)
+            tmp.inputStream().use { read(it) }
+            if (!tmp.renameTo(f)) { f.delete(); check(tmp.renameTo(f)) { "無法保存目前資料，已停止還原" } }
         }
         val db = repo.db
         db.withTransaction {

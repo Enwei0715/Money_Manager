@@ -389,7 +389,8 @@ class NewsDataset(context: Context) {
     private fun writeAtomic(file: File, text: String) {
         file.parentFile?.mkdirs()
         val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeText(text)
+        // 寫完先 fsync 再改名：斷電或被系統關掉時不會留下空白的新檔取代舊檔
+        java.io.FileOutputStream(tmp).use { out -> out.write(text.toByteArray()); out.fd.sync() }
         try {
             java.nio.file.Files.move(
                 tmp.toPath(), file.toPath(),

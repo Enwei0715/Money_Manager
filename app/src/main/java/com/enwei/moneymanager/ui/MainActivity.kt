@@ -127,6 +127,11 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             val dark = isDarkTheme(settings.themeMode)
             androidx.compose.runtime.remember(settings.language) { I18n.init(applicationContext, settings.language) }
             // 狀態列、導覽列的圖示顏色跟著 App 主題（不是系統主題）切換
+            // 開了密碼鎖：最近使用的 App 畫面縮圖與截圖不顯示帳務內容
+            LaunchedEffect(settings.passcodeOn) {
+                if (settings.passcodeOn) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+            }
             LaunchedEffect(dark) {
                 val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)

@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import androidx.navigation.NavController
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.data.spendingReview
@@ -468,9 +469,14 @@ private fun PinPad(title: String, entered: Int, error: Boolean, onDigit: (Char) 
 fun LockScreen(hash: String, title: String = "請輸入密碼", biometric: Boolean = false, onUnlock: () -> Unit) {
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
-    // 連續輸錯：第 5 次起每次要等一段時間（30 秒起倍增，最多 10 分鐘），避免被逐一試出 4 位數密碼
-    var wrong by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
-    var lockedUntil by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0L) }
+    // 連續輸錯：第 5 次起每次要等一段時間（30 秒起倍增，最多 10 分鐘），避免被逐一試出 4 位數密碼。
+    // 次數與等待時間存在手機上（lock_state，不進任何備份），關掉 App 重開也不會歸零
+    val ctx0 = LocalContext.current
+    val lockPrefs = remember { ctx0.getSharedPreferences("lock_state", android.content.Context.MODE_PRIVATE) }
+    var wrong by remember { mutableStateOf(lockPrefs.getInt("wrong", 0)) }
+    var lockedUntil by remember { mutableStateOf(lockPrefs.getLong("lockedUntil", 0L)) }
+    var checking by remember { mutableStateOf(false) }
+    val lockScope = androidx.compose.runtime.rememberCoroutineScope()
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     androidx.compose.runtime.LaunchedEffect(lockedUntil) {
         while (System.currentTimeMillis() < lockedUntil) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(500) }
@@ -480,21 +486,30 @@ fun LockScreen(hash: String, title: String = "請輸入密碼", biometric: Boole
     val ctx = LocalContext.current
     if (biometric) androidx.compose.runtime.LaunchedEffect(Unit) { promptBiometric(ctx, onUnlock) }
     PinPad(if (waitSec > 0) "請等待 $waitSec 秒後再試" else title, pin.length, error, onDigit = { d ->
-        if (pin.length >= 4 || System.currentTimeMillis() < lockedUntil) return@PinPad
+        if (pin.length >= 4 || checking || System.currentTimeMillis() < lockedUntil) return@PinPad
         pin += d
         error = false
         if (pin.length == 4) {
-            if (com.enwei.moneymanager.data.checkPasscode(pin, hash)) {
-                // 舊版雜湊：換成新格式
-                if (com.enwei.moneymanager.data.isLegacyPasscode(hash)) {
-                    val upgraded = hashPasscode(pin)
-                    repo.settings.update { it.copy(passcodeHash = upgraded) }
+            val entered = pin
+            checking = true
+            // 密碼雜湊要算幾萬次：放到背景執行緒，畫面不會卡住
+            lockScope.launch {
+                val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.enwei.moneymanager.data.checkPasscode(entered, hash) }
+                checking = false
+                if (ok) {
+                    // 舊版雜湊：換成新格式
+                    if (com.enwei.moneymanager.data.isLegacyPasscode(hash)) {
+                        val upgraded = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { hashPasscode(entered) }
+                        repo.settings.update { it.copy(passcodeHash = upgraded) }
+                    }
+                    wrong = 0; lockedUntil = 0
+                    lockPrefs.edit().putInt("wrong", 0).putLong("lockedUntil", 0).apply()
+                    onUnlock()
+                } else {
+                    error = true; pin = ""; wrong++
+                    if (wrong >= 5) lockedUntil = System.currentTimeMillis() + minOf(600_000L, 30_000L shl minOf(wrong - 5, 5))
+                    lockPrefs.edit().putInt("wrong", wrong).putLong("lockedUntil", lockedUntil).apply()
                 }
-                wrong = 0
-                onUnlock()
-            } else {
-                error = true; pin = ""; wrong++
-                if (wrong >= 5) lockedUntil = System.currentTimeMillis() + minOf(600_000L, 30_000L shl (wrong - 5))
             }
         }
     }, onBack = { pin = pin.dropLast(1) }, onBio = if (biometric) ({ promptBiometric(ctx, onUnlock) }) else null)
@@ -503,6 +518,7 @@ fun LockScreen(hash: String, title: String = "請輸入密碼", biometric: Boole
 @Composable
 private fun PasscodeSetupDialog(onDone: (String) -> Unit, onCancel: () -> Unit) {
     var first by remember { mutableStateOf<String?>(null) }
+    val setupScope = androidx.compose.runtime.rememberCoroutineScope()
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
     Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -513,7 +529,7 @@ private fun PasscodeSetupDialog(onDone: (String) -> Unit, onCancel: () -> Unit) 
             if (pin.length == 4) {
                 when {
                     first == null -> { first = pin; pin = "" }
-                    first == pin -> onDone(hashPasscode(pin))
+                    first == pin -> { val p = pin; setupScope.launch { onDone(kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { hashPasscode(p) }) } }
                     else -> { error = true; first = null; pin = "" }
                 }
             }

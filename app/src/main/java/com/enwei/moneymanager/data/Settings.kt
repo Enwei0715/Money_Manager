@@ -765,6 +765,13 @@ class SettingsStore(context: Context) {
      * 不同步時兩邊都以舊設定為基礎各自整份寫回，後寫的會把先寫的蓋掉（例如剛改的設定在重開後又變回去）。
      */
     @Synchronized
+    /** 報價時間每次更新只寫這一個值，不必重寫整份設定（盤中每 30 秒一次） */
+    @Synchronized
+    fun setLastQuoteUpdate(at: Long) {
+        prefs.edit().putLong("lastQuoteUpdate", at).apply()
+        state.value = state.value.copy(lastQuoteUpdate = at)
+    }
+
     fun update(block: (AppSettings) -> AppSettings) {
         val s = block(state.value).copy(subcategoryOn = true)
         if (s == state.value) return

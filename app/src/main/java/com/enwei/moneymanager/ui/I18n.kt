@@ -21,7 +21,8 @@ object I18n {
     private val cache = ConcurrentHashMap<String, String>()
 
     fun init(context: Context, language: Int) {
-        if (exact.isEmpty()) runCatching {
+        // 中文介面不用翻譯表：只有切到英文時才讀取（啟動時少解析 18 萬字的檔案）
+        if (exact.isEmpty() && isEnglish(language)) runCatching {
             val map = LinkedHashMap<String, String>()
             context.assets.open("i18n_en.tsv").bufferedReader().useLines { lines ->
                 lines.forEach { line ->
@@ -61,6 +62,9 @@ object I18n {
 
     private fun translate(src: String): String {
         exact[src]?.let { return it }
+        // 前後有空白（例如「本期 」「收入 」）：去掉空白查表，再把空白加回去
+        val trimmed = src.trim()
+        if (trimmed != src && trimmed.isNotEmpty()) exact[trimmed]?.let { return src.substringBefore(trimmed) + it + src.substringAfterLast(trimmed) }
         // 日期格式：2026年10月 → Oct 2026、10月 → Oct、每月 5 日 → Day 5 of month
         var s = src.replace(yearMonth) { "${month(it.groupValues[2])} ${it.groupValues[1]}" }
             .replace(everyMonthDay) { "Day ${it.groupValues[1]} of month" }

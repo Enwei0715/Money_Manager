@@ -17,6 +17,14 @@ object Http {
     val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        // 明文 http 只能連區域網路（自架 AI 伺服器）；其他一律拒絕，避免資料以明文送到網路上
+        .addInterceptor { chain ->
+            val url = chain.request().url
+            if (!url.isHttps && !com.enwei.moneymanager.core.NetGuard.isPrivateHost(url.host)) {
+                throw IOException("Blocked cleartext request to ${url.host}")
+            }
+            chain.proceed(chain.request())
+        }
         .build()
 
     val json = Json { ignoreUnknownKeys = true; isLenient = true }

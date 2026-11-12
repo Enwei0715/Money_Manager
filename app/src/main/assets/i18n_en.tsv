@@ -3308,3 +3308,35 @@ OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金
 店名對照（通知店名 → 記帳店名）	Store name mapping (notification name → your name)
 移除	Remove
 處理失敗・點選重試	Failed; tap to retry
+自動備份失敗	Auto backup failed
+備份資料夾無法存取，請重新選擇	The backup folder can't be accessed; choose it again
+無法連線，請確認網路後再試	Can't connect; check your network and try again
+沒有存取這個檔案或資料夾的權限，請重新選擇	No access to this file or folder; choose it again
+檔案格式不正確或已損毀	The file format is wrong or the file is damaged
+檔案不完整或已損毀	The file is incomplete or damaged
+資料量太大，記憶體不足	Not enough memory for this much data
+手機儲存空間不足	Not enough storage space
+金鑰無效或沒有權限	Invalid key or no permission
+請求太頻繁，請稍後再試	Too many requests; try again later
+發生錯誤，請稍後再試	Something went wrong; try again later
+復原為上次還原前的資料	Undo the last restore
+復原還原前的資料？	Undo the last restore?
+目前的資料會被上次還原前自動保存的資料取代。	Your current data will be replaced by the copy saved automatically before the last restore.
+已復原為還原前的資料	Restored the data from before the last restore
+復原	Undo
+這份備份來自較新版本的帳理，請先更新 App 再還原	This backup is from a newer version of Ledgerly; update the app first
+無法保存目前資料，已停止還原	Couldn't save your current data, so the restore was stopped
+已收盤	Market closed
+這份備份已加密，請輸入備份密碼	This backup is encrypted; enter the backup password
+輸入備份密碼	Enter backup password
+備份密碼	Backup password
+備份密碼不正確	Wrong backup password
+備份加密	Backup encryption
+已開啟：備份檔需要密碼才能還原	On: backups need the password to restore
+關閉：備份檔未加密，請存放在只有你能存取的位置	Off: backups aren't encrypted; keep them where only you can access them
+設定備份密碼	Set backup password
+換手機還原時需要輸入這組密碼；忘記密碼就無法還原，請妥善保存。	You'll need this password to restore on a new phone. If you forget it, the backup can't be restored.
+密碼（至少 8 個字元）	Password (at least 8 characters)
+再輸入一次	Enter again
+不是加密的備份檔	Not an encrypted backup
+檔案不完整	The file is incomplete

@@ -434,6 +434,32 @@ class CategorySuggesterTest {
         assertEquals(300.0, StockCalc.twTax("2330", 100000.0), 0.0)
     }
 
+    @Test fun cleartextOnlyToPrivateHosts() {
+        assertTrue(NetGuard.isPrivateHost("192.168.1.20"))
+        assertTrue(NetGuard.isPrivateHost("10.0.0.5"))
+        assertTrue(NetGuard.isPrivateHost("172.20.1.1"))
+        assertTrue(NetGuard.isPrivateHost("localhost"))
+        assertTrue(NetGuard.isPrivateHost("my-pc.local"))
+        assertEquals(false, NetGuard.isPrivateHost("172.32.0.1"))
+        assertEquals(false, NetGuard.isPrivateHost("api.groq.com"))
+        assertEquals(false, NetGuard.isPrivateHost("8.8.8.8"))
+        assertEquals(false, NetGuard.isPrivateHost("fd.example.com"))
+    }
+
+    @Test fun backupEncryptionRoundTrip() {
+        val plain = "帳理備份測試 1234".repeat(200).toByteArray()
+        val buf = java.io.ByteArrayOutputStream()
+        BackupCrypto.encrypt(buf, "pw-1234".toCharArray()).use { it.write(plain) }
+        val enc = buf.toByteArray()
+        assertTrue(BackupCrypto.isEncrypted(enc))
+        assertEquals(false, String(enc).contains("帳理"))
+        val back = BackupCrypto.decrypt(enc.inputStream(), "pw-1234".toCharArray()).readBytes()
+        assertTrue(back.contentEquals(plain))
+        // 密碼錯：讀取失敗
+        val wrong = runCatching { BackupCrypto.decrypt(enc.inputStream(), "wrong".toCharArray()).readBytes() }
+        assertTrue(wrong.isFailure)
+    }
+
     @Test fun brunchOnlyInLateMorning() {
         // 早午餐排在午餐前面：下午兩點仍是午餐，上午十點才是早午餐
         val c = listOf(

@@ -129,7 +129,7 @@ fun UpdatePrompt() {
                         progress = 0f
                         runCatching { Updater.download(ctx, r, repo.settings.value.githubToken) { p -> progress = p } }
                             .onSuccess { f -> progress = null; Updater.install(ctx, f) }
-                            .onFailure { progress = null; error = "下載失敗：${it.message}" }
+                            .onFailure { progress = null; error = "下載失敗：${com.enwei.moneymanager.ui.friendlyError(it)}" }
                     }
                 }) { Text(if (progress != null) "下載中…" else "立即更新") }
                 androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

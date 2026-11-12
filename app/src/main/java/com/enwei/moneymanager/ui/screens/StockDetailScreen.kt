@@ -178,7 +178,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         (if (market == Market.TW) com.enwei.moneymanager.net.TwData.nameOf(symbol) else null) ?: l.name, System.currentTimeMillis())))
                 }
             }
-            kotlinx.coroutines.delay(30_000)
+            // 台股盤中才每 30 秒更新，收盤後每 10 分鐘（美股照樣能更新）
+            kotlinx.coroutines.delay(if (market != Market.TW || com.enwei.moneymanager.core.TaiwanHolidays.isTwTradingTime()) 30_000 else 600_000)
         }
     }
     val watched = symbol in settings.watchlist
@@ -231,7 +232,9 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         // 即時報價的時間：畫面開著時每 30 秒自動更新，不用手動刷新
                         liveAt?.let { t ->
-                            Text("即時 " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.TAIWAN).format(java.util.Date(t)) + " · 每 30 秒更新",
+                            Text(if (market == Market.TW && !com.enwei.moneymanager.core.TaiwanHolidays.isTwTradingTime())
+                                "已收盤 · " + java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(t))
+                            else "即時 " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.TAIWAN).format(java.util.Date(t)) + " · 每 30 秒更新",
                                 fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Row {

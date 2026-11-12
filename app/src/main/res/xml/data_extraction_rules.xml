@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12 以上的系統備份規則：
+  雲端備份不含 AI／地圖金鑰與密碼鎖狀態（settings.xml 內有金鑰、gplaces／mapbox／local_ai 各自存金鑰）；
+  換手機時的裝置直接傳輸（加密、不經雲端）保留全部。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="settings.xml" />
+        <exclude domain="sharedpref" path="gplaces.xml" />
+        <exclude domain="sharedpref" path="mapbox.xml" />
+        <exclude domain="sharedpref" path="local_ai.xml" />
+        <exclude domain="sharedpref" path="lock_state.xml" />
+        <exclude domain="sharedpref" path="backup_key.xml" />
+        <exclude domain="file" path="pre_restore.lgbak" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="lock_state.xml" />
+        <exclude domain="sharedpref" path="backup_key.xml" />
+    </device-transfer>
+</data-extraction-rules>

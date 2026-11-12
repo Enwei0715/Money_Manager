@@ -20,6 +20,11 @@ import com.enwei.moneymanager.core.TradeRecord
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -112,9 +117,21 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     val rules = db.rules().observeAll()
     val notificationLog = db.notificationLog().observeRecent()
 
-    val fx: Flow<FxConverter> = combine(fxRates, settings.flow) { rates, s ->
-        FxConverter(s.baseCurrency, rates.associate { it.currency to it.rate })
-    }
+    /**
+     * 餘額、持股這類要整張表重算的資料：在背景執行緒算一次，所有畫面共用同一份結果
+     * （原本每個畫面各自訂閱、各自在主執行緒重算）。沒有畫面在看 5 秒後停止計算。
+     */
+    private val shareScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+    private fun <T> Flow<T>.shared(): Flow<T> = flowOn(kotlinx.coroutines.Dispatchers.Default)
+        .shareIn(shareScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+
+    // 只在主要幣別或手續費設定改變時重算（其他設定變動不影響）
+    private val baseCurrency = settings.flow.map { it.baseCurrency }.distinctUntilChanged()
+    private val feeSettingsFlow = settings.flow.map { it.feeSettings }.distinctUntilChanged()
+
+    val fx: Flow<FxConverter> = combine(fxRates, baseCurrency) { rates, base ->
+        FxConverter(base, rates.associate { it.currency to it.rate })
+    }.shared()
 
     fun transactionsInRange(from: Long, to: Long) = db.txns().observeRange(from, to)
 
@@ -122,7 +139,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     val balances: Flow<List<AccountBalance>> = combine(accounts, transactions, trades, fx) { accs, txns, trades, fx ->
         computeBalances(accs, txns, trades, fx)
-    }
+    }.shared()
 
     private fun computeBalances(
         accs: List<AccountEntity>, txns: List<TxnEntity>, trades: List<StockTradeEntity>, fx: FxConverter,
@@ -151,17 +168,17 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     // 手續費設定變更時也要重算（預估賣出費用）
-    val holdings: Flow<List<HoldingView>> = combine(trades, quotes, accounts, settings.flow) { trades, quotes, accs, s ->
-        buildHoldings(trades, quotes, accs, s.feeSettings)
-    }
+    val holdings: Flow<List<HoldingView>> = combine(trades, quotes, accounts, feeSettingsFlow) { trades, quotes, accs, fees ->
+        buildHoldings(trades, quotes, accs, fees)
+    }.shared()
 
     /** 各證券帳戶的持股（key 為證券帳戶 id，null 表示未指定）。 */
-    val holdingsByBroker: Flow<Map<Long?, List<HoldingView>>> = combine(trades, quotes, accounts, settings.flow) { trades, quotes, accs, s ->
+    val holdingsByBroker: Flow<Map<Long?, List<HoldingView>>> = combine(trades, quotes, accounts, feeSettingsFlow) { trades, quotes, accs, fees ->
         // 指定給某一批的股利跟著那一批的證券帳戶
         val brokerOf = trades.associate { it.id to it.brokerAccountId }
         trades.groupBy { t -> t.lotTradeId?.let { brokerOf[it] } ?: t.brokerAccountId }
-            .mapValues { (_, list) -> buildHoldings(list, quotes, accs, s.feeSettings) }
-    }
+            .mapValues { (_, list) -> buildHoldings(list, quotes, accs, fees) }
+    }.shared()
 
     private fun buildHoldings(
         trades: List<StockTradeEntity>, quotes: List<QuoteEntity>, accounts: List<AccountEntity>, fees: com.enwei.moneymanager.core.FeeSettings,
@@ -202,8 +219,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     suspend fun saveTxn(t: TxnEntity): Long {
         val before = if (t.id != 0L) db.txns().get(t.id) else null
         val r = db.txns().upsert(t)
-        if (t.status == TxnStatus.CONFIRMED) learnMerchant(t)
-        if (before?.status == TxnStatus.PENDING && t.status == TxnStatus.CONFIRMED) learnFromConfirmed(t)
+        // 交易已經存好了：之後的學習步驟出錯不能讓呼叫端以為沒存成功（否則會重存一筆）
+        if (t.status == TxnStatus.CONFIRMED) runCatching { learnMerchant(t) }
+        if (before?.status == TxnStatus.PENDING && t.status == TxnStatus.CONFIRMED) runCatching { learnFromConfirmed(t) }
         // 通知記的交易被改到別的帳戶：記住通知裡的卡號末四碼屬於這個帳戶，下次同一張卡直接記對
         if (before != null && t.source == TxnSource.NOTIFICATION && t.accountId != null && before.accountId != t.accountId) runCatching { learnCardLast4(t) }
         // 通知記的店名被改掉：記住「通知店名 → 改成的店名」，之後同一家店的通知直接用改過的名字，舊交易一併統一
@@ -327,7 +345,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             .map { CategorySuggester.Cat(it.id, it.name, it.parentId) }
         if (cats.isEmpty()) return null
         val rules = db.rules().all().associate { it.keyword to it.categoryId }
-        val history = db.txns().all().filter { it.type == type && it.categoryId != null && it.status == TxnStatus.CONFIRMED }
+        // 只看近兩年的紀錄（分類習慣會變，也不必每筆通知都讀整張交易表）
+        val history = db.txns().between(at - 730L * 86_400_000, at + 86_400_000)
+            .filter { it.type == type && it.categoryId != null && it.status == TxnStatus.CONFIRMED }
             .map { CategorySuggester.Past(it.merchant ?: it.note, it.categoryId!!, it.date.toLocalDateTime(), it.amount, it.accountId) }
         return CategorySuggester.suggest(merchant, at.toLocalDateTime(), cats, rules, history, amountMinor, accountId)
     }
@@ -1031,13 +1051,17 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         if (com.enwei.moneymanager.work.AiHealth.networkProblem(background = false) != null) return
         val since = System.currentTimeMillis() - 48L * 3600 * 1000
         val queued = db.notificationLog().all().filter { it.result == "OFFLINE" && it.postedAt >= since }.sortedBy { it.postedAt }
-        queued.forEach { e ->
+        if (queued.isEmpty()) return
+        // 和即時通知共用同一把鎖：不會同時處理同一則；處理失敗的改回 OFFLINE，下次恢復網路再試
+        ingestLock.withLockCompat { queued.forEach { e ->
             db.notificationLog().setResult(e.id, "RETRIED")
-            val r = runCatching { ingestNotification(e.packageName, e.title, e.text, e.postedAt, force = true, offlineRetry = true) }.getOrNull()
+            val res = runCatching { ingestNotification(e.packageName, e.title, e.text, e.postedAt, force = true, offlineRetry = true) }
+            if (res.isFailure) { db.notificationLog().setResult(e.id, "OFFLINE"); return@forEach }
+            val r = res.getOrNull()
             if (r != null && r.kind == "RECORDED") {
                 com.enwei.moneymanager.notify.QuickActions.notifyRecorded(com.enwei.moneymanager.MoneyApp.instance, r.txnId, r.message, true)
             }
-        }
+        } }
     }
 
     /** 通知記帳一次只處理一批：兩批同時進來時不會互相看不到對方剛記的那筆而重複記帳 */
@@ -1617,7 +1641,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      */
     suspend fun habitSplit(name: String?): Pair<String, String>? {
         val n = name?.trim()?.let(::normHabit)?.takeIf { it.length >= 2 } ?: return null
-        val owners = db.txns().all().asSequence()
+        val now = System.currentTimeMillis()
+        val owners = db.txns().between(now - 730L * 86_400_000, now + 86_400_000).asSequence()
             .filter { it.type == TxnType.EXPENSE && !it.merchant.isNullOrBlank() && !it.note.isNullOrBlank() }
             .map { it.note!!.split('・', '·').first().trim() to it.merchant!!.trim() }
             .filter { (stall, m) -> stall.length in 2..12 && stall != m }

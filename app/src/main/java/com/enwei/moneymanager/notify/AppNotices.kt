@@ -34,6 +34,8 @@ enum class NoticeKind(
         NotificationManager.IMPORTANCE_DEFAULT, NotificationCompat.CATEGORY_MESSAGE),
     PROGRESS("progress", "背景進度", "新聞更新、報告產生中的進度（不會響）", GROUP_INVEST,
         NotificationManager.IMPORTANCE_LOW, NotificationCompat.CATEGORY_PROGRESS),
+    BACKUP("backup", "備份", "自動備份失敗時通知", GROUP_SYSTEM,
+        NotificationManager.IMPORTANCE_DEFAULT, NotificationCompat.CATEGORY_ERROR),
     UPDATE("updates", "App 更新", "有新版本時通知", GROUP_SYSTEM,
         NotificationManager.IMPORTANCE_DEFAULT, NotificationCompat.CATEGORY_RECOMMENDATION);
 
@@ -44,7 +46,7 @@ enum class NoticeKind(
         REPORT -> s.featureStocks && s.aiEnabled
         // 新聞更新的進度：沒有 AI 時也會蒐集新聞
         PROGRESS -> s.featureStocks
-        BUDGET, BILLS -> true
+        BUDGET, BILLS, BACKUP -> true
         UPDATE -> com.enwei.moneymanager.BuildConfig.SELF_UPDATE
     }
 

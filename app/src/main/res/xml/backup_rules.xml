@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 以下的系統備份規則：不含金鑰與密碼鎖狀態（說明同 data_extraction_rules.xml） -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="settings.xml" />
+    <exclude domain="sharedpref" path="gplaces.xml" />
+    <exclude domain="sharedpref" path="mapbox.xml" />
+    <exclude domain="sharedpref" path="local_ai.xml" />
+    <exclude domain="sharedpref" path="lock_state.xml" />
+        <exclude domain="sharedpref" path="backup_key.xml" />
+    <exclude domain="file" path="pre_restore.lgbak" />
+</full-backup-content>

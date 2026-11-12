@@ -25,11 +25,14 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         repo.runFeeRebates()
         // AI 自動整理重複的交易（直接在協程中呼叫輕量任務）
         AiBackgroundWork.runAutoTidy()
+        // 每一步之間檢查工作是否已被系統取消（runCatching 會吞掉取消，不檢查就會繼續跑完）
+        if (isStopped) return Result.success()
         runCatching { warnFunding(applicationContext, repo) }
         runCatching { warnLoans(applicationContext, repo) }
         runCatching { warnCardDue(applicationContext, repo) }
         runCatching { nudgePending(applicationContext, repo) }
         runCatching { StockAlertWorker.checkUpdate(applicationContext) }
+        if (isStopped) return Result.success()
         val ok = runCatching { refreshMarket(repo) }.isSuccess
         return if (ok || runAttemptCount > 2) Result.success() else Result.retry()
     }
@@ -53,7 +56,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
         fun runNow(context: Context) {
             WorkManager.getInstance(context).enqueueUniqueWork(
-                "sync-now", ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<SyncWorker>().build(),
+                "sync-now", ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<SyncWorker>()
+                    // 沒網路時等到有網路才跑，不會白跑一次後進入重試
+                    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build(),
             )
         }
 
@@ -77,7 +82,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 repo.settings.value.watchlist.map { com.enwei.moneymanager.core.marketOf(it) to it.uppercase() }).distinct()
             if (symbols.isEmpty()) return
             repo.saveQuotes(QuoteService.fetch(symbols))
-            repo.settings.update { it.copy(lastQuoteUpdate = System.currentTimeMillis()) }
+            repo.settings.setLastQuoteUpdate(System.currentTimeMillis())
             com.enwei.moneymanager.widget.Widgets.refreshAll(MoneyApp.instance)
         }
 

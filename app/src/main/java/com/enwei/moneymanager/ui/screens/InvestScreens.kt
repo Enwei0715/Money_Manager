@@ -131,9 +131,10 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
             val r = runCatching { SyncWorker.refreshQuotes(repo) }
             // 開啟股票頁時（或按更新）順便同步除息
             if (first) MoneyApp.instance.appScope.launch { runCatching { SyncWorker.refreshDividends(repo) } }
-            if (first && refreshTick > 0) onMessage(if (r.isSuccess) "股價已更新" else "更新失敗：${r.exceptionOrNull()?.message}")
+            if (first && refreshTick > 0) onMessage(if (r.isSuccess) "股價已更新" else "更新失敗：${r.exceptionOrNull()?.let { com.enwei.moneymanager.ui.friendlyError(it) }.orEmpty()}")
             first = false
-            kotlinx.coroutines.delay(30_000)
+            // 台股盤中每 30 秒更新；收盤後價格不會再變，改成每 10 分鐘（美股持股仍會慢慢更新），省電省流量
+            kotlinx.coroutines.delay(if (com.enwei.moneymanager.core.TaiwanHolidays.isTwTradingTime()) 30_000 else 600_000)
         }
     }
 
@@ -147,7 +148,13 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
     var view by com.enwei.moneymanager.ui.components.rememberTab("stock.view", 0)
     val closedFold = com.enwei.moneymanager.ui.components.rememberFold("invest.closed", false)
     val heldSyms = open.map { it.symbol.uppercase() }.toSet()
-    val quoteTime = if (settings.lastQuoteUpdate > 0) "報價 " + SimpleDateFormat("HH:mm", Locale.TAIWAN).format(Date(settings.lastQuoteUpdate)) + " · 每 30 秒更新" else ""
+    // 報價時間：不是今天的要寫日期，才不會把上週五的價格當成現在的價格；收盤後不寫「每 30 秒更新」
+    val quoteTime = if (settings.lastQuoteUpdate > 0) {
+        val at = java.time.Instant.ofEpochMilli(settings.lastQuoteUpdate).atZone(java.time.ZoneId.systemDefault())
+        val fmt = if (at.toLocalDate() == java.time.LocalDate.now()) "HH:mm" else "M/d HH:mm"
+        "報價 " + SimpleDateFormat(fmt, Locale.TAIWAN).format(Date(settings.lastQuoteUpdate)) +
+            (if (com.enwei.moneymanager.core.TaiwanHolidays.isTwTradingTime()) " · 每 30 秒更新" else " · 已收盤")
+    } else ""
 
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // 持股（實際買入，計入資產）與觀察（只看報價，不計入資產）分成兩個檢視
