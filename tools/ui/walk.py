@@ -53,7 +53,8 @@ def nodes(retry=3):
             continue
         if "isn't responding" not in texts and "沒有回應" not in texts:
             break
-        note("[dialog] 系統顯示「沒有回應」，按等待")
+        who = next((t for t, _, _, _ in out if "responding" in t or "沒有回應" in t), "")
+        note(f"[dialog] {who}（按等待）")
         for t, d, x, y in out:
             if t in DIALOG_BUTTONS[:2]:
                 adb(f"input tap {x} {y}")
@@ -214,6 +215,14 @@ def main():
     tap("記一筆", wait=1); tap("交易", exact=True); tap("記一筆"); time.sleep(5); shot("bigfont_editor")
     adb("settings put system font_scale 1.0")
 
+    # 沒有回應（ANR）的原因：記下是哪個程式、卡在哪裡
+    anr = sh("adb logcat -d -b main,system,crash | grep -A12 'ANR in' | head -120")
+    if anr.strip():
+        note("[anr]\n" + anr)
+    sh(f"adb shell dumpsys activity processes > /dev/null")
+    traces = sh("adb shell 'ls /data/anr/ 2>/dev/null'")
+    if traces.strip():
+        note("[anr traces] " + traces.replace("\n", " "))
     # 閃退紀錄
     crash = sh(f"adb shell run-as {PKG} cat files/last_crash.txt 2>/dev/null")
     if crash.strip():
