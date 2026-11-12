@@ -196,26 +196,26 @@ def main():
     notify("com.test.card", "測試銀行", f"貴賓您好，末四碼5908感謝{md} {hm}刷卡台幣85元，商店名稱:京都")
     launch()
     shot("txns_after_notifications")
-    tap("LINE Pay"); time.sleep(2); shot("txn_linepay_60"); back()
-    tap("85"); time.sleep(2); shot("txn_kyoto_85"); back()
-    tap("工具", exact=True); tap("通知記帳"); time.sleep(2); shot("notif_log"); back()
+    tap("未分類"); time.sleep(2); shot("txn_linepay_60"); launch()
+    tap("台科大第二餐廳"); time.sleep(2); shot("txn_kyoto_85"); launch()
+    tap("工具", exact=True); tap("通知記帳"); time.sleep(2); shot("notif_log"); launch()
 
     # ④ 個股頁
-    tap("資產", exact=True); tap("股票", exact=True); time.sleep(3)
+    launch(); tap("資產", exact=True); tap("股票", exact=True); time.sleep(3)
     tap("2330"); time.sleep(12); shot("stock_2330")
     scroll(2); shot("stock_2330_mid")
     scroll(3); shot("stock_2330_projection")
     back()
 
     # ⑤ 深色模式與大字體
-    adb("cmd uimode night yes"); time.sleep(2)
-    launch(); shot("dark_txns")
+    adb("cmd uimode night yes"); time.sleep(8)
+    launch(); launch(); shot("dark_txns")
     tap("記一筆"); time.sleep(5); shot("dark_editor"); back(); tap("捨棄", wait=1)
-    adb("cmd uimode night no")
-    adb("settings put system font_scale 1.3"); time.sleep(2)
-    launch(); shot("bigfont_txns")
+    adb("cmd uimode night no"); time.sleep(5)
+    adb("settings put system font_scale 1.3"); time.sleep(5)
+    launch(); launch(); shot("bigfont_txns")
     tap("資產", exact=True); shot("bigfont_assets")
-    tap("記一筆", wait=1); tap("交易", exact=True); tap("記一筆"); time.sleep(5); shot("bigfont_editor")
+    launch(); tap("記一筆"); time.sleep(5); shot("bigfont_editor")
     adb("settings put system font_scale 1.0")
 
     # 沒有回應（ANR）的原因：記下是哪個程式、卡在哪裡

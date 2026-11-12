@@ -346,8 +346,9 @@ private fun AppScaffold(nav: NavHostController) {
             }
             // 分頁列收起時仍保留手機導覽列的高度
             if (barHidden) androidx.compose.foundation.layout.Spacer(Modifier.navigationBarsPadding())
-            } else if (!imeOpen) {
-                // 其他畫面（個股、設定…）也保留 AI 狀態列，看得到報告還在跑，不會以為被關掉
+            } else if (!imeOpen && !editing) {
+                // 其他畫面（個股、設定…）也保留 AI 狀態列，看得到報告還在跑，不會以為被關掉；
+                // 記帳、帳戶等編輯畫面不顯示，避免擠在 App 內鍵盤和儲存按鈕下方
                 com.enwei.moneymanager.ui.components.AiStatusBar(nav, padNav = true) { r -> nav.openRoute(r) }
             }
         },

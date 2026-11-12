@@ -1214,7 +1214,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), state = listState, contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (view == 0) {
                 if (store.items.isEmpty()) item {
-                    Text("尚無新聞。點選右上角的資訊圖示，再按「立即更新」開始蒐集。",
+                    Text(if (job?.running == true) "正在蒐集新聞，完成後顯示於此。" else "尚無新聞。點選右上角的資訊圖示，再按「立即更新」開始蒐集。",
                         fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp))
                 }
                 // grid：市場大局（所有題材重點的彙整）
