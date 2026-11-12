@@ -450,7 +450,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
     if (rtab == 0 && (r.allocation.isNotBlank() || r.alloc.isNotEmpty())) Section("資金分配") {
         if (r.alloc.isNotEmpty()) {
             val total = r.alloc.sumOf { it.pct }.takeIf { it > 0 } ?: 1.0
-            val palette = listOf(Color(0xFF3C82E6), Color(0xFFF0605A), Color(0xFFFFA000), Color(0xFF2E9E57), Color(0xFF7E57C2), Color(0xFF9E9E9E))
+            val palette = com.enwei.moneymanager.ui.components.SeriesColors
             Row(Modifier.fillMaxWidth().height(14.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(7.dp))) {
                 r.alloc.forEachIndexed { i, a -> Box(Modifier.weight((a.pct / total).toFloat().coerceAtLeast(0.01f)).height(14.dp).background(palette[i % palette.size])) }
             }

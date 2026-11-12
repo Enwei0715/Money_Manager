@@ -124,9 +124,6 @@ import java.time.ZoneOffset
 
 private enum class Panel { NONE, AMOUNT, FEE, SPLIT, CATEGORY, ACCOUNT, TO_ACCOUNT }
 
-private val PanelHeader = Color(0xFF111111)
-private val CurrencyBar = Color(0xFF3F4570)
-private val CurrencyBarSelected = Color(0xFF262B4D)
 
 /** 收入藍、支出紅；轉帳用主題文字色（深色模式為白色，淺色模式為黑色）。 */
 @Composable
@@ -1060,35 +1057,40 @@ private fun BottomPanel(
     onEditCategories: () -> Unit, onEditAccounts: () -> Unit, onClose: () -> Unit,
 ) {
     var currencyMenu by remember { mutableStateOf(false) }
+    // 顏色跟隨主題（深淺色、主題色），不再固定黑底與藍紫色
+    val headerBg = MaterialTheme.colorScheme.inverseSurface
+    val onHeader = MaterialTheme.colorScheme.inverseOnSurface
+    val barBg = MaterialTheme.colorScheme.primaryContainer
+    val onBar = MaterialTheme.colorScheme.onPrimaryContainer
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).navigationBarsPadding()) {
-        Row(Modifier.fillMaxWidth().background(PanelHeader).height(46.dp).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().background(headerBg).height(46.dp).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 when (panel) {
                     Panel.AMOUNT -> "金額"; Panel.FEE -> "手續費"; Panel.SPLIT -> "分帳"; Panel.CATEGORY -> "分類"; Panel.TO_ACCOUNT -> "轉入帳戶"; else -> "帳戶"
                 },
-                color = Color.White, fontSize = AppText.body, modifier = Modifier.weight(1f),
+                color = onHeader, fontSize = AppText.body, modifier = Modifier.weight(1f),
             )
             when (panel) {
                 Panel.AMOUNT, Panel.FEE, Panel.SPLIT -> Box {
-                    IconButton(onClick = { currencyMenu = true }) { Icon(Icons.Outlined.Language, "幣別", tint = Color.White) }
+                    IconButton(onClick = { currencyMenu = true }) { Icon(Icons.Outlined.Language, "幣別", tint = onHeader) }
                     DropdownMenu(currencyMenu, { currencyMenu = false }) {
                         allCurrencies.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { onCurrency(c); currencyMenu = false }) }
                     }
                 }
-                Panel.CATEGORY -> IconButton(onClick = onEditCategories) { Icon(Icons.Outlined.Edit, "編輯分類", tint = Color.White) }
-                else -> IconButton(onClick = onEditAccounts) { Icon(Icons.Outlined.Edit, "編輯帳戶", tint = Color.White) }
+                Panel.CATEGORY -> IconButton(onClick = onEditCategories) { Icon(Icons.Outlined.Edit, "編輯分類", tint = onHeader) }
+                else -> IconButton(onClick = onEditAccounts) { Icon(Icons.Outlined.Edit, "編輯帳戶", tint = onHeader) }
             }
-            IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "關閉", tint = Color.White) }
+            IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "關閉", tint = onHeader) }
         }
         when (panel) {
             Panel.AMOUNT, Panel.FEE, Panel.SPLIT -> {
-                Row(Modifier.fillMaxWidth().background(CurrencyBar).height(48.dp)) {
+                Row(Modifier.fillMaxWidth().background(barBg).height(48.dp)) {
                     (currencies + listOfNotNull(currency.takeIf { it !in currencies })).forEach { c ->
                         Box(
-                            Modifier.width(64.dp).fillMaxHeight().background(if (c == currency) CurrencyBarSelected else Color.Transparent)
+                            Modifier.width(64.dp).fillMaxHeight().background(if (c == currency) onBar.copy(alpha = 0.16f) else Color.Transparent)
                                 .clickable { onCurrency(c) },
                             contentAlignment = Alignment.Center,
-                        ) { Text(Money.symbolOf(c).trim().ifEmpty { c }, color = Color.White) }
+                        ) { Text(Money.symbolOf(c).trim().ifEmpty { c }, color = onBar, fontWeight = if (c == currency) androidx.compose.ui.text.font.FontWeight.Bold else null) }
                     }
                 }
                 Keypad(expr, calcMode, onExpr, onToggleCalc, onDoneAmount)
@@ -1248,7 +1250,7 @@ private fun Keypad(expr: String, calcMode: Boolean, onExpr: (String) -> Unit, on
         Row(Modifier.fillMaxWidth()) {
             Digit(Modifier.weight(1f), "00"); Digit(Modifier.weight(1f), "0"); Digit(Modifier.weight(1f), ".")
             Key(Modifier.weight(1f), MaterialTheme.colorScheme.primary, onClick = onDone) {
-                Text(if (Calculator.hasOperator(expr)) "=" else "完成", color = Color.White, fontSize = AppText.title)
+                Text(if (Calculator.hasOperator(expr)) "=" else "完成", color = MaterialTheme.colorScheme.onPrimary, fontSize = AppText.title)
             }
         }
     }

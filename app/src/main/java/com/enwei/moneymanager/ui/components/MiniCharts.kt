@@ -171,7 +171,8 @@ private suspend fun cachedBars(symbol: String): DailyBars? {
     return b
 }
 
-private val SeriesColors = listOf(Color(0xFF3C82E6), Color(0xFFF0605A), Color(0xFF2E9E57), Color(0xFFFFA000), Color(0xFF7E57C2))
+/** 多條線、分配比例等「不同系列」共用的配色（分類比例另用 chartPalette 的暖到冷漸層） */
+val SeriesColors = listOf(Color(0xFF3C82E6), Color(0xFFF0605A), Color(0xFF2E9E57), Color(0xFFFFA000), Color(0xFF7E57C2), Color(0xFF9E9E9E))
 
 /** 多檔個股走勢比較：近 [days] 個交易日，以第一天為 0% 的漲跌幅折線。 */
 @Composable
