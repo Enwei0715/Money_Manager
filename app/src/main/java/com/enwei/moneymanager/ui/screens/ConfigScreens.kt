@@ -408,6 +408,10 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 cfg("新手導覽") { com.enwei.moneymanager.ui.components.Onboarding.show.value = true }
                 // 回報問題：附上版本、裝置與最近一次閃退紀錄（不含任何帳務資料），用分享選單傳給開發者
                 cfg("回報問題") { shareProblemReport(ctx) }
+                cfg("隱私權政策") {
+                    runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("https://github.com/${BuildConfig.UPDATE_REPO}/blob/HEAD/PRIVACY_POLICY.md"))) }
+                }
                 cfg("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.1.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
                 Spacer(Modifier.height(32.dp))
             }

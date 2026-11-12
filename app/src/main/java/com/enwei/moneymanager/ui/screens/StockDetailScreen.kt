@@ -88,7 +88,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
         com.enwei.moneymanager.ui.components.Coach.Step("sd.tabs", "三個分頁", "「走勢」為 K 線與技術指標；「分析」為營收、趨勢推估與持股紀律；「資訊」為除權息、新聞與公司簡介。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "K 線操作", "兩指縮放、左右拖曳；點選 K 棒顯示當日開高低收；上方可切換 60 分、日、週、月 K 與顯示區間。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "均線與指標", "下方可加入或移除均線、布林通道，並切換成交量、RSI、MACD 或 KD 指標。"),
-        com.enwei.moneymanager.ui.components.Coach.Step("sd.alert", "價格提醒", "設定目標價與停損價，盤中每 15 分鐘檢查一次，到價時發出通知。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("sd.alert", "價格提醒", "設定目標價與停損價；台股交易時段約每 15 分鐘檢查一次，到價時發出通知。"),
     ))
     // 英文字母開頭的代號是美股（沒有月營收；大盤比較改用 S&P 500）
     val market = com.enwei.moneymanager.core.marketOf(symbol)
@@ -913,7 +913,7 @@ private fun PriceAlertCard(symbol: String, price: Double, held: Boolean) {
     com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("價格提醒", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
-            Text("盤中每 15 分鐘檢查一次，到價時通知" + (if (price > 0) "；目前 ${"%.2f".format(price)}" else ""), fontSize = AppText.caption,
+            Text("台股交易時段約每 15 分鐘檢查一次，到價時通知" + (if (price > 0) "；目前 ${"%.2f".format(price)}" else ""), fontSize = AppText.caption,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.enwei.moneymanager.ui.components.NumberField(target, { target = it; save() }, "目標價", Modifier.weight(1f))

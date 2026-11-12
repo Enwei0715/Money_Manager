@@ -1192,10 +1192,13 @@ private fun LocationHintRow(on: Boolean) {
                 else ask.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
             })
         }
+        // 背景位置：先說明蒐集什麼、做什麼用，同意後才前往系統設定（Google Play 的顯著揭露規定）
+        var disclose by remember { mutableStateOf(false) }
         if (on && fg && !bg) Row(verticalAlignment = Alignment.CenterVertically) {
             Text("請將位置權限設為「一律允許」，App 未開啟時才能取得位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
-            TextButton(onClick = { openAppSettings() }) { Text("前往設定") }
+            TextButton(onClick = { disclose = true }) { Text("前往設定") }
         }
+        if (disclose) com.enwei.moneymanager.ui.components.AccessDisclosure(2, { openAppSettings() }) { disclose = false }
     }
 }
 

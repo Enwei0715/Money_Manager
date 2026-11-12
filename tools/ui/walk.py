@@ -202,7 +202,8 @@ def main():
 
     # ④ 個股頁
     launch(); tap("資產", exact=True); tap("股票", exact=True); tap("持股"); time.sleep(3)
-    tap("2330"); time.sleep(12); shot("stock_2330")
+    tap("2330"); time.sleep(3); shot("holding_2330")
+    tap("K 線與資訊"); time.sleep(12); shot("stock_2330")
     scroll(2); shot("stock_2330_mid")
     scroll(3); shot("stock_2330_projection")
     back()

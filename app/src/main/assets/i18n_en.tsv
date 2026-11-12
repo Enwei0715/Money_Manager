@@ -3281,3 +3281,24 @@ OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金
 秒後再試	s, then try again
 70 過熱	70 overbought
 30 超賣	30 oversold
+隱私權政策	Privacy policy
+允許背景位置	Allow background location
+開啟「依位置推測店家」後，帳理會在收到付款通知或記帳的當下取得一次位置，用來推測店家並記錄交易地點。	With "Guess store by location" on, Ledgerly gets your location once when a payment notification arrives or when you record a transaction, to guess the store and save where it happened.
+付款通知跳出時帳理多半不在畫面上，因此需要將位置權限設為「一律允許」；帳理不會持續追蹤你的位置。	Ledgerly is usually not on screen when a payment notification arrives, so location must be set to "Allow all the time". Ledgerly does not track your location continuously.
+位置保存在這支手機上；查詢附近店家時，座標會傳送給地圖服務（OpenStreetMap，或你設定金鑰的 Mapbox、Google Places）。	Locations stay on this phone. To look up nearby stores, coordinates are sent to a map service (OpenStreetMap, or Mapbox / Google Places if you added a key).
+不開啟也能正常記帳；你可以隨時在系統設定收回這項權限。	Bookkeeping works without it, and you can revoke this permission in system settings at any time.
+帳理會讀取銀行、信用卡、支付與證券 App 的通知內容（金額、商家、時間），自動建立交易紀錄；包括你在「通知記帳」勾選的 App，以及名稱與你的帳戶相符的銀行 App。	Ledgerly reads notifications from bank, card, payment and brokerage apps (amount, merchant, time) to create transactions automatically, including the apps you selected in Notification bookkeeping and bank apps whose names match your accounts.
+沒有記成交易的通知只在「通知記帳 → 紀錄」保留 7 天（方便你教 App 辨識），之後自動刪除。	Notifications that are not recorded stay in the Notification bookkeeping log for 7 days (so you can teach the app), then are deleted automatically.
+通知內容保存在這支手機上；只有你啟用 AI 功能時，規則看不懂的通知文字會傳給你設定的 AI 服務判讀，不會傳給其他人。	Notification content stays on this phone. Only when AI is enabled is text the rules can't read sent to your chosen AI service; it is never shared with anyone else.
+位於「工具 → AI 中心」。	Under Tools → AI hub.
+所有帳戶依群組列出，頂端為資產、負債與合計；點選帳戶可查看交易紀錄與餘額走勢，右上角 ⋮ →「修改順序」可調整排序。	Accounts are listed by group, with assets, liabilities and the total at the top. Tap an account for its transactions and balance trend; reorder via ⋮ → Reorder at the top right.
+雙方金額相抵為零即視為結清；點選對象的選單可記錄代墊、他幫我付、收回款項，或設定借貸細節。	When both sides net to zero the balance is settled. Use a person's menu to record a payment you covered, one they covered, a repayment, or loan details.
+點右上角 ⋮ →「新增」建立帳戶	Tap ⋮ → Add at the top right to create an account
+設定目標價與停損價；台股交易時段約每 15 分鐘檢查一次，到價時發出通知。	Set a target and a stop price; during Taiwan trading hours the price is checked about every 15 minutes and you are notified when it is reached.
+台股交易時段約每 15 分鐘檢查一次，到價時通知	Checked about every 15 minutes during Taiwan trading hours
+• 參數在「助理 → 紀律 → 我的紀律」調整。	• Adjust the parameters in Assistant → Discipline → My rules.
+自動備份：資料夾權限已失效，請重新選擇	Auto backup: folder access expired; choose it again
+可擇一使用 Gemini（Google AI Studio 免費申請）或 Groq（GroqCloud 免費申請），點選「設定」依步驟完成；自架伺服器請至「設定 → AI 模型設定」。	Use Gemini (free from Google AI Studio) or Groq (free from GroqCloud); tap Set up and follow the steps. For a self-hosted server, go to Settings → AI models.
+可選擇到期時直接記錄，或放入「待確認」由您確認金額後再記錄；設定結束日期即可記錄固定期數的分期。	Record automatically when due, or send to Pending to confirm the amount first. Set an end date to record a fixed number of installments.
+房租、訂閱、薪資等固定收支，設定週期後於到期日自動記錄，或放入待確認。	Rent, subscriptions, salary and other fixed items are recorded on their due date, or sent to Pending.
+左右箭頭切換上一期或下一期；點選中間的期間名稱可回到本期（自訂期間時則重新選擇期間）。	Use the arrows to move to the previous or next period; tap the period name to return to the current one (or pick a new range for a custom period).

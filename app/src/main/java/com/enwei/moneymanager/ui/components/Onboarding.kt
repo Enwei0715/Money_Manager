@@ -95,7 +95,7 @@ object Onboarding {
             "統計：分類比例與每月比較", if ("map" in w) "支出地圖：交易頁右上角的地圖圖示" else null, "預算：接近上限時提醒"), "設定預算", "budget"))
         add(Page(Icons.Outlined.AccountBalanceWallet, "資產", "帳戶、信用卡" + (if ("split" in w) "與往來" else "") + "集中於此。", listOfNotNull(
             "信用卡依帳單週期計算應繳與未出帳金額", if ("split" in w) "往來：列出應收與應付的對象與金額" else null), "新增帳戶", "account/0"))
-        if ("stocks" in w || "ai" in w) add(Page(Icons.Outlined.AutoAwesome, if ("ai" in w) "股票與 AI 助理" else "股票", "位於底部的「助理」分頁。", listOfNotNull(
+        if ("stocks" in w || "ai" in w) add(Page(Icons.Outlined.AutoAwesome, if ("ai" in w) "股票與 AI 助理" else "股票", if ("stocks" in w) "位於底部的「助理」分頁。" else "位於「工具 → AI 中心」。", listOfNotNull(
             if ("stocks" in w) "記錄股票交易，檢視持股損益、K 線與除權息" else null,
             if ("ai" in w) "完成 AI 設定後，可產生每日報告並向 AI 提問" else null),
             null, null))

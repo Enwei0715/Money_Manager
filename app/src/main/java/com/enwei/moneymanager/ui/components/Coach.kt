@@ -79,7 +79,7 @@ object Coach {
             else "「新聞」依題材整理財經新聞，「紀律」依你設定的門檻提示停損與停利；完成 AI 設定後，另有每日報告與 AI 問答。", tab = "assistant")),
         S(null, Step("tab.more", "工具", "常用工具集中於此；點選右上角「編輯」或長按任一格，可調整排列、大小或隱藏。", tab = "more")),
         S(null, Step("tool.budget", "預算", "設定每月總預算與各分類預算；接近或超過上限時提醒，交易頁的本月總覽也會顯示使用比例。", tab = "more")),
-        S(null, Step("tool.recurring", "週期交易", "房租、訂閱、薪資等固定收支，設定週期後於到期日自動記錄。", tab = "more")),
+        S(null, Step("tool.recurring", "週期交易", "房租、訂閱、薪資等固定收支，設定週期後於到期日自動記錄，或放入待確認。", tab = "more")),
         S("notif", Step("tool.notif", "通知記帳設定", "選擇要讀取哪些 App 的通知、查看通知紀錄並測試辨識結果。Android 15 會隱藏部分付款通知，可依頁面中的步驟以 Shizuku 開啟讀取。", tab = "more")),
         S("ai", Step("tool.ai-hub", "AI 中心", "設定 AI 金鑰或自架伺服器並測試連線；AI 用於判讀通知、收支分析與每日投資報告。", tab = "more")),
         S(null, Step("tool.review", "收支分析", "依期間整理支出總覽、與前期的變化及消費習慣" + (if (ai) "；AI 建議分頁會指出可調整之處。" else "。"), tab = "more")),

@@ -131,7 +131,7 @@ private fun List<TxnEntity>.inRange(r: PeriodRange) = filter { val d = it.date.t
 fun StatsTab(nav: NavController) {
     // 第一次打開這頁：逐一介紹期間、類型與圖表
     com.enwei.moneymanager.ui.components.PageTour("stats", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step("st.period", "期間", "左右箭頭切換上一期或下一期；點選中間的期間名稱可回到本期。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("st.period", "期間", "左右箭頭切換上一期或下一期；點選中間的期間名稱可回到本期（自訂期間時則重新選擇期間）。"),
         com.enwei.moneymanager.ui.components.Coach.Step("st.kind", "類型與期間長度", "切換支出或收入，以及每週、每月、每年或自訂期間。"),
         com.enwei.moneymanager.ui.components.Coach.Step("st.pie", "分類比例", "圓餅圖顯示各分類所佔比例；下方清單點選分類可查看子分類與明細交易。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "更多分析", "往下捲動可查看每月比較與收支趨勢；選擇自訂期間可比較任意兩段時間。"),

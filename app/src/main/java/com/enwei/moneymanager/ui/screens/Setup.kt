@@ -62,7 +62,7 @@ object Setup {
         "map.location" to "點選「開啟」，於系統詢問時選擇「使用應用程式時允許」，並保留「精確位置」。",
         "map.background" to "點選「設定」進入應用程式資訊，依序選擇「權限 → 位置 → 一律允許」，再返回帳理。",
         "map.places" to "點選「設定」查看申請步驟：啟用 Google Cloud 帳單、啟用 Places API (New)、建立金鑰後貼上。",
-        "ai.key" to "可擇一使用：Gemini（Google AI Studio 免費申請）、Groq（GroqCloud 免費申請），或家中電腦的自架伺服器。點選「設定」依步驟完成。",
+        "ai.key" to "可擇一使用 Gemini（Google AI Studio 免費申請）或 Groq（GroqCloud 免費申請），點選「設定」依步驟完成；自架伺服器請至「設定 → AI 模型設定」。",
         "backup.folder" to "點選「重新選擇」，選取用於自動備份的資料夾（建議選擇會同步至雲端硬碟的資料夾）。",
     )
 
@@ -148,6 +148,7 @@ fun SetupList(features: Set<String>, open: (String) -> Unit) {
     var aiOpen by remember { mutableStateOf(false) }
     var placesOpen by remember { mutableStateOf(false) }
     var recheck by remember { mutableIntStateOf(0) }
+    var bgDisclose by remember { mutableStateOf(false) }
     val appDetails = { runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
         android.net.Uri.fromParts("package", ctx.packageName, null)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } }
     // 權限直接在這裡跳系統詢問；已被拒絕到不再詢問時，改開應用程式資訊頁
@@ -163,11 +164,13 @@ fun SetupList(features: Set<String>, open: (String) -> Unit) {
             "notif.sensitive" -> shizukuOpen = !shizukuOpen
             "ai.key" -> aiOpen = true
             "map.places" -> placesOpen = true
+            "map.background" -> bgDisclose = true
             "map.location" -> locLauncher.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
             "notif.post" -> if (android.os.Build.VERSION.SDK_INT >= 33) postLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             else -> Setup.act(ctx, id, open)
         }
     }
+    if (bgDisclose) com.enwei.moneymanager.ui.components.AccessDisclosure(2, { Setup.act(ctx, "map.background", open) }) { bgDisclose = false; recheck++ }
     if (aiOpen) AiKeySetupDialog { aiOpen = false; recheck++ }
     if (placesOpen) GooglePlacesKeyDialog { placesOpen = false; recheck++ }
     @Suppress("UNUSED_VARIABLE") val t = tick + recheck
@@ -262,7 +265,10 @@ fun SetupBanner(nav: NavController) {
     val item = Setup.missing(ctx, s).firstOrNull { it.id !in SetupBannerState.dismissed } ?: return
     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).clickable { Setup.act(ctx, item.id) { nav.navigate(it) } }
         .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("${Setup.featureName[item.feature]}：尚未設定${item.title}", fontSize = AppText.secondary, maxLines = 1, modifier = Modifier.weight(1f))
+        // 備份資料夾設定過但權限失效：說明是權限失效，不是沒設定
+        val msg = if (item.id == "backup.folder" && s.autoBackupUri.isNotBlank()) "自動備份：資料夾權限已失效，請重新選擇"
+            else "${Setup.featureName[item.feature]}：尚未設定${item.title}"
+        Text(msg, fontSize = AppText.secondary, maxLines = 1, modifier = Modifier.weight(1f))
         TextButton(onClick = { Setup.act(ctx, item.id) { nav.navigate(it) } }) { Text(item.action) }
         Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.clickable { SetupBannerState.dismissed = SetupBannerState.dismissed + item.id }.padding(horizontal = 10.dp, vertical = 6.dp))
