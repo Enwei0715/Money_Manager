@@ -170,6 +170,17 @@ data class ChatMsg(
 @Serializable
 data class ChatThread(val id: Long, val title: String, val msgs: List<ChatMsg>, val updated: Long = System.currentTimeMillis())
 
+/** 推薦檢討的結論：哪裡選得好／不好，以及之後選股要照做的規則（每日選股會參考，不放在對話裡） */
+@Serializable
+data class PickLesson(
+    val createdAt: Long,
+    val days: Int,
+    val summary: String,
+    val rules: List<String>,
+    /** 檢討當時的成績（平均漲跌、上漲比例），下次檢討時對照有沒有進步 */
+    val stats: String = "",
+)
+
 @Serializable
 data class NewsStore(
     val items: List<NewsItem> = emptyList(),
@@ -178,6 +189,7 @@ data class NewsStore(
     val chat: List<ChatMsg> = emptyList(),
     /** 過去的對話（最新的在前，最多 30 段） */
     val chatThreads: List<ChatThread> = emptyList(),
+    val pickLesson: PickLesson? = null,
     /** 代號 → 公司在做什麼（AI 說明，快取） */
     val business: Map<String, String> = emptyMap(),
     /** 新聞重點庫：「日期|題材」→ 重點（所有新聞都整理進來） */

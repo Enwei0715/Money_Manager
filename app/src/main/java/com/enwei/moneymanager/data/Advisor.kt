@@ -580,7 +580,9 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
         append("\n表現最差：" + sorted.takeLast(3).reversed().joinToString("；") { row(it) })
     }
     // 使用者最近一次「檢討推薦表現」得到的結論：之後每天選股都要參考，檢討才有實際作用
-    val lesson = (listOf(st.chat) + st.chatThreads.map { it.msgs }).flatMap { msgs ->
+    val lesson = st.pickLesson?.takeIf { System.currentTimeMillis() - it.createdAt < 45L * 86_400_000 }
+        ?.let { (listOf(it.summary) + it.rules.map { r -> "規則：$r" }).joinToString("；").take(800) }
+        ?: (listOf(st.chat) + st.chatThreads.map { it.msgs }).flatMap { msgs ->
         msgs.zipWithNext().filter { (q, a) -> q.fromUser && q.text.startsWith("請檢討近") && !a.fromUser }.map { it.second }
     }.maxByOrNull { it.time }?.takeIf { System.currentTimeMillis() - it.time < 30L * 86_400_000 }
         ?.let { (listOf(it.text) + it.points).joinToString("；").take(500) }

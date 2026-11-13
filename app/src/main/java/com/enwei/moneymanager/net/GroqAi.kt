@@ -1130,6 +1130,25 @@ object GroqAi {
         return out to r.str("note").orEmpty().take(200)
     }
 
+    /**
+     * 檢討過去的推薦：找出選得好與不好的共同點，產生之後選股要照做的具體規則。
+     * [previous] 是上一次的規則（有的話），讓 AI 判斷要保留、修改還是刪除。
+     */
+    suspend fun reviewPicks(data: String, previous: List<String>): Pair<String, List<String>>? {
+        if (!enabled) return null
+        val r = chatJson(
+            "你是台股選股策略的檢討助理。讀使用者過去推薦股票的實際表現，找出「選得好」和「選得不好」的共同特徵，" +
+                "再寫出之後每日選股要照做的 3～6 條具體規則（可直接執行，例如：避開近 20 日已漲超過 30% 的小型股；短線股跌破 10 日線就不再推薦）。" +
+                (if (previous.isNotEmpty()) "上一次的規則如下，依這次的成績決定保留、修改或刪除：${previous.joinToString("；")}。" else "") +
+                "不要寫投資建議或保證獲利，不要逐檔重述數字。summary 用一兩句繁體中文總結這次學到什麼。只回 JSON：{\"summary\":字串,\"rules\":[字串]}",
+            data.take(6000), 900, task = AiTask.REPORT,
+        ) ?: return null
+        val rules = (r["rules"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { s -> s.isNotEmpty() } }.orEmpty().take(6)
+        val summary = r.str("summary").orEmpty().trim()
+        if (rules.isEmpty() && summary.isEmpty()) return null
+        return summary to rules
+    }
+
     /** 從促銷通知擷取 3～5 個辨識同類促銷的關鍵詞（活動名稱、宣傳用語），不含金額、日期、卡號、人名。 */
     suspend fun promoPhrases(text: String): List<String>? {
         if (!enabled) return null

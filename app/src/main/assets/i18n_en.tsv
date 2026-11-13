@@ -3466,3 +3466,9 @@ AI 金鑰與模型	AI key & model
 ＋價位線	+ Levels
 價位線 ✕	Levels ✕
 以第一次推薦當天的價格與現在的股價計算；事後統計，不代表之後的表現。	Based on the price on the first recommendation day and the current price; a past statistic, not a forecast.
+選股規則	Picking rules
+每日選股會照這些規則挑選	Daily picks follow these rules
+請 AI 檢討並建立選股規則 ›	Ask AI to review and set picking rules ›
+依最新表現重新檢討 ›	Review again with the latest results ›
+AI 檢討中…	AI reviewing…
+AI 暫時無法完成檢討，請稍後再試	AI couldn't finish the review. Try again later.

@@ -109,7 +109,7 @@ object FullBackupIO {
             settings = repo.settings.exportRaw(),
             extras = EXTRA_PREFS.associateWith { rawOf(prefsOf(it)) },
             placeSamples = PlaceHints.exportSamples(com.enwei.moneymanager.MoneyApp.instance),
-            advisor = com.enwei.moneymanager.MoneyApp.news.load().let { NewsStore(report = it.report, history = it.history, chat = it.chat, chatThreads = it.chatThreads, business = it.business, historyKeepDays = it.historyKeepDays) },
+            advisor = com.enwei.moneymanager.MoneyApp.news.load().let { NewsStore(report = it.report, history = it.history, chat = it.chat, chatThreads = it.chatThreads, pickLesson = it.pickLesson, business = it.business, historyKeepDays = it.historyKeepDays) },
         )
         // 直接串流寫出，不先組成一整個字串（資料多時避免記憶體不足）；有設定備份密碼時整個檔案加密
         val pw = BackupPassword.get()
@@ -179,7 +179,7 @@ object FullBackupIO {
         b.placeSamples?.let { PlaceHints.importSamples(com.enwei.moneymanager.MoneyApp.instance, it) }
         b.advisor?.let { a ->
             com.enwei.moneymanager.MoneyApp.news.update {
-                it.copy(report = a.report, history = a.history, chat = a.chat, chatThreads = a.chatThreads.ifEmpty { it.chatThreads }, business = it.business + a.business, historyKeepDays = a.historyKeepDays)
+                it.copy(report = a.report, history = a.history, chat = a.chat, chatThreads = a.chatThreads.ifEmpty { it.chatThreads }, pickLesson = a.pickLesson ?: it.pickLesson, business = it.business + a.business, historyKeepDays = a.historyKeepDays)
             }
         }
     }
