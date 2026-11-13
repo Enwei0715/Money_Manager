@@ -246,7 +246,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                                 // 分類卡：淡色圓形圖示＋名稱＋一行說明
                                 val desc = when (g.id) {
                                     "accounts" -> "帳戶、分類、預算"; "entry" -> "記帳方式、期間、幣別"; "display" -> "主題、字體、列表"
-                                    "features" -> "使用模式、各項功能"; "autorecord" -> "通知記帳、店名對照"; "ai" -> "金鑰、模型、語氣"
+                                    "features" -> "使用模式、各項功能"; "autorecord" -> "紀錄、來源 App、準確度"; "ai" -> "金鑰、模型、語氣"
                                     "stocks" -> "手續費、紀律"; "notify" -> "八種通知"; "data" -> "密碼、備份還原"; else -> "導覽、回報、更新"
                                 }
                                 com.enwei.moneymanager.ui.components.AppCard(Modifier.weight(1f).height(72.dp).clickable { nav.navigate(g.route ?: "config?g=${g.id}") }) {
