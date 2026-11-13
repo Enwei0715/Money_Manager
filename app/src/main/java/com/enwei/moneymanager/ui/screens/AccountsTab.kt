@@ -251,14 +251,10 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
         else LazyColumn(Modifier.fillMaxSize()) {
             item {
                 com.enwei.moneymanager.ui.components.LineDivider()
-                // 淨資產是這一頁最重要的數字：單獨一行放大；資產、負債放在下面
-                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 16.dp, top = 12.dp),
-                    verticalAlignment = Alignment.Bottom) {
-                    Text("淨資產", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    Text(Money.withSymbol(assets - debts, lk.base), fontSize = AppText.title, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                }
+                // 資產、負債、淨資產同一列三欄（不另外佔一行，避免中間留大片空白）
                 SummaryBarCustom(
-                    listOf("資產" to (Money.full(assets) to IncomeColor), "負債" to (Money.full(debts) to ExpenseColor)),
+                    listOf("資產" to (Money.full(assets) to IncomeColor), "負債" to (Money.full(debts) to ExpenseColor),
+                        "淨資產" to (Money.full(assets - debts) to MaterialTheme.colorScheme.onSurface)),
                 )
             }
             // 往來：別人欠我、我欠別人（借貸與代墊），點進去看每個人
