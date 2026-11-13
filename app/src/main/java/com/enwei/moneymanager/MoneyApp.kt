@@ -45,6 +45,8 @@ class MoneyApp : Application() {
             previous?.uncaughtException(t, e)
         }
         repo = Repository(AppDatabase.build(this), SettingsStore(this))
+        // 桌面小工具、背景工作在沒開 App 時也用正確的基準幣別決定小數位
+        com.enwei.moneymanager.core.Money.displayBase = repo.settings.value.baseCurrency
         news = com.enwei.moneymanager.data.NewsDataset(this)
         com.enwei.moneymanager.ui.I18n.init(this, repo.settings.value.language)
         com.enwei.moneymanager.core.TaiwanHolidays.update(com.enwei.moneymanager.data.HolidayCache.decode(repo.settings.value.holidayCache))

@@ -95,6 +95,9 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     ))
     // 英文字母開頭的代號是美股（沒有月營收；大盤比較改用 S&P 500）
     val market = com.enwei.moneymanager.core.marketOf(symbol)
+    // 這檔股票的計價幣別：金額依幣別顯示（台幣整數、美元兩位小數）
+    val cur = if (market == Market.TW) "TWD" else "USD"
+    fun amt(v: Double) = com.enwei.moneymanager.core.Money.ofUnits(v, cur)
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val holdings by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
     var bars by remember { mutableStateOf<DailyBars?>(null) }
@@ -272,7 +275,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text("預估損益", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("%+,.0f".format(pnl), fontSize = AppText.body, color = if (pnl >= 0) StockUp else StockDown)
+                            Text((if (pnl >= 0) "+" else "") + amt(pnl), fontSize = AppText.body, color = if (pnl >= 0) StockUp else StockDown)
                         }
                         androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.ChevronRight, "持股明細", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -560,7 +563,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         val style = settings.styleOf(symbol)
                         val ad = Discipline.advise(style, avg, last, peak, settings.investPlan.rule())
                         Text("我的持股（${style.label}）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
-                        Text("${"%.0f".format(shares)} 股 · 損益 ${"%+.1f".format((last / avg - 1) * 100)}%", fontSize = AppText.body,
+                        Text("${"%,.0f".format(shares)} 股 · 損益 ${"%+.2f".format((last / avg - 1) * 100)}%", fontSize = AppText.body,
                             color = if (last >= avg) StockUp else StockDown)
                         // 價位圖：均價、現價、買進後最高與停利／減碼／提醒價的相對位置
                         PriceLadder(buildList {
@@ -580,8 +583,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                     hc?.let { Technicals.sma(it, settings.investPlan.hourFast) }, hc?.let { Technicals.sma(it, settings.investPlan.hourSlow) }),
                                 com.enwei.moneymanager.core.GuardRule(settings.investPlan.guardTrailPct, settings.investPlan.baseShares, settings.investPlan.reducePct, settings.investPlan.tolerancePct),
                             )
-                            Text("保本 ${"%,.0f".format(principal)} · 市值 ${"%,.0f".format(shares * last)}" +
-                                (if (g.excessShares >= 1) " · 多賺 ${g.excessShares.toLong()} 股 · 停利價 ${"%.2f".format(g.takeProfit ?: 0.0)}" else ""), fontSize = AppText.body)
+                            Text("保本 ${amt(principal)} · 市值 ${amt(shares * last)}" +
+                                (if (g.excessShares >= 1) " · 多賺 ${"%,d".format(g.excessShares.toLong())} 股 · 停利價 ${"%.2f".format(g.takeProfit ?: 0.0)}" else ""), fontSize = AppText.body)
                             Text("${g.action.label}：${g.note}", fontSize = AppText.body, color = if (g.triggered) MaterialTheme.colorScheme.error else Color.Unspecified)
                             Text("日 K：" + com.enwei.moneymanager.core.ProfitGuard.dailyTrend(c).summary, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -625,7 +628,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                     if (divList.isNotEmpty()) TextButton(onClick = { allDivs = !allDivs }) { Text(if (allDivs) "收起明細" else "除權息明細（${minOf(divList.size, 20)} 次）") }
                     val mine = trades.filter { it.market == market && it.symbol.equals(symbol, true) && it.side == com.enwei.moneymanager.core.StockSide.CASH_DIVIDEND }
-                    if (mine.isNotEmpty()) Text("我已領現金股利 ${"%,.0f".format(mine.sumOf { it.cashAmount })} 元（${mine.map { it.date }.distinct().size} 次）", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary)
+                    if (mine.isNotEmpty()) Text("我已領現金股利 ${amt(mine.sumOf { it.cashAmount })}（${mine.map { it.date }.distinct().size} 次）", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary)
                 }
             }
             // 公司業務（AI 整理；設定裡關掉 AI 就不顯示）

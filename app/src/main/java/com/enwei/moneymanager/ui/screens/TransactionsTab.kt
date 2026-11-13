@@ -921,7 +921,7 @@ private fun CalendarView(
                         ) {
                             marks.forEach { (label, c) ->
                                 if (settings.calendarDots) Box(Modifier.size(6.dp).background(c.copy(alpha = alpha), CircleShape))
-                                else Text(label, fontSize = AppText.badge, lineHeight = 10.sp, color = c.copy(alpha = alpha), maxLines = 1, softWrap = false)
+                                else Text(label, fontSize = AppText.badge, lineHeight = 13.sp, color = c.copy(alpha = alpha), maxLines = 1, softWrap = false)
                             }
                         }
                         Spacer(Modifier.weight(1f))

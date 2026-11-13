@@ -369,8 +369,8 @@ fun PieChart(slices: List<Pair<String, Long>>) {
         val oneLine = bigCount > 8
         fun add(text: String, pct: Float, mid: Double, color: Color) {
             val layout = measurer.measure(
-                if (oneLine) "${com.enwei.moneymanager.ui.tr(text)} ${"%.1f".format(pct)}%" else "${com.enwei.moneymanager.ui.tr(text)}\n${"%.1f".format(pct)} %",
-                baseText.copy(fontSize = AppText.secondary, color = labelColor, lineHeight = 16.sp),
+                if (oneLine) "${com.enwei.moneymanager.ui.tr(text)} ${"%.1f".format(pct)}%" else "${com.enwei.moneymanager.ui.tr(text)}\n${"%.1f".format(pct)}%",
+                baseText.copy(fontSize = AppText.secondary, color = labelColor, lineHeight = 18.sp),
             )
             labels += Label(color, mid, layout, cos(mid) >= 0, (c.y + r * 1.22f * sin(mid)).toFloat())
         }

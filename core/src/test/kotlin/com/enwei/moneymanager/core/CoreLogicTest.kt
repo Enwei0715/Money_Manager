@@ -78,8 +78,10 @@ class CoreLogicTest {
     @Test fun fxAndMoney() {
         val fx = FxConverter("TWD", mapOf("USD" to 0.03125))
         assertEquals(320000L, fx.convert(10000, "USD"))
-        assertEquals("$1,280", Money.format(128000, "TWD"))
-        assertEquals("-US$15.49", Money.format(-1549, "USD"))
+        assertEquals("$ 1,280", Money.format(128000, "TWD"))
+        assertEquals("-US$ 15.49", Money.format(-1549, "USD"))
+        assertEquals("-$ 1,234", Money.withSymbol(-123400, "TWD"))
+        assertEquals("$ 1,499", Money.ofUnits(1498.5, "TWD"))
         assertEquals(23, VersionUtil.codeFromTag("v1.0.23"))
         // 新格式：顯示版本＋建置編號，舊版 App 讀結尾數字一樣判斷得到
         assertEquals(402, VersionUtil.codeFromTag("v2.2.3-402"))

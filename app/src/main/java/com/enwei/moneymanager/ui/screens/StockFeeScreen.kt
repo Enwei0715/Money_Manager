@@ -167,13 +167,13 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
                     Row {
                         Text("${m.month.year}/${m.month.monthValue}", fontSize = AppText.secondary, modifier = Modifier.width(72.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("${m.trades} 筆 · 實收手續費 ${m.paidFee.toLong()} 元", fontSize = AppText.secondary)
+                            Text("${m.trades} 筆 · 實收手續費 ${"%,d".format(m.paidFee.toLong())} 元", fontSize = AppText.secondary)
                             Text(
                                 when {
                                     booked != null -> "已入帳 ${com.enwei.moneymanager.core.Money.full(booked.amount)} 元" +
                                         if (booked.rawText != null) "（依銀行通知校正）" else "（估算）"
-                                    LocalDate.now().isBefore(m.payDate) -> "預估退 ${m.rebate.toLong()} 元，${m.payDate.monthValue}/${m.payDate.dayOfMonth} 入帳"
-                                    else -> "預估退 ${m.rebate.toLong()} 元（已由銀行通知記錄或無須退款）"
+                                    LocalDate.now().isBefore(m.payDate) -> "預估退 ${"%,d".format(m.rebate.toLong())} 元，${m.payDate.monthValue}/${m.payDate.dayOfMonth} 入帳"
+                                    else -> "預估退 ${"%,d".format(m.rebate.toLong())} 元（已由銀行通知記錄或無須退款）"
                                 },
                                 fontSize = AppText.secondary,
                                 color = if (booked != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -212,16 +212,16 @@ private fun FeeCalculator(brokers: List<AccountEntity>, rebates: Map<Long, Rebat
     val tax = StockCalc.twTax(if (etf) "00" else "", amount)
     fun fee(d: Double) = max(min, floor(amount * StockCalc.TW_FEE_RATE * d))
     Text(
-        "成交金額 ${"%,.0f".format(amount)} 元${if (odd) "（零股）" else ""}\n原價手續費 ${full.toLong()} 元 · 賣出交易稅 ${tax.toLong()} 元",
+        "成交金額 ${"%,.0f".format(amount)} 元${if (odd) "（零股）" else ""}\n原價手續費 ${"%,d".format(full.toLong())} 元 · 賣出交易稅 ${"%,d".format(tax.toLong())} 元",
         fontSize = AppText.secondary,
     )
     val rows = buildList {
-        add("預設（${s.feeDiscount} 折）" to "手續費 ${fee(s.feeDiscount).toLong()} 元")
+        add("預設（${s.feeDiscount} 折）" to "手續費 ${"%,d".format(fee(s.feeDiscount).toLong())} 元")
         brokers.forEach { b ->
             val r = rebates[b.id]
             when {
-                r != null -> add(b.name to "成交收 ${full.toLong()} 元，次月退 ${(full - fee(r.discount)).toLong()} 元，實付 ${fee(r.discount).toLong()} 元")
-                b.feeDiscount != null -> add(b.name to "手續費 ${fee(b.feeDiscount).toLong()} 元（${b.feeDiscount} 折）")
+                r != null -> add(b.name to "成交收 ${"%,d".format(full.toLong())} 元，次月退 ${"%,d".format((full - fee(r.discount)).toLong())} 元，實付 ${"%,d".format(fee(r.discount).toLong())} 元")
+                b.feeDiscount != null -> add(b.name to "手續費 ${"%,d".format(fee(b.feeDiscount).toLong())} 元（${b.feeDiscount} 折）")
             }
         }
     }

@@ -451,7 +451,7 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
             items(list.sortedWith(compareByDescending<StockTradeEntity> { it.date }.thenByDescending { it.id }), key = { it.id }) { t ->
                 val lotOf = t.lotTradeId?.let { id -> list.find { it.id == id } }
                 ListItem(
-                    headlineContent = { Text("${t.side.label}  ${if (t.side == StockSide.CASH_DIVIDEND) formatNum(t.cashAmount) else "${formatNum(t.shares, 0)} 股 @ ${formatNum(t.price)}"}") },
+                    headlineContent = { Text("${t.side.label}  ${if (t.side == StockSide.CASH_DIVIDEND) Money.ofUnits(t.cashAmount, t.currency) else "${formatNum(t.shares, 0)} 股 @ ${formatNum(t.price)}"}") },
                     supportingContent = {
                         Text(
                             "${LocalDate.ofEpochDay(t.date)}" +
@@ -704,7 +704,7 @@ fun TradeEditScreen(
                     FormLine("手續費") { FormInput(fee, { fee = it; feeEdited = true }, "", number = true) }
                     FormLine("交易稅") { FormInput(tax, { tax = it; feeEdited = true }, "", number = true) }
                     Text(
-                        "成交金額 ${formatNum(amount)}　${if (side == StockSide.BUY) "應付" else "應收"} ${formatNum(settle)}\n" +
+                        "成交金額 ${Money.ofUnits(amount, if (market == Market.TW) "TWD" else "USD")}　${if (side == StockSide.BUY) "應付" else "應收"} ${Money.ofUnits(settle, if (market == Market.TW) "TWD" else "USD")}\n" +
                             "手續費依 ${feeSettings.discount} 折估算，請以券商帳單為準",
                         fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )

@@ -41,7 +41,8 @@ object Money {
         val body = if (decimalsOf(currency ?: displayBase) == 0) noDecimals.format(BigDecimal.valueOf(abs, 2).setScale(0, RoundingMode.HALF_UP))
             else if (abs % 100 == 0L) noDecimals.format(abs / 100) else twoDecimals.format(abs / 100.0)
         val sign = if (minor < 0) "-" else ""
-        val symbol = currency?.let { symbolOf(it) } ?: ""
+        // 全 App 一種寫法：負號在最前、符號與數字間一個空格（-$ 1,234）
+        val symbol = currency?.let { symbolOf(it).trim() + " " } ?: ""
         return "$sign$symbol$body"
     }
 
@@ -66,8 +67,11 @@ object Money {
     /** 帶幣別符號，例如 "$ 1,000"、"US$ 12.50"。 */
     fun withSymbol(minor: Long, currency: String = displayBase): String {
         val sign = if (minor < 0) "-" else ""
-        return "${symbolOf(currency).trim()} $sign${body(Math.abs(minor), currency)}"
+        return "$sign${symbolOf(currency).trim()} ${body(Math.abs(minor), currency)}"
     }
+
+    /** 以「元」為單位的小數金額（股利、成交金額等）：依幣別決定小數位並加上符號 */
+    fun ofUnits(value: Double, currency: String = displayBase): String = withSymbol(toMinor(value), currency)
 
     fun symbolOf(currency: String): String = when (currency.uppercase()) {
         "TWD" -> "$"

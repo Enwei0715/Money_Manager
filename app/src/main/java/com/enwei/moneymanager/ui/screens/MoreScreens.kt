@@ -216,7 +216,7 @@ private fun ToolTile(
             } else Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(t.icon, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(32.dp))
                 Spacer(Modifier.height(8.dp))
-                Text(t.label, fontSize = AppText.body, lineHeight = 17.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(t.label, fontSize = AppText.body, lineHeight = 19.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
             if (editing) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 listOf("◀" to onLeft, (if (wide) "窄" else "寬") to onToggleWide, "▶" to onRight, "✕" to onHide).forEach { (l, f) ->
@@ -254,7 +254,7 @@ private fun rememberToolSummaries(): Map<String, String> {
     return buildMap {
         put("pending", if (pending.isEmpty()) "沒有待確認的交易" else "${pending.size} 筆待確認")
         put("recurring", next?.let { (r, d) -> "下一筆 ${d.monthValue}/${d.dayOfMonth} ${r.name}" } ?: "沒有週期交易")
-        if (settings.subCurrency != lk.base) put("fx", "1 ${settings.subCurrency} ≈ ${Money.format(lk.fx.convert(100, settings.subCurrency), lk.base)} ${lk.base}")
+        if (settings.subCurrency != lk.base) put("fx", "1 ${settings.subCurrency} ≈ ${"%.2f".format(lk.fx.convert(1_000_000, settings.subCurrency) / 1_000_000.0)} ${lk.base}")
         put("backup", if (settings.lastAutoBackup > 0) "上次備份 ${fmt.format(Date(settings.lastAutoBackup))}" else "尚未設定自動備份")
         put("ai-hub", report?.takeIf { it.running }?.step ?: if (com.enwei.moneymanager.net.GroqAi.enabled) "AI 待命中" else "尚未設定 AI 金鑰")
         put("advisor", news?.report?.let { "報告 ${fmt.format(Date(it.createdAt))}" } ?: "還沒有報告")
