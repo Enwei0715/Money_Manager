@@ -334,6 +334,21 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                     }
                 }
                 sec("功能開關")
+                // 使用模式：一次套用一組功能開關（新手先用精簡，需要時再逐項打開）；AI 需要金鑰，不在模式裡切換
+                val mode = when {
+                    !s.featureNotif && !s.featureSplit && !s.locationHints && !s.featureStocks -> 0
+                    s.featureNotif && s.featureSplit && !s.locationHints && !s.featureStocks -> 1
+                    s.featureNotif && s.featureSplit && s.locationHints && s.featureStocks -> 2
+                    else -> 3
+                }
+                val modes = listOf(0 to "精簡：只手動記帳", 1 to "標準：記帳＋通知自動記帳＋往來", 2 to "完整：再加上定位與股票投資")
+                cfg("使用模式", modes.firstOrNull { it.first == mode }?.second?.substringBefore("：") ?: "自訂") {
+                    ask("使用模式", modes, mode.takeIf { it < 3 }, "套用後仍可在下方逐項開關。資料不會因關閉功能而刪除。") { m ->
+                        repo.settings.update { it.copy(featureNotif = m >= 1, featureSplit = m >= 1, locationHints = m >= 2, featureStocks = m >= 2) }
+                        // 新開的功能需要權限時，接著到功能設定檢查
+                        if ((m >= 1 && !s.featureNotif) || (m >= 2 && !s.locationHints)) nav.navigate("setup")
+                    }
+                }
                 cfg("通知自動記帳", onOff(s.featureNotif)) {
                     askOnOff("通知自動記帳", s.featureNotif, null) { v ->
                         repo.settings.update { it.copy(featureNotif = v) }

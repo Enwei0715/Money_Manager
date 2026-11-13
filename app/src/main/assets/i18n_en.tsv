@@ -3416,3 +3416,10 @@ OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金
 支出跨過預算 80%、100% 時提醒一次；每月初整理上個月的收支	Once when spending crosses 80% or 100% of a budget; a summary of last month at the start of each month
 店名	Merchant
 修改過：	Edited: 
+使用模式	Usage mode
+精簡	Simple
+完整	Full
+精簡：只手動記帳	Simple: manual entry only
+標準：記帳＋通知自動記帳＋往來	Standard: entry, auto-recording from notifications, IOUs
+完整：再加上定位與股票投資	Full: also location and investing
+套用後仍可在下方逐項開關。資料不會因關閉功能而刪除。	You can still turn each feature on or off below. Turning a feature off never deletes data.

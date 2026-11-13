@@ -97,6 +97,8 @@ dependencies {
     implementation(libs.compose.ui.text.google.fonts)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons)
+    // 安裝時依 baseline-prof.txt 預先編譯常用程式（GitHub 直接安裝的 APK 也有效），加快啟動與捲動
+    implementation(libs.androidx.profileinstaller)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)

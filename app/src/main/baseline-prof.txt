@@ -1,0 +1,13 @@
+# 啟動與主要分頁會用到的程式：安裝時預先編譯（profileinstaller）。
+# 規則格式：H＝常用、S＝啟動、P＝啟動後；** 代表任何名稱。
+HSPLcom/enwei/moneymanager/MoneyApp;->**(**)**
+HSPLcom/enwei/moneymanager/core/**;->**(**)**
+HSPLcom/enwei/moneymanager/data/**;->**(**)**
+HSPLcom/enwei/moneymanager/ui/*;->**(**)**
+HSPLcom/enwei/moneymanager/ui/components/**;->**(**)**
+HSPLcom/enwei/moneymanager/ui/screens/TransactionsTab*;->**(**)**
+HSPLcom/enwei/moneymanager/ui/screens/StatsTab*;->**(**)**
+HSPLcom/enwei/moneymanager/ui/screens/AccountsTab*;->**(**)**
+HSPLcom/enwei/moneymanager/ui/screens/TxnEditor*;->**(**)**
+Lcom/enwei/moneymanager/MoneyApp;
+Lcom/enwei/moneymanager/ui/MainActivity;

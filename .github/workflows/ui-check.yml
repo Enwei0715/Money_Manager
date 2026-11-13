@@ -54,6 +54,8 @@ jobs:
         if: always()
         run: |
           [ -d shots ] || exit 0
+          # 一併發佈 Room 匯出的資料庫結構（app/schemas），供日後撰寫升級測試
+          [ -d app/schemas ] && cp -r app/schemas shots/ || true
           sha=$(git rev-parse --short HEAD)
           mkdir -p /tmp/pub && cp -r shots/. /tmp/pub/
           cd /tmp/pub
