@@ -479,8 +479,8 @@ fun SummaryBarCustom(cells: List<Pair<String, Pair<String, Color>>>) {
                         row.forEach { (label, value) ->
                             Column(Modifier.weight(if (row.size == 1) columns.toFloat() else 1f), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                                Text(value.first, color = value.second, style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                com.enwei.moneymanager.ui.components.FitText(value.first, color = value.second,
+                                    fontSize = MaterialTheme.typography.titleMedium.fontSize, fontWeight = MaterialTheme.typography.titleMedium.fontWeight)
                             }
                         }
                     }

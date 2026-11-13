@@ -427,6 +427,8 @@ data class AppSettings(
     val alertsFired: Map<String, Long> = emptyMap(),
     /** 有新版本時通知 */
     val notifyUpdates: Boolean = true,
+    /** 畫面保護：開啟密碼鎖時，最近使用畫面與截圖不顯示帳務內容（會無法截圖）。null＝還沒問過 */
+    val screenProtect: Boolean? = null,
     /** 已通知過的版本代碼 */
     val updateNotified: Int = 0,
     /** 使用者在更新視窗按「略過這版」的版本 */
@@ -682,6 +684,7 @@ class SettingsStore(context: Context) {
         featureSplit = prefs.getBoolean("featureSplit", true),
         alertsFired = dec("alertsFired", "{}", MapSerializer(String.serializer(), Long.serializer()), emptyMap()),
         notifyUpdates = prefs.getBoolean("notifyUpdates", true),
+        screenProtect = if (prefs.contains("screenProtect")) prefs.getBoolean("screenProtect", false) else null,
         updateNotified = prefs.getInt("updateNotified", 0),
         updateSkipped = prefs.getInt("updateSkipped", 0),
         updateCheckLog = prefs.getString("updateCheckLog", "")!!,
@@ -894,6 +897,7 @@ class SettingsStore(context: Context) {
             .putBoolean("featureSplit", s.featureSplit)
             .putString("alertsFired", json.encodeToString(MapSerializer(String.serializer(), Long.serializer()), s.alertsFired))
             .putBoolean("notifyUpdates", s.notifyUpdates)
+            .apply { if (s.screenProtect == null) remove("screenProtect") else putBoolean("screenProtect", s.screenProtect) }
             .putInt("updateNotified", s.updateNotified)
             .putInt("updateSkipped", s.updateSkipped)
             .putString("updateCheckLog", s.updateCheckLog)

@@ -3441,3 +3441,9 @@ OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金
 全部刪除	Delete all
 刪除全部過去的對話？	Delete all past conversations?
 已刪除全部過去的對話	All past conversations deleted
+要允許截圖嗎？	Allow screenshots?
+允許截圖	Allow screenshots
+開啟畫面保護	Turn on screen protection
+畫面保護（禁止截圖）	Screen protection (blocks screenshots)
+開啟後，最近使用的 App 畫面與截圖不會顯示帳務內容，但也無法截圖。關閉則可正常截圖。	When on, the recent-apps preview and screenshots hide your finances, and screenshots are blocked. When off, screenshots work normally.
+開啟「畫面保護」後，最近使用的 App 畫面與截圖不會顯示帳務內容，但也無法截圖回報問題。之後可在「設定 → 安全與資料」更改。	With screen protection on, the recent-apps preview and screenshots hide your finances, but you can't take screenshots to report problems. You can change this later in Settings → Security & data.

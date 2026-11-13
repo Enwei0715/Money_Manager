@@ -40,6 +40,16 @@ fun Text(
 ) = M3Text(
     text = I18n.tr(text), modifier = modifier, color = color, fontSize = fontSize, fontStyle = fontStyle, fontWeight = fontWeight,
     fontFamily = fontFamily, letterSpacing = letterSpacing, textDecoration = textDecoration, textAlign = textAlign,
-    lineHeight = lineHeight, overflow = overflow ?: if (maxLines != Int.MAX_VALUE || !softWrap) TextOverflow.Ellipsis else TextOverflow.Clip, softWrap = softWrap, maxLines = maxLines, minLines = minLines,
+    lineHeight = fitLineHeight(fontSize, lineHeight), overflow = overflow ?: if (maxLines != Int.MAX_VALUE || !softWrap) TextOverflow.Ellipsis else TextOverflow.Clip, softWrap = softWrap, maxLines = maxLines, minLines = minLines,
     onTextLayout = onTextLayout, style = style,
 )
+
+/**
+ * 行高跟著字級：只給字級時用 1.3 倍；給的行高比 1.2 倍字級還小時拉到 1.2 倍。
+ * 避免沿用主題 20sp 的固定行高——大字（標題、200% 字級）上下被切或兩行疊在一起，小字則浪費空間。
+ */
+private fun fitLineHeight(fontSize: TextUnit, lineHeight: TextUnit): TextUnit {
+    if (!fontSize.isSp) return lineHeight
+    if (!lineHeight.isSp) return fontSize * 1.3f
+    return if (lineHeight.value < fontSize.value * 1.2f) fontSize * 1.2f else lineHeight
+}

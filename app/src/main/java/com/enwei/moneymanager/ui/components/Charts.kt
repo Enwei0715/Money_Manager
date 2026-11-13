@@ -85,7 +85,7 @@ fun LineChart(values: List<Long>, labels: List<String>, color: Color, modifier: 
             labels.forEachIndexed { i, l ->
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(l, fontSize = AppText.label, color = textColor)
-                    Text(Money.full(values.getOrElse(i) { 0 }), fontSize = AppText.badge, maxLines = 1, textAlign = TextAlign.Center)
+                    FitText(Money.full(values.getOrElse(i) { 0 }), fontSize = AppText.badge, minSize = 7.sp)
                 }
             }
         }

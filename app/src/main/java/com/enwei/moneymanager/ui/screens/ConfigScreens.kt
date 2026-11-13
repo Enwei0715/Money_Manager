@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -249,8 +250,8 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                                     "features" -> "使用模式、各項功能"; "autorecord" -> "紀錄、來源 App、準確度"; "ai" -> "金鑰、模型、語氣"
                                     "stocks" -> "手續費、紀律"; "notify" -> "八種通知"; "data" -> "密碼、備份還原"; else -> "導覽、回報、更新"
                                 }
-                                com.enwei.moneymanager.ui.components.AppCard(Modifier.weight(1f).height(72.dp).clickable { nav.navigate(g.route ?: "config?g=${g.id}") }) {
-                                    Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                com.enwei.moneymanager.ui.components.AppCard(Modifier.weight(1f).heightIn(min = 72.dp).clickable { nav.navigate(g.route ?: "config?g=${g.id}") }) {
+                                    Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(vertical = 8.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                         androidx.compose.foundation.layout.Box(
                                             Modifier.size(36.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), androidx.compose.foundation.shape.CircleShape),
                                             contentAlignment = Alignment.Center,
@@ -418,6 +419,12 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
 
                 sec("安全")
                 cfg("密碼鎖", onOff(s.passcodeOn)) { nav.navigate("passcode") }
+                if (s.passcodeOn) cfg("畫面保護（禁止截圖）", onOff(s.screenProtect == true)) {
+                    askOnOff("畫面保護（禁止截圖）", s.screenProtect == true,
+                        "開啟後，最近使用的 App 畫面與截圖不會顯示帳務內容，但也無法截圖。關閉則可正常截圖。") { v ->
+                        repo.settings.update { it.copy(screenProtect = v) }
+                    }
+                }
                 sec("資料")
                 cfg("備份與還原") { nav.navigate("backup") }
 

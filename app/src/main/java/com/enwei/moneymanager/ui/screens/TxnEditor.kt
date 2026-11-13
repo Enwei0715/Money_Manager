@@ -608,7 +608,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     segs.forEach { (info, onClick) ->
                         val (label, sel, c) = info
                         Box(
-                            Modifier.weight(1f).height(36.dp)
+                            // 最小 36dp、字大時跟著長高（不會把字底切掉）
+                            Modifier.weight(1f).heightIn(min = 36.dp)
                                 .background(if (sel) MaterialTheme.colorScheme.surface else Color.Transparent, MaterialTheme.shapes.small)
                                 .clickable(onClick = onClick),
                             contentAlignment = Alignment.Center,
@@ -1083,7 +1084,7 @@ private fun BottomPanel(
         }
         when (panel) {
             Panel.AMOUNT, Panel.FEE, Panel.SPLIT -> {
-                Row(Modifier.fillMaxWidth().background(barBg).height(48.dp)) {
+                Row(Modifier.fillMaxWidth().background(barBg).height(48.dp).horizontalScroll(rememberScrollState())) {
                     (currencies + listOfNotNull(currency.takeIf { it !in currencies })).forEach { c ->
                         Box(
                             Modifier.width(64.dp).fillMaxHeight().background(if (c == currency) onBar.copy(alpha = 0.16f) else Color.Transparent)
@@ -1526,7 +1527,7 @@ private fun DebtInline(person: Long?, onPerson: (Long?) -> Unit, newName: String
             kinds.forEach { (i, l) ->
                 val on = i == kind
                 Box(
-                    Modifier.weight(1f).height(36.dp).background(if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent, MaterialTheme.shapes.small)
+                    Modifier.weight(1f).heightIn(min = 36.dp).background(if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent, MaterialTheme.shapes.small)
                         .clickable { onKind(i) },
                     contentAlignment = Alignment.Center,
                 ) { Text(l, fontSize = AppText.secondary, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }

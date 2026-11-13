@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -445,7 +446,7 @@ fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, cent
             drawPath(path, l.color, alpha = labelAlpha, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
             val w = l.layout.size.width.toFloat()
             val x = if (l.right) anchor.x + 8f else anchor.x - 8f - w
-            drawText(l.layout, topLeft = Offset(x.coerceIn(0f, size.width - w), l.y - l.layout.size.height / 2), alpha = labelAlpha)
+            drawText(l.layout, topLeft = Offset(x.coerceIn(0f, maxOf(0f, size.width - w)), l.y - l.layout.size.height / 2), alpha = labelAlpha)
         }
     }
 }
@@ -473,7 +474,7 @@ fun CategoryStatScreen(nav: NavController, categoryId: Long, kind: TxnType, peri
                     Text(Money.format(values.last(), lk.base), style = MaterialTheme.typography.headlineSmall, color = color)
                     Spacer(Modifier.height(12.dp))
                     val maxV = values.maxOrNull()?.coerceAtLeast(1) ?: 1
-                    Row(Modifier.fillMaxWidth().height(150.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 150.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
                         values.forEachIndexed { i, v ->
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(if (v > 0) Money.format(v) else "", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant)

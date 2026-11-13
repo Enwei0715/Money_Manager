@@ -141,7 +141,8 @@ fun ToolGrid(
     var resize by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
     val gap = 8.dp
-    val rowH = 96.dp
+    // 格高跟著系統字級變高（最多 1.6 倍）：大字時名稱第二行與摘要不會被切掉
+    val rowH = 96.dp * density.fontScale.coerceIn(1f, 1.6f)
     val rows = (place.values.maxOfOrNull { it.row + it.h } ?: 0) + if (editing) 1 else 0
     BoxWithConstraints(Modifier.fillMaxWidth().height(rowH * rows + gap * (rows - 1).coerceAtLeast(0))) {
         val cellW = (maxWidth - gap * (GRID_COLS - 1)) / GRID_COLS

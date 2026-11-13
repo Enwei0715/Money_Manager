@@ -919,7 +919,7 @@ private fun CandleChart(
                 val label = com.enwei.moneymanager.ui.tr(sg.tag.ifBlank { if (sg.buy) "買" else "賣" })
                 paint.color = android.graphics.Color.argb(255, (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt())
                 val tw = paint.measureText(label)
-                val tx = (cx - tw / 2).coerceIn(0f, size.width - tw)
+                val tx = (cx - tw / 2).coerceIn(0f, maxOf(0f, size.width - tw))
                 val ty = if (sg.buy) (cy + r + 26f * k).coerceAtMost(priceH - 4f) else (cy - r - 8f * k).coerceAtLeast(46f * k)
                 drawRoundRect(labelBg.copy(alpha = 0.92f), Offset(tx - 6f * k, ty - 24f * k), androidx.compose.ui.geometry.Size(tw + 12f * k, 32f * k),
                     androidx.compose.ui.geometry.CornerRadius(6f, 6f))
@@ -1363,7 +1363,7 @@ private fun ProjectionCard(b: DailyBars) {
                         paint.color = argb(pivotCol)
                         val label = "${dayLabel(p.index)} %.0f".format(p.price)
                         val tw = paint.measureText(label)
-                        val lx = (px - tw / 2).coerceIn(0f, xToday - tw)
+                        val lx = (px - tw / 2).coerceIn(0f, maxOf(0f, xToday - tw))
                         drawContext.canvas.nativeCanvas.drawText(label, lx, if (p.high) py - 9f * k else py + 22f * k, paint)
                     }
                 }

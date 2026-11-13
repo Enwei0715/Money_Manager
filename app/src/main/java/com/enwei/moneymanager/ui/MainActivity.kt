@@ -129,10 +129,23 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             androidx.compose.runtime.remember(settings.language) { I18n.init(applicationContext, settings.language) }
             // 狀態列、導覽列的圖示顏色跟著 App 主題（不是系統主題）切換
             // 開了密碼鎖：最近使用的 App 畫面縮圖與截圖不顯示帳務內容
-            LaunchedEffect(settings.passcodeOn) {
-                if (settings.passcodeOn) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+            // 只有使用者選擇「畫面保護」才擋截圖（預設可截圖，方便截圖回報問題）
+            LaunchedEffect(settings.passcodeOn, settings.screenProtect) {
+                if (settings.passcodeOn && settings.screenProtect == true) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
                 else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             }
+            // 開了密碼鎖、還沒選過：問一次要不要擋截圖（之後可在 設定 → 密碼鎖下方 更改）
+            if (settings.passcodeOn && settings.screenProtect == null && !locked.value) androidx.compose.material3.AlertDialog(
+                onDismissRequest = {},
+                title = { com.enwei.moneymanager.ui.components.Text("要允許截圖嗎？") },
+                text = { com.enwei.moneymanager.ui.components.Text("開啟「畫面保護」後，最近使用的 App 畫面與截圖不會顯示帳務內容，但也無法截圖回報問題。之後可在「設定 → 安全與資料」更改。") },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = {
+                    MoneyApp.repo.settings.update { it.copy(screenProtect = false) }
+                }) { com.enwei.moneymanager.ui.components.Text("允許截圖") } },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = {
+                    MoneyApp.repo.settings.update { it.copy(screenProtect = true) }
+                }) { com.enwei.moneymanager.ui.components.Text("開啟畫面保護") } },
+            )
             LaunchedEffect(dark) {
                 val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)

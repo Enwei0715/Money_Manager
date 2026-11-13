@@ -471,7 +471,8 @@ private fun SummaryCell(label: String, value: String, color: Color, modifier: Mo
     Column(modifier.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant,
             letterSpacing = androidx.compose.ui.unit.TextUnit(1f, androidx.compose.ui.unit.TextUnitType.Sp))
-        Text(value, color = color, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // 金額放不下時縮小字級，不用「…」吃掉位數
+        com.enwei.moneymanager.ui.components.FitText(value, color = color, fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
     }
 }
 

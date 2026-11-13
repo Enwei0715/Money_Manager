@@ -510,7 +510,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                                 val stock = a.pkg in settings.stockPackages
                                 androidx.compose.material3.FilterChip(stock, {
                                     repo.settings.update { it.copy(stockPackages = if (stock) it.stockPackages - a.pkg else it.stockPackages + a.pkg) }
-                                }, label = { Text("股票成交", fontSize = AppText.caption) }, modifier = Modifier.padding(start = 8.dp).height(28.dp))
+                                }, label = { Text("股票成交", fontSize = AppText.caption) }, modifier = Modifier.padding(start = 8.dp))
                             }
                         } else Text(a.pkg, style = MaterialTheme.typography.labelSmall)
                     },
