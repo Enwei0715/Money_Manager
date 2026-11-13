@@ -209,7 +209,7 @@ fun MonthSwitcher(month: YearMonth, onChange: (YearMonth) -> Unit, modifier: Mod
 fun LabelValue(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color = Color.Unspecified) {
     Column(modifier) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.titleMedium, color = valueColor, fontWeight = FontWeight.SemiBold)
+        Text(value, style = MaterialTheme.typography.titleMedium, color = valueColor, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }
 

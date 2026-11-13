@@ -355,7 +355,7 @@ private fun HoldingRow(h: HoldingView, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text("${h.symbol}  ${h.name.orEmpty()}", fontSize = AppText.body, maxLines = 1)
                 Text(
-                    if (h.shares > 0.0001) "${formatShares(h.shares)} · 均價 ${formatNum(h.avgCost)}" else "已實現 ${formatNum(h.realizedTotal, 0)}",
+                    if (h.shares > 0.0001) "${formatShares(h.shares)} · 均價 ${formatNum(h.avgCost)}" else "已實現 ${Money.ofUnits(h.realizedTotal, h.currency)}",
                     fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -365,7 +365,7 @@ private fun HoldingRow(h: HoldingView, onClick: () -> Unit) {
                     "${formatNum(h.price)} " + (dayPct?.let { (if (it >= 0) "▲" else "▼") + formatPct(it) } ?: ""),
                     fontSize = AppText.secondary, color = pnlColor(dayPct ?: 0.0),
                 )
-                if (h.shares > 0.0001) Text("損益 ${formatNum(h.unrealized, 0)} (${formatPct(h.unrealizedPct)})", fontSize = AppText.caption, color = pnlColor(h.unrealized))
+                if (h.shares > 0.0001) Text("損益 ${Money.ofUnits(h.unrealized, h.currency)}（${formatPct(h.unrealizedPct)}）", fontSize = AppText.caption, color = pnlColor(h.unrealized))
             }
         }
         com.enwei.moneymanager.ui.components.LineDivider()
@@ -397,19 +397,19 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
                 com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth().padding(16.dp)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            LabelValue("持有股數", formatNum(h.shares, 0))
+                            LabelValue("持有股數", formatShares(h.shares))
                             LabelValue("平均成本", formatNum(h.avgCost))
                             LabelValue("現價", h.price?.let { formatNum(it) } ?: "—")
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            LabelValue("市值", formatNum(h.marketValue, 0))
-                            LabelValue("預估損益", formatNum(h.unrealized, 0), valueColor = pnlColor(h.unrealized))
-                            LabelValue("已實現", formatNum(h.realizedTotal, 0), valueColor = pnlColor(h.realizedTotal))
+                            LabelValue("市值", Money.ofUnits(h.marketValue, h.currency))
+                            LabelValue("預估損益", Money.ofUnits(h.unrealized, h.currency), valueColor = pnlColor(h.unrealized))
+                            LabelValue("已實現", Money.ofUnits(h.realizedTotal, h.currency), valueColor = pnlColor(h.realizedTotal))
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            LabelValue("成本（扣股利）", formatNum(h.netCost, 0))
-                            LabelValue("已領股利", formatNum(h.openDividends, 0))
-                            LabelValue("預估賣出費用", formatNum(h.estSellCost, 0))
+                            LabelValue("成本（扣股利）", Money.ofUnits(h.netCost, h.currency))
+                            LabelValue("已領股利", Money.ofUnits(h.openDividends, h.currency))
+                            LabelValue("預估賣出費用", Money.ofUnits(h.estSellCost, h.currency))
                         }
                     }
                 }
@@ -424,18 +424,18 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("成交日期 ${LocalDate.ofEpochDay(lot.epochDay)}", style = MaterialTheme.typography.labelLarge)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                LabelValue("預估損益", pnl?.let { formatNum(it, 0) } ?: "—", valueColor = pnl?.let { pnlColor(it) } ?: Color.Unspecified)
-                                LabelValue("現值", h.price?.let { formatNum(lot.shares * it, 0) } ?: "—")
+                                LabelValue("預估損益", pnl?.let { Money.ofUnits(it, h.currency) } ?: "—", valueColor = pnl?.let { pnlColor(it) } ?: Color.Unspecified)
+                                LabelValue("現值", h.price?.let { Money.ofUnits(lot.shares * it, h.currency) } ?: "—")
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 LabelValue("庫存／股", formatNum(lot.shares, 0), Modifier.weight(1f))
                                 LabelValue("單價", formatNum(lot.price), Modifier.weight(1f))
-                                LabelValue("價金", formatNum(gross, 0), Modifier.weight(1f))
+                                LabelValue("價金", Money.ofUnits(gross, h.currency), Modifier.weight(1f))
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                LabelValue("手續費＋稅", formatNum(lot.cost - gross, 0), Modifier.weight(1f))
-                                LabelValue("除息金額", formatNum(lot.dividends, 0), Modifier.weight(1f))
-                                LabelValue("原幣成本", formatNum(lot.netCost, 0), Modifier.weight(1f))
+                                LabelValue("手續費＋稅", Money.ofUnits(lot.cost - gross, h.currency), Modifier.weight(1f))
+                                LabelValue("除息金額", Money.ofUnits(lot.dividends, h.currency), Modifier.weight(1f))
+                                LabelValue("原幣成本", Money.ofUnits(lot.netCost, h.currency), Modifier.weight(1f))
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 androidx.compose.material3.OutlinedButton(onClick = {
@@ -456,7 +456,7 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
                         Text(
                             "${LocalDate.ofEpochDay(t.date)}" +
                                 (if (t.side == StockSide.CASH_DIVIDEND) lotOf?.let { " · 屬於 ${LocalDate.ofEpochDay(it.date)} 那批" } ?: " · 依持股比例分配"
-                                else " · 手續費 ${formatNum(t.fee, 0)} · 稅 ${formatNum(t.tax, 0)}") +
+                                else " · 手續費 ${Money.ofUnits(t.fee, t.currency)} · 稅 ${Money.ofUnits(t.tax, t.currency)}") +
                                 (if (t.source != TxnSource.MANUAL) " · ${t.source.label}" else ""),
                         )
                     },

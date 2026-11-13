@@ -330,6 +330,7 @@ fun NotificationSettingsScreen(nav: NavController) {
     // 交易已被刪除的紀錄要顯示成「已刪除」，可以重新記帳
     val txns by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val txnIds = remember(txns) { txns.map { it.id }.toHashSet() }
+    val txnById = remember(txns) { txns.associateBy { it.id } }
     fun loadNotes() = testScope.launch {
         val n = TxnNotificationListener.activeNotes()
         testMsg = if (n == null) "仍無法讀取通知列：請確認已開啟通知存取權（開啟後可能要稍等幾秒）" else if (n.isEmpty()) "通知列目前沒有通知" else null
@@ -679,7 +680,15 @@ fun NotificationSettingsScreen(nav: NavController) {
                                 Text(label, fontSize = AppText.label, color = col,
                                     modifier = Modifier.background(col.copy(alpha = 0.12f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
                             }
-                            Text(listOfNotNull(e.title, e.text).joinToString(" "), fontSize = AppText.secondary, maxLines = 2,
+                            // 已記帳：先寫記成什麼（金額・店名），通知原文縮成一行放下面
+                            val rec = e.txnId?.let { id -> txnById[id] }
+                            if (rec != null && !gone) {
+                                Text(listOfNotNull(Money.withSymbol(rec.amount, rec.currency), rec.merchant?.takeIf { it.isNotBlank() }).joinToString("・"),
+                                    fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                Text(listOfNotNull(e.title, e.text).joinToString(" "), fontSize = AppText.caption, maxLines = 1,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            } else Text(listOfNotNull(e.title, e.text).joinToString(" "), fontSize = AppText.secondary, maxLines = 2,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             if (gone) Text("點選重新記帳", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
                             else if (e.result == "UNPARSED" && com.enwei.moneymanager.core.NotificationParser.parseStockFillPartial(e.title, e.text) != null)
