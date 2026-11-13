@@ -134,7 +134,7 @@ fun ReviewContent(
             // 分段：每段一個畫面看得完（總覽含目標與最大幾筆；結構、習慣、AI 各自一段）
             val tabNames = listOfNotNull("總覽", "變化", "習慣", if (settings.aiEnabled) "AI 建議" else null)
             val rt = reviewTab.coerceAtMost(tabNames.size - 1)
-            com.enwei.moneymanager.ui.components.SubTabs(tabNames, rt) { reviewTab = it }
+            com.enwei.moneymanager.ui.components.TextTabs(tabNames, rt) { reviewTab = it }
 
             // ① 總覽
             if (rt == 0) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {

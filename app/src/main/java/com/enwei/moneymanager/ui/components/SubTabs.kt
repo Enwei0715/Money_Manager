@@ -5,6 +5,8 @@ import com.enwei.moneymanager.ui.AppText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -47,6 +49,32 @@ fun SubTabs(options: List<String>, selected: Int, modifier: Modifier = Modifier,
                 Text(label, fontSize = AppText.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (sel) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+
+/**
+ * 第二層的分頁（放在 [SubTabs] 下面時用）：只有文字與底線，不再疊一個灰底膠囊，畫面不會兩層粗框擠在一起。
+ */
+@Composable
+fun TextTabs(options: List<String>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
+    Row(modifier.fillMaxWidth()) {
+        options.forEachIndexed { i, label ->
+            val sel = i == selected
+            Column(
+                Modifier.weight(1f)
+                    .clickable(role = androidx.compose.ui.semantics.Role.Tab) { Chrome.reveal(); onSelect(i) }
+                    .semantics { this.selected = sel }
+                    .padding(top = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(label, fontSize = AppText.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (sel) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+                Box(Modifier.fillMaxWidth(0.5f).height(2.dp).background(if (sel) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent))
             }
         }
     }

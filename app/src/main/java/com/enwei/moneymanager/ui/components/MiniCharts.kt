@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -254,17 +255,17 @@ fun LabeledBars(title: String, rows: List<Triple<String, Long, String>>, color: 
     if (rows.isEmpty() || rows.all { it.second <= 0 }) return
     val max = rows.maxOf { it.second }.coerceAtLeast(1)
     val track = MaterialTheme.colorScheme.surfaceVariant
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
+    // 一項一列：名稱｜細長條｜數值（原本名稱、數值、長條分兩行，項目一多就很擠）
+    Column(modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
         rows.forEach { (name, v, label) ->
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(name, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Text(label, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
+            Row(Modifier.fillMaxWidth().heightIn(min = 30.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(name, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.34f))
+                Box(Modifier.weight(0.36f).padding(horizontal = 8.dp).height(6.dp).background(track, RoundedCornerShape(3.dp))) {
+                    if (v > 0) Box(Modifier.fillMaxWidth((v.toFloat() / max).coerceIn(0.03f, 1f)).height(6.dp).background(color.copy(alpha = 0.8f), RoundedCornerShape(3.dp)))
                 }
-                Box(Modifier.fillMaxWidth().height(8.dp).background(track, RoundedCornerShape(3.dp))) {
-                    if (v > 0) Box(Modifier.fillMaxWidth((v.toFloat() / max).coerceIn(0.02f, 1f)).height(8.dp).background(color, RoundedCornerShape(3.dp)))
-                }
+                Text(label, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(0.30f))
             }
         }
     }
