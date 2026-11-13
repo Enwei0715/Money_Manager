@@ -270,8 +270,41 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         db.accounts().upsert(acc.copy(cardLast4 = l4))
     }
 
+    /**
+     * 這筆交易另記的手續費：新記的用 externalKey「FEE:主交易 id」連起來；
+     * 舊資料沒有標記，找同一時間、同帳戶、名稱是手續費的支出。
+     */
+    suspend fun feeOf(t: TxnEntity): TxnEntity? {
+        if (t.id == 0L || (t.type != TxnType.EXPENSE && t.type != TxnType.TRANSFER)) return null
+        db.txns().byExternalKey("FEE:${t.id}")?.let { return it }
+        return db.txns().between(t.date, t.date).firstOrNull {
+            it.id != t.id && it.type == TxnType.EXPENSE && it.accountId == t.accountId && it.date == t.date &&
+                (it.merchant == "轉帳手續費" || it.merchant?.endsWith("手續費") == true)
+        }
+    }
+
+    /**
+     * 存主交易的手續費：有填就新增或更新（同一筆主交易只會有一筆手續費，不會重複），
+     * 清空就刪掉原本那筆。
+     */
+    suspend fun saveFeeFor(main: TxnEntity, mainId: Long, fee: Long?, categoryId: Long?) {
+        val existing = feeOf(main.copy(id = mainId))
+        if (fee == null || fee <= 0) { existing?.let { db.txns().delete(it.id) }; return }
+        saveTxn(TxnEntity(
+            id = existing?.id ?: 0L, type = TxnType.EXPENSE, amount = fee, currency = main.currency, accountId = main.accountId,
+            categoryId = existing?.categoryId ?: categoryId,
+            merchant = if (main.type == TxnType.TRANSFER) "轉帳手續費" else listOfNotNull(main.merchant?.takeIf { it.isNotBlank() }, "手續費").joinToString(" "),
+            date = main.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED, externalKey = "FEE:$mainId",
+        ))
+    }
+
+    /** 刪主交易時一起刪掉的手續費（復原時一起還原） */
+    private val cascadedFees = java.util.concurrent.ConcurrentHashMap<Long, TxnEntity>()
+
     suspend fun deleteTxn(id: Long) {
         val t = db.txns().get(id)
+        // 主交易刪掉，另記的手續費也一起刪（不留下孤兒）
+        t?.let { main -> feeOf(main)?.let { fee -> db.txns().delete(fee.id); cascadedFees[id] = fee } }
         db.txns().delete(id)
         if (t != null && t.source == TxnSource.NOTIFICATION) {
             AutoAccuracy.onDelete(t)
@@ -283,6 +316,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     /** 復原剛刪除的交易（保留原本的 id，通知紀錄等關聯不會斷） */
     suspend fun restoreTxn(t: TxnEntity) {
         db.txns().upsert(t)
+        cascadedFees.remove(t.id)?.let { db.txns().upsert(it) }
         if (t.source == TxnSource.NOTIFICATION) {
             AutoAccuracy.onRestore(t)
             runCatching { db.notificationLog().setResultForTxn(t.id, "RECORDED") }

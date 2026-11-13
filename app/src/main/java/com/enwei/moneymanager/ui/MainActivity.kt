@@ -254,11 +254,18 @@ fun NavController.openRoute(r: String) {
         }
         r == "review" -> { TabRequest.statsView = 1; openTab("stats") }
         tabs.any { it.route == r } -> openTab(r)
+        // 小工具的「股票」：切到資產分頁的股票區塊，不另外疊一層
+        r == "invest" -> { TabRequest.accountsSection = 1; openTab("accounts") }
+        // 從通知或小工具打開的設定類頁面：先回到工具分頁首頁再開，按返回回到工具，不會回到不相干的舊畫面
+        r.substringBefore('?').substringBefore('/') in TOOL_OWNED -> { openTab("more"); navigate(r) }
         else -> navigate(r)
     }
 }
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
+
+/** 屬於「工具」分頁的頁面（從通知、小工具打開時先回到工具首頁） */
+private val TOOL_OWNED = setOf("settings", "backup", "pending", "config", "notif", "budget", "recurring", "ai", "ai-hub")
 
 /** 編輯畫面：不顯示底部分頁列（避免按到分頁丟掉正在輸入的內容） */
 private val EDITOR_PREFIXES = listOf("txn/", "account/", "trade/", "recurring/{", "search")
@@ -317,6 +324,9 @@ internal fun NavController.openTab(route: String) {
         launchSingleTop = true
         restoreState = true
     }
+    // 點底部分頁一律回到這個分頁的首頁（例如工具→預算 切走再回來，看到的是工具格，不是預算）；
+    // 首頁的捲動位置、頁內子分頁照樣保留
+    popBackStack(route, inclusive = false)
 }
 
 @Composable

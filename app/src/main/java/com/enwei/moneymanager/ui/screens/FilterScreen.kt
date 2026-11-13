@@ -323,9 +323,10 @@ fun Donut(label: String, part: Long, total: Long, color: Color, modifier: Modifi
                 drawArc(track, 0f, 360f, false, topLeft, Size(d, d), style = Stroke(w))
                 drawArc(color, -90f, 360f * anim.value, false, topLeft, Size(d, d), style = Stroke(w, cap = StrokeCap.Round))
             }
-            Text("${(anim.value * 100).toInt()}%", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+            // 字大時縮小，不壓到圓環
+            com.enwei.moneymanager.ui.components.FitText("${(anim.value * 100).toInt()}%", Modifier.padding(horizontal = 12.dp), fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
         }
-        Text(Money.full(if (part > 0) part else total), fontSize = AppText.secondary, maxLines = 1)
-        if (part > 0) Text(Money.full(total), fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        com.enwei.moneymanager.ui.components.FitText(Money.full(if (part > 0) part else total), fontSize = AppText.secondary)
+        if (part > 0) com.enwei.moneymanager.ui.components.FitText(Money.full(total), fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

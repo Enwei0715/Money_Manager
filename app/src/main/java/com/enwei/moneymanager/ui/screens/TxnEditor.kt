@@ -205,6 +205,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             accountId = t.accountId; toAccountId = t.toAccountId; toExpr = t.toAmount?.let(::minorToExpr).orEmpty()
             categoryId = t.categoryId; merchant = t.merchant.orEmpty(); note = t.note.orEmpty()
             date = t.date.toLocalDate(); time = Instant.ofEpochMilli(t.date).atZone(ZoneId.systemDefault()).toLocalTime().withSecond(0).withNano(0)
+            // 已經記過手續費：帶入金額，編輯時可以修改或清空
+            repo.feeOf(t)?.let { f -> feeExpr = minorToExpr(f.amount); showFee = true }
         }
     }
     LaunchedEffect(accountId, lk.accounts) {
@@ -441,16 +443,15 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     } else emptyList()
     val splitReady = splitParts.isNotEmpty() && amountMinor != null && splitParts.sumOf { it.second } <= amountMinor
 
-    /** 手續費另記一筆支出（轉帳、支出都可以加） */
-    suspend fun saveFee(t: TxnEntity) {
-        val fee = feeMinor ?: return
+    /**
+     * 手續費另記一筆支出（轉帳、支出都可以加；新增與編輯都可以）。
+     * 和主交易連在一起：編輯時更新同一筆、清空就刪掉，不會重複新增。
+     */
+    suspend fun saveFee(t: TxnEntity, mainId: Long) {
         if (t.type != TxnType.TRANSFER && t.type != TxnType.EXPENSE) return
+        if (feeMinor == null && original == null) return
         val feeCat = lk.categories.firstOrNull { it.name.contains("手續費") }?.id ?: if (t.type == TxnType.EXPENSE) t.categoryId else null
-        repo.saveTxn(TxnEntity(
-            type = TxnType.EXPENSE, amount = fee, currency = t.currency, accountId = t.accountId, categoryId = feeCat,
-            merchant = if (t.type == TxnType.TRANSFER) "轉帳手續費" else listOfNotNull(t.merchant, "手續費").joinToString(" "),
-            date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
-        ))
+        repo.saveFeeFor(t, mainId, feeMinor, feeCat)
     }
 
     fun save(again: Boolean) {
@@ -461,8 +462,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             scope.launch {
                 val pid = payer.person ?: repo.debtPerson(payer.name)
                 val t = t0.copy(accountId = pid)
-                repo.saveTxn(t)
-                saveFee(t0.copy(accountId = accountId ?: pid))
+                val mid = repo.saveTxn(t)
+                saveFee(t0.copy(accountId = accountId ?: pid), mid)
                 TxnScroll.focusDay = date
                 if (again) {
                     expr = ""; merchant = ""; note = ""; splitRaw = ""; paidBy = false; feeExpr = ""; showFee = false
@@ -488,8 +489,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         if (splitReady) {
             scope.launch {
                 val shares = splitParts.map { (r, v) -> (r.person ?: repo.debtPerson(r.name)) to v }
-                repo.saveWithSplits(t, shares)
-                saveFee(t)
+                val mid = repo.saveWithSplits(t, shares)
+                saveFee(t, mid)
                 TxnScroll.focusDay = date
                 if (again) {
                     expr = ""; merchant = ""; note = ""; splitRaw = ""; splitMe = true; splitOn = false
@@ -518,7 +519,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 }
             }
             // 手續費另記一筆支出
-            if (original == null) saveFee(t)
+            saveFee(t, newId)
             if (again) {
                 expr = ""; merchant = ""; note = ""; toExpr = ""; feeExpr = ""; showFee = false
                 time = LocalTime.now().withSecond(0).withNano(0)
@@ -627,8 +628,13 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("金額", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                        if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && !debtMode && original == null) Text(if (showFee) "手續費 ✓" else "＋手續費", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable { showFee = !showFee; if (showFee) panel = Panel.FEE }.padding(4.dp))
+                        // 新增與編輯都可以加手續費；按鈕加框、點擊範圍至少 40dp，一眼看得到
+                        if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && !debtMode) Text(if (showFee) "手續費 ✓" else "＋ 手續費", fontSize = AppText.secondary,
+                            color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.heightIn(min = 40.dp)
+                                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                                .clickable { showFee = !showFee; if (showFee) panel = Panel.FEE }
+                                .padding(horizontal = 12.dp, vertical = 8.dp))
                     }
                     Text(
                         (if (currency != lk.base) Money.symbolOf(currency) else "$ ") + expr.ifEmpty { "0" },
@@ -684,7 +690,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         })
                     }
                 }
-                if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && showFee && original == null) {
+                if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && showFee) {
                     FormRow("手續費", color, panel == Panel.FEE, onClick = { focusManager.clearFocus(); panel = Panel.FEE }) {
                         Text(feeExpr, fontSize = AppText.body)
                     }

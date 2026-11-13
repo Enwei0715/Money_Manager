@@ -362,7 +362,10 @@ fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, cent
         // 挖空中間成圓環，寫總額
         drawCircle(separator, r * 0.6f, c)
         if (centerValue != null) {
-            val v = measurer.measure(centerValue, centerStyle)
+            // 合計太寬時縮小字級，一定放得進圓環中間的洞
+            var v = measurer.measure(centerValue, centerStyle)
+            var fs = centerStyle.fontSize.value
+            while (v.size.width > r * 1.1f && fs > 9f) { fs -= 1f; v = measurer.measure(centerValue, centerStyle.copy(fontSize = fs.sp)) }
             val t = centerTitle?.let { measurer.measure(it, centerSub) }
             val h = v.size.height + (t?.size?.height ?: 0)
             var y = c.y - h / 2f
@@ -388,9 +391,12 @@ fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, cent
         val bigCount = slices.count { it.second * 100f / total >= 3f }
         val oneLine = bigCount > 8
         val labelStyle = baseText.copy(fontSize = AppText.secondary, color = labelColor, lineHeight = 18.sp)
+        // 標籤最寬只能用到圓環外側剩下的空間：窄手機、大字級、英文時會換行或以「…」收尾，不會壓到圓環
+        val sideW = maxOf(size.width / 2f - r * 1.12f - 12f, 48.dp.toPx()).toInt()
         fun measureLabel(text: String, pct: Float, single: Boolean) = measurer.measure(
             if (single) "${com.enwei.moneymanager.ui.tr(text)} ${"%.1f".format(pct)}%" else "${com.enwei.moneymanager.ui.tr(text)}\n${"%.1f".format(pct)}%",
-            labelStyle,
+            labelStyle, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, maxLines = 2,
+            constraints = androidx.compose.ui.unit.Constraints(maxWidth = sideW),
         )
         fun add(text: String, pct: Float, mid: Double, color: Color) {
             labels += Label(color, mid, measureLabel(text, pct, oneLine), cos(mid) >= 0, (c.y + r * 1.22f * sin(mid)).toFloat(), text, pct)
