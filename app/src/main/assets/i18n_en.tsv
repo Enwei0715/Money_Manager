@@ -3423,3 +3423,6 @@ OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金
 標準：記帳＋通知自動記帳＋往來	Standard: entry, auto-recording from notifications, IOUs
 完整：再加上定位與股票投資	Full: also location and investing
 套用後仍可在下方逐項開關。資料不會因關閉功能而刪除。	You can still turn each feature on or off below. Turning a feature off never deletes data.
+使用模式、各項功能	Usage mode, features
+通知記帳、店名對照	Notification recording, merchant names
+八種通知	Eight notification types
