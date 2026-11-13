@@ -1641,7 +1641,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             if (categoryId == null) categoryId = suggestCategory(owner, type, occurred, p.amountMinor, account?.id)?.categoryId
         }
         val result = insert(
-            base.copy(type = type, merchant = merchant, note = habitNote ?: base.note, rawText = if (aiParsed) "$tagged\n$AI_TAG" else tagged, categoryId = categoryId, status = finalStatus),
+            // 說明一律不自動帶入（攤位習慣只用來判斷店家，不寫進說明）
+            base.copy(type = type, merchant = merchant, note = base.note, rawText = if (aiParsed) "$tagged\n$AI_TAG" else tagged, categoryId = categoryId, status = finalStatus),
             "RECORDED", "${type.label} $amountText ${merchant.orEmpty()}$aiNote",
         )
         // 記下這筆的位置：之後在同一地點付款就能推測店家

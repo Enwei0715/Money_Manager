@@ -718,8 +718,13 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
     // 其他頁面帶過來的問題（例如推薦追蹤的檢討）：放進輸入框，由使用者按送出
+    var autoQ by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.chatQuestion) {
-        com.enwei.moneymanager.ui.TabRequest.chatQuestion?.let { input = it; com.enwei.moneymanager.ui.TabRequest.chatQuestion = null }
+        com.enwei.moneymanager.ui.TabRequest.chatQuestion?.let {
+            // 推薦追蹤的「請 AI 檢討」：直接送出，不用再按一次
+            if (com.enwei.moneymanager.ui.TabRequest.chatAutoSend) autoQ = it else input = it
+            com.enwei.moneymanager.ui.TabRequest.chatQuestion = null; com.enwei.moneymanager.ui.TabRequest.chatAutoSend = false
+        }
     }
     var confirmClear by remember { mutableStateOf(false) }
     var confirmDeleteChat by remember { mutableStateOf(false) }
@@ -754,6 +759,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
         input = ""
         com.enwei.moneymanager.work.ChatJob.ask(ctx, q)
     }
+    LaunchedEffect(autoQ) { autoQ?.let { q -> autoQ = null; send(q) } }
     // 只有出現新訊息才捲動，而且捲到那則訊息的開頭（長回覆從頭讀）；這次開 App 第一次進來直接跳到最後一則
     // （對話最多留 40 則，則數可能不變，所以用最後一則的時間判斷有沒有新訊息）
     val last = store.chat.lastOrNull()?.time
@@ -2375,9 +2381,16 @@ private fun PickTrack(store: NewsStore, nav: NavController) {
     }
     val withRet = stocks.filter { it.ret != null }
     Section("推薦追蹤") {
-        // 範圍的意思寫清楚：看這段期間推薦過的股票，從推薦那天到今天漲跌多少
-        com.enwei.moneymanager.ui.components.SubTabs(listOf("近 7 天", "近 30 天", "近 90 天"), span.coerceIn(0, 2)) { span = it }
-        Text("近 $days 天報告推薦過的股票，從第一次推薦那天到現在的漲跌", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // 期間只是一排小字選項（不佔一大塊）；下面一行說明這個範圍的意思
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("近 $days 天推薦過的股票", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            listOf(7, 30, 90).forEachIndexed { i, d ->
+                val on = span.coerceIn(0, 2) == i
+                Text("$d 天", fontSize = AppText.caption, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.clickable { span = i }.padding(horizontal = 8.dp, vertical = 10.dp))
+            }
+        }
         when {
             rows.isEmpty() -> Text("這段期間沒有推薦紀錄。", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             withRet.isEmpty() -> Text(if (fetched == null) "讀取目前股價…" else "無法取得目前股價，請稍後再試。", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2390,13 +2403,30 @@ private fun PickTrack(store: NewsStore, nav: NavController) {
                     "${withRet.size} 檔中 $upN 檔上漲，平均 ${"%+.1f".format(avg)}%",
                     fontSize = AppText.section, fontWeight = FontWeight.SemiBold, color = if (avg >= 0) StockUp else StockDown,
                 )
+                // 最近一次「請 AI 檢討」的結論：每日選股會參考（30 天內有效），寫在這裡讓你看得到
+                val lesson = remember(System.identityHashCode(store)) {
+                    (listOf(store.chat) + store.chatThreads.map { it.msgs }).flatMap { msgs ->
+                        msgs.zipWithNext().filter { (q, a) -> q.fromUser && q.text.startsWith("請檢討近") && !a.fromUser }.map { it.second }
+                    }.maxByOrNull { it.time }?.takeIf { System.currentTimeMillis() - it.time < 30L * 86_400_000 }
+                }
+                lesson?.let { l ->
+                    val d = java.time.Instant.ofEpochMilli(l.time).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)) {
+                        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("${d.monthValue}/${d.dayOfMonth} 的檢討結論（每日選股會參考）", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                            Text(com.enwei.moneymanager.data.stripCites(l.text), fontSize = AppText.secondary, maxLines = 3)
+                            l.points.take(3).forEach { pt -> Text("・" + com.enwei.moneymanager.data.stripCites(pt), fontSize = AppText.caption, maxLines = 2) }
+                        }
+                    }
+                }
                 if (aiOn) TextButton(onClick = {
                     val lines = withRet.take(40).joinToString("\n") { s ->
                         "${java.time.LocalDate.ofEpochDay(s.first.day)} ${s.first.pick.symbol} ${s.first.pick.name}（${s.first.pick.style}，推薦 ${s.times} 次）推薦價 ${s.first.pick.price} → ${"%+.1f".format(s.ret)}%"
                     }
                     com.enwei.moneymanager.ui.TabRequest.chatQuestion = "請檢討近 $days 天的推薦表現：哪些類型選得好、哪些不好，之後選股該怎麼調整？請給具體可執行的規則（這次的結論會用於之後的每日選股）。\n平均 ${"%+.1f".format(avg)}%，上漲 $upN / ${withRet.size} 檔。\n$lines"
+                    com.enwei.moneymanager.ui.TabRequest.chatAutoSend = true
                     com.enwei.moneymanager.ui.TabRequest.advisorSub = 1
-                }) { Text("請 AI 檢討這些推薦 ›", fontSize = AppText.caption) }
+                }) { Text(if (lesson == null) "請 AI 檢討這些推薦（結論會用於每日選股）›" else "重新檢討（更新每日選股參考的結論）›", fontSize = AppText.caption) }
                 // 每檔一列：左邊名稱與推薦日、右邊漲跌（主要數字）＋長條；價格細節縮成一行小字
                 val maxAbs = vs.maxOf { kotlin.math.abs(it) }.coerceAtLeast(1.0)
                 stocks.forEach { s ->

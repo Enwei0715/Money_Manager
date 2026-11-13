@@ -238,6 +238,8 @@ object TabRequest {
     var txnsTab by androidx.compose.runtime.mutableStateOf<Int?>(null)
     /** 要帶進「問 AI」輸入框的問題（例如從推薦追蹤請 AI 檢討） */
     var chatQuestion by androidx.compose.runtime.mutableStateOf<String?>(null)
+    /** 帶過去的問題要不要直接送出 */
+    var chatAutoSend = false
     /** 打開統計頁時要切到哪個檢視（1＝分析） */
     var statsView by androidx.compose.runtime.mutableStateOf<Int?>(null)
 }

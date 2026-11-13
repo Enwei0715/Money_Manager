@@ -313,7 +313,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     fun pickPlace(placeName: String, at: Pair<Double, Double>?) {
         val (m, stall) = splitByHabit(placeName)
         merchant = m; merchantAuto = false
-        if (stall != null && note.isBlank()) note = stall
+        // 說明一律不自動帶入（由你自己寫）
         // 位置是攤位的位置：只有店家就是這個地點時才記成店家的位置
         merchantAt = if (stall == null) at else null
     }
@@ -338,7 +338,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             if (merchant.isBlank() || merchantAuto) {
                 val (m, stall) = splitByHabit(here)
                 merchant = m; merchantAuto = true
-                if (stall != null && note.isBlank()) note = stall
             }
         }
         nearby = (hist + known).distinct().take(8)
@@ -359,7 +358,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 if (ms.size == 1) {
                     merchant = ms.first(); merchantAuto = true
                     val stalls = cands.mapNotNull { it.second }.distinct()
-                    if (stalls.size == 1 && cands.size == 1 && note.isBlank()) note = stalls.first()
                 }
             }
             nearby = (hist + known + mb.map { cleanPlaceName(it.name) }).distinct().take(10)
