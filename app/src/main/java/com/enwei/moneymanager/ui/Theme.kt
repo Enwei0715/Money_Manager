@@ -207,6 +207,12 @@ fun MoneyTheme(
     val p = Themes.of(preset)
     AppearancePrefs.corner = corner
     val typo = androidx.compose.runtime.remember(font, tabular) { typographyOf(Themes.family(font), tabular) }
+    // K 線等用 Android 畫布寫字的圖表也要用設定的字型：把字型家族解析成 Typeface（下載中的字型載入後會自動更新）
+    val fam = Themes.family(font)
+    val resolver = androidx.compose.ui.platform.LocalFontFamilyResolver.current
+    val tfState = androidx.compose.runtime.remember(fam) { fam?.let { runCatching { resolver.resolve(it) }.getOrNull() } }
+    val tf = tfState?.value as? android.graphics.Typeface
+    androidx.compose.runtime.SideEffect { AppTypeface.current = tf }
     // 系統字級照實套用（最大 200%，Android 14 起的上限），弱視或長輩放大字體時內文一定跟著變大；
     // 高度固定的工具列另用 [ChromeScale] 限制，不會被撐變形
     CompositionLocalProvider(LocalDensity provides Density(base.density * uiScale * BASE_UI_SCALE, base.fontScale.coerceIn(0.85f, 2f) * textScale)) {
@@ -279,4 +285,9 @@ object AppText {
 fun ChromeScale(content: @Composable () -> Unit) {
     val d = LocalDensity.current
     CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale.coerceAtMost(1.15f)), content = content)
+}
+
+/** 目前設定字型的 Android Typeface（null＝系統字型）；畫布上的文字（K 線、紀律圖、趨勢推估）用它 */
+object AppTypeface {
+    var current by androidx.compose.runtime.mutableStateOf<android.graphics.Typeface?>(null)
 }

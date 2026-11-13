@@ -155,6 +155,8 @@ fun MoreScreen(nav: NavController) {
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (shown.isEmpty()) Text("還沒有工具", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(14.dp))
+            if (editing) Text("長按工具後拖曳可移動，拖曳右下角可改大小；上下滑動可捲動頁面", fontSize = AppText.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
             // 三欄網格：每格可以是 1×1、2×1、3×1、1×2、2×2；編輯時拖動移動、拖角落改大小
             ToolGrid(
                 shown,

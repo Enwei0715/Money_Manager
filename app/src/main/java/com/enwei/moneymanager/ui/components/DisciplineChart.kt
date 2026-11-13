@@ -90,8 +90,8 @@ fun DisciplineChart(symbol: String, modifier: Modifier = Modifier) {
             // 和個股頁一樣：小圓章「買／賣」，只有最新一個寫出理由
             // 文字以 11sp 為基準（跟著螢幕密度與系統字級），圓章與標籤一起等比放大
             val k = 11.sp.toPx() / 22f
-            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f * k }
-            val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = com.enwei.moneymanager.ui.AppTypeface.current; textSize = 22f * k }
+            val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = com.enwei.moneymanager.ui.AppTypeface.current;
                 textSize = 20f * k; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER
             }
             val shownSig = signals.filter { it.index >= from }

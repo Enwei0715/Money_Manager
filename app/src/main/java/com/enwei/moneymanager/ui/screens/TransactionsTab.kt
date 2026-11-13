@@ -190,6 +190,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     var tab by com.enwei.moneymanager.ui.components.rememberTab("txns.tab", initialTab.coerceIn(0, 1))
     // 舊版記住的是「分析」（第 3 個分頁，已移到統計頁）：改回每日
     LaunchedEffect(Unit) { if (tab > 1) tab = 0 }
+    // 切換「每日／日曆」時叫回收起的分頁列：日曆捲不動，收起後會叫不出來
+    LaunchedEffect(tab) { com.enwei.moneymanager.ui.components.Chrome.bottomHidden = false; com.enwei.moneymanager.ui.components.Chrome.topHidden = false }
     LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.txnsTab) {
         com.enwei.moneymanager.ui.TabRequest.txnsTab?.let { tab = it.coerceAtMost(1); com.enwei.moneymanager.ui.TabRequest.txnsTab = null }
     }
@@ -316,7 +318,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.surface,
                 indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), height = 3.dp, color = MaterialTheme.colorScheme.primary) },
             ) {
-                (if (com.enwei.moneymanager.ui.I18n.english) listOf("Daily", "Calendar", "Review") else subTabs).forEachIndexed { i, t ->
+                (if (com.enwei.moneymanager.ui.I18n.english) listOf("Daily", "Calendar") else subTabs).forEachIndexed { i, t ->
                     Tab(
                         selected = tab == i, onClick = { tab = i },
                         selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -360,9 +362,16 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     }
                     Text("長按日期記一筆", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp))
                     }
+                    // 日曆捲不動：往下拉（手指向下滑）也能叫回收起的分頁列
+                    Box(Modifier.pointerInput(Unit) {
+                        androidx.compose.foundation.gestures.detectVerticalDragGestures { _, dy ->
+                            if (dy > 6f) { com.enwei.moneymanager.ui.components.Chrome.bottomHidden = false; com.enwei.moneymanager.ui.components.Chrome.topHidden = false }
+                        }
+                    }) {
                     when (calSpan) {
                         0, 1 -> CalendarView(range, all, accounts, settings, lk, nav, DayOfWeek.of(settings.weekStartDay), carry, settings.memos) { memoEditing = it }
                         else -> YearCalendar(month.year, all, lk, startDay) { ym -> month = ym; calSpan = 0 }
+                    }
                     }
                 }
                 // 收支檢討（月、季、年；AI 逐筆檢查並提問）

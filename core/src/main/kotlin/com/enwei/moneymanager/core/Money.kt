@@ -37,22 +37,36 @@ object Money {
     /** 整數金額不顯示小數點；有零頭時顯示兩位。 */
     fun format(minor: Long, currency: String? = null): String {
         val abs = Math.abs(minor)
-        val body = if (abs % 100 == 0L) noDecimals.format(abs / 100) else twoDecimals.format(abs / 100.0)
+        // 台幣等沒有輔幣的幣別一律整數；其他幣別整數時不顯示小數、有零頭時顯示兩位
+        val body = if (decimalsOf(currency ?: displayBase) == 0) noDecimals.format(BigDecimal.valueOf(abs, 2).setScale(0, RoundingMode.HALF_UP))
+            else if (abs % 100 == 0L) noDecimals.format(abs / 100) else twoDecimals.format(abs / 100.0)
         val sign = if (minor < 0) "-" else ""
         val symbol = currency?.let { symbolOf(it) } ?: ""
         return "$sign$symbol$body"
     }
 
-    /** 一律顯示兩位小數，例如 "1,000.00"、"-2,574.00"。 */
-    fun full(minor: Long): String {
+    /** 沒有輔幣的幣別：台幣、日圓、韓元一律顯示整數（四捨五入），其他幣別顯示兩位小數 */
+    private val zeroDecimal = setOf("TWD", "JPY", "KRW")
+
+    /** 不指定幣別時用的幣別（App 設定的基準幣別） */
+    @Volatile var displayBase: String = "TWD"
+
+    fun decimalsOf(currency: String): Int = if (currency.uppercase() in zeroDecimal) 0 else 2
+
+    private fun body(absMinor: Long, currency: String): String =
+        if (decimalsOf(currency) == 0) noDecimals.format(BigDecimal.valueOf(absMinor, 2).setScale(0, RoundingMode.HALF_UP))
+        else twoDecimals.format(absMinor / 100.0)
+
+    /** 依幣別顯示：台幣 "1,000"、美元 "1,000.00"（沒有符號）。 */
+    fun full(minor: Long, currency: String = displayBase): String {
         val sign = if (minor < 0) "-" else ""
-        return sign + twoDecimals.format(Math.abs(minor) / 100.0)
+        return sign + body(Math.abs(minor), currency)
     }
 
-    /** 帶幣別符號，例如 "$ 1,000.00"。 */
-    fun withSymbol(minor: Long, currency: String = "TWD"): String {
+    /** 帶幣別符號，例如 "$ 1,000"、"US$ 12.50"。 */
+    fun withSymbol(minor: Long, currency: String = displayBase): String {
         val sign = if (minor < 0) "-" else ""
-        return "${symbolOf(currency).trim()} $sign${twoDecimals.format(Math.abs(minor) / 100.0)}"
+        return "${symbolOf(currency).trim()} $sign${body(Math.abs(minor), currency)}"
     }
 
     fun symbolOf(currency: String): String = when (currency.uppercase()) {

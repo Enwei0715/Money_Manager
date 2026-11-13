@@ -23,8 +23,13 @@ class PeriodsTest {
     }
 
     @Test fun fullFormat() {
-        assertEquals("1,000.00", Money.full(100000))
-        assertEquals("-2,574.00", Money.full(-257400))
-        assertEquals("$ 40.00", Money.withSymbol(4000))
+        // 台幣沒有輔幣：一律整數（四捨五入）；外幣保留兩位小數
+        assertEquals("1,000", Money.full(100000))
+        assertEquals("-2,574", Money.full(-257400))
+        assertEquals("$ 40", Money.withSymbol(4000))
+        assertEquals("$ 143", Money.withSymbol(14307))
+        assertEquals("$ 1,861", Money.withSymbol(186050))
+        assertEquals("US$ 12.50", Money.withSymbol(1250, "USD"))
+        assertEquals("1,000.00", Money.full(100000, "USD"))
     }
 }

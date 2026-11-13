@@ -35,7 +35,11 @@ fun SubTabs(options: List<String>, selected: Int, modifier: Modifier = Modifier,
                 Modifier.weight(1f)
                     .background(if (sel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant, inner)
                     // 可點高度約 44dp；讀屏念成「分頁、已選取」
-                    .clickable(role = androidx.compose.ui.semantics.Role.Tab) { onSelect(i) }
+                    .clickable(role = androidx.compose.ui.semantics.Role.Tab) {
+                        // 換分頁時把收起的分頁列、標題列叫回來：新分頁（例如日曆）可能捲不動，否則就叫不出來
+                        Chrome.bottomHidden = false; Chrome.topHidden = false
+                        onSelect(i)
+                    }
                     .semantics { this.selected = sel }
                     .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center,

@@ -327,6 +327,8 @@ fun StatsTab(nav: NavController) {
 fun PieChart(slices: List<Pair<String, Long>>) {
     val total = slices.sumOf { it.second }
     val measurer = rememberTextMeasurer()
+    // 圖上的字用設定的字型（主題的字型家族），不是系統預設
+    val baseText = MaterialTheme.typography.bodyMedium
     val labelColor = MaterialTheme.colorScheme.onSurface
     val empty = MaterialTheme.colorScheme.surfaceVariant
     val separator = MaterialTheme.colorScheme.surface
@@ -368,7 +370,7 @@ fun PieChart(slices: List<Pair<String, Long>>) {
         fun add(text: String, pct: Float, mid: Double, color: Color) {
             val layout = measurer.measure(
                 if (oneLine) "${com.enwei.moneymanager.ui.tr(text)} ${"%.1f".format(pct)}%" else "${com.enwei.moneymanager.ui.tr(text)}\n${"%.1f".format(pct)} %",
-                TextStyle(fontSize = AppText.secondary, color = labelColor, lineHeight = 16.sp),
+                baseText.copy(fontSize = AppText.secondary, color = labelColor, lineHeight = 16.sp),
             )
             labels += Label(color, mid, layout, cos(mid) >= 0, (c.y + r * 1.22f * sin(mid)).toFloat())
         }

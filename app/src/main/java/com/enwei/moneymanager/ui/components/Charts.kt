@@ -50,6 +50,7 @@ private val AxisWidth = 44f
 @Composable
 fun LineChart(values: List<Long>, labels: List<String>, color: Color, modifier: Modifier = Modifier, autoMin: Boolean = true) {
     val measurer = rememberTextMeasurer()
+    val baseText = androidx.compose.material3.MaterialTheme.typography.bodySmall
     val grid = MaterialTheme.colorScheme.outlineVariant
     val textColor = MaterialTheme.colorScheme.onSurfaceVariant
     val plotBg = MaterialTheme.colorScheme.background
@@ -70,7 +71,7 @@ fun LineChart(values: List<Long>, labels: List<String>, color: Color, modifier: 
             while (g <= hi + 1e-9) {
                 val y = h - ((g - lo) / (hi - lo) * h).toFloat()
                 drawLine(grid, Offset(left, y), Offset(size.width, y), strokeWidth = 2f)
-                val t = measurer.measure(axisLabel(g), TextStyle(fontSize = AppText.badge, color = textColor))
+                val t = measurer.measure(axisLabel(g), baseText.copy(fontSize = AppText.badge, color = textColor))
                 drawText(t, topLeft = Offset(left - t.size.width - 6f, y - t.size.height / 2))
                 g += step
             }
@@ -95,6 +96,7 @@ fun LineChart(values: List<Long>, labels: List<String>, color: Color, modifier: 
 @Composable
 fun DualBarChart(first: List<Long>, second: List<Long>, labels: List<String>, firstColor: Color, secondColor: Color, modifier: Modifier = Modifier) {
     val measurer = rememberTextMeasurer()
+    val baseText = androidx.compose.material3.MaterialTheme.typography.bodySmall
     val grid = MaterialTheme.colorScheme.outlineVariant
     val textColor = MaterialTheme.colorScheme.onSurfaceVariant
     val plotBg = MaterialTheme.colorScheme.background
@@ -111,7 +113,7 @@ fun DualBarChart(first: List<Long>, second: List<Long>, labels: List<String>, fi
             while (g <= hi + 1e-9) {
                 val y = h - (g / hi * h).toFloat()
                 drawLine(grid, Offset(left, y), Offset(size.width, y), strokeWidth = 2f)
-                val t = measurer.measure(axisLabel(g), TextStyle(fontSize = AppText.badge, color = textColor))
+                val t = measurer.measure(axisLabel(g), baseText.copy(fontSize = AppText.badge, color = textColor))
                 drawText(t, topLeft = Offset(left - t.size.width - 6f, y - t.size.height / 2))
                 g += step
             }

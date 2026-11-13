@@ -122,6 +122,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         }
         setContent {
             val settings by MoneyApp.repo.settings.flow.collectAsStateWithLifecycle()
+            // 沒指定幣別的金額（總額、圖表）依基準幣別決定要不要顯示小數
+            com.enwei.moneymanager.core.Money.displayBase = settings.baseCurrency
             ColorPrefs.setB = settings.colorSetB
             val dark = isDarkTheme(settings.themeMode)
             androidx.compose.runtime.remember(settings.language) { I18n.init(applicationContext, settings.language) }

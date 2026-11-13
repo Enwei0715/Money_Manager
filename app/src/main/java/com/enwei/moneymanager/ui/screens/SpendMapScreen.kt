@@ -513,6 +513,7 @@ private fun SpendMap(
         0f, 0f, 0f, 1f, 0f,
     )))
     val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val mapFont = MaterialTheme.typography.bodySmall.fontFamily
     Box(modifier.background(bg).onSizeChanged { sizePx = it }) {
         androidx.compose.foundation.Canvas(
             Modifier.fillMaxSize()
@@ -615,7 +616,7 @@ private fun SpendMap(
                 val px = ((mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
                 if (px < -40 || px > size.width + 40 || py < -20 || py > size.height + 20) return@forEach
                 val r = (pinR(sp, maxTotal) * 0.8 + 2.4).dp.toPx()
-                val base = androidx.compose.ui.text.TextStyle(fontSize = 10.5.sp, fontWeight = if (sp == picked) FontWeight.SemiBold else FontWeight.Normal, letterSpacing = 0.2.sp)
+                val base = androidx.compose.ui.text.TextStyle(fontFamily = mapFont, fontSize = 10.5.sp, fontWeight = if (sp == picked) FontWeight.SemiBold else FontWeight.Normal, letterSpacing = 0.2.sp)
                 val lay = textMeasurer.measure(if (sp.name.length > 10) sp.name.take(9) + "…" else sp.name, base.copy(color = labelFg))
                 val lx = px + r + 6.dp.toPx(); val ly = py - lay.size.height / 2f
                 val rect = androidx.compose.ui.geometry.Rect(lx - 2.dp.toPx(), ly, lx + lay.size.width + 2.dp.toPx(), ly + lay.size.height)

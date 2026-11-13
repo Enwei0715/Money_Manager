@@ -182,8 +182,8 @@ fun ToolGrid(
                     modifier = Modifier.fillMaxSize()
                         .then(
                             if (editing) Modifier.pointerInput(t.id, ids, place) {
-                                // 拖動整格：放開時依位置決定插入的順序
-                                detectDragGestures(
+                                // 長按後才拖動整格：一般上下滑動用來捲動頁面（工具放滿時才捲得到下方）
+                                androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress(
                                     onDragStart = { dragId = t.id; drag = Offset.Zero; selected = t.id },
                                     onDrag = { ch, d -> ch.consume(); drag += d },
                                     onDragEnd = {

@@ -832,7 +832,7 @@ private fun CandleChart(
         val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
         levels.forEach { (v, col) -> if (v in lo..hi) drawLine(col, Offset(0f, y(v)), Offset(size.width, y(v)), 2f, pathEffect = dash) }
         // 有名稱的價位線：虛線＋右邊小標籤「移動停損 3851」；不在畫面範圍時貼在上緣或下緣並加箭頭
-        val tagPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f * k; color = android.graphics.Color.WHITE }
+        val tagPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = com.enwei.moneymanager.ui.AppTypeface.current; textSize = 22f * k; color = android.graphics.Color.WHITE }
         fun argb(c: Color) = android.graphics.Color.argb(255, (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
         val usedY = ArrayList<Float>()
         labeledLevels.sortedByDescending { it.first }.forEach { (v, col, name) ->
@@ -863,7 +863,7 @@ private fun CandleChart(
         }
         // 均線圖例（左上）：MA20 3805　MA60 3823…，顏色和線一樣
         run {
-            val lp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f * k }
+            val lp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = com.enwei.moneymanager.ui.AppTypeface.current; textSize = 22f * k }
             var lx = 4f
             maSeries.toSortedMap().forEach { (len, v) ->
                 val cur = v.getOrNull(to - 1) ?: return@forEach
@@ -894,8 +894,8 @@ private fun CandleChart(
         }
         // 紀律買賣點：小圓章「買／賣」標在 K 棒下方／上方；只有最新一個與點選的那根才寫出理由，畫面不擠
         // 圓章與標籤用一般字重（粗體在小圓裡會糊成一團）；標籤底下墊一塊底色，不會和 K 棒疊在一起
-        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 26f * k }
-        val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 22f * k; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER }
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = com.enwei.moneymanager.ui.AppTypeface.current; textSize = 26f * k }
+        val badge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = com.enwei.moneymanager.ui.AppTypeface.current; textSize = 22f * k; color = android.graphics.Color.WHITE; textAlign = android.graphics.Paint.Align.CENTER }
         val latest = signals.maxByOrNull { it.index }?.index
         signals.forEach { sg ->
             val i = sg.index - from
@@ -996,7 +996,7 @@ private fun IndicatorChart(b: DailyBars, from: Int, n: Int, kind: Int) {
             }
             1 -> {
                 hline(70.0, 0.0, 100.0); hline(30.0, 0.0, 100.0); line(rsi, 0.0, 100.0, c1)
-                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f * k; color = android.graphics.Color.GRAY }
+                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = com.enwei.moneymanager.ui.AppTypeface.current; textSize = 20f * k; color = android.graphics.Color.GRAY }
                 drawContext.canvas.nativeCanvas.drawText(com.enwei.moneymanager.ui.tr("70 過熱"), 4f, size.height * 0.3f - 4f, tp)
                 drawContext.canvas.nativeCanvas.drawText(com.enwei.moneymanager.ui.tr("30 超賣"), 4f, size.height * 0.7f + 20f * k, tp)
             }
@@ -1011,13 +1011,13 @@ private fun IndicatorChart(b: DailyBars, from: Int, n: Int, kind: Int) {
                     drawRect((if (h >= 0) up else down).copy(alpha = 0.6f), Offset(i * cw + cw * 0.2f, minOf(y0, y1)), Size(cw * 0.6f, kotlin.math.abs(y1 - y0)))
                 }
                 line(macd.dif, -m, m, c2); line(macd.signal, -m, m, c1)
-                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f * k }
+                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = com.enwei.moneymanager.ui.AppTypeface.current; textSize = 20f * k }
                 tp.color = android.graphics.Color.argb(255, 255, 160, 0); drawContext.canvas.nativeCanvas.drawText("DIF", 4f, 18f * k, tp)
                 tp.color = android.graphics.Color.argb(255, 126, 87, 194); drawContext.canvas.nativeCanvas.drawText("DEA", 4f + tp.measureText("DIF ") + 8f, 18f * k, tp)
             }
             else -> {
                 hline(80.0, 0.0, 100.0); hline(20.0, 0.0, 100.0); line(kd.first, 0.0, 100.0, c2); line(kd.second, 0.0, 100.0, c1)
-                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f * k }
+                val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = com.enwei.moneymanager.ui.AppTypeface.current; textSize = 20f * k }
                 tp.color = android.graphics.Color.argb(255, 255, 160, 0); drawContext.canvas.nativeCanvas.drawText("K", 4f, 18f * k, tp)
                 tp.color = android.graphics.Color.argb(255, 126, 87, 194); drawContext.canvas.nativeCanvas.drawText("D", 4f + tp.measureText("K ") + 8f, 18f * k, tp)
                 tp.color = android.graphics.Color.GRAY
@@ -1280,7 +1280,7 @@ private fun ProjectionCard(b: DailyBars) {
             )
             androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(190.dp).clipToBounds()) {
                 val k = 10.sp.toPx() / 20f
-                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f * k }
+                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = com.enwei.moneymanager.ui.AppTypeface.current; textSize = 20f * k }
                 fun argb(c: Color) = android.graphics.Color.argb(255, (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
                 /** 圖上的小標籤：底色＋文字，貼齊右邊或指定位置 */
                 fun tag(text: String, xRight: Float, yMid: Float, colr: Color) {

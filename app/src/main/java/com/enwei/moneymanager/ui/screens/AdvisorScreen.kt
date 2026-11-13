@@ -1587,8 +1587,8 @@ private fun PlanTab(nav: NavController) {
                     }
                 }
             }
-            Bucket("長線（目標 ${"%.0f".format(settings.investPlan.longRatio * 100)}%）", a.longValue, a.longTarget, a.longRoom, ::m)
-            Bucket("短線（目標 ${"%.0f".format(100 - settings.investPlan.longRatio * 100)}%）", a.shortValue, a.shortTarget, a.shortRoom, ::m)
+            Bucket("長線・目標 ${"%.0f".format(settings.investPlan.longRatio * 100)}%", a.longValue, a.longTarget, a.longRoom, ::m)
+            Bucket("短線・目標 ${"%.0f".format(100 - settings.investPlan.longRatio * 100)}%", a.shortValue, a.shortTarget, a.shortRoom, ::m)
             if (a.reserveShort > 0) Text("⚠ 可動用現金低於預留金額 ${m(a.reserveShort)}", color = MaterialTheme.colorScheme.error, fontSize = AppText.caption)
             if (a.shortOver > 0) Text("⚠ 短線超出計畫 ${m(a.shortOver)}，新的短線單先暫停", color = MaterialTheme.colorScheme.error, fontSize = AppText.caption)
         }
@@ -1882,19 +1882,22 @@ private fun StageChip(label: String, hint: String) {
 
 @Composable
 private fun Bucket(label: String, used: Long, target: Long, room: Long, m: (Long) -> String) {
-    Column {
-        Row {
-            Text(label, fontSize = AppText.body, modifier = Modifier.weight(1f))
-            Text("${m(used)} / ${m(target)}", fontSize = AppText.secondary)
+    // 每列一個重點、不換行：上排「名稱｜已投入」，下排「目標｜還可投入」
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, fontSize = AppText.body, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(m(used), fontSize = AppText.body, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
         val f = if (target > 0) (used.toFloat() / target).coerceIn(0f, 1f) else 0f
         Box(Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(3.dp))) {
             Box(Modifier.fillMaxWidth(f).height(6.dp).background(if (used > target) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)))
         }
-        Text("還可投入 ${m(room)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row {
+            Text("目標 ${m(target)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.weight(1f))
+            Text("還可投入 ${m(room)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
     }
 }
-
 
 @Composable
 private fun PlanDialog(p: InvestPlanSettings, onDismiss: () -> Unit) {
