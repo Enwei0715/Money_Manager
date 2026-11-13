@@ -81,7 +81,7 @@ object Onboarding {
 
     private fun pagesFor(w: Set<String>) = buildList {
         add(Page(Icons.Outlined.Savings, "歡迎使用帳理", "請先選擇要使用的功能，帳理將依此調整介面與設定。",
-            listOf("可隨時點選右上角「略過」", "日後可於「設定 → 功能開關」調整")))
+            listOf("可隨時點選右上角「略過」", "日後可於設定中各分組調整")))
         add(Page(Icons.Outlined.Checklist, "選擇要使用的功能", "勾選的功能將立即開啟；未勾選的功能會先隱藏，介面更為精簡。", kind = 1))
         add(Page(Icons.Outlined.Palette, "選擇外觀", "日後可於「設定 → 外觀與顯示」調整。", kind = 2))
         add(Page(Icons.Outlined.EditNote, "新增交易", "點選交易頁右下角的「＋」。", listOfNotNull(

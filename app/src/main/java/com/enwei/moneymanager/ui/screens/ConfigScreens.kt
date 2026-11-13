@@ -182,14 +182,38 @@ private val cfgGroups = listOf(
     CfgGroup("accounts", "帳戶與分類", com.enwei.moneymanager.ui.components.LineIcons.IcWallet, listOf("帳戶", "分類與預算")),
     CfgGroup("entry", "記帳", com.enwei.moneymanager.ui.components.LineIcons.IcPencil, listOf("記帳", "期間", "幣別")),
     CfgGroup("display", "外觀與顯示", com.enwei.moneymanager.ui.components.LineIcons.IcPalette, listOf("外觀", "顯示")),
-    CfgGroup("features", "功能開關", com.enwei.moneymanager.ui.components.LineIcons.IcToggle, listOf("功能開關")),
-    CfgGroup("autorecord", "自動記帳", com.enwei.moneymanager.ui.components.LineIcons.IcChat, listOf("自動記帳"), route = "notif", visible = { it.featureNotif }),
-    CfgGroup("ai", "AI", com.enwei.moneymanager.ui.components.LineIcons.ToolAi, listOf("AI"), visible = { it.aiEnabled }),
-    CfgGroup("stocks", "股票", com.enwei.moneymanager.ui.components.LineIcons.ToolCandles, listOf("股票"), visible = { it.featureStocks }),
+    // 每個功能的開關放在自己那一組的第一列；功能關閉時卡片照樣顯示（標「已關閉」），才找得到從哪裡打開
+    CfgGroup("features", "一般", com.enwei.moneymanager.ui.components.LineIcons.IcToggle, listOf("一般")),
+    CfgGroup("autorecord", "自動記帳", com.enwei.moneymanager.ui.components.LineIcons.IcChat, listOf("自動記帳")),
+    CfgGroup("ai", "AI", com.enwei.moneymanager.ui.components.LineIcons.ToolAi, listOf("AI")),
+    CfgGroup("stocks", "投資", com.enwei.moneymanager.ui.components.LineIcons.ToolCandles, listOf("投資")),
     CfgGroup("notify", "通知", com.enwei.moneymanager.ui.components.LineIcons.ToolBell, listOf("通知"), route = "notices"),
     CfgGroup("data", "安全與資料", com.enwei.moneymanager.ui.components.LineIcons.IcLock, listOf("安全", "資料")),
     // 「關於」：新手導覽、回報問題、隱私權政策、App 更新（原本卡片直接跳到更新頁，這幾項找不到）
     CfgGroup("update", "關於", com.enwei.moneymanager.ui.components.LineIcons.ToolUpdate, listOf("關於")),
+)
+
+/** 子頁裡的設定索引：「名稱|同義詞」、所在位置、要打開的頁面 */
+private val settingIndex = listOf(
+    Triple("深色模式|淺色|夜間|暗色", "外觀與顯示 → 主題", "appearance"),
+    Triple("字體大小|文字大小|字級", "外觀與顯示 → 主題", "appearance"),
+    Triple("數字等寬|金額對齊", "外觀與顯示 → 主題", "appearance"),
+    Triple("主題色|顏色|配色", "外觀與顯示 → 主題", "appearance"),
+    Triple("指紋|生物辨識|臉部", "安全與資料 → 密碼鎖", "passcode"),
+    Triple("自動上鎖|離開多久要密碼|鎖定時間", "安全與資料 → 密碼鎖", "passcode"),
+    Triple("自動備份|備份頻率|雲端備份", "安全與資料 → 備份與還原", "backup"),
+    Triple("備份密碼|備份加密", "安全與資料 → 備份與還原", "backup"),
+    Triple("還原|匯入|匯出", "安全與資料 → 備份與還原", "backup"),
+    Triple("監聽的 App|來源 App|銀行通知", "自動記帳 → 來源 App", "notif"),
+    Triple("預設帳戶|自動記帳帳戶", "自動記帳 → 來源 App", "notif"),
+    Triple("準確度|自動記帳紀錄", "自動記帳 → 紀錄", "notif"),
+    Triple("AI 金鑰|API Key|Gemini|Groq|模型", "AI → 金鑰與模型", "ai"),
+    Triple("自動檢查新版本|新版通知|更新", "關於 → App 更新", "settings"),
+    Triple("持股紀律|停損|停利|資金配置", "投資 → 紀律", "advisor:3"),
+    Triple("券商折扣|手續費折扣|月退", "投資 → 手續費與月退", "stockfees"),
+    Triple("預算|儲蓄目標", "帳戶與分類 → 預算", "budget"),
+    Triple("帳戶排序|隱藏帳戶|計入淨資產|計入收支統計", "帳戶與分類 → 帳戶", "accountsettings"),
+    Triple("通知聲音|提醒|股價提醒|月報", "通知 → 通知類別", "notices"),
 )
 
 @Composable
@@ -199,6 +223,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
     val q = query.trim()
     // 目前畫到哪一節（sec 設定、cfg 依此決定要不要顯示）
     var cur = ""
+    var hits = 0
     val searching = grp == null && q.isNotEmpty()
     @androidx.compose.runtime.NonSkippableComposable @Composable fun sec(title: String) {
         cur = title
@@ -207,8 +232,10 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
     @androidx.compose.runtime.NonSkippableComposable @Composable fun cfg(title: String, value: String? = null, onClick: () -> Unit) {
         when {
             grp != null -> if (cur in grp.sections) ConfigRow(title, value, onClick = onClick)
-            searching -> if (title.contains(q, true) || com.enwei.moneymanager.ui.tr(title).contains(q, true) || cur.contains(q, true))
+            searching -> if (title.contains(q, true) || com.enwei.moneymanager.ui.tr(title).contains(q, true) || cur.contains(q, true)) {
+                hits++
                 ConfigRow(title, value, sub = cur, onClick = onClick)
+            }
         }
     }
     val ctx = LocalContext.current
@@ -241,14 +268,20 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                         },
                         shape = RoundedCornerShape(24.dp),
                     )
-                    if (!searching) cfgGroups.filter { it.visible(s) }.chunked(2).forEach { rowGroups ->
+                    if (!searching) cfgGroups.chunked(2).forEach { rowGroups ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             rowGroups.forEach { g ->
                                 // 分類卡：淡色圓形圖示＋名稱＋一行說明
+                                // 說明依目前狀態產生：關閉的功能直接標「已關閉」
                                 val desc = when (g.id) {
-                                    "accounts" -> "帳戶、分類、預算"; "entry" -> "記帳方式、期間、幣別"; "display" -> "主題、字體、列表"
-                                    "features" -> "使用模式、各項功能"; "autorecord" -> "紀錄、來源 App、準確度"; "ai" -> "金鑰、模型、語氣"
-                                    "stocks" -> "手續費、紀律"; "notify" -> "八種通知"; "data" -> "密碼、備份還原"; else -> "導覽、回報、更新"
+                                    "accounts" -> "帳戶、分類、預算"; "entry" -> "記帳方式、期間、幣別"; "display" -> "主題、字體、語言"
+                                    "features" -> "使用模式、往來、權限檢查"
+                                    "autorecord" -> if (s.featureNotif) "來源 App、紀錄、定位" else "已關閉"
+                                    "ai" -> if (!s.aiEnabled) "已關閉" else if (s.hasAiKey) "金鑰、模型、語氣" else "需要設定金鑰"
+                                    "stocks" -> if (s.featureStocks) "手續費、新聞更新" else "已關閉"
+                                    "notify" -> com.enwei.moneymanager.notify.NoticeKind.entries.filter { it.available(s) }.let { k -> "${k.count { it.enabled(s) }} / ${k.size} 種已開啟" }
+                                    "data" -> listOfNotNull(if (s.passcodeOn) "密碼鎖已開" else "密碼鎖", "備份還原").joinToString("、")
+                                    else -> "導覽、回報、${BuildConfig.VERSION_NAME}"
                                 }
                                 com.enwei.moneymanager.ui.components.AppCard(Modifier.weight(1f).heightIn(min = 72.dp).clickable { nav.navigate(g.route ?: "config?g=${g.id}") }) {
                                     Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(vertical = 8.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -334,7 +367,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                         com.enwei.moneymanager.ui.applyAppLocale(ctx, v)
                     }
                 }
-                sec("功能開關")
+                sec("一般")
                 // 使用模式：一次套用一組功能開關（新手先用精簡，需要時再逐項打開）；AI 需要金鑰，不在模式裡切換
                 val mode = when {
                     !s.featureNotif && !s.featureSplit && !s.locationHints && !s.featureStocks -> 0
@@ -344,12 +377,20 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 }
                 val modes = listOf(0 to "精簡：只手動記帳", 1 to "標準：記帳＋通知自動記帳＋往來", 2 to "完整：再加上定位與股票投資")
                 cfg("使用模式", modes.firstOrNull { it.first == mode }?.second?.substringBefore("：") ?: "自訂") {
-                    ask("使用模式", modes, mode.takeIf { it < 3 }, "套用後仍可在下方逐項開關。資料不會因關閉功能而刪除。") { m ->
+                    ask("使用模式", modes, mode.takeIf { it < 3 }, "套用後仍可在各組逐項開關。資料不會因關閉功能而刪除。") { m ->
                         repo.settings.update { it.copy(featureNotif = m >= 1, featureSplit = m >= 1, locationHints = m >= 2, featureStocks = m >= 2) }
                         // 新開的功能需要權限時，接著到功能設定檢查
                         if ((m >= 1 && !s.featureNotif) || (m >= 2 && !s.locationHints)) nav.navigate("setup")
                     }
                 }
+                cfg("往來與分帳", onOff(s.featureSplit)) {
+                    askOnOff("往來與分帳", s.featureSplit, null) { v -> repo.settings.update { it.copy(featureSplit = v) } }
+                }
+                // 已開啟的功能需要的權限與金鑰，一頁看完；少了的也能在這裡補
+                cfg("功能設定檢查") { nav.navigate("setup") }
+
+                // 自動記帳：開關在第一列，打開後才顯示細項
+                sec("自動記帳")
                 cfg("通知自動記帳", onOff(s.featureNotif)) {
                     askOnOff("通知自動記帳", s.featureNotif, null) { v ->
                         repo.settings.update { it.copy(featureNotif = v) }
@@ -357,38 +398,24 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                         if (v) nav.navigate("setup")
                     }
                 }
-                cfg("往來與分帳", onOff(s.featureSplit)) {
-                    askOnOff("往來與分帳", s.featureSplit, null) { v -> repo.settings.update { it.copy(featureSplit = v) } }
-                }
+                if (s.featureNotif) cfg("來源 App、紀錄與準確度") { nav.navigate("notif") }
                 cfg("定位與支出地圖", onOff(s.locationHints)) {
-                    askOnOff("定位與支出地圖", s.locationHints, null) { v ->
+                    askOnOff("定位與支出地圖", s.locationHints, "依付款時的位置推測店家，並在交易頁顯示支出地圖。") { v ->
                         repo.settings.update { it.copy(locationHints = v) }
                         // 打開時接著授予位置權限
                         if (v) nav.navigate("setup")
                     }
                 }
-                cfg("股票與投資助理", onOff(s.featureStocks)) {
-                    askOnOff("股票與投資助理", s.featureStocks, null) { v ->
-                        repo.settings.update { it.copy(featureStocks = v) }
-                    }
-                }
+
+                sec("AI")
                 cfg("AI 功能", onOff(s.aiEnabled)) {
                     askOnOff("AI 功能", s.aiEnabled, null) { v ->
                         repo.settings.update { it.copy(aiEnabled = v) }
                         if (v && !s.hasAiKey) nav.navigate("ai")
                     }
                 }
-                // 已開啟的功能需要的權限與金鑰，一頁看完；少了的也能在這裡補
-                cfg("功能設定檢查") { nav.navigate("setup") }
-
-                if (s.featureNotif) {
-                    sec("自動記帳")
-                    cfg("通知自動記帳設定") { nav.navigate("notif") }
-                }
-
                 if (s.aiEnabled) {
-                sec("AI")
-                cfg("AI 模型設定", if (s.hasAiKey) "已設定金鑰" else "需要設定金鑰") { nav.navigate("ai") }
+                cfg("AI 金鑰與模型", if (s.hasAiKey) "已設定金鑰" else "需要設定金鑰") { nav.navigate("ai") }
                 // AI 說話的口吻：收支檢討、投資報告、股票助理都會照這個語氣
                 cfg("AI 語氣", com.enwei.moneymanager.net.GroqAi.AiTone.entries.getOrElse(s.aiTone) { com.enwei.moneymanager.net.GroqAi.AiTone.GENTLE }.label) {
                     ask(
@@ -403,9 +430,21 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 }
                 }
 
+                sec("投資")
+                cfg("股票與投資助理", onOff(s.featureStocks)) {
+                    askOnOff("股票與投資助理", s.featureStocks, null) { v ->
+                        repo.settings.update { it.copy(featureStocks = v) }
+                    }
+                }
                 if (s.featureStocks) {
-                sec("股票")
                 cfg("手續費與月退") { nav.navigate("stockfees") }
+                cfg("新聞自動更新", "每 ${s.newsIntervalHours} 小時") {
+                    ask("新聞自動更新", listOf(1, 2, 3, 6, 12, 24).map { it to "每 $it 小時" }, s.newsIntervalHours) { v ->
+                        repo.settings.update { it.copy(newsIntervalHours = v) }
+                        com.enwei.moneymanager.work.NewsWorker.schedule(ctx, replace = true)
+                    }
+                }
+                cfg("持股紀律與資金配置") { com.enwei.moneymanager.ui.openRouteFrom(nav, "advisor:3") }
                 cfg("觀察清單", "${s.watchlist.size} 檔") { nav.navigate("invest") }
                 }
 
@@ -441,6 +480,15 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                     cfg("支持開發") { runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) } }
                 }
                 cfg("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版可更新" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
+                // 搜尋也找得到放在子頁裡的設定（深色模式、指紋、備份加密…），點了直接打開那一頁
+                if (searching) {
+                    val sub = settingIndex.filter { (k, _, _) -> k.split('|').any { it.contains(q, true) || com.enwei.moneymanager.ui.tr(it).contains(q, true) } }
+                    sub.forEach { (k, where, route) ->
+                        ConfigRow(k.substringBefore('|'), null, sub = where) { com.enwei.moneymanager.ui.openRouteFrom(nav, route) }
+                    }
+                    if (hits == 0 && sub.isEmpty()) Text("找不到「$q」相關的設定", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp))
+                }
                 Spacer(Modifier.height(32.dp))
             }
         }

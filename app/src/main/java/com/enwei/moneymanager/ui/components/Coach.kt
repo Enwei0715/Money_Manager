@@ -85,7 +85,7 @@ object Coach {
         S(null, Step("tool.review", "收支分析", "依期間整理支出總覽、與前期的變化及消費習慣" + (if (ai) "；AI 建議分頁會指出可調整之處。" else "。"), tab = "more")),
         S("map", Step("tool.merchants", "店家位置", "管理已記錄的店家位置；設定 Google Places 或 Mapbox 金鑰可提高店家搜尋的準確度，未設定時使用 OpenStreetMap。", tab = "more")),
         S(null, Step("tool.backup", "備份", "所有資料只存在這支手機；建議設定自動備份到雲端硬碟，換手機時在新手機還原即可。", tab = "more")),
-        S(null, Step("more.settings", "設定", "外觀、記帳方式、通知與 AI 等設定。「功能開關」可隨時開啟或關閉上述功能，「功能設定檢查」列出尚未完成的設定。", tab = "more")),
+        S(null, Step("more.settings", "設定", "外觀、記帳方式、通知與 AI 等設定。每個功能的開關在各自的分組第一列，「一般」裡有使用模式與「功能設定檢查」。", tab = "more")),
         S(null, Step(null, "導覽完成", "第一次進入各頁面時，還會有該頁的詳細說明。如需再次查看，請至「設定 → 關於 → 新手導覽」。", tab = "txns")),
     )
 

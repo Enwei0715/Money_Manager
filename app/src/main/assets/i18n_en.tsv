@@ -3448,3 +3448,18 @@ OpenStreetMap 找不到；可改用其他關鍵字，或設定 Google Places 金
 開啟後，最近使用的 App 畫面與截圖不會顯示帳務內容，但也無法截圖。關閉則可正常截圖。	When on, the recent-apps preview and screenshots hide your finances, and screenshots are blocked. When off, screenshots work normally.
 開啟「畫面保護」後，最近使用的 App 畫面與截圖不會顯示帳務內容，但也無法截圖回報問題。之後可在「設定 → 安全與資料」更改。	With screen protection on, the recent-apps preview and screenshots hide your finances, but you can't take screenshots to report problems. You can change this later in Settings → Security & data.
 ＋ 手續費	+ Fee
+一般	General
+投資	Investing
+使用模式、往來、權限檢查	Usage mode, IOUs, permissions
+已關閉	Off
+來源 App、紀錄、定位	Source apps, log, location
+需要設定金鑰	Key needed
+手續費、新聞更新	Fees, news updates
+來源 App、紀錄與準確度	Source apps, log & accuracy
+AI 金鑰與模型	AI key & model
+新聞自動更新	Automatic news updates
+持股紀律與資金配置	Holding discipline & allocation
+依付款時的位置推測店家，並在交易頁顯示支出地圖。	Guess the store from where you paid, and show the spending map on Transactions.
+套用後仍可在各組逐項開關。資料不會因關閉功能而刪除。	You can still switch each feature in its group. Turning a feature off never deletes data.
+股票功能已關閉（設定 → 投資）	Stocks are off (Settings → Investing)
+日後可於設定中各分組調整	You can change this later in each Settings group

@@ -211,7 +211,7 @@ fun AssistantScreen(nav: NavController, showBack: Boolean = false) {
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
             if (settings.featureStocks) AdvisorContent(nav)
-            else com.enwei.moneymanager.ui.components.EmptyHint("股票功能已關閉（設定 → 功能開關）")
+            else com.enwei.moneymanager.ui.components.EmptyHint("股票功能已關閉（設定 → 投資）")
         }
     }
 }
