@@ -262,7 +262,7 @@ private fun rememberToolSummaries(): Map<String, String> {
         settings.budgets[0L]?.let { b -> put("budget", "已用 ${if (b > 0) monthExpense * 100 / b else 0}%・剩 ${Money.withSymbol((b - monthExpense).coerceAtLeast(0), lk.base).substringBefore(".")}") }
         put("totalstats", "淨資產 ${Money.withSymbol(balances.filter { it.account.includeInNetWorth && !it.account.archived }.sumOf { lk.fx.convert(it.balance, it.account.currency) }, lk.base)}")
         put("notif", "監聽 ${settings.notifPackages.size} 個 App")
-        put("settings", if (settings.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.1.${settings.updateAvailable}" else "目前 ${BuildConfig.VERSION_NAME}")
+        put("settings", if (settings.updateAvailable > BuildConfig.VERSION_CODE) "有新版可更新" else "目前 ${BuildConfig.VERSION_NAME}")
     }
 }
 
@@ -1122,7 +1122,7 @@ fun SettingsScreen(nav: NavController) {
             release = r
             updateStatus = when {
                 r == null -> "找不到可下載的版本"
-                Updater.isNewer(r) -> "有新版本 ${r.tag}"
+                Updater.isNewer(r) -> "有新版本 ${r.display}"
                 else -> "已是最新版本（${BuildConfig.VERSION_NAME}）"
             }
         }.onFailure {
@@ -1179,7 +1179,7 @@ fun SettingsScreen(nav: NavController) {
                             Text(chip, fontSize = AppText.caption, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
                         }
                     }
-                    if (newer) Text("新版本 ${r!!.tag}", fontSize = AppText.section, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    if (newer) Text("新版本 ${r!!.display}", fontSize = AppText.section, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary)
                     // 失敗或提示訊息（成功時狀態已在標籤裡，不重複）
                     updateStatus?.takeIf { !checking && (r == null || it.startsWith("下載") || it.startsWith("請允許")) }?.let {

@@ -22,7 +22,10 @@ data class ReleaseInfo(
     val assetApiUrl: String,
     val assetBrowserUrl: String,
     val sizeBytes: Long,
-)
+) {
+    /** 給使用者看的版本號：「v2.2.3-402」→「2.2.3」（舊格式「v2.1.399」照原樣） */
+    val display: String get() = tag.removePrefix("v").substringBefore("-")
+}
 
 /**
  * 從 GitHub Releases 檢查並下載新版 APK。

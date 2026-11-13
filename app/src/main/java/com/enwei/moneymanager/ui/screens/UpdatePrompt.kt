@@ -62,8 +62,8 @@ fun UpdatePrompt() {
                 val log = when {
                     r == null -> "$time 檢查失敗：" + (res.exceptionOrNull()?.message ?: "找不到可下載的版本")
                     !Updater.isNewer(r) -> "$time 已是最新版本"
-                    r.versionCode == s.updateSkipped -> "$time 有新版本 ${r.tag}（已略過）"
-                    else -> "$time 有新版本 ${r.tag}"
+                    r.versionCode == s.updateSkipped -> "$time 有新版本 ${r.display}（已略過）"
+                    else -> "$time 有新版本 ${r.display}"
                 }
                 repo.settings.update { it.copy(updateCheckLog = log, updateAvailable = if (r != null && Updater.isNewer(r)) r.versionCode else 0) }
                 // 只有真的查到結果才算檢查過；失敗（沒網路等）下次回到 App 再試
@@ -90,7 +90,7 @@ fun UpdatePrompt() {
         icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.SystemUpdate, null, tint = MaterialTheme.colorScheme.primary) },
         title = {
             Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Text("有新版本 ${r.tag}", fontSize = AppText.title)
+                Text("有新版本 ${r.display}", fontSize = AppText.title)
                 Text("目前 ${BuildConfig.VERSION_NAME}" + (r.sizeBytes.takeIf { it > 0 }?.let { " · 約 ${"%.1f".format(it / 1_048_576.0)} MB" } ?: ""),
                     fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

@@ -30,6 +30,14 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # 顯示用版本號（主.次.修訂），規則見 version.properties
+      - name: Version
+        run: |
+          mm=$(grep '^versionMajorMinor=' version.properties | cut -d= -f2)
+          base=$(grep '^patchBase=' version.properties | cut -d= -f2)
+          patch=$(( ${{ github.run_number }} - base )); [ $patch -lt 0 ] && patch=0
+          echo "APP_VERSION=$mm.$patch" >> "$GITHUB_ENV"
+
       # 固定簽章金鑰：Android 只允許「相同簽章」的新版覆蓋安裝。
       # 1. 有設定 Secrets（KEYSTORE_BASE64 / KEYSTORE_PASSWORD）就用 Secrets。
       # 2. 否則使用存放在草稿 Release「signing-key」中的金鑰（只有對儲存庫有寫入權限的人看得到）；
@@ -80,16 +88,16 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/github/release/app-github-release.apk "dist/MoneyManager-2.1.${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/github/release/app-github-release.apk "dist/Ledgerly-${{ env.APP_VERSION }}.apk"
           # 上架 Google Play 用的 App Bundle（在 Play Console 上傳）
-          cp app/build/outputs/bundle/playRelease/app-play-release.aab "dist/Ledgerly-play-2.1.${{ github.run_number }}.aab"
+          cp app/build/outputs/bundle/playRelease/app-play-release.aab "dist/Ledgerly-play-${{ env.APP_VERSION }}.aab"
           rm -f app/release.jks
           # 混淆對照表：還原閃退紀錄用（只放在建置成品，不附在 Release）
-          cp app/build/outputs/mapping/githubRelease/mapping.txt "dist/mapping-2.1.${{ github.run_number }}.txt" || true
+          cp app/build/outputs/mapping/githubRelease/mapping.txt "dist/mapping-${{ env.APP_VERSION }}.txt" || true
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MoneyManager-2.1.${{ github.run_number }}
+          name: Ledgerly-${{ env.APP_VERSION }}
           path: dist/*
 
       # 只在預設分支發布 Release，驗證分支與 PR 不會產生正式版本。
@@ -100,9 +108,11 @@ jobs:
         run: |
           # 更新說明：有 RELEASE_NOTES.md 就用它（給使用者看的中文說明），否則用 commit 訊息
           # 只有這次 commit 改過 RELEASE_NOTES.md 才用它，避免舊說明沿用到之後的版本
-          if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -qx RELEASE_NOTES.md; then notes="$(cat RELEASE_NOTES.md)"; else notes="$(git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):')"; fi
-          gh release create "v2.1.${{ github.run_number }}" dist/*.apk dist/*.aab \
-            --title "帳理 Ledgerly 2.1.${{ github.run_number }}" \
+          # 沒改更新說明時只寫一行（commit 標題），不把整段開發訊息放上去
+          if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -qx RELEASE_NOTES.md; then notes="$(head -n 20 RELEASE_NOTES.md)"; else notes="・$(git log -1 --pretty=%s)"; fi
+          # 標籤結尾保留建置編號：舊版 App 依標籤最後的數字判斷有沒有新版
+          gh release create "v${{ env.APP_VERSION }}-${{ github.run_number }}" dist/*.apk dist/*.aab \
+            --title "帳理 Ledgerly ${{ env.APP_VERSION }}" \
             --target "${{ github.sha }}" \
             --notes "$notes"
 

@@ -433,7 +433,7 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
                 com.enwei.moneymanager.data.Features.sponsorUrl?.let { url ->
                     cfg("支持開發") { runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) } }
                 }
-                cfg("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版 2.1.${s.updateAvailable}" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
+                cfg("App 更新", if (s.updateAvailable > BuildConfig.VERSION_CODE) "有新版可更新" else BuildConfig.VERSION_NAME) { nav.navigate("settings") }
                 Spacer(Modifier.height(32.dp))
             }
         }
