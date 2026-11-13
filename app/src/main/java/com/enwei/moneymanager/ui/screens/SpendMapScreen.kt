@@ -209,7 +209,7 @@ fun SpendMapScreen(nav: NavController) {
                     Text("地圖上 ${placed.size} 筆 ${Money.withSymbol(placedSum, lk.base)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (extra) Text(if (more) "  ︿" else "  ﹀", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (more) Text(listOfNotNull(unplaced.size.takeIf { it > 0 }?.let { "沒有位置 $it 筆" }, onlineCount.takeIf { it > 0 }?.let { "線上 $it 筆" }).joinToString("・"),
+                if (more) Text(listOfNotNull(unplaced.size.takeIf { it > 0 }?.let { "$it 筆沒有記到位置（不會標在地圖上）" }, onlineCount.takeIf { it > 0 }?.let { "$it 筆是線上消費（沒有實體店面，不標在地圖上）" }).joinToString("\n"),
                     fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             // 沒有可標示的支出時地圖照樣顯示（對準常活動的區域），只在下方註明

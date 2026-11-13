@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -121,6 +122,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     var divs by remember { mutableStateOf<List<com.enwei.moneymanager.core.DividendEvent>>(emptyList()) }
     var indicator by remember { mutableStateOf(KlinePrefs.indicator) }
     var showBB by remember { mutableStateOf(KlinePrefs.bb) }
+    // 價位線（壓力、支撐、停損、停利…）預設收起，只留均價：圖上不會擠滿標籤，需要時再打開
+    var showLevels by remember { mutableStateOf(false) }
     LaunchedEffect(hourly, count, mas, indicator, showBB) { if (hourly || span == 0) KlinePrefs.save(hourly, count, mas, indicator, showBB) }
     val trades by repo.trades.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
@@ -431,7 +434,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                 (if (showSignals) stt?.lines.orEmpty().map { (nm, v) ->
                                     Triple(v, when (nm) { "移動停損" -> Color(0xFFFF7043); "停損" -> Color(0xFF2E7D32); else -> Color(0xFFD81B60) }, nm)
                                 } else emptyList())
-                            CandleChart(kb, from, n, showBB, mas.sorted(), signals = visibleSignals, labeledLevels = chartLevels,
+                            CandleChart(kb, from, n, showBB, mas.sorted(), signals = visibleSignals, labeledLevels = if (showLevels) chartLevels else chartLevels.filter { it.third.contains("均價") },
                                 onZoom = { z -> count = (count / z).coerceIn(10f, usable.toFloat()); back = back.coerceIn(0f, (usable - count).coerceAtLeast(0f)) },
                                 onPan = { bars -> back = (back + bars).coerceIn(0f, (usable - count).coerceAtLeast(0f)) },
                                 selected = sel,
@@ -454,6 +457,9 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                 }
                                 Text(if (showBB) "布林 ✕" else "＋布林", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).clickable { showBB = !showBB }
+                                        .padding(horizontal = 8.dp, vertical = 3.dp))
+                                Text(if (showLevels) "價位線 ✕" else "＋價位線", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).clickable { showLevels = !showLevels }
                                         .padding(horizontal = 8.dp, vertical = 3.dp))
                                 Text("＋均線", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius)).clickable { addMa = true }
@@ -772,6 +778,9 @@ private fun CandleChart(
     val pan by androidx.compose.runtime.rememberUpdatedState(onPan)
     val nNow by androidx.compose.runtime.rememberUpdatedState(n)
     val tap by androidx.compose.runtime.rememberUpdatedState(onTap)
+    // 兩指量測：兩根手指下的兩根 K 棒，畫出區間並標漲跌幅（放開就消失）
+    var measure by remember { mutableStateOf<Pair<Float, Float>?>(null) }
+    val measureCol = MaterialTheme.colorScheme.primary
     Canvas(
         Modifier.fillMaxWidth().height(260.dp).padding(top = 8.dp)
             // 兩指才算縮放，單指上下滑仍可捲動頁面
@@ -780,15 +789,26 @@ private fun CandleChart(
                     awaitFirstDown(requireUnconsumed = false)
                     do {
                         val e = awaitPointerEvent()
-                        if (e.changes.count { it.pressed } >= 2) {
+                        val pressed = e.changes.filter { it.pressed }
+                        if (pressed.size >= 2) {
                             val z = e.calculateZoom()
                             if (z != 1f) zoom(z)
+                            val xs = pressed.take(2).map { (it.position.x / size.width).coerceIn(0f, 1f) }.sorted()
+                            measure = xs[0] to xs[1]
                             e.changes.forEach { it.consume() }
                         }
                     } while (e.changes.any { it.pressed })
+                    measure = null
                 }
             }
             .pointerInput(Unit) { detectTapGestures { o -> tap(o.x / size.width) } }
+            // 長按後左右滑：逐根顯示每根 K 棒的開高低收（不會變成拖動圖表）
+            .pointerInput(Unit) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { o -> tap(o.x / size.width) },
+                    onDrag = { ch, _ -> ch.consume(); tap((ch.position.x / size.width).coerceIn(0f, 0.999f)) },
+                )
+            }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures { change, dx ->
                     change.consume()
@@ -932,6 +952,24 @@ private fun CandleChart(
         selected?.takeIf { it in from until to }?.let { j ->
             val x = (j - from) * cw + cw / 2
             drawLine(grid.copy(alpha = 1f), Offset(x, 0f), Offset(x, size.height), 1.5f)
+        }
+        // 兩指量測：區間底色＋兩端收盤價的漲跌幅
+        measure?.let { (a, bx) ->
+            val ia = (from + (a * n).toInt()).coerceIn(from, to - 1)
+            val ib = (from + (bx * n).toInt()).coerceIn(from, to - 1)
+            val xa = (ia - from) * cw; val xb = (ib - from + 1) * cw
+            drawRect(measureCol.copy(alpha = 0.10f), Offset(xa, 0f), Size(xb - xa, priceH))
+            val ca = b.close[ia]; val cb = b.close[ib]
+            val pct = if (ca != 0.0) (cb - ca) / ca * 100 else 0.0
+            val txt = "%+.2f%%（%.2f → %.2f，%d 根）".format(pct, ca, cb, ib - ia)
+            val pm = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                typeface = com.enwei.moneymanager.ui.AppTypeface.current; textSize = 24f * k
+                color = android.graphics.Color.WHITE
+            }
+            val tw = pm.measureText(txt)
+            val bx0 = ((xa + xb) / 2 - tw / 2 - 8f * k).coerceIn(0f, maxOf(0f, size.width - tw - 16f * k))
+            drawRoundRect(if (pct >= 0) up else down, Offset(bx0, legendH + 4f * k), Size(tw + 16f * k, 34f * k), androidx.compose.ui.geometry.CornerRadius(8f, 8f))
+            drawContext.canvas.nativeCanvas.drawText(txt, bx0 + 8f * k, legendH + 28f * k, pm)
         }
     }
 }

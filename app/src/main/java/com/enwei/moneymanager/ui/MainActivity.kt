@@ -257,7 +257,7 @@ fun NavController.openRoute(r: String) {
         // 小工具的「股票」：切到資產分頁的股票區塊，不另外疊一層
         r == "invest" -> { TabRequest.accountsSection = 1; openTab("accounts") }
         // 從通知或小工具打開的設定類頁面：先回到工具分頁首頁再開，按返回回到工具，不會回到不相干的舊畫面
-        r.substringBefore('?').substringBefore('/') in TOOL_OWNED -> { openTab("more"); navigate(r) }
+        r.substringBefore('?').substringBefore('/') in TOOL_OWNED -> { openTab("more"); popBackStack("more", inclusive = false); navigate(r) }
         else -> navigate(r)
     }
 }
@@ -319,14 +319,16 @@ internal fun NavController.openTab(route: String) {
         if (!popBackStack(start.id, inclusive = false)) navigate(route) { launchSingleTop = true }
         return
     }
+    // 已經在這個分頁（含它的子畫面）再點一次：回到分頁首頁；
+    // 從別的分頁切回來：回到上次看的畫面（例如工具→預算 切走再回來仍在預算，按返回回工具）
+    // 這個分頁的首頁目前在返回堆疊裡＝正在這個分頁（含子畫面）；別的分頁的畫面是存起來的，不在堆疊裡
+    val again = runCatching { getBackStackEntry(route) }.isSuccess
     navigate(route) {
         popUpTo(start.id) { saveState = true }
         launchSingleTop = true
         restoreState = true
     }
-    // 點底部分頁一律回到這個分頁的首頁（例如工具→預算 切走再回來，看到的是工具格，不是預算）；
-    // 首頁的捲動位置、頁內子分頁照樣保留
-    popBackStack(route, inclusive = false)
+    if (again) popBackStack(route, inclusive = false)
 }
 
 @Composable

@@ -628,19 +628,29 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("金額", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                        // 新增與編輯都可以加手續費；按鈕加框、點擊範圍至少 40dp，一眼看得到
-                        if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && !debtMode) Text(if (showFee) "手續費 ✓" else "＋ 手續費", fontSize = AppText.secondary,
-                            color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.heightIn(min = 40.dp)
-                                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                                .clickable { showFee = !showFee; if (showFee) panel = Panel.FEE }
-                                .padding(horizontal = 12.dp, vertical = 8.dp))
                     }
-                    Text(
-                        (if (currency != lk.base) Money.symbolOf(currency) else "$ ") + expr.ifEmpty { "0" },
-                        fontSize = androidx.compose.ui.unit.TextUnit(34f, androidx.compose.ui.unit.TextUnitType.Sp), fontWeight = FontWeight.SemiBold,
-                        color = if (expr.isEmpty()) MaterialTheme.colorScheme.outlineVariant else if (debtMode) MaterialTheme.colorScheme.onSurface else color,
-                    )
+                    // 金額＋右邊空白處放手續費（不另外佔一列）：沒填時是「＋ 手續費」，填了顯示金額；點了用下方鍵盤輸入，清空即刪除
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            (if (currency != lk.base) Money.symbolOf(currency) else "$ ") + expr.ifEmpty { "0" },
+                            fontSize = androidx.compose.ui.unit.TextUnit(34f, androidx.compose.ui.unit.TextUnitType.Sp), fontWeight = FontWeight.SemiBold,
+                            color = if (expr.isEmpty()) MaterialTheme.colorScheme.outlineVariant else if (debtMode) MaterialTheme.colorScheme.onSurface else color,
+                            modifier = Modifier.weight(1f), maxLines = 1,
+                        )
+                        if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && !debtMode) {
+                            val feeOn = showFee && panel == Panel.FEE
+                            Box(
+                                Modifier.heightIn(min = 40.dp)
+                                    .border(if (feeOn) 1.5.dp else 1.dp, MaterialTheme.colorScheme.primary.copy(alpha = if (feeOn) 1f else 0.5f), RoundedCornerShape(20.dp))
+                                    .clickable { showFee = true; focusManager.clearFocus(); panel = Panel.FEE }
+                                    .padding(horizontal = 14.dp),
+                                contentAlignment = Alignment.Center,  // 字上下左右置中
+                            ) {
+                                Text(if (showFee && feeExpr.isNotBlank()) "手續費 $ $feeExpr" else "＋ 手續費", fontSize = AppText.secondary,
+                                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            }
+                        }
+                    }
                     if (Calculator.hasOperator(expr)) Calculator.evaluate(expr)?.let {
                         Text("= ${Calculator.format(it)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -688,11 +698,6 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         }, label = {
                             Text(listOfNotNull(g.merchant, lk.catLabel(g.categoryId)).joinToString(" · ") + "（${g.count} 次）", fontSize = AppText.caption, maxLines = 1)
                         })
-                    }
-                }
-                if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && showFee) {
-                    FormRow("手續費", color, panel == Panel.FEE, onClick = { focusManager.clearFocus(); panel = Panel.FEE }) {
-                        Text(feeExpr, fontSize = AppText.body)
                     }
                 }
                 if (type == TxnType.TRANSFER) {

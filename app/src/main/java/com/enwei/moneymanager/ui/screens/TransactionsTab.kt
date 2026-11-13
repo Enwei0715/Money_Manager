@@ -648,7 +648,19 @@ fun DayBlock(
             e.txn?.let { sep(); MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
             e.trade?.let { tr -> sep(); TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
         } else {
-            txns.sortedByDescending { it.date }.forEach { sep(); MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
+            // 另記的手續費：找出它屬於哪一筆（FEE:主交易 id，舊資料用同時間同帳戶），併到那一筆顯示
+            val feeOf = remember(txns) {
+                val byId = txns.associateBy { it.id }
+                txns.mapNotNull { f ->
+                    val isFee = f.type == TxnType.EXPENSE && (f.externalKey?.startsWith("FEE:") == true || f.merchant == "轉帳手續費" || f.merchant?.endsWith(" 手續費") == true)
+                    if (!isFee) return@mapNotNull null
+                    val parent = f.externalKey?.removePrefix("FEE:")?.toLongOrNull()?.let { byId[it] }
+                        ?: txns.firstOrNull { p -> p.id != f.id && p.date == f.date && p.accountId == f.accountId && (p.type == TxnType.TRANSFER || p.type == TxnType.EXPENSE) && p.merchant != f.merchant }
+                    parent?.let { it.id to f }
+                }.toMap()
+            }
+            val hiddenFees = feeOf.values.map { it.id }.toSet()
+            txns.filter { it.id !in hiddenFees }.sortedByDescending { it.date }.forEach { sep(); MmTxnRow(it, lk, balances[it.id], feeOf[it.id]) { nav.navigate("txn/${it.id}") } }
             trades.sortedByDescending { it.id }.forEach { tr -> sep(); TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
         }
         com.enwei.moneymanager.ui.components.LineDivider()
@@ -700,9 +712,9 @@ fun TradeRow(tr: com.enwei.moneymanager.data.StockTradeEntity, lk: Lookups, acco
 /** 一筆交易：左分類、中內容與帳戶、右金額。 */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () -> Unit) {
+fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, fee: TxnEntity? = null, onClick: () -> Unit) {
     val st = repo.settings.flow.collectAsStateWithLifecycle().value
-    if (st.rowStyle == 0) { IconTxnRow(t, lk, balanceAfter, st.showDescription, onClick); return }
+    if (st.rowStyle == 0) { IconTxnRow(t, lk, balanceAfter, st.showDescription, fee, onClick); return }
     val cat = lk.category(t.categoryId)
     val acc = lk.account(t.accountId)
     val gray = MaterialTheme.colorScheme.onSurfaceVariant
@@ -737,6 +749,8 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(Money.withSymbol(t.amount, t.currency), color = color, fontSize = AppText.body)
+            // 這筆另記的手續費併在同一列顯示（不另佔一列）
+            fee?.let { f -> Text("手續費 " + Money.withSymbol(f.amount, f.currency), fontSize = AppText.label, color = ExpenseColor) }
             if (t.status == TxnStatus.PENDING) Text("待確認", color = MaterialTheme.colorScheme.primary, fontSize = AppText.label)
             if (balanceAfter != null) Text("(${Money.full(balanceAfter)})", fontSize = AppText.label, color = gray)
             else if (t.currency != lk.base && lk.fx.hasRate(t.currency)) Text("≈" + Money.full(lk.fx.convert(t.amount, t.currency)), fontSize = AppText.label, color = gray)
@@ -749,7 +763,7 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, onClick: () 
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun IconTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long?, showDesc: Boolean, onClick: () -> Unit) {
+private fun IconTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long?, showDesc: Boolean, fee: TxnEntity? = null, onClick: () -> Unit) {
     val cat = lk.category(t.categoryId)
     val root = cat?.parentId?.let { lk.category(it) } ?: cat
     val gray = MaterialTheme.colorScheme.onSurfaceVariant
@@ -783,6 +797,7 @@ private fun IconTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long?, showDesc:
             Text((if (t.type == TxnType.EXPENSE) "−" else if (t.type == TxnType.INCOME) "+" else "") + Money.withSymbol(t.amount, t.currency),
                 color = color, fontSize = AppText.body, fontWeight = FontWeight.Medium)
             if (t.status == TxnStatus.PENDING) Text("待確認", color = MaterialTheme.colorScheme.primary, fontSize = AppText.label)
+            fee?.let { f -> Text("手續費 −" + Money.withSymbol(f.amount, f.currency), fontSize = AppText.label, color = ExpenseColor) }
             if (balanceAfter != null) Text(Money.full(balanceAfter), fontSize = AppText.label, color = gray)
             else if (t.currency != lk.base && lk.fx.hasRate(t.currency)) Text("≈" + Money.full(lk.fx.convert(t.amount, t.currency)), fontSize = AppText.label, color = gray)
         }
@@ -932,6 +947,18 @@ private fun CalendarView(
                                 if (settings.calendarDots) Box(Modifier.size(6.dp).background(c.copy(alpha = alpha), CircleShape))
                                 else Text(label, fontSize = AppText.badge, lineHeight = 13.sp, color = c.copy(alpha = alpha), maxLines = 1, softWrap = false)
                             }
+                        }
+                        // 格子中間不留白：列出當天金額最大的幾筆（店名或分類），一眼看出錢花在哪
+                        val items = remember(byDay[date]) {
+                            byDay[date].orEmpty().filter { it.type != com.enwei.moneymanager.data.TxnType.TRANSFER }
+                                .sortedByDescending { it.amount }.take(if (fit) 2 else 3)
+                        }
+                        items.forEach { x ->
+                            Text(
+                                x.merchant?.takeIf { it.isNotBlank() } ?: lk.category(x.categoryId)?.name ?: x.note.orEmpty(),
+                                fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha * 0.9f),
+                                maxLines = 1, softWrap = false, modifier = Modifier.padding(horizontal = 3.dp),
+                            )
                         }
                         Spacer(Modifier.weight(1f))
                         // 收入、支出、合計：完整千分位金額，靠右；放不下時自動縮小字級，不縮寫成「萬」
