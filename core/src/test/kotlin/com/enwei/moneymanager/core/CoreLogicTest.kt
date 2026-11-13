@@ -767,4 +767,12 @@ class AutopayAfterDueTest {
         // 2026/12/04（週五）→ 跳過週末到 12/07（週一）
         assertEquals(LocalDate.of(2026, 12, 7), c.autopayDateFor(LocalDate.of(2026, 12, 4), -1))
     }
+
+    @org.junit.Test
+    fun merchantKeepsInnerBrackets() {
+        org.junit.Assert.assertEquals("包子商行(台科大第一餐廳)", NotificationParser.balanceBrackets("包子商行(台科大第一餐廳)"))
+        org.junit.Assert.assertEquals("包子商行(台科大第一餐廳)", NotificationParser.balanceBrackets("包子商行(台科大第一餐廳"))
+        org.junit.Assert.assertEquals("全家", NotificationParser.balanceBrackets("【全家】"))
+        org.junit.Assert.assertEquals("咖啡店", NotificationParser.balanceBrackets("咖啡店)"))
+    }
 }

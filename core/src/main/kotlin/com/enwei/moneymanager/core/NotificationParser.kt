@@ -130,6 +130,27 @@ object NotificationParser {
         Regex("(?:商店|特店|店家|商家|消費地點|收款方|付款對象)\\s*(?:名稱)?\\s*[:：]\\s*([^，,。\\n]{2,30})"),
         Regex("(?:付款給|支付給|轉帳給|付給)\\s*([^，,。\\s]{2,30})"),
     )
+    /**
+     * 店名頭尾的括號：整段被包起來（「【全家】」）才拿掉；店名裡成對的括號要保留，
+     * 例如「包子商行(台科大第一餐廳)」不能變成「包子商行(台科大第一餐廳」。
+     */
+    fun balanceBrackets(raw: String): String {
+        var s = raw.trim()
+        val pairs = listOf('「' to '」', '【' to '】', '(' to ')', '（' to '）')
+        // 整段被一對括號包住：拿掉外層
+        pairs.firstOrNull { (o, c) -> s.length > 2 && s.first() == o && s.last() == c && s.count { it == o } == 1 }?.let { s = s.drop(1).dropLast(1).trim() }
+        // 頭尾多出來、沒有配對的括號：拿掉
+        for ((o, c) in pairs) {
+            while (s.isNotEmpty() && s.first() == c) s = s.drop(1)
+            while (s.isNotEmpty() && s.last() == o) s = s.dropLast(1)
+            while (s.isNotEmpty() && s.first() == o && s.count { it == o } > s.count { it == c }) s = s.drop(1)
+            while (s.isNotEmpty() && s.last() == c && s.count { it == c } > s.count { it == o }) s = s.dropLast(1)
+            // 只有開括號、少了收尾（通知被截斷）：補上收尾括號
+            if (s.count { it == o } > s.count { it == c }) s += c
+        }
+        return s.trim()
+    }
+
     private val dateLike = Regex("^[0-9/:\\-.\\s年月日時分上下午AMPamp]+$")
 
     /** OTP 要是獨立的字：「HOTPOT」「Hotpot 火鍋」這類店名裡剛好有 otp 不算 */
@@ -322,7 +343,7 @@ object NotificationParser {
         var generic: String? = null
         for (p in merchantPatterns) {
             for (m in p.findAll(text)) {
-                val candidate = m.groupValues[1].trim().trim('「', '」', '【', '】', '(', ')', '（', '）')
+                val candidate = balanceBrackets(m.groupValues[1].trim())
                     .replace(Regex("^\\d{1,4}/\\d{1,2}(?:/\\d{1,2})?(?:\\s*\\d{1,2}:\\d{2}(?::\\d{2})?)?\\s*"), "") // 去掉開頭的日期時間
                     .trim()
                 if (candidate.length >= 2 && !dateLike.matches(candidate) && candidate !in placeWords &&

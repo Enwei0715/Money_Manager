@@ -245,11 +245,16 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     fun removeMerchantAlias(from: String) = settings.update { it.copy(merchantAlias = it.merchantAlias - from) }
 
     private suspend fun learnMerchantAlias(old: String?, new: String?) {
-        val from = old?.trim().orEmpty(); val to = new?.trim().orEmpty()
+        // 舊版解析少了收尾括號的店名（「包子商行(台科大第一餐廳」）先補齊，之後新通知解析出的名稱才對得上
+        val from = old?.trim().orEmpty().let { com.enwei.moneymanager.core.NotificationParser.balanceBrackets(it) }; val to = new?.trim().orEmpty()
         if (from.isEmpty() || to.isEmpty() || from == to || weakMerchant(from)) return
-        if (!Regex(".{3,}[^商書飯藥酒]店$|.{3,}分公司$").containsMatchIn(from)) return
-        // 百貨、商場、車站、美食街的刷卡名稱是很多專櫃共用的，改其中一筆不代表整個商場都是那家店
-        if (sharedVenueWords.any { from.contains(it) }) return
+        // 「店名(所在地點)」：括號前就是那一家（例如「包子商行(台科大第一餐廳)」），地點即使是餐廳或商場也可以學
+        val shopInBrackets = Regex("^([^()（）]{2,})[(（].{2,}[)）]$").find(from)?.groupValues?.get(1)?.trim()
+        if (shopInBrackets == null) {
+            if (!Regex(".{3,}[^商書飯藥酒]店$|.{3,}分公司$").containsMatchIn(from)) return
+            // 百貨、商場、車站、美食街的刷卡名稱是很多專櫃共用的，改其中一筆不代表整個商場都是那家店
+            if (sharedVenueWords.any { from.contains(it) }) return
+        } else if (sharedVenueWords.any { shopInBrackets.contains(it) } || weakMerchant(shopInBrackets)) return
         settings.update { it.copy(merchantAlias = it.merchantAlias + (from to to)) }
         // 只統一通知記下的同名交易；手動記的交易不動
         db.txns().renameNotificationMerchant(from, to)
