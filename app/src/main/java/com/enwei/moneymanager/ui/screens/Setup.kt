@@ -179,7 +179,7 @@ fun SetupList(features: Set<String>, open: (String) -> Unit) {
         groups.forEach { (f, list) ->
             Text(Setup.featureName[f] ?: f, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             list.forEach { item ->
                 val ok = Setup.done(ctx, s, item.id)
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
@@ -224,7 +224,7 @@ fun SetupList(features: Set<String>, open: (String) -> Unit) {
                     }
                     shizukuMsg?.let { Text(it, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
         }
     }

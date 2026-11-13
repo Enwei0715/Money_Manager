@@ -53,7 +53,7 @@ private fun GroupHeader(title: String) {
         title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body,
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, top = 14.dp, bottom = 8.dp),
     )
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    com.enwei.moneymanager.ui.components.LineDivider()
 }
 
 /** 帳戶設定：依群組列出所有帳戶（含隱藏），點選進入編輯。 */
@@ -84,7 +84,7 @@ fun AccountSettingsScreen(nav: NavController) {
                         )
                         Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    com.enwei.moneymanager.ui.components.LineDivider()
                 }
             }
             Spacer(Modifier.height(32.dp))
@@ -101,7 +101,7 @@ fun AccountGroupScreen(nav: NavController) {
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { BackTopBar("帳戶群組", { nav.popBackStack() }) }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
             Spacer(Modifier.height(12.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             ReorderableColumn(s.groupOrder().filter { s.featureStocks || it != AccountType.BROKERAGE }, { it.name }, { list ->
                 repo.settings.update { it.copy(accountGroupOrder = list.map { t -> t.name }) }
             }) { type, handle ->

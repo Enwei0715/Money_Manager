@@ -273,7 +273,7 @@ private fun FilterHeader(allOn: Boolean, onAll: (Boolean) -> Unit, right: @Compo
         Text("全部", fontSize = AppText.body, modifier = Modifier.weight(1f))
         right()
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    com.enwei.moneymanager.ui.components.LineDivider()
 }
 
 /** 一列勾選項目：勾選框、名稱、右邊金額。 */
@@ -301,7 +301,7 @@ private fun FilterRow(
         Spacer(Modifier.weight(1f))
         right()
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    com.enwei.moneymanager.ui.components.RowDivider()
 }
 
 /**

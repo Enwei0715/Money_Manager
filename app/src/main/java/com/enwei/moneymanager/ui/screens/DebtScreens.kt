@@ -91,7 +91,7 @@ fun DebtsScreen(nav: NavController) {
                     "我欠別人" to (Money.full(iOwe) to ExpenseColor),
                     "淨額" to (Money.full(owedToMe - iOwe) to MaterialTheme.colorScheme.onSurface),
                 ))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
             if (people.isEmpty()) item {
                 EmptyHint("目前沒有往來對象。可於記帳時使用「往來」，或點選右上角新增")
@@ -159,5 +159,5 @@ private fun PersonRow(nav: NavController, a: com.enwei.moneymanager.data.Account
             }
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    com.enwei.moneymanager.ui.components.LineDivider()
 }

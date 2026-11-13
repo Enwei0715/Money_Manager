@@ -159,14 +159,14 @@ object Onboarding {
                             }
                             if (p.steps.isNotEmpty()) {
                                 Spacer(Modifier.height(20.dp))
-                                androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                com.enwei.moneymanager.ui.components.LineDivider()
                                 p.steps.forEachIndexed { n, st ->
                                     Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.Top) {
                                         Text("${n + 1}", fontSize = AppText.body, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.widthIn(min = 28.dp))
                                         Text(st, fontSize = AppText.body)
                                     }
-                                    androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                    com.enwei.moneymanager.ui.components.LineDivider()
                                 }
                             }
                             if (p.action != null && p.route != null) {
@@ -194,7 +194,7 @@ object Onboarding {
     @Composable
     private fun Survey(w: Set<String>) {
         Column {
-            androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             // 基本功能一定有
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -203,7 +203,7 @@ object Onboarding {
                 }
                 CheckMark(true, enabled = false)
             }
-            androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             wants.forEach { o ->
                 val on = o.key in w
                 fun toggle() {
@@ -227,7 +227,7 @@ object Onboarding {
                     }
                     CheckMark(on)
                 }
-                androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
         }
     }
@@ -252,9 +252,9 @@ object Onboarding {
                 Text("本月支出", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                 Text("$ 18,420", fontSize = AppText.title, fontWeight = FontWeight.SemiBold, color = com.enwei.moneymanager.ui.ExpenseColor)
             }
-            androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             listOf(Triple("越香", "飲食／午餐", "$ 90"), Triple("台北捷運", "交通／捷運", "$ 20")).forEachIndexed { i, (m, sub, a) ->
-                if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(start = 14.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                if (i > 0) com.enwei.moneymanager.ui.components.RowDivider(Modifier.padding(start = 14.dp))
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(m, fontSize = AppText.body)

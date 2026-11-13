@@ -445,7 +445,7 @@ fun SummaryBar(t: Totals, base: String) {
                 }
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        com.enwei.moneymanager.ui.components.LineDivider()
     }
 }
 
@@ -596,7 +596,7 @@ fun DayBlock(
 ) {
     val t = if (ledger != null) Totals(ledger.sumOf { maxOf(0, it.delta) }, -ledger.sumOf { minOf(0, it.delta) }) else totalsOf(txns, lk.fx)
     Column(Modifier.padding(top = 10.dp).background(MaterialTheme.colorScheme.surface)) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        com.enwei.moneymanager.ui.components.LineDivider()
         BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp)) {
             val compact = maxWidth < 400.dp
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -616,10 +616,10 @@ fun DayBlock(
                     modifier = Modifier.weight(1f).padding(start = 4.dp), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        com.enwei.moneymanager.ui.components.LineDivider()
         if (memos.isNotEmpty()) {
             memos.sortedWith(compareByDescending<Memo> { it.pinned }.thenBy { it.id }).forEach { m -> MemoLine(m) { onMemo(m) } }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
         }
         // 交易之間加細分隔線，左邊的分類、中間內容與右邊金額比較好對齊
         val divider = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
@@ -633,7 +633,7 @@ fun DayBlock(
             txns.sortedByDescending { it.date }.forEach { sep(); MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
             trades.sortedByDescending { it.id }.forEach { tr -> sep(); TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        com.enwei.moneymanager.ui.components.LineDivider()
     }
 }
 
@@ -963,13 +963,13 @@ private fun CalendarView(
             val dayMemos = memoDays[day].orEmpty()
             Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 4.dp)) {
                 dayMemos.forEach { m -> MemoLine(m) { sheetDay = null; onMemo(m) } }
-                if (dayMemos.isNotEmpty() || txns.isNotEmpty()) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                if (dayMemos.isNotEmpty() || txns.isNotEmpty()) com.enwei.moneymanager.ui.components.LineDivider()
                 if (txns.isEmpty()) Text("沒有交易", color = gray, fontSize = AppText.secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
                 else txns.sortedByDescending { it.date }.forEachIndexed { i, t ->
-                    if (i > 0) HorizontalDivider(Modifier.padding(start = 14.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    if (i > 0) com.enwei.moneymanager.ui.components.RowDivider(Modifier.padding(start = 14.dp))
                     MmTxnRow(t, lk) { sheetDay = null; nav.navigate("txn/${t.id}") }
                 }
-                if (txns.isNotEmpty()) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                if (txns.isNotEmpty()) com.enwei.moneymanager.ui.components.LineDivider()
             }
             Spacer(Modifier.height(24.dp))
         }

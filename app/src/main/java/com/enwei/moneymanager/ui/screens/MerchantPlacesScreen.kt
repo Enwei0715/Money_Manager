@@ -192,7 +192,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                     Text(if (mbOn) "已設定" else "未設定", fontSize = AppText.caption,
                         color = if (mbOn) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 // Google Places：店家搜尋（台灣小店最完整）
                 Row(
                     Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).clickable { gOpen = true }.coachTarget("mp.google").padding(horizontal = 16.dp, vertical = 14.dp),
@@ -202,13 +202,13 @@ fun MerchantPlacesScreen(nav: NavController) {
                     Text(if (gOn) "本月查 ${com.enwei.moneymanager.net.GooglePlaces.usedThisMonth} 次" else "未設定", fontSize = AppText.caption,
                         color = if (gOn) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(progress ?: "${places.size} 家・${missing.size} 家沒有位置", fontSize = AppText.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     if (missing.isNotEmpty()) OutlinedButton(enabled = progress == null, onClick = { autoFind(missing.map { it.name }.take(40)) }, modifier = Modifier.coachTarget("mp.auto")) { Text("自動找") }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
             if (bare.isNotEmpty()) {
                 item(key = "bare-head") {
@@ -216,7 +216,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                         Text("需指定分店", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("這些交易只記了連鎖店名，指定分店後才能標示位置。", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    com.enwei.moneymanager.ui.components.LineDivider()
                 }
                 items(bare, key = { "bare-${it.first}" }) { (name, list) ->
                     Row(
@@ -230,12 +230,12 @@ fun MerchantPlacesScreen(nav: NavController) {
                         }
                         Text("指定分店 ›", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    com.enwei.moneymanager.ui.components.LineDivider()
                 }
                 item(key = "places-head") {
                     Text("店家", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 16.dp, top = 18.dp, bottom = 6.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    com.enwei.moneymanager.ui.components.LineDivider()
                 }
             }
             items(places, key = { it.name }) { p ->
@@ -255,14 +255,14 @@ fun MerchantPlacesScreen(nav: NavController) {
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         })
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
             // 不是實體店：收在最下面，可以還原
             val ex = PlaceHints.excluded().filter { it in current }.sorted()
             if (ex.isNotEmpty()) item(key = "ex-head") {
                 Text("不是實體店", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
             items(ex, key = { "ex-$it" }) { n ->
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -271,7 +271,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                     Text("還原", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.clickable { PlaceHints.setExcluded(n, false); tick++ }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
             item { Spacer(Modifier.height(32.dp)) }
         }
@@ -436,7 +436,7 @@ fun MerchantPlacesScreen(nav: NavController) {
 private fun ActionLine(label: String, onClick: () -> Unit) {
     Text(label, fontSize = AppText.body, color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp))
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    com.enwei.moneymanager.ui.components.LineDivider()
 }
 
 /** 設定 Mapbox 公開金鑰（pk. 開頭），存檔前先測試一次。 */
@@ -526,7 +526,7 @@ private fun MapboxSearchDialog(name: String, near: Pair<Double, Double>, onDone:
                                 Text(listOfNotNull(p.meters?.let { if (it < 1000) "${it.toInt()} 公尺" else "%.1f 公里".format(it / 1000) }, p.address.ifBlank { null }).joinToString("・"),
                                     fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                             }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            com.enwei.moneymanager.ui.components.LineDivider()
                         }
                     }
                 }
@@ -598,7 +598,7 @@ private fun BranchDialog(
                     item {
                         Text("曾記錄的分店", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        com.enwei.moneymanager.ui.components.LineDivider()
                     }
                     items(known, key = { "k$it" }) { b ->
                         Text(b, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -606,7 +606,7 @@ private fun BranchDialog(
                                 onPick(picked.toList(), b, PlaceHints.merchantPins()[b])
                                 picked = emptySet()
                             }.padding(vertical = 10.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        com.enwei.moneymanager.ui.components.LineDivider()
                     }
                 }
                 item {
@@ -626,7 +626,7 @@ private fun BranchDialog(
                         Text(listOfNotNull(r.meters?.let { if (it < 1000) "${it.toInt()} 公尺" else "%.1f 公里".format(it / 1000) }, r.address.ifBlank { null }).joinToString("・"),
                             fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    com.enwei.moneymanager.ui.components.LineDivider()
                 }
             }
         },

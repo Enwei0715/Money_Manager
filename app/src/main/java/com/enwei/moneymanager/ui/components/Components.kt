@@ -72,7 +72,7 @@ fun BackTopBar(title: String, onBack: () -> Unit, actions: @Composable () -> Uni
                 actions = { actions() },
             )
         }
-        androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+        LineDivider()
     }
 }
 
@@ -234,3 +234,16 @@ fun formatPct(v: Double) = (if (v >= 0) "+" else "") + String.format("%.2f%%", v
 
 fun formatNum(v: Double, digits: Int = 2): String =
     if (v == Math.floor(v) && digits <= 2) String.format("%,.0f", v) else String.format("%,.${digits}f", v)
+
+/**
+ * 全 App 只用兩種分隔線：
+ * - [LineDivider]：清單列與區塊之間（outlineVariant）
+ * - [RowDivider]：卡片內同一組資料的細分隔（outlineVariant 半透明）
+ */
+@Composable
+fun LineDivider(modifier: Modifier = Modifier) =
+    androidx.compose.material3.HorizontalDivider(modifier, color = MaterialTheme.colorScheme.outlineVariant)
+
+@Composable
+fun RowDivider(modifier: Modifier = Modifier) =
+    androidx.compose.material3.HorizontalDivider(modifier, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))

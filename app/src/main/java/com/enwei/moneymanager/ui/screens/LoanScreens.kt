@@ -139,7 +139,7 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
             if (dialog != 0) LoanMoveDialog(acc, l, repay = dialog == 1, lk = lk) { dialog = 0 }
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    com.enwei.moneymanager.ui.components.LineDivider()
 }
 
 @Composable

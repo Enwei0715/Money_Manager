@@ -85,7 +85,7 @@ fun AppearanceScreen(nav: NavController) {
                 }
                 com.enwei.moneymanager.ui.components.SubTabs(listOf("色彩", "文字", "版面"), tab) { tab = it }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -160,7 +160,7 @@ fun AppearanceScreen(nav: NavController) {
                         SwitchRow("顯示說明", "交易列在店名下方顯示說明", s.showDescription) { v -> repo.settings.update { it.copy(showDescription = v) } }
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 TextButton(onClick = {
                     repo.settings.update { it.copy(themePreset = "coral", themeMode = 0, fontChoice = 2, textScale = 1f, uiScale = 1f, cornerStyle = 0,
                         tabularNums = true, colorSetB = false, cardStyle = false, rowStyle = 0) }
@@ -285,7 +285,7 @@ private fun LayoutPreview(showDesc: Boolean) {
                 }
                 Text(if (i == 2) "$ 51,733" else if (i == 0) "-$ 90" else "-$ 20", fontSize = AppText.body, color = if (i == 2) IncomeColor else ExpenseColor)
             }
-            if (i < 2) HorizontalDivider(Modifier.padding(start = if (AppearancePrefs.icons) 62.dp else 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            if (i < 2) com.enwei.moneymanager.ui.components.RowDivider(Modifier.padding(start = if (AppearancePrefs.icons) 62.dp else 16.dp))
         }
     }
 }

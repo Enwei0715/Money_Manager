@@ -142,6 +142,6 @@ fun ManageRow(
                 Icon(Icons.Rounded.DragHandle, "拖曳排序", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        com.enwei.moneymanager.ui.components.LineDivider()
     }
 }

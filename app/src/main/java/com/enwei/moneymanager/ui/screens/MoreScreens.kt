@@ -812,7 +812,7 @@ fun FxScreen(nav: NavController) {
                         Text("= ${Money.format(lk.fx.convert(it, from), settings.baseCurrency)} ${settings.baseCurrency}", style = MaterialTheme.typography.titleLarge)
                     }
                 }
-                HorizontalDivider()
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
             val shown = FxService.common.mapNotNull { c -> rates.find { it.currency == c } }
             items(shown, key = { it.currency }) { r ->
@@ -940,7 +940,7 @@ fun BackupScreen(nav: NavController) {
                     }
                 }
             }
-            HorizontalDivider()
+            com.enwei.moneymanager.ui.components.LineDivider()
             Text("帳理完整備份（.lgbak）", style = MaterialTheme.typography.titleMedium)
             // 備份加密：設定密碼後，匯出與自動備份的檔案都會加密（密碼只存在這支手機）
             var encOn by remember { mutableStateOf(com.enwei.moneymanager.data.BackupPassword.isSet()) }
@@ -1013,12 +1013,12 @@ fun BackupScreen(nav: NavController) {
                     dismissButton = { TextButton(onClick = { undoAsk = false }) { Text("取消") } },
                 )
             }
-            HorizontalDivider()
+            com.enwei.moneymanager.ui.components.LineDivider()
             // 交易明細匯出成 Excel 可開的 CSV（原本在交易頁「總計」分頁）
             Text("匯出交易明細", style = MaterialTheme.typography.titleMedium)
             OutlinedButton(onClick = { csvExporter.launch("帳理交易明細-${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.csv") },
                 modifier = Modifier.fillMaxWidth()) { Text("匯出全部交易（CSV，可用 Excel 開啟）") }
-            HorizontalDivider()
+            com.enwei.moneymanager.ui.components.LineDivider()
             Text("Money Manager 備份檔（.mmbak）", style = MaterialTheme.typography.titleMedium)
             Button(enabled = !busy, onClick = { mmImporter.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("從 .mmbak 匯入") }
             OutlinedButton(enabled = !busy, onClick = { mmExporter.launch("帳理-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.mmbak") },

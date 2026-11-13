@@ -91,7 +91,7 @@ fun NoticeSettingsScreen(nav: NavController) {
                 com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                     Column {
                         kinds.forEachIndexed { i, k ->
-                            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            if (i > 0) com.enwei.moneymanager.ui.components.RowDivider()
                             val on = k.enabled(s)
                             val blocked = remember(tick) { channelBlocked(k) }
                             fun toggle(v: Boolean) = MoneyApp.repo.settings.update { st ->

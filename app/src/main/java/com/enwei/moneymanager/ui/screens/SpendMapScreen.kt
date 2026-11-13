@@ -336,7 +336,7 @@ fun SpendMapScreen(nav: NavController) {
                     }
                     s.txns.forEach { t ->
                         val d = java.time.Instant.ofEpochMilli(t.date).atZone(zone).toLocalDate()
-                        HorizontalDivider(Modifier.padding(start = 14.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        com.enwei.moneymanager.ui.components.RowDivider(Modifier.padding(start = 14.dp))
                         Row(Modifier.fillMaxWidth().clickable { nav.navigate("txn/${t.id}") }.padding(start = 14.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Text("${d.monthValue}/${d.dayOfMonth}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(48.dp))
@@ -349,7 +349,7 @@ fun SpendMapScreen(nav: NavController) {
                     }
                 }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                com.enwei.moneymanager.ui.components.RowDivider()
             }
             item { Spacer(Modifier.height(32.dp)) }
         }

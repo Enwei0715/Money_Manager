@@ -89,7 +89,7 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
             KindSwitch(kind) { kind = it }
             Spacer(Modifier.height(12.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             ReorderableColumn(roots, { it.id }, { scope.launch { repo.reorderCategories(it) } }) { c, handle ->
                 val subs = cats.filter { it.parentId == c.id }.sortedBy { it.sortOrder }
                 ManageRow(
@@ -112,7 +112,7 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
                         androidx.compose.material3.TextButton(onClick = { confirmRules = true }) { Text("刪除 ${picked.size} 個", color = MaterialTheme.colorScheme.error) }
                     } else androidx.compose.material3.TextButton(onClick = { picked = myRules.map { it.keyword }.toSet() }) { Text("全選") }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 myRules.forEach { r ->
                     val on = r.keyword in picked
                     Row(
@@ -124,7 +124,7 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
                         Text(r.keyword, Modifier.weight(1f))
                         Text(lk.catLabel(r.categoryId) ?: "?", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    com.enwei.moneymanager.ui.components.LineDivider()
                 }
             }
             // 店名對照：把通知裡的店名改過一次後學到的（通知店名 → 你用的店名），可以刪除
@@ -132,7 +132,7 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
             if (kind == TxnType.EXPENSE && aliasMap.isNotEmpty()) {
                 Text("店名對照（通知店名 → 記帳店名）", fontSize = com.enwei.moneymanager.ui.AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 6.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 aliasMap.entries.sortedBy { it.key }.forEach { (from, to) ->
                     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
@@ -141,7 +141,7 @@ fun CategorySettingsScreen(nav: NavController, initialKind: TxnType) {
                         }
                         androidx.compose.material3.TextButton(onClick = { repo.removeMerchantAlias(from) }) { Text("移除", color = MaterialTheme.colorScheme.error) }
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    com.enwei.moneymanager.ui.components.LineDivider()
                 }
             }
             Spacer(Modifier.height(32.dp))
@@ -184,7 +184,7 @@ fun SubcategoryScreen(nav: NavController, parentId: Long) {
     }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
             Spacer(Modifier.height(12.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             ReorderableColumn(subs, { it.id }, { scope.launch { repo.reorderCategories(it) } }) { c, handle ->
                 ManageRow(
                     title = c.name + if (c.archived) "（隱藏）" else "", handle = handle, dimmed = c.archived,

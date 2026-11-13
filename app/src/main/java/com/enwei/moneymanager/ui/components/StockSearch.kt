@@ -65,7 +65,7 @@ fun StockSearch(onPick: (TwData.StockInfo) -> Unit, maxHeight: Dp = 360.dp, auto
                     Text(s.name, fontSize = AppText.body, modifier = Modifier.weight(1f))
                     if (s.industry.isNotBlank()) Text(s.industry, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
         }
     }

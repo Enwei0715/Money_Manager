@@ -409,7 +409,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
             SubHead("$style（${list.size}）")
             // 股與股之間用整條分隔線隔開
             list.forEachIndexed { i, it ->
-                if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                if (i > 0) com.enwei.moneymanager.ui.components.LineDivider()
                 PickCard(it, r.cites, newsById, foldKey = "pick.${it.symbol}") { nav.navigate("stock/${it.symbol}") }
             }
         }
@@ -418,7 +418,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
     if (rtab == 2 && r.holdings.isNotEmpty()) Section("持股動作（${r.holdings.size}）") {
         ChatChartView(com.enwei.moneymanager.data.ChatChart("holdings"), nav)
         r.holdings.forEachIndexed { i, h ->
-            if (i > 0) androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            if (i > 0) com.enwei.moneymanager.ui.components.RowDivider()
             Column(Modifier.fillMaxWidth().clickable { nav.navigate("stock/${h.symbol}") }.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(h.symbol, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -440,7 +440,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
     if (rtab == 3 && r.keyNews.isNotEmpty()) Section("一定要看的新聞（${r.keyNews.size}）") {
         r.keyNews.forEachIndexed { i, k ->
             newsById[k.id]?.let { n ->
-                if (i > 0) androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                if (i > 0) com.enwei.moneymanager.ui.components.RowDivider()
                 NewsLine(n, num = r.cites.indexOf(k.id).takeIf { it >= 0 }?.plus(1))
                 if (k.why.isNotBlank()) Text("為什麼重要：${k.why}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
             }
@@ -509,7 +509,7 @@ private fun HistoryDialog(store: NewsStore, onOpen: (Long) -> Unit, onDismiss: (
                         }, label = { Text(l, fontSize = AppText.caption) })
                     }
                 }
-                androidx.compose.material3.HorizontalDivider()
+                com.enwei.moneymanager.ui.components.LineDivider()
                 if (all.isEmpty()) Text("還沒有報告", fontSize = AppText.secondary)
                 Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
                     all.forEachIndexed { i, rep ->
@@ -588,7 +588,7 @@ fun PickCard(
             }
             // 段落：上方一條分隔線，標題在線下；有說明時「？」放在標題同一行的最右邊
             @Composable fun section(title: String, help: Pair<String, String>? = null) {
-                HorizontalDivider(Modifier.padding(top = 10.dp, bottom = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                com.enwei.moneymanager.ui.components.RowDivider(Modifier.padding(top = 10.dp, bottom = 8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
                     Text(title, fontSize = AppText.label, color = muted, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     if (help != null) com.enwei.moneymanager.ui.components.HelpIcon(help.first, help.second, Modifier.size(24.dp))
@@ -1621,7 +1621,7 @@ private fun PlanTab(nav: NavController) {
                     }
                     note?.let { Text(it, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                com.enwei.moneymanager.ui.components.RowDivider()
             }
             if (!p.disciplineOn) Text("持股紀律建議目前關閉，點選「調整」開啟。", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
             else if (p.guardOn) {
@@ -1660,7 +1660,7 @@ private fun PlanTab(nav: NavController) {
                     Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.clickable { save(rules.filterIndexed { j, _ -> j != i }) }.padding(start = 10.dp, end = 2.dp))
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                com.enwei.moneymanager.ui.components.RowDivider()
             }
             var draft by remember { mutableStateOf("") }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
@@ -1762,7 +1762,7 @@ private fun GuardRow(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwei.m
             }
         }
     }
-    if (!last) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    if (!last) com.enwei.moneymanager.ui.components.LineDivider()
 }
 
 /** 改一檔的保本金額、手動停利價、減碼價；也可以重設移動停利的最高價。 */
@@ -2225,7 +2225,7 @@ private fun HoldingCard(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwe
         }
         ai?.let { AiHoldLine(it) }
     }
-    androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    com.enwei.moneymanager.ui.components.LineDivider()
 }
 
 
@@ -2339,7 +2339,7 @@ private fun PickTrack(store: NewsStore, nav: NavController) {
         // 依日期列出（新到舊）；每檔一列：左邊名稱與推薦價，右邊現價與漲跌
         rows.groupBy { it.day }.entries.sortedByDescending { it.key }.forEach { (day, list) ->
             val dayRets = list.mapNotNull { ret(it) }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 val d = java.time.LocalDate.ofEpochDay(day)
                 Text("${d.monthValue}/${d.dayOfMonth} 推薦 ${list.size} 檔", fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

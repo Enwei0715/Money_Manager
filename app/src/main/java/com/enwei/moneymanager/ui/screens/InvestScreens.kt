@@ -181,7 +181,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                     )
                     Text(quoteTime, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
             if (open.isEmpty()) item(key = "empty") {
                 Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -207,7 +207,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                     Text("證券帳戶（${brokers.size}）", Modifier.weight(1f), fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextButton(onClick = { nav.navigate("account/0?type=BROKERAGE") }) { Text("＋ 新增") }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
             items(brokers, key = { "b${it.account.id}" }) { b ->
                 val hs = byBroker[b.account.id].orEmpty().filter { it.shares > 0.0001 }
@@ -233,7 +233,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                         }
                         Text(Money.withSymbol(stock + cashV, lk.base), fontSize = AppText.body)
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    com.enwei.moneymanager.ui.components.LineDivider()
                 }
             }
             if (closed.isNotEmpty()) {
@@ -255,7 +255,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                     }
                     TextButton(onClick = { addWatch = true }) { Text("＋ 加入") }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
             if (settings.watchlist.isEmpty()) item(key = "wempty") {
                 Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -295,7 +295,7 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                             Icon(Icons.Filled.Close, "移出觀察", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                         }
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    com.enwei.moneymanager.ui.components.LineDivider()
                 }
             }
         }
@@ -332,7 +332,7 @@ private fun FoldHeader(title: String, open: Boolean, toggle: () -> Unit, action:
         }
         action()
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    com.enwei.moneymanager.ui.components.LineDivider()
 }
 
 @Composable
@@ -344,7 +344,7 @@ private fun StockHeader(title: String, right: String, color: androidx.compose.ui
         Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body)
         Text(right, color = color)
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    com.enwei.moneymanager.ui.components.LineDivider()
 }
 
 @Composable
@@ -368,7 +368,7 @@ private fun HoldingRow(h: HoldingView, onClick: () -> Unit) {
                 if (h.shares > 0.0001) Text("損益 ${formatNum(h.unrealized, 0)} (${formatPct(h.unrealizedPct)})", fontSize = AppText.caption, color = pnlColor(h.unrealized))
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        com.enwei.moneymanager.ui.components.LineDivider()
     }
 }
 

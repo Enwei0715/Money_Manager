@@ -356,7 +356,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 Text("計入淨資產", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 Switch(includeNet, { includeNet = it }, colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary, checkedThumbColor = Color.White))
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             // 和淨資產分開：例如代管、公司代墊的帳戶，餘額要看但收支不算自己的
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -365,7 +365,7 @@ fun AccountEditScreen(nav: NavController, id: Long, initType: String? = null) {
                 }
                 Switch(inStats, { inStats = it }, colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary, checkedThumbColor = Color.White))
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             Row(Modifier.fillMaxWidth().clickable { archived = !archived }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("顯示／隱藏", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 Icon(if (archived) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, if (archived) "已隱藏" else "顯示中",

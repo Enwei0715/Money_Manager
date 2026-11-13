@@ -752,7 +752,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                             Text(listOfNotNull(r.meters?.let { if (it < 1000) "${it.toInt()} 公尺" else "%.1f 公里".format(it / 1000) }, r.address.ifBlank { null }).joinToString("・"),
                                 fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                         }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        com.enwei.moneymanager.ui.components.LineDivider()
                     }
                 }
                 // 店家位置預覽：點一下修改位置
@@ -1136,7 +1136,7 @@ private fun BottomPanel(
                                 Text(lk.catLabel(c.id) ?: c.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     color = if (c.id == selectedCategory) MaterialTheme.colorScheme.primary else Color.Unspecified)
                             }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            com.enwei.moneymanager.ui.components.RowDivider()
                         }
                     }
                 } else {
@@ -1158,7 +1158,7 @@ private fun BottomPanel(
                                         color = if (c.id == lk.rootId(selectedCategory)) MaterialTheme.colorScheme.primary else Color.Unspecified)
                                     if (hasSub) Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                                 }
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                com.enwei.moneymanager.ui.components.RowDivider()
                             }
                         }
                         Box(Modifier.width(0.5.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
@@ -1171,7 +1171,7 @@ private fun BottomPanel(
                                     Text(c.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                         color = if (c.id == selectedCategory) MaterialTheme.colorScheme.primary else Color.Unspecified)
                                 }
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                com.enwei.moneymanager.ui.components.RowDivider()
                             }
                         }
                     }

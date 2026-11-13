@@ -49,7 +49,7 @@ fun <T> OptionDialog(
                     description, fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
                 ) else androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 LazyColumn(Modifier.heightIn(max = 420.dp)) {
                     itemsIndexed(options) { i, (v, label) ->
                         val sel = v == selected
@@ -64,7 +64,7 @@ fun <T> OptionDialog(
                         if (preview != null) androidx.compose.foundation.layout.Box(
                             Modifier.fillMaxWidth().clickable { onPick(v); onDismiss() }.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                         ) { preview(v) }
-                        if (i < options.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        if (i < options.lastIndex) com.enwei.moneymanager.ui.components.LineDivider()
                     }
                 }
             }

@@ -172,7 +172,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
                         Icon(Icons.Filled.ChevronRight, "下一期")
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 if (showFilter) {
                     FormLine("期間", onClick = { pickRange = true }) {
                         Text(if (from == null) "" else "$from ~ ${to ?: from}", fontSize = AppText.body)
@@ -227,7 +227,7 @@ fun SearchScreen(nav: NavController, startWithFilter: Boolean = false, startMont
                         Text("${result.size} 筆", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             } else if (showList) SummaryBar(totalsOf(result, lk.fx), lk.base)
         } }) {
             LazyColumn(Modifier.fillMaxSize()) {
@@ -304,7 +304,7 @@ fun PendingScreen(nav: NavController) {
             if (pendingTrades.isNotEmpty()) item {
                 PendingSection("股票交易待確認（${pendingTrades.size}）") {
                     pendingTrades.sortedByDescending { it.date }.forEachIndexed { i, p ->
-                        if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        if (i > 0) com.enwei.moneymanager.ui.components.RowDivider()
                         val sell = p.side == "SELL"
                         val missing = listOfNotNull("股數".takeIf { p.shares == null }, "價格".takeIf { p.price == null }, "證券帳戶".takeIf { p.brokerId == null })
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -418,7 +418,7 @@ private fun AiSuggestionSection(lk: Lookups) {
         if (unknownProgress.running || unknownProgress.error != null) com.enwei.moneymanager.ui.components.AiWorkProgress(unknownProgress, Modifier.fillMaxWidth())
         open.forEachIndexed { i, sg ->
             val t = byId[sg.txnId] ?: return@forEachIndexed
-            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            if (i > 0) com.enwei.moneymanager.ui.components.RowDivider()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text((t.merchant ?: "未命名") + "　" + com.enwei.moneymanager.core.Money.withSymbol(t.amount, t.currency), fontSize = AppText.body,
@@ -481,7 +481,7 @@ private fun DuplicateSection(lk: Lookups) {
         if (dupProgress.running || dupProgress.error != null) com.enwei.moneymanager.ui.components.AiWorkProgress(dupProgress, Modifier.fillMaxWidth())
         pairs.forEach { p ->
             val v = verdicts[p.key]
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            com.enwei.moneymanager.ui.components.RowDivider()
             Text(com.enwei.moneymanager.core.Money.withSymbol(p.keep.amount, p.keep.currency) + " · ${p.keep.type.label}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
             Text("保留：${line(p.keep)}", fontSize = AppText.caption)
             Text("刪除：${line(p.drop)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -115,7 +115,8 @@ fun ReviewContent(
 
     run {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // 從統計頁打開時，期間（每月／每季／每年與上一期、下一期）在頂列，這裡不再重複一排選項
+            if (period == null) Row(verticalAlignment = Alignment.CenterVertically) {
                 // 英文標籤較長：選項可左右捲動，切換期間的箭頭固定在右邊
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ReviewSpan.entries.forEach { sp ->
@@ -164,7 +165,7 @@ fun ReviewContent(
                         if (d.avgExpense > 0) Triple("前三${d.span.label}平均", m(d.avgExpense), null) else null,
                     )
                     if (metrics.isNotEmpty()) {
-                        HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        com.enwei.moneymanager.ui.components.RowDivider(Modifier.padding(vertical = 4.dp))
                         metrics.chunked(2).forEach { row ->
                             Row(Modifier.fillMaxWidth()) {
                                 row.forEach { (label, value, c) ->
@@ -209,7 +210,7 @@ fun ReviewContent(
                     }
                     val budgetRows = settings.budgets.entries.filter { (cid, _) -> cid == 0L || lk.category(cid)?.archived == false }
                     if (settings.savingsGoal != null && budgetRows.isNotEmpty())
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        com.enwei.moneymanager.ui.components.RowDivider()
                     // 分類已刪除或封存的預算不顯示
                     // 當月才顯示「每天約」：過去的月份已經結束
                     val daysLeft = if (offset == 0 && !java.time.LocalDate.now().isAfter(d.end)) java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), d.end) + 1 else null

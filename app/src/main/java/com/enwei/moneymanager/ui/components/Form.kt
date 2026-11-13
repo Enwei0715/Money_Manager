@@ -40,7 +40,7 @@ fun FormLine(
                 Box(Modifier.weight(1f)) { content() }
                 trailing?.invoke()
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
         }
     }
 }

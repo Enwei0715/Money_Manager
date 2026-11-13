@@ -96,7 +96,7 @@ private fun SectionHeader(title: String) {
         title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = AppText.body,
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(start = 16.dp, top = 14.dp, bottom = 6.dp),
     )
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    com.enwei.moneymanager.ui.components.LineDivider()
 }
 
 @Composable
@@ -113,7 +113,7 @@ private fun ConfigRow(title: String, value: String? = null, sub: String? = null,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp))
         Text("›", color = MaterialTheme.colorScheme.outline, fontSize = AppText.title, modifier = Modifier.padding(start = 8.dp))
     }
-    androidx.compose.material3.HorizontalDivider(Modifier.background(MaterialTheme.colorScheme.surface).padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+    com.enwei.moneymanager.ui.components.RowDivider(Modifier.background(MaterialTheme.colorScheme.surface).padding(start = 16.dp))
 }
 
 private data class Choice<T>(val title: String, val options: List<Pair<T, String>>, val selected: T?, val description: String?, val onPick: (T) -> Unit,
@@ -589,7 +589,7 @@ fun BudgetScreen(nav: NavController) {
                                 Text("未設定", fontSize = AppText.body, color = MaterialTheme.colorScheme.primary)
                             }
                         }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        com.enwei.moneymanager.ui.components.RowDivider()
                         Row(Modifier.fillMaxWidth().clickable { editGoal = true }, verticalAlignment = Alignment.CenterVertically) {
                             Text("儲蓄率目標", fontSize = AppText.body, modifier = Modifier.weight(1f))
                             Text(s.savingsGoal?.let { "%.0f%%".format(it) } ?: "未設定", fontSize = AppText.body, color = MaterialTheme.colorScheme.primary)

@@ -85,7 +85,7 @@ fun StockFeeScreen(nav: NavController) {
             }
             NumberField(usFee, { usFee = it; saveFees() }, "美股每筆手續費", suffix = "USD")
 
-            HorizontalDivider()
+            com.enwei.moneymanager.ui.components.LineDivider()
             Text("各證券帳戶", fontSize = AppText.body)
             if (brokers.isEmpty()) Text(
                 "還沒有證券帳戶。",
@@ -93,7 +93,7 @@ fun StockFeeScreen(nav: NavController) {
             )
             brokers.forEach { b -> BrokerFeeCard(b, lk, settings.brokerRebates[b.id]) }
 
-            HorizontalDivider()
+            com.enwei.moneymanager.ui.components.LineDivider()
             FeeCalculator(brokers, settings.brokerRebates)
             Spacer(Modifier.padding(24.dp))
         }
@@ -160,7 +160,7 @@ private fun BrokerFeeCard(b: AccountEntity, lk: Lookups, rule: RebateRule?) {
                 }) { Text("儲存") }
             }
             if (mode == 2 && rule != null && months.isNotEmpty()) {
-                HorizontalDivider()
+                com.enwei.moneymanager.ui.components.LineDivider()
                 Text("各月退佣", fontSize = AppText.body)
                 months.take(8).forEach { m ->
                     val booked = m.booked

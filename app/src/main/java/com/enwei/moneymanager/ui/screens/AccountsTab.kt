@@ -130,7 +130,7 @@ fun balanceBefore(
 @Composable
 private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {}) {
     val cards = com.enwei.moneymanager.ui.AppearancePrefs.cards
-    if (!cards) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    if (!cards) com.enwei.moneymanager.ui.components.LineDivider()
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
             .padding(start = if (cards) 24.dp else 16.dp, end = if (cards) 24.dp else 16.dp, top = if (cards) 20.dp else 14.dp, bottom = if (cards) 8.dp else 10.dp),
@@ -140,7 +140,7 @@ private fun GrayHeader(title: String, right: @Composable RowScope.() -> Unit = {
             letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp))
         right()
     }
-    if (!cards) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    if (!cards) com.enwei.moneymanager.ui.components.LineDivider()
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -248,7 +248,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
         if (section == 1) StockContent(nav, refreshTick) { msg -> scope.launch { snack.showSnackbar(com.enwei.moneymanager.ui.tr(msg)) } }
         else LazyColumn(Modifier.fillMaxSize()) {
             item {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 SummaryBarCustom(
                     listOf("資產" to (Money.full(assets) to IncomeColor), "負債" to (Money.full(debts) to ExpenseColor),
                         "合計" to (Money.full(assets - debts) to MaterialTheme.colorScheme.onSurface)),
@@ -331,7 +331,7 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
                     itemsIndexed(list, key = { _, it -> "a${it.account.id}" }) { idx, b ->
                         val st = cards[b.account.id]
                         val name = b.account.name + if (b.account.archived) "（隱藏）" else ""
-                        HorizontalDivider(Modifier.padding(horizontal = if (com.enwei.moneymanager.ui.AppearancePrefs.cards) 12.dp else 0.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                        com.enwei.moneymanager.ui.components.RowDivider(Modifier.padding(horizontal = if (com.enwei.moneymanager.ui.AppearancePrefs.cards) 12.dp else 0.dp))
                         Column(
                             Modifier.fillMaxWidth().groupCell(false, idx == list.lastIndex)
                                 .clickable { nav.navigate("acct/${b.account.id}") }
@@ -426,7 +426,7 @@ private fun AccountLine(
             }
             right()
         }
-        if (!last) HorizontalDivider(Modifier.padding(start = if (type != null && com.enwei.moneymanager.ui.AppearancePrefs.icons) 64.dp else 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+        if (!last) com.enwei.moneymanager.ui.components.RowDivider(Modifier.padding(start = if (type != null && com.enwei.moneymanager.ui.AppearancePrefs.icons) 64.dp else 16.dp))
     }
 }
 
@@ -480,7 +480,7 @@ fun SummaryBarCustom(cells: List<Pair<String, Pair<String, Color>>>) {
                 }
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        com.enwei.moneymanager.ui.components.LineDivider()
     }
 }
 
@@ -572,7 +572,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                     }
                     IconButton(onClick = { nav.navigate("account/$id") }) { Icon(Icons.Outlined.Edit, "編輯帳戶") }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 val isLoan = acc?.type == AccountType.LOAN
                 SummaryBarCustom(
                     listOf(
@@ -609,7 +609,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         }
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
             if (acc?.type == AccountType.CREDIT_CARD) item {
                 val st = cardInfo[acc.id]
@@ -632,7 +632,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                         nav.navigate("txn/0?type=TRANSFER&account=${acc.autopayFromId ?: 0}&to=${acc.id}&amount=${st?.payable ?: 0}")
                     }) { Text("繳卡費") }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
             }
             if (acc?.type == AccountType.LOAN) item { LoanCard(acc, current, lk, nav) }
             if (chart) {
@@ -677,7 +677,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                     val labels = months.map { "${it.monthValue}月" }
                     Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(vertical = 8.dp)) {
                         LineChart(ends, labels, MaterialTheme.colorScheme.primary, autoMin = false)
-                        HorizontalDivider(Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        com.enwei.moneymanager.ui.components.LineDivider(Modifier.padding(vertical = 12.dp))
                         DualBarChart(deps, wds, labels, IncomeColor, ExpenseColor)
                         if (isBroker) Text(
                             "折線：現金＋持股市值　長條：存入／提出",
@@ -794,7 +794,7 @@ private fun PeriodRow(title: String, sub: String, deposit: Long, withdrawal: Lon
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        com.enwei.moneymanager.ui.components.LineDivider()
     }
 }
 
@@ -829,14 +829,14 @@ fun TotalStatsScreen(nav: NavController) {
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize()) {
             item {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 Column(Modifier.padding(20.dp)) {
                     Text("餘額（不含股票）", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(Money.full(worth.last()), fontSize = AppText.display, fontWeight = FontWeight.SemiBold)
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 LineChart(worth, labels, MaterialTheme.colorScheme.primary, Modifier.padding(vertical = 12.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                com.enwei.moneymanager.ui.components.LineDivider()
                 DualBarChart(totals.map { it.income }, totals.map { it.expense }, labels, IncomeColor, ExpenseColor, Modifier.padding(vertical = 12.dp))
             }
         }
@@ -878,7 +878,7 @@ fun AccountOrderScreen(nav: NavController) {
                                     Icon(Icons.Rounded.DragHandle, "拖曳排序", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            com.enwei.moneymanager.ui.components.LineDivider()
                         }
                     }
                 }

@@ -260,7 +260,7 @@ private val tabs = listOf(
 @Composable
 private fun BottomTabs(current: String?, onSelect: (String) -> Unit) = ChromeScale {
     Column(Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        com.enwei.moneymanager.ui.components.LineDivider()
         val stocksOn = MoneyApp.repo.settings.flow.collectAsStateWithLifecycle().value.featureStocks
         Row(Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 720.dp).navigationBarsPadding().height(56.dp)) {
             tabs.filter { it.route != "assistant" || stocksOn }.forEach { t ->

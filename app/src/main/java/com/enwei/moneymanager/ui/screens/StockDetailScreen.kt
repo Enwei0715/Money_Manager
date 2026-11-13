@@ -1366,7 +1366,7 @@ private fun ProjectionCard(b: DailyBars) {
                 Text("20 日後", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             // 三種情境的 20 日後價格
-            androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            com.enwei.moneymanager.ui.components.LineDivider()
             Row(Modifier.fillMaxWidth()) {
                 listOf(Triple("悲觀", simQ[0].last(), down), Triple("基準", simQ[1].last(), midCol), Triple("樂觀", simQ[2].last(), up)).forEach { (l, v, colr) ->
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {

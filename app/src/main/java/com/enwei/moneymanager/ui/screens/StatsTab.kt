@@ -196,14 +196,17 @@ fun StatsTab(nav: NavController) {
                 }
             },
             actions = {
-                if (view == 0) Box(Modifier.padding(end = 8.dp)) {
+                // 期間選單：兩個檢視共用同一個位置（分類＝週／月／年／自訂；分析＝每月／每季／每年）
+                Box(Modifier.padding(end = 8.dp)) {
                     Row(
                         Modifier.coachTarget("st.kind").border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(8.dp)).clickable { menu = true }
                             .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                    ) { Text(period.label, fontSize = AppText.body); Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp)) }
+                    ) { Text(if (view == 1) "每${reviewSpan.label}" else period.label, fontSize = AppText.body); Icon(Icons.Filled.KeyboardArrowDown, null, Modifier.size(18.dp)) }
                     DropdownMenu(menu, { menu = false }) {
-                        Period.entries.forEach { p ->
+                        if (view == 1) com.enwei.moneymanager.data.ReviewSpan.entries.forEach { sp ->
+                            DropdownMenuItem(text = { Text("每${sp.label}") }, onClick = { reviewSpan = sp; menu = false })
+                        } else Period.entries.forEach { p ->
                             DropdownMenuItem(text = { Text(p.label) }, onClick = { period = p; menu = false; if (p == Period.CUSTOM) pickRange = true })
                         }
                     }
@@ -239,7 +242,7 @@ fun StatsTab(nav: NavController) {
                     Column(Modifier.background(MaterialTheme.colorScheme.surface).coachTarget("st.pie")) {
                         PieChart(byCat.map { (cid, v) -> (lk.category(cid)?.name ?: "未分類") to v })
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    com.enwei.moneymanager.ui.components.LineDivider()
                     Spacer(Modifier.height(10.dp))
                 }
                 if (byCat.isEmpty()) item { EmptyHint("這段期間沒有${kind.label}") }
@@ -264,7 +267,7 @@ fun StatsTab(nav: NavController) {
                             Text(cat?.name ?: "未分類", Modifier.weight(1f), fontSize = AppText.body)
                             Text(Money.withSymbol(v, lk.base), fontSize = AppText.body)
                         }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        com.enwei.moneymanager.ui.components.LineDivider()
                     }
                 }
                 // 近 6 個月比較：同一種收支每個月的總額，最右邊是本月（統計頁導覽說的「每月比較」）
