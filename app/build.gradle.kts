@@ -9,8 +9,9 @@ plugins {
 // CI 以 GITHUB_RUN_NUMBER 當作版本號，讓每次建置都能被 App 內更新偵測到
 val buildNumber = (System.getenv("BUILD_NUMBER") ?: System.getenv("GITHUB_RUN_NUMBER"))?.toIntOrNull() ?: 1
 // 版本號規則見 version.properties：顯示給使用者的是「主.次.修訂」，修訂號從 1 起算
-val versionProps = java.util.Properties().apply { rootProject.file("version.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) } }
-val appVersionName = "${versionProps.getProperty("versionMajorMinor", "2.2")}.${(buildNumber - (versionProps.getProperty("patchBase", "0").toIntOrNull() ?: 0)).coerceAtLeast(0)}"
+val versionLines = rootProject.file("version.properties").takeIf { it.exists() }?.readLines().orEmpty()
+fun versionProp(key: String): String? = versionLines.firstOrNull { it.startsWith("$key=") }?.substringAfter('=')?.trim()
+val appVersionName = "${versionProp("versionMajorMinor") ?: "2.2"}.${(buildNumber - (versionProp("patchBase")?.toIntOrNull() ?: 0)).coerceAtLeast(0)}"
 
 android {
     namespace = "com.enwei.moneymanager"
