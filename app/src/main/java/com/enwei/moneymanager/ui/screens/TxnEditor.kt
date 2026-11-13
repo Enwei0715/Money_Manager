@@ -6,6 +6,7 @@ import com.enwei.moneymanager.ui.AppText
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -630,24 +631,40 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         Text("金額", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     }
                     // 金額＋右邊空白處放手續費（不另外佔一列）：沒填時是「＋ 手續費」，填了顯示金額；點了用下方鍵盤輸入，清空即刪除
+                    // 正在輸入哪一個：那一個後面有閃爍的游標，另一個變淡
+                    val caretAlpha by androidx.compose.animation.core.rememberInfiniteTransition(label = "caret").animateFloat(
+                        1f, 0f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(530), androidx.compose.animation.core.RepeatMode.Reverse), label = "caret",
+                    )
+                    val feeTyping = showFee && panel == Panel.FEE
+                    val amountTyping = panel == Panel.AMOUNT
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            (if (currency != lk.base) Money.symbolOf(currency) else "$ ") + expr.ifEmpty { "0" },
-                            fontSize = androidx.compose.ui.unit.TextUnit(34f, androidx.compose.ui.unit.TextUnitType.Sp), fontWeight = FontWeight.SemiBold,
-                            color = if (expr.isEmpty()) MaterialTheme.colorScheme.outlineVariant else if (debtMode) MaterialTheme.colorScheme.onSurface else color,
-                            modifier = Modifier.weight(1f), maxLines = 1,
-                        )
+                        val amtColor = if (expr.isEmpty()) MaterialTheme.colorScheme.outlineVariant else if (debtMode) MaterialTheme.colorScheme.onSurface else color
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                (if (currency != lk.base) Money.symbolOf(currency) else "$ ") + expr.ifEmpty { "0" },
+                                fontSize = androidx.compose.ui.unit.TextUnit(34f, androidx.compose.ui.unit.TextUnitType.Sp), fontWeight = FontWeight.SemiBold,
+                                color = if (feeTyping) amtColor.copy(alpha = 0.45f) else amtColor, maxLines = 1,
+                            )
+                            if (amountTyping) Box(Modifier.padding(start = 2.dp).size(width = 2.dp, height = 32.dp).background(color.copy(alpha = caretAlpha)))
+                        }
                         if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && !debtMode) {
-                            val feeOn = showFee && panel == Panel.FEE
-                            Box(
+                            // 輸入手續費時：按鈕填滿主題色、後面有閃爍游標，一看就知道鍵盤正在輸入手續費
+                            val primary = MaterialTheme.colorScheme.primary
+                            Row(
                                 Modifier.heightIn(min = 40.dp)
-                                    .border(if (feeOn) 1.5.dp else 1.dp, MaterialTheme.colorScheme.primary.copy(alpha = if (feeOn) 1f else 0.5f), RoundedCornerShape(20.dp))
+                                    .background(if (feeTyping) primary else Color.Transparent, RoundedCornerShape(20.dp))
+                                    .border(1.dp, primary.copy(alpha = if (feeTyping) 1f else 0.5f), RoundedCornerShape(20.dp))
                                     .clickable { showFee = true; focusManager.clearFocus(); panel = Panel.FEE }
                                     .padding(horizontal = 14.dp),
-                                contentAlignment = Alignment.Center,  // 字上下左右置中
+                                verticalAlignment = Alignment.CenterVertically,  // 字上下置中
                             ) {
-                                Text(if (showFee && feeExpr.isNotBlank()) "手續費 $ $feeExpr" else "＋ 手續費", fontSize = AppText.secondary,
-                                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                val onChip = if (feeTyping) MaterialTheme.colorScheme.onPrimary else primary
+                                Text(when {
+                                    feeTyping -> "手續費 $ " + feeExpr.ifEmpty { "0" }
+                                    showFee && feeExpr.isNotBlank() -> "手續費 $ $feeExpr"
+                                    else -> "＋ 手續費"
+                                }, fontSize = AppText.secondary, color = onChip, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                if (feeTyping) Box(Modifier.padding(start = 2.dp).size(width = 2.dp, height = 18.dp).background(onChip.copy(alpha = caretAlpha)))
                             }
                         }
                     }
