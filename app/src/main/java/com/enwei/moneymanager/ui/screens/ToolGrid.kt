@@ -200,7 +200,8 @@ fun ToolGrid(
                         )
                         .combinedClickable(
                             onClick = { if (editing) selected = if (selected == t.id) null else t.id else onOpen(t) },
-                            onLongClick = { if (!editing) onLongPress() },
+                            // 編輯中不偵測長按：否則長按會被點擊處理吃掉，拖曳手勢收不到（長按後無法移動）
+                            onLongClick = if (editing) null else ({ onLongPress() }),
                         ),
                 ) { TileContent(t, w, h, summary[t.id]) }
                 if (editing) {

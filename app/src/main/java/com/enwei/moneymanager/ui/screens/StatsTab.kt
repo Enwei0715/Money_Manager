@@ -342,7 +342,7 @@ fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, cent
     val centerStyle = baseText.copy(fontSize = AppText.title, fontWeight = FontWeight.SemiBold, color = labelColor)
     val centerSub = baseText.copy(fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
     // 圓環：中間寫本期總額（最重要的數字），高度比原本的實心圓餅小
-    Canvas(Modifier.fillMaxWidth().height(if (slices.count { total > 0 && it.second * 100f / total >= 3f } > 7) 300.dp else 260.dp).padding(vertical = 10.dp)) {
+    Canvas(Modifier.fillMaxWidth().height(if (slices.count { total > 0 && it.second * 100f / total >= 3f } > 7) 360.dp else 320.dp).padding(vertical = 12.dp)) {
         val r = minOf(size.width * 0.27f, size.height * 0.42f)
         val c = Offset(size.width / 2, size.height / 2)
         val topLeft = Offset(c.x - r, c.y - r)
@@ -374,22 +374,25 @@ fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, cent
         start = -90f
         if (slices.size > 1) sweeps.forEach { sw ->
             val rad = Math.toRadians(start.toDouble())
-            drawLine(separator, c, Offset(c.x + (r * cos(rad)).toFloat(), c.y + (r * sin(rad)).toFloat()), strokeWidth = 2f)
+            // 只畫在圓環上（從挖空的內緣到外緣），不穿過中間的合計文字
+            drawLine(separator, Offset(c.x + (r * 0.6f * cos(rad)).toFloat(), c.y + (r * 0.6f * sin(rad)).toFloat()),
+                Offset(c.x + (r * cos(rad)).toFloat(), c.y + (r * sin(rad)).toFloat()), strokeWidth = 2f)
             start += sw
         }
 
         // 標籤：兩行（名稱／百分比），沿著圓餅外圍的橢圓排列；同側依高度排序後上下推開，用平滑曲線連到扇形。
-        class Label(val color: Color, val angle: Double, val layout: androidx.compose.ui.text.TextLayoutResult, val right: Boolean, var y: Float)
+        class Label(val color: Color, val angle: Double, var layout: androidx.compose.ui.text.TextLayoutResult, val right: Boolean, var y: Float, val text: String, val pct: Float)
         val labels = mutableListOf<Label>()
         // 小於 3% 的扇形太窄，標籤一定擠在一起：合成一個「其他」標籤（扇形照畫）
         val bigCount = slices.count { it.second * 100f / total >= 3f }
         val oneLine = bigCount > 8
+        val labelStyle = baseText.copy(fontSize = AppText.secondary, color = labelColor, lineHeight = 18.sp)
+        fun measureLabel(text: String, pct: Float, single: Boolean) = measurer.measure(
+            if (single) "${com.enwei.moneymanager.ui.tr(text)} ${"%.1f".format(pct)}%" else "${com.enwei.moneymanager.ui.tr(text)}\n${"%.1f".format(pct)}%",
+            labelStyle,
+        )
         fun add(text: String, pct: Float, mid: Double, color: Color) {
-            val layout = measurer.measure(
-                if (oneLine) "${com.enwei.moneymanager.ui.tr(text)} ${"%.1f".format(pct)}%" else "${com.enwei.moneymanager.ui.tr(text)}\n${"%.1f".format(pct)}%",
-                baseText.copy(fontSize = AppText.secondary, color = labelColor, lineHeight = 18.sp),
-            )
-            labels += Label(color, mid, layout, cos(mid) >= 0, (c.y + r * 1.22f * sin(mid)).toFloat())
+            labels += Label(color, mid, measureLabel(text, pct, oneLine), cos(mid) >= 0, (c.y + r * 1.22f * sin(mid)).toFloat(), text, pct)
         }
         start = -90f
         var smallStart = Float.NaN; var smallSweep = 0f; var smallPct = 0f; var smallColor = labelColor
@@ -407,14 +410,21 @@ fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, cent
         val ring = r * 1.28f
         listOf(true, false).forEach { side ->
             val list = labels.filter { it.right == side }.sortedBy { it.y }
+            // 同一側兩行標籤放不下：改成一行（名稱 百分比），避免上下推擠時疊在一起
+            if (list.sumOf { it.layout.size.height + 4 } > size.height) list.forEach { it.layout = measureLabel(it.text, it.pct, true) }
+            // 一行還是放不下：比例最小的不寫標籤（下方清單仍看得到），絕不重疊
+            val shownSide = list.toMutableList()
+            while (shownSide.size > 1 && shownSide.sumOf { it.layout.size.height + 4 } > size.height) {
+                val smallest = shownSide.minBy { it.pct }; shownSide.remove(smallest); labels.remove(smallest)
+            }
             var prevBottom = Float.NEGATIVE_INFINITY
-            list.forEach { l ->
+            shownSide.forEach { l ->
                 val h = l.layout.size.height.toFloat()
                 l.y = maxOf(l.y, prevBottom + h / 2 + 4f)
                 prevBottom = l.y + h / 2
             }
             var nextTop = size.height
-            list.asReversed().forEach { l ->
+            shownSide.asReversed().forEach { l ->
                 val h = l.layout.size.height.toFloat()
                 l.y = minOf(l.y, nextTop - h / 2 - 4f).coerceAtLeast(h / 2)
                 nextTop = l.y - h / 2
