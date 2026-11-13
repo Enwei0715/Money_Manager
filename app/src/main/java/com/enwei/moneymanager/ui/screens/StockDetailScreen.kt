@@ -1292,8 +1292,10 @@ private fun ProjectionCard(b: DailyBars) {
                 val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = com.enwei.moneymanager.ui.AppTypeface.current; textSize = 20f * k }
                 fun argb(c: Color) = android.graphics.Color.argb(255, (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
                 /** 圖上的小標籤：底色＋文字，貼齊右邊或指定位置 */
-                fun tag(text: String, xRight: Float, yMid: Float, colr: Color) {
+                fun tag(text: String, xRight: Float, yMidRaw: Float, colr: Color) {
                     paint.color = argb(colr)
+                    // 上下也限制在圖內：價位靠近圖的頂端或底端時，標籤不會被切掉一半
+                    val yMid = yMidRaw.coerceIn(12f * k, size.height - 10f * k)
                     val tw = paint.measureText(text)
                     val x0 = (xRight - tw - 8f * k).coerceAtLeast(0f)
                     drawRoundRect(labelBg.copy(alpha = 0.9f), Offset(x0, yMid - 12f * k), Size(tw + 8f * k, 22f * k), androidx.compose.ui.geometry.CornerRadius(4f, 4f))

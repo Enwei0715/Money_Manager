@@ -286,8 +286,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 },
                 actions = {
                     val pendingCount = pending.size + settings.pendingTrades.size
-                    if (pendingCount > 0) IconButton(onClick = { nav.navigate("pending") }) {
-                        BadgedBox(badge = { Badge { Text("$pendingCount") } }) { Icon(Icons.Filled.NotificationsActive, "待確認") }
+                    if (pendingCount > 0) com.enwei.moneymanager.ui.components.BadgedIconButton({ nav.navigate("pending") }, pendingCount, "待確認") {
+                        Icon(Icons.Filled.NotificationsActive, null)
                     }
                     // 支出地圖：在哪裡花錢（跟交易放在一起）
                     if (settings.locationHints) IconButton(onClick = { nav.navigate("spendmap") }, modifier = Modifier.coachTarget("txns.map")) { Icon(com.enwei.moneymanager.ui.components.LineIcons.IcMap, "支出地圖") }
@@ -298,10 +298,10 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         floatingActionButton = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // 日曆不放＋按鈕（會擋住日期格）：改成長按日期記帳
-                if (tab == 0) FloatingActionButton(
+                if (tab == 0) com.enwei.moneymanager.ui.components.ScrollAwareFab { FloatingActionButton(
                     onClick = { nav.navigate("txn/0") }, shape = CircleShape, modifier = Modifier.size(64.dp).coachTarget("fab.add"),
                     containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White,
-                ) { Icon(Icons.Filled.Add, "記一筆", modifier = Modifier.size(32.dp)) }
+                ) { Icon(Icons.Filled.Add, "記一筆", modifier = Modifier.size(32.dp)) } }
             }
         },
     ) { pad ->

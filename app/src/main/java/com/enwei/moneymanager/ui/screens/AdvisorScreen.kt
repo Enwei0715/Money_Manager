@@ -255,10 +255,8 @@ private fun TodayTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                 Text(r?.let { "讀了 ${it.newsCount} 則新聞" } ?: "資料集 $recentCount 則新聞", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             val count = store.history.size + if (store.report != null) 1 else 0
-            if (count > 1) androidx.compose.material3.IconButton(onClick = { showHistory = true }) {
-                androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("$count", fontSize = AppText.badge) } }) {
-                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.History, "報告歷史")
-                }
+            if (count > 1) com.enwei.moneymanager.ui.components.BadgedIconButton({ showHistory = true }, count, "報告歷史") {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.History, null)
             }
             if (r != null) androidx.compose.material3.IconButton(onClick = {
                 val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
@@ -784,10 +782,8 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (store.chat.isEmpty()) "新對話" else com.enwei.moneymanager.data.chatTitle(store.chat), fontSize = AppText.body,
                 fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            androidx.compose.material3.IconButton(onClick = { showThreads = true }) {
-                androidx.compose.material3.BadgedBox(badge = {
-                    if (store.chatThreads.isNotEmpty()) androidx.compose.material3.Badge { Text("${store.chatThreads.size}", fontSize = AppText.badge) }
-                }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.History, "過去的對話") }
+            com.enwei.moneymanager.ui.components.BadgedIconButton({ showThreads = true }, store.chatThreads.size, "過去的對話") {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.History, null)
             }
             androidx.compose.material3.IconButton(enabled = !busy && store.chat.isNotEmpty(), onClick = {
                 com.enwei.moneymanager.work.ChatJob.seenLast = 0
@@ -1230,11 +1226,9 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
             androidx.compose.material3.IconButton(onClick = { searchOpen = !searchOpen }) {
                 Icon(Icons.Filled.Search, "搜尋", tint = if (query.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            androidx.compose.material3.IconButton(onClick = { filterOpen = true }) {
-                androidx.compose.material3.BadgedBox(badge = { if (filterCount > 0) androidx.compose.material3.Badge { Text("$filterCount", fontSize = AppText.badge) } }) {
-                    Icon(androidx.compose.material.icons.Icons.Outlined.Tune, "篩選",
-                        tint = if (filterCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+            com.enwei.moneymanager.ui.components.BadgedIconButton({ filterOpen = true }, filterCount, "篩選") {
+                Icon(androidx.compose.material.icons.Icons.Outlined.Tune, null,
+                    tint = if (filterCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             androidx.compose.material3.IconButton(onClick = { infoOpen = true }) {
                 Icon(androidx.compose.material.icons.Icons.Outlined.Info, "資料集與更新", tint = MaterialTheme.colorScheme.onSurfaceVariant)

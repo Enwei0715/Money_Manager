@@ -584,10 +584,9 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     Icon(com.enwei.moneymanager.ui.components.LineIcons.IcNote, "當天備註")
                 }
                 // 來源通知收在右上角的通知圖示：點了才看原文，表單保持乾淨
-                if (!original?.rawText.isNullOrBlank()) androidx.compose.material3.IconButton(onClick = { showSource = true }) {
-                    androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge(containerColor = MaterialTheme.colorScheme.primary) }) {
-                        Icon(androidx.compose.material.icons.Icons.Outlined.Notifications, "來源通知")
-                    }
+                if (!original?.rawText.isNullOrBlank()) com.enwei.moneymanager.ui.components.BadgedIconButton({ showSource = true }, 0, "來源通知",
+                    dot = true, badgeColor = MaterialTheme.colorScheme.primary) {
+                    Icon(androidx.compose.material.icons.Icons.Outlined.Notifications, null)
                 }
             }
         },

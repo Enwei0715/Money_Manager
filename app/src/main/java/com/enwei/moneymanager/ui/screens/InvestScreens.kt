@@ -389,7 +389,7 @@ fun HoldingScreen(nav: NavController, market: String, symbol: String) {
             }
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { nav.navigate("trade/0?market=$market&symbol=$symbol") }) { Icon(Icons.Filled.Add, "新增交易") }
+            com.enwei.moneymanager.ui.components.ScrollAwareFab { FloatingActionButton(onClick = { nav.navigate("trade/0?market=$market&symbol=$symbol") }) { Icon(Icons.Filled.Add, "新增交易") } }
         },
     ) { pad ->
         LazyColumn(Modifier.padding(pad)) {

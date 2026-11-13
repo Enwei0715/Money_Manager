@@ -75,7 +75,7 @@ fun RecurringScreen(nav: NavController) {
     val list by repo.recurring.collectAsStateWithLifecycle(emptyList())
     Scaffold(
         topBar = { BackTopBar("週期交易／自動扣款", { nav.popBackStack() }) },
-        floatingActionButton = { FloatingActionButton(onClick = { nav.navigate("recurring/0") }) { Icon(Icons.Filled.Add, "新增") } },
+        floatingActionButton = { com.enwei.moneymanager.ui.components.ScrollAwareFab { FloatingActionButton(onClick = { nav.navigate("recurring/0") }) { Icon(Icons.Filled.Add, "新增") } } },
     ) { pad ->
         LazyColumn(Modifier.padding(pad)) {
             // 每月固定收支合計（依頻率換算成每月）
