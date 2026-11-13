@@ -1050,6 +1050,35 @@ fun NewsStore.openChat(id: Long): NewsStore {
     return copy(chat = t.msgs, chatThreads = parked.take(30))
 }
 
+/** 刪除目前這段對話：自動接上最近一段過去的對話（沒有就變成空白新對話） */
+fun NewsStore.deleteCurrentChat(): NewsStore {
+    val next = chatThreads.maxByOrNull { it.updated }
+    return if (next == null) copy(chat = emptyList())
+    else copy(chat = next.msgs, chatThreads = chatThreads.filter { it.id != next.id })
+}
+
+/** 清除目前對話的所有訊息（保留在這段對話裡，不切換） */
+fun NewsStore.clearChatMessages(): NewsStore = copy(chat = emptyList())
+
+/** 刪除一段過去的對話 */
+fun NewsStore.deleteThread(id: Long): NewsStore = copy(chatThreads = chatThreads.filter { it.id != id })
+
+/** 刪除全部過去的對話（目前這段保留） */
+fun NewsStore.deleteAllThreads(): NewsStore = copy(chatThreads = emptyList())
+
+/**
+ * 刪除一組問答：問題連同緊接著的 AI 回覆一起刪（只刪回覆時也連同它的問題），
+ * 刪掉後下一次提問就不會再把這段當成上下文送給 AI。
+ */
+fun NewsStore.deleteChatPair(index: Int): NewsStore {
+    if (index !in chat.indices) return this
+    val m = chat[index]
+    val from = if (m.fromUser) index else (index - 1).takeIf { it >= 0 && chat[it].fromUser } ?: index
+    var to = if (m.fromUser) index else index
+    if (m.fromUser && index + 1 < chat.size && !chat[index + 1].fromUser) to = index + 1
+    return copy(chat = chat.filterIndexed { i, _ -> i !in from..to })
+}
+
 /**
  * 新聞篩選：收進資料集前先判斷和投資有沒有關、算相關度分數、找同一事件的相似標題。
  * 都是本機規則，不花 AI 額度。

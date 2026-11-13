@@ -98,6 +98,11 @@ import com.enwei.moneymanager.data.NewsStore
 import com.enwei.moneymanager.data.prunedHistory
 import com.enwei.moneymanager.data.newChat
 import com.enwei.moneymanager.data.openChat
+import com.enwei.moneymanager.data.deleteChatPair
+import com.enwei.moneymanager.data.deleteCurrentChat
+import com.enwei.moneymanager.data.clearChatMessages
+import com.enwei.moneymanager.data.deleteThread
+import com.enwei.moneymanager.data.deleteAllThreads
 import com.enwei.moneymanager.data.StockPick
 import com.enwei.moneymanager.data.advisorSnapshot
 import com.enwei.moneymanager.data.askAdvisor
@@ -719,6 +724,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
         com.enwei.moneymanager.ui.TabRequest.chatQuestion?.let { input = it; com.enwei.moneymanager.ui.TabRequest.chatQuestion = null }
     }
     var confirmClear by remember { mutableStateOf(false) }
+    var confirmDeleteChat by remember { mutableStateOf(false) }
     var showThreads by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
     // 對話在背景執行：離開畫面也會繼續，回來時看得到回覆；不在畫面上時完成會通知
@@ -789,7 +795,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                 scope.launch { MoneyApp.news.update { it.newChat() }; list.scrollToItem(0) }
             }) { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.AddComment, "新對話") }
             Box {
-                androidx.compose.material3.IconButton(enabled = store.chat.isNotEmpty(), onClick = { moreMenu = true }) {
+                androidx.compose.material3.IconButton(enabled = store.chat.isNotEmpty() || store.chatThreads.isNotEmpty(), onClick = { moreMenu = true }) {
                     androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.MoreVert, "更多")
                 }
                 androidx.compose.material3.DropdownMenu(moreMenu, { moreMenu = false }) {
@@ -802,8 +808,10 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                         ctx.startActivity(android.content.Intent.createChooser(
                             android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, txt), null))
                     })
-                    androidx.compose.material3.DropdownMenuItem(enabled = !busy, text = { Text("清除這段對話", color = MaterialTheme.colorScheme.error) },
+                    androidx.compose.material3.DropdownMenuItem(enabled = !busy, text = { Text("清除所有訊息") },
                         onClick = { moreMenu = false; confirmClear = true })
+                    androidx.compose.material3.DropdownMenuItem(enabled = !busy, text = { Text("刪除這段對話", color = MaterialTheme.colorScheme.error) },
+                        onClick = { moreMenu = false; confirmDeleteChat = true })
                 }
             }
         }
@@ -841,7 +849,16 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
                 items(store.chat, key = { "c${it.time}${it.fromUser}" }) { m ->
                     Bubble(
                         m, newsById, nav,
-                        onDelete = { scope.launch { MoneyApp.news.update { st -> st.copy(chat = st.chat.filterNot { it.time == m.time && it.fromUser == m.fromUser }) } } },
+                        onDelete = {
+                            val idx = store.chat.indexOf(m)
+                            // 回覆進行中時，正在回答的最後一個問題不能刪（否則回覆會被加回成沒有問題的回答）
+                            val lastQ = store.chat.indexOfLast { it.fromUser }
+                            if (idx >= 0 && !(busy && idx >= lastQ)) {
+                                val before = store
+                                scope.launch { MoneyApp.news.update { it.deleteChatPair(idx) } }
+                                com.enwei.moneymanager.ui.components.Undo.show("已刪除這組問答") { MoneyApp.news.update { it.copy(chat = before.chat) } }
+                            }
+                        },
                         onEdit = if (m.fromUser) ({ input = m.text }) else null,
                         // 最後一則回覆可以重新產生：拿掉這則回覆，用前一個問題再問一次
                         onRegenerate = if (m === lastAi && !busy && GroqAi.enabled) ({
@@ -908,17 +925,35 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
     }
     if (confirmClear) AlertDialog(
         onDismissRequest = { confirmClear = false },
-        title = { Text("清除這段對話？") },
-        text = { Text("刪除這段對話的 ${store.chat.size} 則訊息（過去的對話不受影響）。") },
+        title = { Text("清除所有訊息？") },
+        text = { Text("清除這段對話的 ${store.chat.size} 則訊息，之後提問不會再參考這些內容。過去的對話不受影響，清除後可復原。") },
         confirmButton = {
             TextButton(onClick = {
                 confirmClear = false
                 com.enwei.moneymanager.work.ChatJob.seenLast = 0
                 com.enwei.moneymanager.work.ChatJob.state.value = null
-                scope.launch { MoneyApp.news.update { it.copy(chat = emptyList()) }; list.scrollToItem(0) }
+                val before = store
+                scope.launch { MoneyApp.news.update { it.clearChatMessages() }; list.scrollToItem(0) }
+                com.enwei.moneymanager.ui.components.Undo.show("已清除所有訊息") { MoneyApp.news.update { it.copy(chat = before.chat) } }
             }) { Text("清除", color = MaterialTheme.colorScheme.error) }
         },
         dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } },
+    )
+    if (confirmDeleteChat) AlertDialog(
+        onDismissRequest = { confirmDeleteChat = false },
+        title = { Text("刪除這段對話？") },
+        text = { Text("刪除後會打開最近一段過去的對話；這段裡的「檢討推薦」結論，之後的每日選股也不再參考。刪除後可復原。") },
+        confirmButton = {
+            TextButton(onClick = {
+                confirmDeleteChat = false
+                com.enwei.moneymanager.work.ChatJob.seenLast = -1
+                com.enwei.moneymanager.work.ChatJob.state.value = null
+                val before = store
+                scope.launch { MoneyApp.news.update { it.deleteCurrentChat() }; list.scrollToItem(0) }
+                com.enwei.moneymanager.ui.components.Undo.show("已刪除這段對話") { MoneyApp.news.update { it.copy(chat = before.chat, chatThreads = before.chatThreads) } }
+            }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(onClick = { confirmDeleteChat = false }) { Text("取消") } },
     )
     if (showThreads) ChatThreadsDialog(store, busy, onOpen = { id ->
         showThreads = false
@@ -932,6 +967,7 @@ private fun ChatTab(nav: NavController, store: NewsStore, reload: () -> Unit) {
 @Composable
 private fun ChatThreadsDialog(store: NewsStore, busy: Boolean, onOpen: (Long) -> Unit, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
+    var confirmAll by remember { mutableStateOf(false) }
     val fmt = java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.TAIWAN)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -947,13 +983,33 @@ private fun ChatThreadsDialog(store: NewsStore, busy: Boolean, onOpen: (Long) ->
                             Text("${fmt.format(java.util.Date(t.updated))} · ${t.msgs.size} 則", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         androidx.compose.material3.IconButton(onClick = {
-                            scope.launch { MoneyApp.news.update { st -> st.copy(chatThreads = st.chatThreads.filter { it.id != t.id }) } }
-                        }) { androidx.compose.material3.Icon(Icons.Filled.Delete, "刪除", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            val before = store.chatThreads
+                            scope.launch { MoneyApp.news.update { it.deleteThread(t.id) } }
+                            com.enwei.moneymanager.ui.components.Undo.show("已刪除「${t.title}」") { MoneyApp.news.update { it.copy(chatThreads = before) } }
+                        }) { androidx.compose.material3.Icon(Icons.Filled.Delete, "刪除「${t.title}」", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
+        dismissButton = if (store.chatThreads.isNotEmpty()) ({
+            TextButton(enabled = !busy, onClick = { confirmAll = true }) { Text("全部刪除", color = MaterialTheme.colorScheme.error) }
+        }) else null,
+    )
+    if (confirmAll) AlertDialog(
+        onDismissRequest = { confirmAll = false },
+        title = { Text("刪除全部過去的對話？") },
+        text = { Text("刪除 ${store.chatThreads.size} 段過去的對話（目前這段保留），刪除後可復原。") },
+        confirmButton = {
+            TextButton(onClick = {
+                confirmAll = false
+                val before = store.chatThreads
+                scope.launch { MoneyApp.news.update { it.deleteAllThreads() } }
+                com.enwei.moneymanager.ui.components.Undo.show("已刪除全部過去的對話") { MoneyApp.news.update { it.copy(chatThreads = before) } }
+                onDismiss()
+            }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(onClick = { confirmAll = false }) { Text("取消") } },
     )
 }
 
@@ -1403,7 +1459,7 @@ private fun NewsTab(nav: NavController, store: NewsStore) {
                         modifier = Modifier.weight(1f),
                     ) { Text("立即更新") }
                     OutlinedButton(
-                        enabled = (store.items.isNotEmpty() || store.report != null || store.chat.isNotEmpty()) && job?.running != true && reportWork?.running != true &&
+                        enabled = (store.items.isNotEmpty() || store.report != null || store.chat.isNotEmpty() || store.chatThreads.isNotEmpty()) && job?.running != true && reportWork?.running != true &&
                             newsWork?.running != true && chatWork?.running != true,
                         onClick = { clearDatabaseError = null; confirmClearDatabase = true },
                         modifier = Modifier.weight(1f),
