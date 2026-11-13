@@ -140,6 +140,8 @@ fun MoreScreen(nav: NavController) {
         if (i < 0 || i == j) return
         ids.add(j, ids.removeAt(i)); setOrder(ids)
     }
+    // 編輯中按返回：先結束編輯，不直接離開頁面
+    androidx.activity.compose.BackHandler(enabled = editing) { editing = false }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {

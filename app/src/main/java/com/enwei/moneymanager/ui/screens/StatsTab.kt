@@ -175,6 +175,10 @@ fun StatsTab(nav: NavController) {
     val sum = byCat.sumOf { it.second }
 
     val topScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+
+    // 叫回收起的標題列（換分頁、切換檢視時）
+
+    LaunchedEffect(com.enwei.moneymanager.ui.components.Chrome.resetTick) { topScroll.state.heightOffset = 0f }
     // 切換「分類／分析」時把收起的頂列放回來：分析內容短、不能捲動時，否則就找不到切換期間的箭頭
     LaunchedEffect(view) { topScroll.state.heightOffset = 0f }
     Scaffold(modifier = Modifier.nestedScroll(topScroll.nestedScrollConnection), containerColor = MaterialTheme.colorScheme.background, topBar = {
@@ -240,7 +244,7 @@ fun StatsTab(nav: NavController) {
             LazyColumn(Modifier.fillMaxSize()) {
                 item {
                     Column(Modifier.background(MaterialTheme.colorScheme.surface).coachTarget("st.pie")) {
-                        PieChart(byCat.map { (cid, v) -> (lk.category(cid)?.name ?: "未分類") to v })
+                        PieChart(byCat.map { (cid, v) -> (lk.category(cid)?.name ?: "未分類") to v }, "${kind.label}合計", Money.withSymbol(sum, lk.base))
                     }
                     com.enwei.moneymanager.ui.components.LineDivider()
                     Spacer(Modifier.height(10.dp))
@@ -324,7 +328,7 @@ fun StatsTab(nav: NavController) {
 }
 
 @Composable
-fun PieChart(slices: List<Pair<String, Long>>) {
+fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, centerValue: String? = null) {
     val total = slices.sumOf { it.second }
     val measurer = rememberTextMeasurer()
     // 圖上的字用設定的字型（主題的字型家族），不是系統預設
@@ -335,7 +339,10 @@ fun PieChart(slices: List<Pair<String, Long>>) {
     // 動畫：每次資料改變都從 12 點鐘方向（0 度）順時針轉開到完整圓餅，轉完標籤再淡入
     val prog = remember(slices) { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(slices) { prog.animateTo(1f, androidx.compose.animation.core.tween(800, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
-    Canvas(Modifier.fillMaxWidth().height(if (slices.count { total > 0 && it.second * 100f / total >= 3f } > 7) 360.dp else 320.dp).padding(vertical = 12.dp)) {
+    val centerStyle = baseText.copy(fontSize = AppText.title, fontWeight = FontWeight.SemiBold, color = labelColor)
+    val centerSub = baseText.copy(fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // 圓環：中間寫本期總額（最重要的數字），高度比原本的實心圓餅小
+    Canvas(Modifier.fillMaxWidth().height(if (slices.count { total > 0 && it.second * 100f / total >= 3f } > 7) 300.dp else 260.dp).padding(vertical = 10.dp)) {
         val r = minOf(size.width * 0.27f, size.height * 0.42f)
         val c = Offset(size.width / 2, size.height / 2)
         val topLeft = Offset(c.x - r, c.y - r)
@@ -350,6 +357,16 @@ fun PieChart(slices: List<Pair<String, Long>>) {
             val drawn = (limit - (start + 90f)).coerceIn(0f, sweeps[i])
             if (drawn > 0f) drawArc(chartPalette[i % chartPalette.size], start, drawn, true, topLeft, Size(2 * r, 2 * r))
             start += sweeps[i]
+        }
+        // 挖空中間成圓環，寫總額
+        drawCircle(separator, r * 0.6f, c)
+        if (centerValue != null) {
+            val v = measurer.measure(centerValue, centerStyle)
+            val t = centerTitle?.let { measurer.measure(it, centerSub) }
+            val h = v.size.height + (t?.size?.height ?: 0)
+            var y = c.y - h / 2f
+            t?.let { drawText(it, topLeft = Offset(c.x - it.size.width / 2f, y)); y += it.size.height }
+            drawText(v, topLeft = Offset(c.x - v.size.width / 2f, y))
         }
         val labelAlpha = ((prog.value - 0.75f) / 0.25f).coerceIn(0f, 1f)
         if (labelAlpha <= 0f) return@Canvas

@@ -191,7 +191,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     // 舊版記住的是「分析」（第 3 個分頁，已移到統計頁）：改回每日
     LaunchedEffect(Unit) { if (tab > 1) tab = 0 }
     // 切換「每日／日曆」時叫回收起的分頁列：日曆捲不動，收起後會叫不出來
-    LaunchedEffect(tab) { com.enwei.moneymanager.ui.components.Chrome.bottomHidden = false; com.enwei.moneymanager.ui.components.Chrome.topHidden = false }
+    LaunchedEffect(tab) { com.enwei.moneymanager.ui.components.Chrome.reveal() }
     LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.txnsTab) {
         com.enwei.moneymanager.ui.TabRequest.txnsTab?.let { tab = it.coerceAtMost(1); com.enwei.moneymanager.ui.TabRequest.txnsTab = null }
     }
@@ -212,6 +212,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     val yearly = false
     // 日曆的範圍：0 月、1 季、2 年
     var calSpan by rememberSaveable { mutableStateOf(0) }
+    // 切換月曆／年曆時頂部區塊叫回來（年曆可能捲動後才變成不能捲）
+    LaunchedEffect(calSpan) { com.enwei.moneymanager.ui.components.Chrome.reveal() }
     fun step(n: Long) {
         month = when {
             yearly -> month.plusYears(n)
@@ -246,6 +248,8 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     var batchDelete by remember { mutableStateOf(false) }
     // 往下捲時標題列、分頁列與摘要收起，往上捲立刻出現
     val topScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    // 叫回收起的標題列（換分頁、切換檢視時）
+    LaunchedEffect(com.enwei.moneymanager.ui.components.Chrome.resetTick) { topScroll.state.heightOffset = 0f }
     Scaffold(
         modifier = Modifier.nestedScroll(topScroll.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
@@ -301,12 +305,15 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
         },
     ) { pad ->
         var dragX by remember { mutableStateOf(0f) }
-        val swipeModifier = if (settings.swipe == 1 && tab < 2) Modifier.pointerInput(yearly) {
+        val swipeModifier = if (settings.swipe == 1 && tab < 2) Modifier.pointerInput(yearly, tab, calSpan) {
             detectHorizontalDragGestures(
                 onDragStart = { dragX = 0f },
                 onDragEnd = {
-                    if (dragX > 160f) month = if (yearly) month.minusYears(1) else month.minusMonths(1)
-                    else if (dragX < -160f) month = if (yearly) month.plusYears(1) else month.plusMonths(1)
+                    // 年曆左右滑動換年，其餘換月；門檻約 60dp（依螢幕密度）
+                    val byYear = yearly || (tab == 1 && calSpan == 2)
+                    val th = 60.dp.toPx()
+                    if (dragX > th) month = if (byYear) month.minusYears(1) else month.minusMonths(1)
+                    else if (dragX < -th) month = if (byYear) month.plusYears(1) else month.plusMonths(1)
                     dragX = 0f
                 },
             ) { _, d -> dragX += d }
@@ -365,7 +372,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     // 日曆捲不動：往下拉（手指向下滑）也能叫回收起的分頁列
                     Box(Modifier.pointerInput(Unit) {
                         androidx.compose.foundation.gestures.detectVerticalDragGestures { _, dy ->
-                            if (dy > 6f) { com.enwei.moneymanager.ui.components.Chrome.bottomHidden = false; com.enwei.moneymanager.ui.components.Chrome.topHidden = false }
+                            if (dy > 6f) com.enwei.moneymanager.ui.components.Chrome.reveal()
                         }
                     }) {
                     when (calSpan) {

@@ -61,7 +61,12 @@ private fun hhmm(ms: Long) = DateTimeFormatter.ofPattern("HH:mm").format(Instant
  * 新聞資料集的區塊完成度，以及限流或連續失敗暫停的原因。沒有事情時不佔空間。
  */
 @Composable
-fun AiStatusBar(nav: NavController, padNav: Boolean = false, onOpen: (String) -> Unit = { nav.navigate(it) }) {
+fun AiStatusBar(
+    nav: NavController, padNav: Boolean = false,
+    /** 精簡模式（投資以外的頁面）：進行中的工作只畫一條細進度線；需要處理的暫停、錯誤仍顯示文字 */
+    compact: Boolean = false,
+    onOpen: (String) -> Unit = { nav.navigate(it) },
+) {
     val report by ReportJob.state.collectAsStateWithLifecycle()
     val chat by ChatJob.state.collectAsStateWithLifecycle()
     val review by AiBackgroundWork.reviewProgress.collectAsStateWithLifecycle()
@@ -117,9 +122,18 @@ fun AiStatusBar(nav: NavController, padNav: Boolean = false, onOpen: (String) ->
         }
     }
     if (lines.isEmpty()) return
+    val shown = if (compact) lines.filter { !it.running } else lines
+    val running = if (compact) lines.filter { it.running } else emptyList()
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh)
         .then(if (padNav) Modifier.navigationBarsPadding() else Modifier)) {
-        lines.forEach { l -> Line(l, onOpen) }
+        // 背景工作進行中：一條 2dp 的細線，點了打開對應頁面（不佔兩行文字的高度）
+        running.firstOrNull()?.let { r ->
+            val p = r.progress
+            val mod = Modifier.fillMaxWidth().height(3.dp).clickable(enabled = r.route != null) { r.route?.let(onOpen) }
+            if (p != null) androidx.compose.material3.LinearProgressIndicator(progress = { p }, modifier = mod)
+            else androidx.compose.material3.LinearProgressIndicator(mod)
+        }
+        shown.forEach { l -> Line(l, onOpen) }
     }
 }
 

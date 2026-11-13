@@ -25,6 +25,7 @@ import kotlin.math.roundToInt
 fun CollapsingTop(modifier: Modifier = Modifier, header: @Composable () -> Unit, content: @Composable () -> Unit) {
     var headerH by remember { mutableFloatStateOf(0f) }
     var offset by remember { mutableFloatStateOf(0f) }
+    androidx.compose.runtime.LaunchedEffect(Chrome.resetTick) { offset = 0f }
     val conn = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -60,6 +61,11 @@ object Chrome {
     var bottomHidden by mutableStateOf(false)
     /** 次頁的標題列（BackTopBar）是否因往下捲而收起 */
     var topHidden by mutableStateOf(false)
+    /** 每次加一：所有收起的頂部區塊（分頁標題列、CollapsingTop）都回到展開 */
+    var resetTick by androidx.compose.runtime.mutableIntStateOf(0)
+
+    /** 把收起的分頁列、標題列、頂部區塊全部叫回來（換分頁、切換檢視、內容捲不動時用） */
+    fun reveal() { bottomHidden = false; topHidden = false; resetTick++ }
 
     /** 放在整個內容外層：只看捲動方向，不吃掉捲動量 */
     val watcher = object : NestedScrollConnection {

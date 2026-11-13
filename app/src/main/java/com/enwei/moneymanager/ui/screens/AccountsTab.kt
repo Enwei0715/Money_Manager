@@ -156,6 +156,8 @@ fun AccountsTab(nav: NavController, showBack: Boolean = false, initialTab: Int =
     )) }
     // 往下捲時標題列與分頁列收起，內容用滿畫面；往上捲立刻出現
     val topScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    // 叫回收起的標題列（換分頁、切換檢視時）
+    LaunchedEffect(com.enwei.moneymanager.ui.components.Chrome.resetTick) { topScroll.state.heightOffset = 0f }
     var section by com.enwei.moneymanager.ui.components.rememberTab("accounts.section", initialTab)
     // 從「助理」入口打開時直接到助理分頁
     remember { if (initialTab != 0) section = initialTab }

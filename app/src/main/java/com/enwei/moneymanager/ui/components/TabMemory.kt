@@ -20,7 +20,11 @@ object TabMemory {
 private class SavedTab(private val key: String, private val state: MutableState<Int>) : MutableState<Int> by state {
     override var value: Int
         get() = state.value
-        set(v) { state.value = v; TabMemory.set(key, v) }
+        set(v) {
+            // 換分頁時叫回收起的分頁列與標題列：新分頁可能很短或捲不動
+            if (v != state.value) Chrome.reveal()
+            state.value = v; TabMemory.set(key, v)
+        }
 }
 
 /** 記住分頁位置的狀態（用法和 `remember { mutableStateOf(0) }` 一樣）。 */

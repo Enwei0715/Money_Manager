@@ -268,14 +268,20 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     val sh = held.sumOf { it.shares }
                     val avg = held.sumOf { it.avgCost * it.shares } / sh
                     val pnl = held.sumOf { it.unrealized }
+                    val cost = held.sumOf { it.netCost }
+                    val value = held.sumOf { it.marketValue }
+                    val ret = if (cost > 0) pnl / cost * 100 else 0.0
+                    val pc = if (pnl >= 0) StockUp else StockDown
+                    // 重點放大：損益金額與報酬率；下面一行是股數、均價、市值
                     Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("我的持股", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("%,.0f 股・均價 %.2f".format(sh, avg), fontSize = AppText.body)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("預估損益", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text((if (pnl >= 0) "+" else "") + amt(pnl), fontSize = AppText.body, color = if (pnl >= 0) StockUp else StockDown)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("我的持股・預估損益", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text((if (pnl >= 0) "+" else "") + amt(pnl), fontSize = AppText.title, fontWeight = FontWeight.SemiBold, color = pc, maxLines = 1)
+                                Text("  %+.2f%%".format(ret), fontSize = AppText.body, color = pc, maxLines = 1)
+                            }
+                            Text("%,.0f 股・均價 %.2f・市值 ".format(sh, avg) + amt(value), fontSize = AppText.caption,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
                         androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.ChevronRight, "持股明細", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

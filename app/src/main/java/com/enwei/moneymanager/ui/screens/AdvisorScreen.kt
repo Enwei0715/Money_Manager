@@ -180,6 +180,7 @@ fun AdvisorContent(nav: NavController) {
 @Composable
 fun AssistantScreen(nav: NavController, showBack: Boolean = false) {
     val topScroll = androidx.compose.material3.TopAppBarDefaults.enterAlwaysScrollBehavior()
+    LaunchedEffect(com.enwei.moneymanager.ui.components.Chrome.resetTick) { topScroll.state.heightOffset = 0f }
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     androidx.compose.material3.Scaffold(
         modifier = Modifier.nestedScroll(topScroll.nestedScrollConnection),
@@ -1557,22 +1558,21 @@ private fun PlanTab(nav: NavController) {
         val s = snap
         if (s == null && sub < 2) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (sub == 0) {
-        // ① 大盤：加權指數 K 線＋階段
-        if (s != null) Section("大盤") {
-            val idx = s.index
-            com.enwei.moneymanager.ui.components.AnnotatedKLine("^TWII", if (idx != null && idx.close.size >= 20) listOf(
-                Triple("壓力（60 日高）", idx.high.takeLast(60).max(), Color(0xFFAB47BC)),
-                Triple("支撐（60 日低）", idx.low.takeLast(60).min(), Color(0xFF26A69A)),
-            ) else emptyList())
-            StageChip(s.indexStage.label, s.indexStage.hint)
-            if (s.sox != null) Text("費城半導體：${s.soxStage.label}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        // ② 資金配置：比例條（長線、短線、可投入、預留）＋與目標比較
+        // ① 資金配置（這一頁的重點，放最上面）：比例條（長線、短線、可投入、預留）＋與目標比較
         if (s != null) Section("資金配置", action = "調整" to { editPlan = true }) {
             val a = s.alloc
+            // 需要處理的警示放最上面、用醒目的底色（原本是最下面一行小字）
+            val warns = listOfNotNull(
+                a.reserveShort.takeIf { it > 0 }?.let { "可動用現金低於預留金額 ${m(it)}" },
+                a.shortOver.takeIf { it > 0 }?.let { "短線超出計畫 ${m(it)}，新的短線單先暫停" },
+            )
+            warns.forEach { w ->
+                Text(w, color = MaterialTheme.colorScheme.onErrorContainer, fontSize = AppText.body,
+                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
+            }
             val spare = (a.cash - a.reserve).coerceAtLeast(0)
             val parts = listOf(
-                Triple("長線", a.longValue, StockUp), Triple("短線", a.shortValue, Color(0xFFFFA000)),
+                Triple("長線", a.longValue, MaterialTheme.colorScheme.primary), Triple("短線", a.shortValue, Color(0xFFFFA000)),
                 Triple("可投入", spare, Color(0xFF3C82E6)), Triple("預留", minOf(a.reserve, a.cash).coerceAtLeast(0), MaterialTheme.colorScheme.onSurfaceVariant),
             ).filter { it.second > 0 }
             val total = parts.sumOf { it.second }.coerceAtLeast(1)
@@ -1589,8 +1589,16 @@ private fun PlanTab(nav: NavController) {
             }
             Bucket("長線・目標 ${"%.0f".format(settings.investPlan.longRatio * 100)}%", a.longValue, a.longTarget, a.longRoom, ::m)
             Bucket("短線・目標 ${"%.0f".format(100 - settings.investPlan.longRatio * 100)}%", a.shortValue, a.shortTarget, a.shortRoom, ::m)
-            if (a.reserveShort > 0) Text("⚠ 可動用現金低於預留金額 ${m(a.reserveShort)}", color = MaterialTheme.colorScheme.error, fontSize = AppText.caption)
-            if (a.shortOver > 0) Text("⚠ 短線超出計畫 ${m(a.shortOver)}，新的短線單先暫停", color = MaterialTheme.colorScheme.error, fontSize = AppText.caption)
+        }
+        // ② 大盤：加權指數 K 線＋階段（可收合，預設收起；階段標籤在標題下方就看得到）
+        if (s != null) Section("大盤（${s.indexStage.label}）", collapsible = true, initiallyOpen = false) {
+            val idx = s.index
+            com.enwei.moneymanager.ui.components.AnnotatedKLine("^TWII", if (idx != null && idx.close.size >= 20) listOf(
+                Triple("壓力（60 日高）", idx.high.takeLast(60).max(), Color(0xFFAB47BC)),
+                Triple("支撐（60 日低）", idx.low.takeLast(60).min(), Color(0xFF26A69A)),
+            ) else emptyList())
+            StageChip(s.indexStage.label, s.indexStage.hint)
+            if (s.sox != null) Text("費城半導體：${s.soxStage.label}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         }
         if (sub == 1 && s != null && s.holdings.isEmpty()) Text("目前沒有持股。", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)

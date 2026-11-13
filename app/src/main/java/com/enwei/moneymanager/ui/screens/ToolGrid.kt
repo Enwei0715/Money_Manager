@@ -217,7 +217,8 @@ fun ToolGrid(
                     // 右下角把手：拖動改大小
                     // 右下角把手：格子內側一個細線直角，拖動改大小（觸控範圍比看到的大）
                     val handle = MaterialTheme.colorScheme.primary
-                    Box(
+                    // 只在選取的那一格顯示：其他格的角落不會攔下上下滑動（工具放滿時才捲得動）
+                    if (selected == t.id) Box(
                         Modifier.align(Alignment.BottomEnd).size(32.dp)
                             .drawBehind {
                                 val m = 8.dp.toPx(); val l = 10.dp.toPx(); val w = 1.6.dp.toPx()
