@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -371,7 +372,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                     }
                     // 日曆捲不動：往下拉（手指向下滑）也能叫回收起的分頁列
                     Box(Modifier.pointerInput(Unit) {
-                        androidx.compose.foundation.gestures.detectVerticalDragGestures { _, dy ->
+                        detectVerticalDragGestures { _, dy ->
                             if (dy > 6f) com.enwei.moneymanager.ui.components.Chrome.reveal()
                         }
                     }) {

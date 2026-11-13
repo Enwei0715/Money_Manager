@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -183,7 +184,7 @@ fun ToolGrid(
                         .then(
                             if (editing) Modifier.pointerInput(t.id, ids, place) {
                                 // 長按後才拖動整格：一般上下滑動用來捲動頁面（工具放滿時才捲得到下方）
-                                androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress(
+                                detectDragGesturesAfterLongPress(
                                     onDragStart = { dragId = t.id; drag = Offset.Zero; selected = t.id },
                                     onDrag = { ch, d -> ch.consume(); drag += d },
                                     onDragEnd = {

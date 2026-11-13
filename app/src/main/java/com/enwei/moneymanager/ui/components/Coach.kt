@@ -153,7 +153,7 @@ fun CoachOverlay(onTab: (String) -> Unit) {
     val st = steps[i]
     LaunchedEffect(i) { st.tab?.let(onTab) }
     // 導覽中按返回：回上一步（第一步時結束導覽），不讓底下的頁面跟著換掉而標錯位置
-    androidx.activity.compose.BackHandler { if (i > 0) Coach.prev() else Coach.step = -1 }
+    androidx.activity.compose.BackHandler { if (i > 0) Coach.prev() else Coach.stop() }
     val density = LocalDensity.current
     val hole = st.target?.let { Coach.rects[it] }?.takeIf { it.width > 0 && it.height > 0 }
     val dim = Color.Black.copy(alpha = 0.72f)
