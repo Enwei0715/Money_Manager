@@ -432,10 +432,16 @@ private fun SpendMap(
         cx = mx(fallback.second); cy = my(fallback.first); zoom = 14.0
     }
     if (zoom < 0 && sizePx.width > 0 && spots.isNotEmpty()) {
-        val xs = spots.map { mx(it.lon) }; val ys = spots.map { my(it.lat) }
-        cx = (xs.min() + xs.max()) / 2; cy = (ys.min() + ys.max()) / 2
+        val ys = spots.map { my(it.lat) }
+        // 經度是一圈：找最大的空隙，從空隙之後開始算，跨過換日線的點（例如台灣與美國）也能用最短的範圍框住
+        val xs0 = spots.map { mx(it.lon) }.sorted()
+        var gapAt = xs0.size - 1; var gap = xs0.first() + 1 - xs0.last()
+        for (i in 0 until xs0.size - 1) { val g = xs0[i + 1] - xs0[i]; if (g > gap) { gap = g; gapAt = i } }
+        val startX = xs0[(gapAt + 1) % xs0.size]
+        val spanX = 1 - gap
+        cx = (startX + spanX / 2).let { it - kotlin.math.floor(it) }; cy = (ys.min() + ys.max()) / 2
         val pad = with(density) { 48.dp.toPx() }
-        val dx = (xs.max() - xs.min()).coerceAtLeast(1e-9); val dy = (ys.max() - ys.min()).coerceAtLeast(1e-9)
+        val dx = spanX.coerceAtLeast(1e-9); val dy = (ys.max() - ys.min()).coerceAtLeast(1e-9)
         val z = minOf(kotlin.math.log2((sizePx.width - pad * 2) / (dx * tilePx)), kotlin.math.log2((sizePx.height - pad * 2) / (dy * tilePx)))
         // 點分散在很遠的地方（例如台灣和歐洲）：可以縮到看得到整個世界，所有店都在畫面裡
         zoom = if (spots.size == 1) 16.0 else z.coerceIn(1.0, 16.0)
@@ -521,7 +527,7 @@ private fun SpendMap(
                     detectTransformGestures { _, pan, scale, _ ->
                         if (zoom >= 0) {
                             val world = tilePx * Math.pow(2.0, zoom)
-                            cx -= pan.x / world; cy = (cy - pan.y / world).coerceIn(0.0, 1.0)
+                            cx -= pan.x / world; cx -= kotlin.math.floor(cx); cy = (cy - pan.y / world).coerceIn(0.0, 1.0)
                             zoom = (zoom + kotlin.math.log2(scale.toDouble())).coerceIn(1.0, 18.0)
                         }
                     }
@@ -536,11 +542,11 @@ private fun SpendMap(
                                 val sp = picked
                                 if (moving && sp != null) {
                                     // 修正位置：點的地方就是正確位置
-                                    onMove(sp, Math.toDegrees(kotlin.math.atan(kotlin.math.sinh(Math.PI * (1 - 2 * wy)))), wx * 360 - 180)
+                                    onMove(sp, Math.toDegrees(kotlin.math.atan(kotlin.math.sinh(Math.PI * (1 - 2 * wy)))), (wx - kotlin.math.floor(wx)) * 360 - 180)
                                     onMoveEnd()
                                 } else {
                                     // 點針頭（在位置上方）也算點到
-                                    fun dist(p: SpendSpot) = kotlin.math.hypot((mx(p.lon) - cx) * world + sizePx.width / 2 - o.x,
+                                    fun dist(p: SpendSpot) = kotlin.math.hypot(wrapDx(mx(p.lon) - cx) * world + sizePx.width / 2 - o.x,
                                         (my(p.lat) - cy) * world + sizePx.height / 2 - o.y)
                                     onSelect(spots.minByOrNull { dist(it) }?.takeIf { dist(it) < 30.dp.toPx() })
                                 }
@@ -599,7 +605,7 @@ private fun SpendMap(
             }
             // 地點標記：小而精緻的圓點——細白邊、極淡陰影；選中的外圍多一圈淡色光暈（大小隨金額只略為變化）
             spots.sortedBy { if (it == picked) 1 else 0 }.forEach { sp ->
-                val px = ((mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
+                val px = (wrapDx(mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
                 val r = (pinR(sp, maxTotal) * 0.8 + 1.0).dp.toPx()
                 val col = androidx.compose.ui.graphics.Color(palette[cats.indexOf(sp.cat).coerceAtLeast(0) % palette.size])
                 val c = androidx.compose.ui.geometry.Offset(px, py)
@@ -613,7 +619,7 @@ private fun SpendMap(
             val halo = if (dark) androidx.compose.ui.graphics.Color(0xE61E1E21) else androidx.compose.ui.graphics.Color(0xF2FFFFFF)
             val taken = mutableListOf<androidx.compose.ui.geometry.Rect>()
             (listOfNotNull(picked) + spots.take(5)).distinct().forEach { sp ->
-                val px = ((mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
+                val px = (wrapDx(mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
                 if (px < -40 || px > size.width + 40 || py < -20 || py > size.height + 20) return@forEach
                 val r = (pinR(sp, maxTotal) * 0.8 + 2.4).dp.toPx()
                 val base = androidx.compose.ui.text.TextStyle(fontFamily = mapFont, fontSize = 10.5.sp, fontWeight = if (sp == picked) FontWeight.SemiBold else FontWeight.Normal, letterSpacing = 0.2.sp)
@@ -691,3 +697,7 @@ internal fun MapPreview(name: String, at: Pair<Double, Double>, modifier: Modifi
         androidx.compose.foundation.layout.Box(Modifier.matchParentSize().clickable(onClick = onClick))
     }
 }
+
+
+/** 地圖左右會一直重複：點和畫面中心的水平距離取最近的那一圈（-0.5～0.5 個世界寬），點不會因為滑過一圈就消失 */
+private fun wrapDx(d: Double): Double = d - kotlin.math.floor(d + 0.5)
