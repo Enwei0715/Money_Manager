@@ -2193,17 +2193,23 @@ private fun ChatChartView(ch: com.enwei.moneymanager.data.ChatChart, nav: NavCon
             val store by MoneyApp.news.flow.collectAsStateWithLifecycle()
             val st = store ?: return
             // 只列產業題材（排除大盤漲跌、總經），每個題材附相關個股
-            val all = remember(System.identityHashCode(st)) { MoneyApp.news.investableThemes(st) }
+            // 題材名稱其實是個股名稱接亂碼（例如「世芯KYTRAINIU」）：不是題材，不列
+            val all = remember(System.identityHashCode(st)) {
+                MoneyApp.news.investableThemes(st).filter { (t, _) -> !Regex("[\\u4e00-\\u9fff]-?KY|[\\u4e00-\\u9fff][A-Z]{5,}").containsMatchIn(t.key) }
+            }
             val picked = (if (ch.items.isEmpty()) all.take(8)
             else all.filter { (t, _) -> ch.items.any { it.contains(t.key) || t.key.contains(it) } }.ifEmpty { all.take(8) }).take(8)
             ThemeBars(picked, nav)
         }
         "holdings" -> {
             val holdings by repo.holdingsByBroker.collectAsStateWithLifecycle(emptyMap())
-            val rows = holdings.values.flatten().filter { it.shares > 0.0001 && it.price != null }.map { h ->
-                val cost = h.avgCost * h.shares
-                val pnl = h.marketValue - cost
-                Triple("${h.symbol} ${h.name.orEmpty()}".trim(), if (cost > 0) pnl / cost * 100 else 0.0, "%+.1f%%".format(if (cost > 0) pnl / cost * 100 else 0.0))
+            // 同一檔在不同券商帳戶：合併成一列（總成本、總市值算報酬），不重複列出
+            val rows = holdings.values.flatten().filter { it.shares > 0.0001 && it.price != null }.groupBy { it.symbol }.map { (_, hs) ->
+                val h = hs.first()
+                val cost = hs.sumOf { it.avgCost * it.shares }
+                val pnl = hs.sumOf { it.marketValue } - cost
+                val pct = if (cost > 0) pnl / cost * 100 else 0.0
+                Triple("${h.symbol} ${h.name.orEmpty()}".trim(), pct, "%+.1f%%".format(pct))
             }.sortedByDescending { it.second }
             com.enwei.moneymanager.ui.components.SignedBars("持股損益（%）", rows)
         }
@@ -2218,7 +2224,7 @@ private fun ThemeBars(rows: List<Pair<com.enwei.moneymanager.data.TopicStat, Lis
     if (rows.isEmpty()) { Text("還沒有足夠的產業題材新聞", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant); return }
     val max = rows.maxOf { it.first.count }.coerceAtLeast(1)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("產業題材（長條＝新聞則數，顏色＝多空）", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
+        Text("產業題材", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
         rows.forEach { (t, syms) ->
             val c = when { t.avgSentiment > 0.2 -> StockUp; t.avgSentiment < -0.2 -> StockDown; else -> MaterialTheme.colorScheme.onSurfaceVariant }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

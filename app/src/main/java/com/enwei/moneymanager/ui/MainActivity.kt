@@ -374,8 +374,8 @@ private fun AppScaffold(nav: NavHostController) {
                 exit = androidx.compose.animation.shrinkVertically(shrinkTowards = androidx.compose.ui.Alignment.Top),
             ) {
                 Column {
-                    // AI 狀態列：正在進行的 AI 工作、進度與暫停原因（沒有事情時不佔空間）
-                    com.enwei.moneymanager.ui.components.AiStatusBar(nav, compact = tabShown != "assistant") { r -> nav.openRoute(r) }
+                    // AI 狀態列：進行中只留一條細進度線（投資頁上方已有完整進度，不重複佔兩行、不擋內容）；暫停與錯誤才顯示文字
+                    com.enwei.moneymanager.ui.components.AiStatusBar(nav, compact = true) { r -> nav.openRoute(r) }
                     BottomTabs(tabShown) { route -> nav.openTab(route) }
                 }
             }
@@ -384,7 +384,7 @@ private fun AppScaffold(nav: NavHostController) {
             } else if (!imeOpen && !editing) {
                 // 其他畫面（個股、設定…）也保留 AI 狀態列，看得到報告還在跑，不會以為被關掉；
                 // 記帳、帳戶等編輯畫面不顯示，避免擠在 App 內鍵盤和儲存按鈕下方
-                com.enwei.moneymanager.ui.components.AiStatusBar(nav, padNav = true, compact = current?.startsWith("advisor") != true) { r -> nav.openRoute(r) }
+                com.enwei.moneymanager.ui.components.AiStatusBar(nav, padNav = true, compact = true) { r -> nav.openRoute(r) }
             }
         } },
     ) { inner ->

@@ -883,10 +883,12 @@ private fun CandleChart(
         run {
             val lastI = to - 1
             val col = if (b.close[lastI] >= b.open[lastI]) up else down
-            val ly = y(b.close[lastI])
+            val ly0 = y(b.close[lastI])
             val label = "%.2f".format(b.close[lastI])
             val tw = tagPaint.measureText(label)
-            drawLine(col.copy(alpha = 0.6f), Offset(0f, ly), Offset(size.width, ly), 1f)
+            drawLine(col.copy(alpha = 0.6f), Offset(0f, ly0), Offset(size.width, ly0), 1f)
+            // 標籤不壓到左上的均線圖例：最高只到圖例下方
+            val ly = ly0.coerceAtLeast(legendH + 14f * k)
             drawContext.canvas.nativeCanvas.drawRoundRect(0f, ly - 13f * k, tw + 10f * k, ly + 11f * k, 6f, 6f, android.graphics.Paint().apply { color = argb(col) })
             drawContext.canvas.nativeCanvas.drawText(label, 5f * k, ly + 6f * k, tagPaint)
         }
@@ -929,12 +931,15 @@ private fun CandleChart(
         signals.forEach { sg ->
             val i = sg.index - from
             if (i !in 0 until n) return@forEach
-            val cx = i * cw + cw / 2
-            val col = if (sg.buy) up else down
             val r = 13f * k
+            // 圓章貼近左右邊緣時往內移，不被切掉一半
+            val cx = (i * cw + cw / 2).coerceIn(r, maxOf(r, size.width - r))
+            val col = if (sg.buy) up else down
             val cy = if (sg.buy) (y(b.low[sg.index]) + r + 4f).coerceAtMost(priceH - r) else (y(b.high[sg.index]) - r - 4f).coerceAtLeast(r + legendH)
             drawCircle(col, radius = r, center = Offset(cx, cy))
-            drawContext.canvas.nativeCanvas.drawText(com.enwei.moneymanager.ui.tr(if (sg.buy) "買" else "賣"), cx, cy + 8f * k, badge)
+            // 圓章只放一個字：英文用 B／S（Buy、Sell 放不進小圓）
+            val mark = if (com.enwei.moneymanager.ui.I18n.english) (if (sg.buy) "B" else "S") else (if (sg.buy) "買" else "賣")
+            drawContext.canvas.nativeCanvas.drawText(mark, cx, cy + 8f * k, badge)
             if (sg.index == latest || sg.index == selected) {
                 val label = com.enwei.moneymanager.ui.tr(sg.tag.ifBlank { if (sg.buy) "買" else "賣" })
                 paint.color = android.graphics.Color.argb(255, (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt())

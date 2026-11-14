@@ -74,7 +74,8 @@ fun MiniKLine(symbol: String, days: Int = 40, modifier: Modifier = Modifier) {
             val hi = (from until b.close.size).maxOf { b.high.getOrElse(it) { b.close[it] } }
             val lo = (from until b.close.size).minOf { b.low.getOrElse(it) { b.close[it] } }
             val span = (hi - lo).takeIf { it > 0 } ?: 1.0
-            fun y(v: Double) = ((hi - v) / span * size.height).toFloat()
+            // 上下各留 5% 空間：最高、最低的 K 棒影線不貼邊被切掉
+            fun y(v: Double) = (size.height * 0.05f + (hi - v) / span * size.height * 0.9f).toFloat()
             val w = size.width / n
             // 期間起點的價格虛線，看得出現在比起點高還低
             drawLine(grid, Offset(0f, y(first)), Offset(size.width, y(first)), 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
@@ -303,7 +304,8 @@ fun AnnotatedKLine(symbol: String, levels: List<Triple<String, Double, Color>>, 
             val hi = maxOf((from until b.close.size).maxOf { b.high.getOrElse(it) { b.close[it] } }, inView.maxOrNull() ?: 0.0, maVals.maxOrNull() ?: 0.0)
             val lo = minOf((from until b.close.size).minOf { b.low.getOrElse(it) { b.close[it] } }, inView.minOrNull() ?: Double.MAX_VALUE, maVals.minOrNull() ?: Double.MAX_VALUE)
             val span = (hi - lo).takeIf { it > 0 } ?: 1.0
-            fun y(v: Double) = ((hi - v) / span * size.height).toFloat()
+            // 上下各留 5% 空間：最高、最低的 K 棒影線不貼邊被切掉
+            fun y(v: Double) = (size.height * 0.05f + (hi - v) / span * size.height * 0.9f).toFloat()
             val w = size.width / n
             for (k in 0..3) drawLine(grid, Offset(0f, size.height * k / 3), Offset(size.width, size.height * k / 3), 1f)
             for (k in 0 until n) {

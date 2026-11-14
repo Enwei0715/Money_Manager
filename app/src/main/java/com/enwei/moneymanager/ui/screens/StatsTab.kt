@@ -366,7 +366,7 @@ fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, cent
             var v = measurer.measure(centerValue, centerStyle)
             var fs = centerStyle.fontSize.value
             while (v.size.width > r * 1.1f && fs > 9f) { fs -= 1f; v = measurer.measure(centerValue, centerStyle.copy(fontSize = fs.sp)) }
-            val t = centerTitle?.let { measurer.measure(it, centerSub) }
+            val t = centerTitle?.let { measurer.measure(com.enwei.moneymanager.ui.tr(it), centerSub) }
             val h = v.size.height + (t?.size?.height ?: 0)
             var y = c.y - h / 2f
             t?.let { drawText(it, topLeft = Offset(c.x - it.size.width / 2f, y)); y += it.size.height }
@@ -385,21 +385,33 @@ fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, cent
         }
 
         // 標籤：兩行（名稱／百分比），沿著圓餅外圍的橢圓排列；同側依高度排序後上下推開，用平滑曲線連到扇形。
-        class Label(val color: Color, val angle: Double, var layout: androidx.compose.ui.text.TextLayoutResult, val right: Boolean, var y: Float, val text: String, val pct: Float)
+        // 名稱與百分比分開量：名稱太長只縮名稱（「…」結尾），百分比一定看得到
+        class Label(val color: Color, val angle: Double, var name: androidx.compose.ui.text.TextLayoutResult, var pctL: androidx.compose.ui.text.TextLayoutResult,
+                    var single: Boolean, val right: Boolean, var y: Float, val text: String, val pct: Float) {
+            val h: Int get() = if (single) maxOf(name.size.height, pctL.size.height) else name.size.height + pctL.size.height
+            val w: Int get() = if (single) name.size.width + 8 + pctL.size.width else maxOf(name.size.width, pctL.size.width)
+        }
         val labels = mutableListOf<Label>()
         // 小於 3% 的扇形太窄，標籤一定擠在一起：合成一個「其他」標籤（扇形照畫）
         val bigCount = slices.count { it.second * 100f / total >= 3f }
         val oneLine = bigCount > 8
         val labelStyle = baseText.copy(fontSize = AppText.secondary, color = labelColor, lineHeight = 18.sp)
-        // 標籤最寬只能用到圓環外側剩下的空間：窄手機、大字級、英文時會換行或以「…」收尾，不會壓到圓環
-        val sideW = maxOf(size.width / 2f - r * 1.12f - 12f, 48.dp.toPx()).toInt()
-        fun measureLabel(text: String, pct: Float, single: Boolean) = measurer.measure(
-            if (single) "${com.enwei.moneymanager.ui.tr(text)} ${"%.1f".format(pct)}%" else "${com.enwei.moneymanager.ui.tr(text)}\n${"%.1f".format(pct)}%",
-            labelStyle, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, maxLines = 2,
-            constraints = androidx.compose.ui.unit.Constraints(maxWidth = sideW),
-        )
+        // 標籤欄：每一側對齊同一條直線（左側靠右對齊、右側靠左對齊），寬度只用圓環外側剩下的空間
+        val colGap = r * 1.16f
+        val sideW = maxOf(size.width / 2f - colGap - 8f, 48.dp.toPx()).toInt()
+        fun pctLayout(pct: Float) = measurer.measure("${"%.1f".format(pct)}%", labelStyle)
+        fun nameLayout(text: String, maxW: Int) = measurer.measure(com.enwei.moneymanager.ui.tr(text), labelStyle,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, maxLines = 1,
+            constraints = androidx.compose.ui.unit.Constraints(maxWidth = maxOf(maxW, 1)))
+        fun relayout(l: Label, single: Boolean) {
+            l.single = single
+            l.pctL = pctLayout(l.pct)
+            l.name = nameLayout(l.text, if (single) sideW - l.pctL.size.width - 8 else sideW)
+        }
         fun add(text: String, pct: Float, mid: Double, color: Color) {
-            labels += Label(color, mid, measureLabel(text, pct, oneLine), cos(mid) >= 0, (c.y + r * 1.22f * sin(mid)).toFloat(), text, pct)
+            val pl = pctLayout(pct)
+            labels += Label(color, mid, nameLayout(text, if (oneLine) sideW - pl.size.width - 8 else sideW), pl, oneLine,
+                cos(mid) >= 0, (c.y + r * 1.22f * sin(mid)).toFloat(), text, pct)
         }
         start = -90f
         var smallStart = Float.NaN; var smallSweep = 0f; var smallPct = 0f; var smallColor = labelColor
@@ -418,41 +430,50 @@ fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, cent
         listOf(true, false).forEach { side ->
             val list = labels.filter { it.right == side }.sortedBy { it.y }
             // 同一側兩行標籤放不下：改成一行（名稱 百分比），避免上下推擠時疊在一起
-            if (list.sumOf { it.layout.size.height + 4 } > size.height) list.forEach { it.layout = measureLabel(it.text, it.pct, true) }
+            if (list.sumOf { it.h + 6 } > size.height) list.forEach { relayout(it, true) }
             // 一行還是放不下：比例最小的不寫標籤（下方清單仍看得到），絕不重疊
             val shownSide = list.toMutableList()
-            while (shownSide.size > 1 && shownSide.sumOf { it.layout.size.height + 4 } > size.height) {
+            while (shownSide.size > 1 && shownSide.sumOf { it.h + 6 } > size.height) {
                 val smallest = shownSide.minBy { it.pct }; shownSide.remove(smallest); labels.remove(smallest)
             }
             var prevBottom = Float.NEGATIVE_INFINITY
             shownSide.forEach { l ->
-                val h = l.layout.size.height.toFloat()
-                l.y = maxOf(l.y, prevBottom + h / 2 + 4f)
+                val h = l.h.toFloat()
+                l.y = maxOf(l.y, prevBottom + h / 2 + 6f)
                 prevBottom = l.y + h / 2
             }
             var nextTop = size.height
             shownSide.asReversed().forEach { l ->
-                val h = l.layout.size.height.toFloat()
-                l.y = minOf(l.y, nextTop - h / 2 - 4f).coerceAtLeast(h / 2)
+                val h = l.h.toFloat()
+                l.y = minOf(l.y, nextTop - h / 2 - 6f).coerceAtLeast(h / 2)
                 nextTop = l.y - h / 2
             }
         }
         labels.forEach { l ->
             val dir = if (l.right) 1f else -1f
             val dy = l.y - c.y
-            // 標籤水平位置：貼著外圍橢圓；在圓餅正上／下方時往外側留一點距離
-            val dx = kotlin.math.sqrt(maxOf(0f, ring * ring - dy * dy)).coerceAtLeast(r * 0.35f)
-            val anchor = Offset(c.x + dir * dx, l.y)
+            // 同一側的標籤對齊同一欄，連線從扇形外緣拉到欄位，不會左右交錯
+            val anchor = Offset(c.x + dir * colGap, l.y)
             val p1 = Offset(c.x + (r * 1.01f * cos(l.angle)).toFloat(), c.y + (r * 1.01f * sin(l.angle)).toFloat())
-            val out = Offset(c.x + (r * 1.12f * cos(l.angle)).toFloat(), c.y + (r * 1.12f * sin(l.angle)).toFloat())
+            val out = Offset(c.x + (r * 1.08f * cos(l.angle)).toFloat(), c.y + (r * 1.08f * sin(l.angle)).toFloat())
             val path = androidx.compose.ui.graphics.Path().apply {
                 moveTo(p1.x, p1.y)
-                cubicTo(out.x, out.y, anchor.x - dir * 18f, anchor.y, anchor.x, anchor.y)
+                cubicTo(out.x, out.y, anchor.x - dir * 14f, anchor.y, anchor.x, anchor.y)
             }
             drawPath(path, l.color, alpha = labelAlpha, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
-            val w = l.layout.size.width.toFloat()
-            val x = if (l.right) anchor.x + 8f else anchor.x - 8f - w
-            drawText(l.layout, topLeft = Offset(x.coerceIn(0f, maxOf(0f, size.width - w)), l.y - l.layout.size.height / 2), alpha = labelAlpha)
+            val top = l.y - l.h / 2f
+            fun place(t: androidx.compose.ui.text.TextLayoutResult, x0: Float, y0: Float) {
+                // 左側靠右對齊（貼近連線端點），右側靠左對齊
+                val x = if (l.right) x0 else x0 - t.size.width
+                drawText(t, topLeft = Offset(x.coerceIn(0f, maxOf(0f, size.width - t.size.width)), y0), alpha = labelAlpha)
+            }
+            val x0 = anchor.x + dir * 6f
+            if (l.single) {
+                if (l.right) { place(l.name, x0, top); place(l.pctL, x0 + l.name.size.width + 8f, top) }
+                else { place(l.pctL, x0, top); place(l.name, x0 - l.pctL.size.width - 8f, top) }
+            } else {
+                place(l.name, x0, top); place(l.pctL, x0, top + l.name.size.height)
+            }
         }
     }
 }
