@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -208,6 +210,14 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             date = t.date.toLocalDate(); time = Instant.ofEpochMilli(t.date).atZone(ZoneId.systemDefault()).toLocalTime().withSecond(0).withNano(0)
             // 已經記過手續費：帶入金額，編輯時可以修改或清空
             repo.feeOf(t)?.let { f -> feeExpr = minorToExpr(f.amount); showFee = true }
+            // 有代墊：金額欄顯示整筆總額，往來列出每個人欠你的部分（存檔時更新原本那幾筆，不會重複新增）
+            note = com.enwei.moneymanager.data.stripSplitNote(t.note).orEmpty()
+            val splits = repo.splitsOf(t)
+            if (splits.isNotEmpty()) {
+                expr = minorToExpr(t.amount + splits.sumOf { it.amount })
+                splitOn = true; splitMe = true
+                splitRaw = SplitRow.encode(splits.map { SplitRow(it.toAccountId, "", minorToExpr(it.amount), auto = false) })
+            }
         }
     }
     LaunchedEffect(accountId, lk.accounts) {
@@ -507,7 +517,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         // 新記的一筆：回到交易清單時捲到這筆的日期
         if (original == null) TxnScroll.focusDay = date
         scope.launch {
-            val newId = repo.saveTxn(t)
+            // 編輯支出：原本有代墊但這次把人都移除了 → 一起刪掉那幾筆代墊
+            val newId = if (original != null && t.type == TxnType.EXPENSE) repo.saveWithSplits(t, emptyList()) else repo.saveTxn(t)
             // 新記的支出、時間在 30 分鐘內：記下目前位置，之後在這裡付款時可推測店家
             if (original == null && t.type == TxnType.EXPENSE && settings.locationHints && !t.merchant.isNullOrBlank() &&
                 kotlin.math.abs(System.currentTimeMillis() - t.date) <= 30 * 60_000L) {
@@ -933,6 +944,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 }
             }
             if (panel != Panel.NONE) BottomPanel(
+                splitTitle = splitRows.getOrNull(splitIdx)?.let { r -> "${r.person?.let { lk.account(it)?.name } ?: r.name.trim()} 欠你" },
                 panel = panel, lk = lk, type = type, expr = when (panel) { Panel.FEE -> feeExpr; Panel.SPLIT -> splitRows.getOrNull(splitIdx)?.expr.orEmpty(); else -> expr },
                 currency = currency, currencies = listOf(settings.baseCurrency, settings.subCurrency).distinct(),
                 allCurrencies = currencyOptions(lk), calcMode = calcMode,
@@ -1091,6 +1103,8 @@ private fun BottomPanel(
     /** 自動分類建議：(分類 id, 原因) */
     suggestion: Pair<Long, String>? = null,
     onEditCategories: () -> Unit, onEditAccounts: () -> Unit, onClose: () -> Unit,
+    /** 正在輸入代墊金額時，鍵盤標題寫出是誰的部分 */
+    splitTitle: String? = null,
 ) {
     var currencyMenu by remember { mutableStateOf(false) }
     // 顏色跟隨主題（深淺色、主題色），不再固定黑底與藍紫色
@@ -1102,7 +1116,7 @@ private fun BottomPanel(
         Row(Modifier.fillMaxWidth().background(headerBg).height(46.dp).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 when (panel) {
-                    Panel.AMOUNT -> "金額"; Panel.FEE -> "手續費"; Panel.SPLIT -> "分帳"; Panel.CATEGORY -> "分類"; Panel.TO_ACCOUNT -> "轉入帳戶"; else -> "帳戶"
+                    Panel.AMOUNT -> "金額"; Panel.FEE -> "手續費"; Panel.SPLIT -> splitTitle ?: "分帳"; Panel.CATEGORY -> "分類"; Panel.TO_ACCOUNT -> "轉入帳戶"; else -> "帳戶"
                 },
                 color = onHeader, fontSize = AppText.body, modifier = Modifier.weight(1f),
             )
@@ -1414,7 +1428,7 @@ private data class SplitRow(val person: Long?, val name: String, val expr: Strin
  * 分帳：點常一起分帳的人（小標籤，可左右滑）就加進來，金額自動平攤（含你）；人數、總額變了會重算。
  * 手動改過某人的金額就保留他的數字。下方選付款人、每人一列欠你的金額，最後一行是你的支出。
  */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun SplitSection(
     includeMe: Boolean, onIncludeMe: (Boolean) -> Unit, paidBy: Boolean, onPaidBy: (Boolean) -> Unit,
@@ -1455,37 +1469,49 @@ private fun SplitSection(
         else { onPaidBy(true); onRows(listOf(rows[m - 1])) }
     }
     if (paidBy) {
-        if (total != null) SplitSummary("你欠 ${nameOf(rows.first())} ${Money.withSymbol(total, currency)}")
+        if (total != null) FormRow("", color, false, onClick = {}) {
+            Text("你欠 ${nameOf(rows.first())} ${Money.withSymbol(total, currency)}", fontSize = AppText.secondary, color = muted)
+        }
         return
     }
-    // 每個人一列：他要還你的金額（預設和你平分，可改）
+    // 每個人一列：他要還你的金額（預設和你平分，可改）。正在輸入的那一列整列標色、有閃爍游標，並自動捲到鍵盤上方
+    val caretAlpha by androidx.compose.animation.core.rememberInfiniteTransition(label = "splitCaret").animateFloat(
+        1f, 0f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(530), androidx.compose.animation.core.RepeatMode.Reverse), label = "splitCaret",
+    )
     rows.forEachIndexed { i, r ->
+        val typing = editing == i
+        val bring = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+        LaunchedEffect(typing) { if (typing) { kotlinx.coroutines.delay(280); bring.bringIntoView() } }
         val del: @Composable () -> Unit = {
             Text("✕", color = muted, fontSize = AppText.body, modifier = Modifier.clickable { onRows(rows.filterIndexed { j, _ -> j != i }) }
                 .padding(start = 10.dp, top = 6.dp, bottom = 6.dp))
         }
-        FormRow("", color, false, onClick = {}, trailing = del) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        FormRow("", color, typing, onClick = { onEditAmount(i) }, trailing = del) {
+            Row(Modifier.bringIntoViewRequester(bring), verticalAlignment = Alignment.CenterVertically) {
                 Text("${nameOf(r)} 欠你", fontSize = AppText.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Column(Modifier.width(88.dp).clickable { onEditAmount(i) }) {
-                    Text(r.expr.ifEmpty { "0" }, fontSize = AppText.body, maxLines = 1, textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                        color = if (r.expr.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp))
-                    HorizontalDivider(thickness = if (editing == i) 2.dp else 1.dp, color = if (editing == i) color else MaterialTheme.colorScheme.outlineVariant)
+                Row(
+                    Modifier.widthIn(min = 96.dp)
+                        .background(if (typing) color.copy(alpha = 0.12f) else Color.Transparent, RoundedCornerShape(6.dp))
+                        .border(if (typing) 1.5.dp else 1.dp, if (typing) color else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End,
+                ) {
+                    Text(Money.symbolOf(currency) + " " + r.expr.ifEmpty { "0" }, fontSize = AppText.body, maxLines = 1,
+                        color = if (r.expr.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                    if (typing) Box(Modifier.padding(start = 2.dp).size(width = 2.dp, height = 20.dp).background(color.copy(alpha = caretAlpha)))
                 }
             }
         }
     }
     val others = rows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L }
-    if (total != null) Row(
-        Modifier.fillMaxWidth().padding(start = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(if (others > total) "超過總額 ${Money.withSymbol(total, currency)}" else "你的支出 ${Money.withSymbol(total - others, currency)}",
-            fontSize = AppText.secondary, color = if (others > total) MaterialTheme.colorScheme.error else muted, modifier = Modifier.weight(1f))
-        // 一鍵平分（含你一份）；手動改過金額後才需要
-        if (!rows.all { it.auto } || !includeMe) Text("平分", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable { onIncludeMe(true); onRows(rows.map { it.copy(auto = true) }) }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
+    if (total != null) FormRow("", color, false, onClick = {}) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(if (others > total) "超過總額 ${Money.withSymbol(total, currency)}" else "你的支出 ${Money.withSymbol(total - others, currency)}",
+                fontSize = AppText.secondary, color = if (others > total) MaterialTheme.colorScheme.error else muted, modifier = Modifier.weight(1f))
+            // 一鍵平分（含你一份）；手動改過金額後才需要
+            if (!rows.all { it.auto } || !includeMe) Text("平分", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { onIncludeMe(true); onRows(rows.map { it.copy(auto = true) }) }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
+        }
     }
 }
 
@@ -1510,14 +1536,6 @@ private fun ChoiceLine(label: String, options: List<String>, sel: Int, color: Co
             }
         }
     }
-}
-
-/** 往來的結果：一行短字 */
-@Composable
-private fun SplitSummary(text: String) {
-    val indent = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp
-    Text(text, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.fillMaxWidth().padding(start = indent, end = 16.dp, top = 6.dp, bottom = 4.dp))
 }
 
 

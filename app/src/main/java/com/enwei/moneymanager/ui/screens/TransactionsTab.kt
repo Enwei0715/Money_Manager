@@ -663,7 +663,9 @@ fun DayBlock(
             val advOf = remember(txns, lk) {
                 txns.filter { a -> a.type == TxnType.TRANSFER && a.merchant?.startsWith("代墊") == true && lk.account(a.toAccountId)?.type == com.enwei.moneymanager.data.AccountType.LOAN }
                     .mapNotNull { a ->
-                        txns.firstOrNull { p -> p.type == TxnType.EXPENSE && p.date == a.date && p.accountId == a.accountId && p.note?.contains("代墊") == true }
+                        val key = a.externalKey?.removePrefix("SPLIT:")?.toLongOrNull()
+                        (if (key != null) txns.firstOrNull { it.id == key }
+                        else txns.firstOrNull { p -> p.type == TxnType.EXPENSE && p.date == a.date && p.accountId == a.accountId })
                             ?.let { it.id to a }
                     }.groupBy({ it.first }, { it.second })
             }
@@ -723,6 +725,8 @@ fun TradeRow(tr: com.enwei.moneymanager.data.StockTradeEntity, lk: Lookups, acco
 fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, fee: TxnEntity? = null, advances: List<TxnEntity> = emptyList(), onClick: () -> Unit) {
     val st = repo.settings.flow.collectAsStateWithLifecycle().value
     val move = debtMoveOf(t)
+    // 舊版寫在說明裡的「共 $410，代墊 …」不顯示（代墊已併在金額下方）
+    val note = com.enwei.moneymanager.data.stripSplitNote(t.note)
     if (st.rowStyle == 0) { IconTxnRow(t, lk, balanceAfter, st.showDescription, fee, advances, move, onClick); return }
     val cat = lk.category(t.categoryId)
     val acc = lk.account(t.accountId)
@@ -731,7 +735,7 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, fee: TxnEnti
     val color = when (t.type) { TxnType.INCOME -> IncomeColor; TxnType.EXPENSE -> ExpenseColor; TxnType.TRANSFER -> MaterialTheme.colorScheme.onSurface }
     // 往來：標題直接寫「黃子懷 還你」「幫 黃子懷 代墊」，第二行寫錢存入／付出的帳戶，原本的店名或項目放在後面
     val who = move?.let { lk.account(it.personId)?.name }.orEmpty()
-    val title = move?.let { m -> listOfNotNull(m.sentence(who), debtItem(t)).joinToString(" · ") } ?: t.merchant?.takeIf { it.isNotBlank() }
+    val title = move?.let { m -> listOfNotNull(m.sentence(who), debtItem(t)?.takeIf { it != who }).joinToString(" · ") } ?: t.merchant?.takeIf { it.isNotBlank() }
     val accountText = move?.let { m -> m.where(lk.account(m.otherId)?.name ?: "?") }
         ?: if (t.type == TxnType.TRANSFER) "${acc?.name ?: "?"} → ${lk.account(t.toAccountId)?.name ?: "?"}" else acc?.name.orEmpty()
     val selecting = TxnSelect.active
@@ -757,7 +761,7 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, fee: TxnEnti
             if (title != null) Text(title, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(accountText, color = gray, fontSize = if (title != null) AppText.secondary else AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
             // 帳戶一行、說明一行：太長以「…」結尾
-            if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (showDesc && note != null) Text(note, color = gray, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
@@ -782,6 +786,7 @@ private fun IconTxnRow(
     t: TxnEntity, lk: Lookups, balanceAfter: Long?, showDesc: Boolean, fee: TxnEntity? = null,
     advances: List<TxnEntity> = emptyList(), move: com.enwei.moneymanager.data.DebtMove? = null, onClick: () -> Unit,
 ) {
+    val note = com.enwei.moneymanager.data.stripSplitNote(t.note)
     val cat = lk.category(t.categoryId)
     val root = cat?.parentId?.let { lk.category(it) } ?: cat
     val gray = MaterialTheme.colorScheme.onSurfaceVariant
@@ -789,7 +794,7 @@ private fun IconTxnRow(
     val color = when (t.type) { TxnType.INCOME -> IncomeColor; TxnType.EXPENSE -> ExpenseColor; TxnType.TRANSFER -> MaterialTheme.colorScheme.onSurface }
     val catName = if (move != null) "往來・${move.kind.label}" else if (transfer) "轉帳" else listOfNotNull(root?.name, cat?.name?.takeIf { cat.parentId != null }).joinToString("／").ifBlank { "未分類" }
     val who = move?.let { lk.account(it.personId)?.name }.orEmpty()
-    val title = move?.let { m -> listOfNotNull(m.sentence(who), debtItem(t)).joinToString(" · ") } ?: t.merchant?.takeIf { it.isNotBlank() } ?: catName
+    val title = move?.let { m -> listOfNotNull(m.sentence(who), debtItem(t)?.takeIf { it != who }).joinToString(" · ") } ?: t.merchant?.takeIf { it.isNotBlank() } ?: catName
     val accountText = move?.let { m -> m.where(lk.account(m.otherId)?.name ?: "?") }
         ?: if (transfer) "${lk.account(t.accountId)?.name ?: "?"} → ${lk.account(t.toAccountId)?.name ?: "?"}" else lk.account(t.accountId)?.name.orEmpty()
     val sub = listOfNotNull(catName.takeIf { (t.merchant?.isNotBlank() == true && !transfer) || move != null }, accountText.ifBlank { null }).joinToString(" · ")
@@ -810,7 +815,7 @@ private fun IconTxnRow(
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = AppText.body, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (sub.isNotBlank()) Text(sub, color = gray, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (showDesc && !t.note.isNullOrBlank()) Text(t.note, color = gray, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (showDesc && note != null) Text(note, color = gray, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {

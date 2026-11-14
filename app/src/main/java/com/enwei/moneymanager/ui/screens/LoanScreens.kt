@@ -132,6 +132,8 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
                 OutlinedButton(modifier = Modifier.weight(1f), onClick = { dialog = 1 }) { Text("對方給我錢") }
                 OutlinedButton(modifier = Modifier.weight(1f), onClick = { dialog = 2 }) { Text("我給對方錢") }
             }
+            // 一起吃飯、幫他付：直接開記帳頁並選好這個人
+            OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { nav.navigate("txn/0?type=EXPENSE&split=${acc.id}") }) { Text("記一筆代墊") }
             if (dialog != 0) LoanMoveDialog(acc, l, incoming = dialog == 1, lk = lk) { dialog = 0 }
         }
     }

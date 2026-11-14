@@ -358,11 +358,14 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     /** 刪主交易時一起刪掉的手續費（復原時一起還原） */
     private val cascadedFees = java.util.concurrent.ConcurrentHashMap<Long, TxnEntity>()
+    private val cascadedSplits = java.util.concurrent.ConcurrentHashMap<Long, List<TxnEntity>>()
 
     suspend fun deleteTxn(id: Long) {
         val t = db.txns().get(id)
         // 主交易刪掉，另記的手續費也一起刪（不留下孤兒）
         t?.let { main -> feeOf(main)?.let { fee -> db.txns().delete(fee.id); cascadedFees[id] = fee } }
+        // 代墊的部分也一起刪（復原時一起還原）
+        t?.let { main -> splitsOf(main).takeIf { it.isNotEmpty() }?.let { l -> l.forEach { db.txns().delete(it.id) }; cascadedSplits[id] = l } }
         db.txns().delete(id)
         if (t != null && t.source == TxnSource.NOTIFICATION) {
             AutoAccuracy.onDelete(t)
@@ -375,6 +378,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     suspend fun restoreTxn(t: TxnEntity) {
         db.txns().upsert(t)
         cascadedFees.remove(t.id)?.let { db.txns().upsert(it) }
+        cascadedSplits.remove(t.id)?.forEach { db.txns().upsert(it) }
         if (t.source == TxnSource.NOTIFICATION) {
             AutoAccuracy.onRestore(t)
             runCatching { db.notificationLog().setResultForTxn(t.id, "RECORDED") }
@@ -721,50 +725,42 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     /**
-     * 代墊／分帳：一筆消費裡 [split] 是幫 [personId] 付的。支出只記自己的部分（統計不會多算），
-     * 別人的部分記成轉到這個人的「應收」（之後收回時是轉帳，不算收入）。自己的部分是 0 時整筆都是代墊。
+     * 這筆支出裡幫別人代墊的部分（各記成一筆轉到往來對象的轉帳）：
+     * 新記的用 externalKey「SPLIT:主交易 id」連起來；舊資料找同時間、同帳戶、名稱以「代墊」開頭、轉到往來對象的轉帳。
      */
+    suspend fun splitsOf(t: TxnEntity): List<TxnEntity> {
+        if (t.id == 0L || t.type != TxnType.EXPENSE) return emptyList()
+        val loans = db.accounts().all().filter { it.type == AccountType.LOAN }.map { it.id }.toSet()
+        return db.txns().between(t.date, t.date).filter {
+            it.type == TxnType.TRANSFER && it.toAccountId in loans &&
+                (it.externalKey == "SPLIT:${t.id}" || (it.externalKey == null && it.date == t.date && it.accountId == t.accountId && it.merchant?.startsWith("代墊") == true))
+        }
+    }
+
     /**
-     * 多人分帳：一筆付款裡有好幾個人的部分（例如房租幫兩位室友代墊）。
-     * 自己的部分記成支出（全部是別人的就不記支出），每個人的部分各記一筆轉帳到他的往來帳戶（對方欠我）。
+     * 存一筆有代墊的支出：[t] 的金額是整筆總額，[shares] 是每個往來對象要還你的部分。
+     * 支出只記自己的部分（統計不會多算），別人的部分各記一筆轉到他的往來帳戶（對方欠你）。
+     * 編輯時更新原本那幾筆代墊、移除的人就刪掉，不會重複新增；說明欄不寫入任何代墊文字。
+     * 全部都是別人的（自己的部分是 0）時，整筆記成代墊轉帳。
      */
     suspend fun saveWithSplits(t: TxnEntity, shares: List<Pair<Long, Long>>): Long {
         val parts = shares.filter { it.second > 0 }
-        if (parts.isEmpty()) return saveTxn(t)
-        if (parts.size == 1) return saveWithSplit(t, parts[0].first, parts[0].second)
-        val others = parts.sumOf { it.second }
-        val own = (t.amount - others).coerceAtLeast(0)
+        val own = (t.amount - parts.sumOf { it.second }).coerceAtLeast(0)
         val label = listOfNotNull("代墊", t.merchant?.takeIf { it.isNotBlank() }).joinToString("：")
-        val names = parts.map { (pid, v) -> (db.accounts().get(pid)?.name.orEmpty()) to v }
-        val detail = names.joinToString("、") { (n, v) -> "$n ${Money.format(v, t.currency)}" }
-        var firstId = 0L
-        if (own > 0) firstId = saveTxn(t.copy(amount = own, note = listOfNotNull(t.note, "共 ${Money.format(t.amount, t.currency)}，代墊 $detail").joinToString(" · ")))
-        parts.forEachIndexed { i, (pid, v) ->
-            val tr = TxnEntity(
-                type = TxnType.TRANSFER, amount = v, currency = t.currency, accountId = t.accountId, toAccountId = pid,
-                merchant = label, note = "幫 ${names[i].first} 付", date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
-            )
-            val id = if (own == 0L && i == 0 && t.id != 0L) saveTxn(tr.copy(id = t.id)) else db.txns().insert(tr)
-            if (firstId == 0L) firstId = id
+        val existing = splitsOf(t).toMutableList()
+        if (own == 0L && parts.size == 1 && t.id == 0L) {
+            return saveTxn(t.copy(type = TxnType.TRANSFER, toAccountId = parts[0].first, categoryId = null, merchant = label))
         }
-        return firstId
-    }
-
-    suspend fun saveWithSplit(t: TxnEntity, personId: Long, split: Long): Long {
-        val share = (t.amount - split).coerceAtLeast(0)
-        val who = db.accounts().get(personId)?.name.orEmpty()
-        val label = listOfNotNull("代墊", t.merchant?.takeIf { it.isNotBlank() }).joinToString("：")
-        return if (share == 0L) {
-            saveTxn(t.copy(type = TxnType.TRANSFER, toAccountId = personId, categoryId = null, merchant = label,
-                note = listOfNotNull(t.note, "幫 $who 付").joinToString(" · ")))
-        } else {
-            val id = saveTxn(t.copy(amount = share, note = listOfNotNull(t.note, "共 ${Money.format(t.amount, t.currency)}，代墊 $who ${Money.format(split, t.currency)}").joinToString(" · ")))
-            db.txns().insert(TxnEntity(
-                type = TxnType.TRANSFER, amount = split, currency = t.currency, accountId = t.accountId, toAccountId = personId,
-                merchant = label, note = "幫 $who 付", date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
+        val mainId = saveTxn(t.copy(amount = own))
+        parts.forEach { (pid, v) ->
+            val old = existing.firstOrNull { it.toAccountId == pid }?.also { existing.remove(it) }
+            saveTxn(TxnEntity(
+                id = old?.id ?: 0L, type = TxnType.TRANSFER, amount = v, currency = t.currency, accountId = t.accountId, toAccountId = pid,
+                merchant = label, date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED, externalKey = "SPLIT:$mainId",
             ))
-            id
         }
+        existing.forEach { db.txns().delete(it.id) }
+        return mainId
     }
 
     /** 收付款通知對得到哪個往來對象：通知裡有對方名字（確定），或入帳金額等於他欠的整筆／某一筆（不確定）。 */
@@ -2553,3 +2549,8 @@ fun isLineWallet(title: String?, text: String?): Boolean {
     return listOf("LINE錢包", "LINE Wallet", "LINE Pay", "LINE Bank", "LINE BANK").any { t.contains(it, ignoreCase = true) } ||
         body.startsWith("LINE Pay", ignoreCase = true)
 }
+
+
+/** 舊版把代墊寫在說明裡（「共 $ 410，代墊 黃子懷 $ 105」）：顯示與編輯時拿掉，說明欄只留使用者自己寫的 */
+fun stripSplitNote(note: String?): String? =
+    note?.replace(Regex("\\s*(·\\s*)?共 [^，,]+[，,]\\s*代墊 .*$"), "")?.trim()?.ifBlank { null }
