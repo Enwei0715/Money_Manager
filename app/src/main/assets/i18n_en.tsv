@@ -3478,10 +3478,18 @@ AI 暫時無法完成檢討，請稍後再試	AI couldn't finish the review. Try
 對方給你	They gave
 期間增減	Change
 目前沒有欠款	Nothing owed
-幫對方付的錢，在記帳時用「代墊」記，會自動算進對方欠你。	When you pay for someone, record it with "Paid for others" — it is added to what they owe you.
+幫對方付的錢：記支出時在下方「往來」點對方，選「我付的」，會自動算進對方欠你。	Paid for them: when recording the expense, tap them under "Debts" and choose "I paid" — it is added to what they owe you.
 對方欠你的錢減少；不算收入。	Reduces what they owe you; not income.
 對方目前沒欠你，這筆記成你向對方借，之後要還；不算收入。	They owe you nothing, so this is recorded as borrowing from them; not income.
 你欠對方的錢減少；不算支出。	Reduces what you owe them; not an expense.
 記成對方欠你，之後收回；不算支出。	Recorded as money they owe you; not an expense.
 存入哪個帳戶	Into account
 代墊	Paid for
+這筆錢是誰付的？	Who paid?
+我付的	I paid
+他們要還你多少？	How much do they owe you?
+平分（我也吃一份）	Split evenly (incl. me)
+全部由他們出	All theirs
+這筆錢是？	This money is
+填好金額後會顯示結果	Enter the amount to see the result
+和別人一起付、幫別人付，或別人幫你付：點上面的對象。	Split with someone, pay for someone, or someone paid for you: tap a person above.

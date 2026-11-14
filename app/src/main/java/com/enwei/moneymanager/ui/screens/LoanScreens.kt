@@ -132,7 +132,7 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
                 OutlinedButton(modifier = Modifier.weight(1f), onClick = { dialog = 1 }) { Text("對方給我錢") }
                 OutlinedButton(modifier = Modifier.weight(1f), onClick = { dialog = 2 }) { Text("我給對方錢") }
             }
-            Text("幫對方付的錢，在記帳時用「代墊」記，會自動算進對方欠你。", fontSize = AppText.caption, color = gray)
+            Text("幫對方付的錢：記支出時在下方「往來」點對方，選「我付的」，會自動算進對方欠你。", fontSize = AppText.caption, color = gray)
             if (dialog != 0) LoanMoveDialog(acc, l, incoming = dialog == 1, lk = lk) { dialog = 0 }
         }
     }
