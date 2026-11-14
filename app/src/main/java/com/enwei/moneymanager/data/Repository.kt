@@ -2138,7 +2138,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val cutoff = lastStatement.plusDays(1).toMillis(LocalTime.MIDNIGHT)
             val billed = maxOf(0, -balanceAsOf(card, txns, cutoff, fx))
             val paid = txns.filter { it.type == TxnType.TRANSFER && it.toAccountId == card.id && it.date >= cutoff }.sumOf { it.toAmount ?: it.amount }
-            val payable = maxOf(0, billed - paid)
+            // 這期已經自動扣繳（銀行通知的實際扣款金額）：銀行帳單以入帳日計算，結帳日前幾天的刷卡常算到下一期，
+            // 扣款後還剩的差額不是「還欠」，而是下一期的未出帳
+            val autopaid = txns.any { it.type == TxnType.TRANSFER && it.toAccountId == card.id && it.date >= cutoff && it.externalKey?.startsWith("AP:${card.id}:") == true }
+            val payable = if (autopaid) 0L else maxOf(0, billed - paid)
             val due = cycle.nextDueDate(lastStatement)
             card.id to CardStatus(payable, maxOf(0, owed - payable), due, if (card.autopayFromId != null) cycle.autopayDateFor(due, card.autopayDay) else null)
         }

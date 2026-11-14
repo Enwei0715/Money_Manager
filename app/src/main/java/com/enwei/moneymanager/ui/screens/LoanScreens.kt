@@ -132,7 +132,6 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
                 OutlinedButton(modifier = Modifier.weight(1f), onClick = { dialog = 1 }) { Text("對方給我錢") }
                 OutlinedButton(modifier = Modifier.weight(1f), onClick = { dialog = 2 }) { Text("我給對方錢") }
             }
-            Text("幫對方付的錢：記支出時在下方「往來」點對方，選「我付的」，會自動算進對方欠你。", fontSize = AppText.caption, color = gray)
             if (dialog != 0) LoanMoveDialog(acc, l, incoming = dialog == 1, lk = lk) { dialog = 0 }
         }
     }
@@ -181,15 +180,6 @@ private fun LoanMoveDialog(acc: AccountEntity, l: Repository.LoanStatus, incomin
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    when {
-                        incoming && repay -> "對方欠你的錢減少；不算收入。"
-                        incoming -> "對方目前沒欠你，這筆記成你向對方借，之後要還；不算收入。"
-                        repay -> "你欠對方的錢減少；不算支出。"
-                        else -> "記成對方欠你，之後收回；不算支出。"
-                    },
-                    fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 NumberField(amount, { amount = it }, "金額")
                 if (repay && info.annualRate > 0) NumberField(interest, { interest = it }, "其中利息（另記為利息${if (incoming) "收入" else "支出"}）")
                 DropdownField(if (incoming) "存入哪個帳戶" else "從哪個帳戶付", accounts, other, { it.name }, { other = it }, memoryKey = "loan.account")

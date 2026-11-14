@@ -1393,11 +1393,8 @@ private fun RepayRow(person: Long?, name: String, kind: Int, color: Color, onPic
         onToggle = { id -> if (person == id) onPick(null, "") else onPick(id, "") },
         onExtra = { onPick(null, "") }, onAdd = { onPick(null, it) }, onFieldFocus = onFieldFocus,
     )
-    val lk = rememberLookups()
     if (person == null && name.isBlank()) return
-    val who = person?.let { lk.account(it)?.name } ?: name.trim()
-    QuestionLine("這筆錢是？", listOf("$who 還你的", "向 $who 借的"), kind, color, onKind)
-    SplitSummary(if (kind == 0) "$who 欠你的錢減少，不算收入。" else "記成你欠 $who，之後要還，不算收入。")
+    ChoiceLine("這筆是", listOf("他還你", "向他借"), kind, color, onKind)
 }
 
 /** 分帳的一個人：對象（既有往來帳戶 id，或新名字）、他的部分（可輸入算式）、是否自動平攤（手動改過金額就不再自動算）。 */
@@ -1415,7 +1412,7 @@ private data class SplitRow(val person: Long?, val name: String, val expr: Strin
 
 /**
  * 分帳：點常一起分帳的人（小標籤，可左右滑）就加進來，金額自動平攤（含你）；人數、總額變了會重算。
- * 手動改過某人的金額就保留他的數字。下方用兩個問題（誰付的、要還你多少）和一句結果說明。
+ * 手動改過某人的金額就保留他的數字。下方選付款人、每人一列欠你的金額，最後一行是你的支出。
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -1450,29 +1447,18 @@ private fun SplitSection(
         onAdd = { n -> onRows(if (paidBy) listOf(SplitRow(null, n, "", auto = true)) else rows + SplitRow(null, n, "", auto = true)) },
         onFieldFocus = onFieldFocus,
     )
-    if (rows.isEmpty()) {
-        SplitSummary("和別人一起付、幫別人付，或別人幫你付：點上面的對象。")
-        return
-    }
-    val who = rows.joinToString("、") { nameOf(it) }
-    // 第一個問題：錢是誰付的。用完整的句子當選項，不用「我全付／他先付」這種要猜意思的詞
-    QuestionLine("這筆錢是誰付的？", listOf("我付的", "$who 付的"), if (paidBy) 1 else 0, color) { m ->
-        onPaidBy(m == 1)
-        if (m == 1) onRows(rows.take(1)) else onRows(rows.map { it.copy(auto = true) })
+    if (rows.isEmpty()) return
+    // 誰付錢：我，或其中一位（別人先幫我付只能是一個人）
+    val payers = listOf("我") + rows.map { nameOf(it) }
+    ChoiceLine("付款人", payers, if (paidBy) 1 else 0, color) { m ->
+        if (m == 0) { onPaidBy(false); onRows(rows.map { it.copy(auto = true) }) }
+        else { onPaidBy(true); onRows(listOf(rows[m - 1])) }
     }
     if (paidBy) {
-        SplitSummary(
-            if (total == null) "填好金額後會顯示結果" else
-                "${nameOf(rows.first())} 幫你付了 ${Money.withSymbol(total, currency)}：支出照記 ${Money.withSymbol(total, currency)}，" +
-                    "同時記你欠 ${nameOf(rows.first())} ${Money.withSymbol(total, currency)}，之後還他時按「我給對方錢」。",
-        )
+        if (total != null) SplitSummary("你欠 ${nameOf(rows.first())} ${Money.withSymbol(total, currency)}")
         return
     }
-    // 第二個問題：別人要還你多少
-    QuestionLine("他們要還你多少？", listOf("平分（我也吃一份）", "全部由他們出"), if (!rows.all { it.auto }) -1 else if (includeMe) 0 else 1, color) { m ->
-        onIncludeMe(m == 0); onRows(rows.map { it.copy(auto = true) })
-    }
-    // 已加入的人：名字、他要還你的金額（可改）、移除
+    // 每個人一列：他要還你的金額（預設和你平分，可改）
     rows.forEachIndexed { i, r ->
         val del: @Composable () -> Unit = {
             Text("✕", color = muted, fontSize = AppText.body, modifier = Modifier.clickable { onRows(rows.filterIndexed { j, _ -> j != i }) }
@@ -1480,60 +1466,58 @@ private fun SplitSection(
         }
         FormRow("", color, false, onClick = {}, trailing = del) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${nameOf(r)} 要還你", fontSize = AppText.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                // 金額用 App 內的計算機鍵盤輸入（不跳系統鍵盤）
+                Text("${nameOf(r)} 欠你", fontSize = AppText.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Column(Modifier.width(88.dp).clickable { onEditAmount(i) }) {
-                    Text(r.expr.ifEmpty { "0" }, fontSize = AppText.body, maxLines = 1,
+                    Text(r.expr.ifEmpty { "0" }, fontSize = AppText.body, maxLines = 1, textAlign = androidx.compose.ui.text.style.TextAlign.End,
                         color = if (r.expr.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(vertical = 4.dp))
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp))
                     HorizontalDivider(thickness = if (editing == i) 2.dp else 1.dp, color = if (editing == i) color else MaterialTheme.colorScheme.outlineVariant)
                 }
             }
         }
     }
     val others = rows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L }
-    SplitSummary(
-        when {
-            total == null -> "填好金額後會顯示結果"
-            others > total -> "要還你的金額超過這筆總額 ${Money.withSymbol(total, currency)}"
-            else -> "你付了 ${Money.withSymbol(total, currency)}：" +
-                rows.joinToString("、") { "${nameOf(it)} 之後還你 ${Money.withSymbol(Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L, currency)}" } +
-                "，你自己的支出只記 ${Money.withSymbol(total - others, currency)}。對方還錢時，到收入選「誰還的」或在往來頁按「對方給我錢」。"
-        },
-        error = total != null && others > total,
-    )
+    if (total != null) Row(
+        Modifier.fillMaxWidth().padding(start = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(if (others > total) "超過總額 ${Money.withSymbol(total, currency)}" else "你的支出 ${Money.withSymbol(total - others, currency)}",
+            fontSize = AppText.secondary, color = if (others > total) MaterialTheme.colorScheme.error else muted, modifier = Modifier.weight(1f))
+        // 一鍵平分（含你一份）；手動改過金額後才需要
+        if (!rows.all { it.auto } || !includeMe) Text("平分", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { onIncludeMe(true); onRows(rows.map { it.copy(auto = true) }) }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
+    }
 }
 
-/** 一個問題＋幾個選項（選中的填色），讓使用者一看就知道在選什麼 */
+/** 標籤＋一排小選項（選中的填色），和表單其他列對齊 */
 @Composable
-private fun QuestionLine(question: String, options: List<String>, sel: Int, color: Color, onSel: (Int) -> Unit) {
-    val indent = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp
-    Column(Modifier.fillMaxWidth().padding(start = indent, end = 16.dp, top = 8.dp, bottom = 2.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(question, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(Modifier.fillMaxWidth().border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), MaterialTheme.shapes.small)) {
+private fun ChoiceLine(label: String, options: List<String>, sel: Int, color: Color, onSel: (Int) -> Unit) {
+    FormRow("", color, false, onClick = {}) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            Text(label, fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 6.dp))
             options.forEachIndexed { i, l ->
                 val on = i == sel
-                Box(
-                    Modifier.weight(1f).heightIn(min = 40.dp).background(if (on) color.copy(alpha = 0.14f) else Color.Transparent, MaterialTheme.shapes.small)
-                        .clickable { onSel(i) }.padding(horizontal = 6.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center,
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (on) color.copy(alpha = 0.14f) else Color.Transparent,
+                    border = BorderStroke(1.dp, if (on) color else MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.clickable { onSel(i) },
                 ) {
-                    Text(l, fontSize = AppText.secondary, color = if (on) color else MaterialTheme.colorScheme.onSurface,
-                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 2,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(l, fontSize = AppText.secondary, color = if (on) color else MaterialTheme.colorScheme.onSurface, maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp))
                 }
             }
         }
     }
 }
 
-/** 分帳的結果：用一句話寫出誰付、誰欠誰、支出記多少 */
+/** 往來的結果：一行短字 */
 @Composable
-private fun SplitSummary(text: String, error: Boolean = false) {
+private fun SplitSummary(text: String) {
     val indent = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp
-    Text(text, fontSize = AppText.secondary,
-        color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.fillMaxWidth().padding(start = indent, end = 16.dp, top = 8.dp, bottom = 4.dp))
+    Text(text, fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(start = indent, end = 16.dp, top = 6.dp, bottom = 4.dp))
 }
 
 
