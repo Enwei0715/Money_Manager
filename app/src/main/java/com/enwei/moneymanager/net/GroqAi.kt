@@ -164,6 +164,12 @@ object GroqAi {
         val system = if (com.enwei.moneymanager.ui.I18n.english && task.userText)
             system + " Write every human-readable text value in English (keep JSON keys, values chosen from given lists, stock codes and original names unchanged)."
         else system
+        // 使用者正在和股票助理對話：背景工作（報告、標註…）先讓路，等對話回完再送，
+        // 免得兩邊搶同一份每分鐘額度，對話卡住像當機（最多讓 3 分鐘）
+        if (task != AiTask.CHAT && kotlin.coroutines.coroutineContext[com.enwei.moneymanager.work.InChatKey] == null) {
+            val until = System.currentTimeMillis() + 180_000L
+            while (com.enwei.moneymanager.work.ChatJob.state.value?.running == true && System.currentTimeMillis() < until) kotlinx.coroutines.delay(500)
+        }
         val all = routes(task, system.length + user.length)
         if (all.isEmpty()) return@withContext null
         val now = System.currentTimeMillis()

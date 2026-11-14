@@ -127,10 +127,11 @@ fun AiStatusBar(
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh)
         .then(if (padNav) Modifier.navigationBarsPadding() else Modifier)) {
         // 背景工作進行中：一條 2dp 的細線，點了打開對應頁面（不佔兩行文字的高度）
-        running.firstOrNull()?.let { r ->
+        // 同時有好幾個工作：每個一條細線（對話排最前面），各自前進，不會只看到一條停住不動
+        running.sortedByDescending { it.route == "advisor:1" }.take(3).forEach { r ->
             val p = r.progress
-            val mod = Modifier.fillMaxWidth().height(3.dp).clickable(enabled = r.route != null) { r.route?.let(onOpen) }
-            if (p != null) androidx.compose.material3.LinearProgressIndicator(progress = { p }, modifier = mod)
+            val mod = Modifier.fillMaxWidth().padding(bottom = 1.dp).height(3.dp).clickable(enabled = r.route != null) { r.route?.let(onOpen) }
+            if (p != null) androidx.compose.material3.LinearProgressIndicator(progress = { p.coerceIn(0f, 1f) }, modifier = mod)
             else androidx.compose.material3.LinearProgressIndicator(mod)
         }
         shown.forEach { l -> Line(l, onOpen) }

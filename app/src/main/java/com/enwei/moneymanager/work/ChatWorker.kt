@@ -14,6 +14,10 @@ import kotlinx.coroutines.launch
  * 股票助理對話：送出後立刻在 App 的 coroutine 執行（離開對話畫面也會繼續），回覆存進對話紀錄；
  * 不在對話畫面時回覆完成會通知。
  */
+/** 協程標記：在股票助理對話流程裡執行（背景工作看到對話進行中會讓路，對話自己的呼叫不用） */
+object InChatKey : kotlin.coroutines.CoroutineContext.Key<InChat>
+object InChat : kotlin.coroutines.AbstractCoroutineContextElement(InChatKey)
+
 object ChatJob {
     data class State(val question: String, val startedAt: Long, val running: Boolean = true, val error: String? = null, val step: String = "")
 
@@ -43,7 +47,8 @@ object ChatJob {
         val app = context.applicationContext
         state.value = State(question, System.currentTimeMillis())
         // 直接執行：沒有共用鎖，背景新聞分析在跑也不會讓對話排隊
-        current = MoneyApp.instance.appScope.launch { run(app, question) }
+        // 標記「這是對話自己的工作」：對話流程裡的其他 AI 呼叫（確認代號等）不用讓路給自己
+        current = MoneyApp.instance.appScope.launch(InChat) { run(app, question) }
     }
 
     /** 停止目前的回覆：取消執行中的工作，回覆就算之後回來也不會加進對話。 */
