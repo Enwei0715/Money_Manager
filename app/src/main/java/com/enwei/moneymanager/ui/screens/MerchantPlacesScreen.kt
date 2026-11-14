@@ -172,7 +172,7 @@ fun MerchantPlacesScreen(nav: NavController) {
             return@launch
         }
         names.forEach { PlaceHints.clearMerchantGeo(it) }
-        val n = PlaceHints.geocodeMerchants(names, a) { i, total -> progress = "找位置中 $i/$total…" }
+        val n = PlaceHints.geocodeMerchants(names, a, onProgress = { i, total -> progress = "找位置中 $i/$total…" })
         progress = null; tick++
         android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("找到 $n 家店的位置"), android.widget.Toast.LENGTH_SHORT).show()
     }
