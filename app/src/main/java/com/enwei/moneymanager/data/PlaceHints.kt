@@ -132,12 +132,18 @@ object PlaceHints {
      * 用店名找位置：只在常活動區域（[anchors]）附近 2 公里內找；先找 OpenStreetMap 名稱相符的店，
      * 再用 Photon 模糊搜尋；多個結果取離常活動區域最近的。找不到就記下來不再重查。回傳這次找到幾家。
      */
-    suspend fun geocodeMerchants(names: List<String>, anchors: List<Pair<Double, Double>>, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int = withContext(Dispatchers.IO) {
+    suspend fun geocodeMerchants(
+        names: List<String>, anchors: List<Pair<Double, Double>>, onProgress: (Int, Int) -> Unit = { _, _ -> },
+        /** 旅遊時的店（國外景點、機場…）：常活動區域附近找不到時，改在全世界找 */
+        global: Set<String> = emptySet(),
+    ): Int = withContext(Dispatchers.IO) {
         var found = 0
         val near = anchors.take(2)
         names.forEachIndexed { i, n ->
             onProgress(i + 1, names.size)
-            if (geoPrefs.contains(n) || ambPrefs.contains(n)) return@forEachIndexed
+            // 找過但沒找到的店不再重找；旅遊的店例外（之前只在台灣附近找，現在可以改在全世界找）
+            val retry = n in global && geoPrefs.getString(n, "").isNullOrEmpty()
+            if (!retry && (geoPrefs.contains(n) || ambPrefs.contains(n))) return@forEachIndexed
             // 有 Google／Mapbox 金鑰用它們找；沒有才用 OpenStreetMap（Overpass，常活動區域 2 公里內）
             val hit = kotlinx.coroutines.withTimeoutOrNull(15_000) {
                 if (com.enwei.moneymanager.net.PlaceSearch.online) {
@@ -157,9 +163,15 @@ object PlaceHints {
                         .minByOrNull { it.second }?.first
                 }
             }
-            if (hit == null && ambPrefs.contains(n)) return@forEachIndexed
-            geoPrefs.edit().putString(n, hit?.let { "${it.first},${it.second}" } ?: "").apply()
-            if (hit != null) found++
+            val hit2 = hit ?: if (n in global) kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                (if (com.enwei.moneymanager.net.PlaceSearch.online)
+                    com.enwei.moneymanager.net.PlaceSearch.search(n, null, 3).firstOrNull { com.enwei.moneymanager.net.Mapbox.relevant(n, it.name) }?.let { it.lat to it.lon }
+                else null) ?: geoByName(n, -89.0, -179.9, 89.0, 179.9).firstOrNull()?.let { it.latitude to it.longitude }
+            } else null
+            if (hit2 != null) ambPrefs.edit().remove(n).apply()
+            if (hit2 == null && ambPrefs.contains(n)) return@forEachIndexed
+            geoPrefs.edit().putString(n, hit2?.let { "${it.first},${it.second}" } ?: "").apply()
+            if (hit2 != null) found++
             // Overpass 是免費的公共服務：每家店之間停一下，不要一次打太快
             if (!com.enwei.moneymanager.net.PlaceSearch.online) kotlinx.coroutines.delay(1000)
         }

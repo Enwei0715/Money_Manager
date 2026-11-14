@@ -93,13 +93,16 @@ private data class SpendSpot(
  * 位置來自記帳當下記下的位置；同一家店在別處記過位置的也套用；還沒有位置的店可用店名在 OpenStreetMap 找。
  */
 @Composable
-fun SpendMapScreen(nav: NavController) {
+fun SpendMapScreen(nav: NavController, startMonth: java.time.YearMonth? = null) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val lk = rememberLookups()
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     var span by com.enwei.moneymanager.ui.components.rememberTab("spendmap.span", 2)
-    var anchor by remember { mutableStateOf(LocalDate.now()) }
+    // 從交易頁進來：對齊交易頁正在看的月份（不是當月就從那個月的第一天開始）
+    var anchor by remember {
+        mutableStateOf(startMonth?.takeIf { it != java.time.YearMonth.now() }?.atDay(1) ?: LocalDate.now())
+    }
     var geo by remember { mutableStateOf(PlaceHints.merchantGeo()) }
     var progress by remember { mutableStateOf<String?>(null) }
     val zone = ZoneId.systemDefault()
@@ -252,7 +255,10 @@ fun SpendMapScreen(nav: NavController) {
         ))
         LazyColumn(Modifier.weight(1f).fillMaxWidth().coachTarget("map.list"), state = listState) {
             // 沒有位置的店：用店名在 OpenStreetMap 找（每秒一家）
-            val missing = unplaced.mapNotNull { it.merchant?.trim()?.takeIf { m -> m.isNotEmpty() && m !in geo && (!chain(m) || branchy(m)) } }.distinct()
+            // 旅遊的消費（國外景點、機場）：附近找不到就在全世界找；之前沒找到的也可以再找一次
+            val travel = unplaced.filter { t -> lk.category(lk.rootId(t.categoryId))?.name.orEmpty().let { it.contains("旅遊") || it.contains("Travel", true) } }
+                .mapNotNull { it.merchant?.trim() }.toSet()
+            val missing = unplaced.mapNotNull { it.merchant?.trim()?.takeIf { m -> m.isNotEmpty() && (m !in geo || (m in travel && geo[m] == null)) && (!chain(m) || branchy(m)) } }.distinct()
             if (missing.isNotEmpty()) item {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(progress ?: "${missing.size} 家店還沒有位置", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
@@ -266,7 +272,7 @@ fun SpendMapScreen(nav: NavController) {
                                 android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("需要位置權限，才能判斷搜尋範圍"), android.widget.Toast.LENGTH_SHORT).show()
                                 return@launch
                             }
-                            val n = PlaceHints.geocodeMerchants(missing.take(40), anchors) { i, total -> progress = "找位置中 $i/$total…" }
+                            val n = PlaceHints.geocodeMerchants(missing.take(40), anchors, { i, total -> progress = "找位置中 $i/$total…" }, travel)
                             geo = PlaceHints.merchantGeo(); progress = null
                             android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("找到 $n 家店的位置"), android.widget.Toast.LENGTH_SHORT).show()
                         }
@@ -431,7 +437,8 @@ private fun SpendMap(
         val pad = with(density) { 48.dp.toPx() }
         val dx = (xs.max() - xs.min()).coerceAtLeast(1e-9); val dy = (ys.max() - ys.min()).coerceAtLeast(1e-9)
         val z = minOf(kotlin.math.log2((sizePx.width - pad * 2) / (dx * tilePx)), kotlin.math.log2((sizePx.height - pad * 2) / (dy * tilePx)))
-        zoom = if (spots.size == 1) 16.0 else z.coerceIn(3.0, 16.0)
+        // 點分散在很遠的地方（例如台灣和歐洲）：可以縮到看得到整個世界，所有店都在畫面裡
+        zoom = if (spots.size == 1) 16.0 else z.coerceIn(1.0, 16.0)
     }
     // 底圖：有 Mapbox 金鑰用 Mapbox Streets，否則 OpenStreetMap（深色模式在畫的時候轉暗）
     val style = if (com.enwei.moneymanager.net.Mapbox.enabled) "mb" else "osm"
@@ -515,7 +522,7 @@ private fun SpendMap(
                         if (zoom >= 0) {
                             val world = tilePx * Math.pow(2.0, zoom)
                             cx -= pan.x / world; cy = (cy - pan.y / world).coerceIn(0.0, 1.0)
-                            zoom = (zoom + kotlin.math.log2(scale.toDouble())).coerceIn(2.0, 18.0)
+                            zoom = (zoom + kotlin.math.log2(scale.toDouble())).coerceIn(1.0, 18.0)
                         }
                     }
                 }
@@ -634,7 +641,7 @@ private fun SpendMap(
         if (controls) Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("+" to 1.0, "−" to -1.0).forEach { (l, d) ->
                 androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), shape = androidx.compose.foundation.shape.CircleShape,
-                    modifier = Modifier.size(36.dp).clickable { if (zoom >= 0) zoom = (zoom + d).coerceIn(2.0, 18.0) }) {
+                    modifier = Modifier.size(36.dp).clickable { if (zoom >= 0) zoom = (zoom + d).coerceIn(1.0, 18.0) }) {
                     Box(contentAlignment = Alignment.Center) { Text(l, fontSize = AppText.title) }
                 }
             }

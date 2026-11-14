@@ -419,7 +419,14 @@ private fun AppScaffold(nav: NavHostController) {
             }
             composable("budget") { BudgetScreen(nav) }
             composable("appearance") { com.enwei.moneymanager.ui.screens.AppearanceScreen(nav) }
-            composable("spendmap") { com.enwei.moneymanager.ui.screens.SpendMapScreen(nav) }
+            composable(
+                "spendmap?month={month}",
+                // 從交易頁進來時帶入正在看的月份（yyyy-MM），地圖從那個月開始
+                arguments = listOf(navArgument("month") { type = NavType.StringType; defaultValue = "" }),
+            ) { e ->
+                com.enwei.moneymanager.ui.screens.SpendMapScreen(nav,
+                    runCatching { java.time.YearMonth.parse(e.arguments!!.getString("month")) }.getOrNull())
+            }
             composable("merchants") { com.enwei.moneymanager.ui.screens.MerchantPlacesScreen(nav) }
             composable("setup") { com.enwei.moneymanager.ui.screens.SetupScreen(nav) }
             composable("debts") { com.enwei.moneymanager.ui.screens.DebtsScreen(nav) }

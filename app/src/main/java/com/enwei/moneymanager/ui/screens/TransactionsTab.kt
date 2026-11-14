@@ -290,7 +290,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         Icon(Icons.Filled.NotificationsActive, null)
                     }
                     // 支出地圖：在哪裡花錢（跟交易放在一起）
-                    if (settings.locationHints) IconButton(onClick = { nav.navigate("spendmap") }, modifier = Modifier.coachTarget("txns.map")) { Icon(com.enwei.moneymanager.ui.components.LineIcons.IcMap, "支出地圖") }
+                    if (settings.locationHints) IconButton(onClick = { nav.navigate("spendmap?month=$month") }, modifier = Modifier.coachTarget("txns.map")) { Icon(com.enwei.moneymanager.ui.components.LineIcons.IcMap, "支出地圖") }
                     IconButton(onClick = { nav.navigate("search?month=$month") }, modifier = Modifier.coachTarget("txns.search")) { Icon(com.enwei.moneymanager.ui.components.LineIcons.IcSearch, "搜尋") }
                 },
             ) }
