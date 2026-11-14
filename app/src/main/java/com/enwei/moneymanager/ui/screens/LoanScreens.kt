@@ -59,14 +59,16 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
             OutlinedButton(onClick = { nav.navigate("account/${acc.id}") }) { Text("設定借貸") }
         } else {
             val l = Repository.LoanStatus(acc, info, balance)
-            val verb = if (info.lent) "收回" else "還款"
+            // 欠款方向看實際餘額：正數是對方欠你、負數是你欠對方（不看當初設定是借出還是借入）
+            val owedToMe = balance > 0
+            val verb = if (owedToMe) "收回" else "還款"
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(if (info.lent) "借出給" else "向其借入", fontSize = AppText.secondary, color = gray)
+                    Text("往來對象", fontSize = AppText.secondary, color = gray)
                     Text(info.counterparty.ifBlank { acc.name }, fontSize = AppText.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
                 Surface(
@@ -74,7 +76,7 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
                     shape = RoundedCornerShape(20.dp),
                 ) {
                     Text(
-                        if (l.outstanding == 0L) "已結清" else if (info.lent) "待收回" else "待償還",
+                        if (l.outstanding == 0L) "已結清" else if (owedToMe) "待收回" else "待償還",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         color = if (l.outstanding == 0L) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
                         fontSize = AppText.secondary,
@@ -82,7 +84,7 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(if (info.lent) "對方尚欠你" else "你尚欠", fontSize = AppText.secondary, color = gray)
+                Text(if (l.outstanding == 0L) "目前沒有欠款" else if (owedToMe) "對方欠你" else "你欠對方", fontSize = AppText.secondary, color = gray)
                 Text(Money.withSymbol(l.outstanding, acc.currency), fontSize = AppText.display)
             }
             if (info.principal > 0) {
@@ -126,17 +128,12 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    modifier = Modifier.weight(1f),
-                    enabled = l.outstanding > 0,
-                    onClick = { dialog = 1 },
-                ) { Text(if (info.lent) "收回款項" else "還款") }
-                OutlinedButton(
-                    modifier = Modifier.weight(1f),
-                    onClick = { dialog = 2 },
-                ) { Text(if (info.lent) "再借出" else "再借入") }
+                // 只分錢的方向：對方給你、你給對方；是收回還是借入、是借出還是還款，依目前欠款自動判斷
+                OutlinedButton(modifier = Modifier.weight(1f), onClick = { dialog = 1 }) { Text("對方給我錢") }
+                OutlinedButton(modifier = Modifier.weight(1f), onClick = { dialog = 2 }) { Text("我給對方錢") }
             }
-            if (dialog != 0) LoanMoveDialog(acc, l, repay = dialog == 1, lk = lk) { dialog = 0 }
+            Text("幫對方付的錢，在記帳時用「代墊」記，會自動算進對方欠你。", fontSize = AppText.caption, color = gray)
+            if (dialog != 0) LoanMoveDialog(acc, l, incoming = dialog == 1, lk = lk) { dialog = 0 }
         }
     }
     com.enwei.moneymanager.ui.components.LineDivider()
@@ -156,7 +153,7 @@ private fun LoanDetailLine(label: String, value: String, alert: Boolean = false)
 }
 
 @Composable
-private fun LoanMoveDialog(acc: AccountEntity, l: Repository.LoanStatus, repay: Boolean, lk: Lookups, onDismiss: () -> Unit) {
+private fun LoanMoveDialog(acc: AccountEntity, l: Repository.LoanStatus, incoming: Boolean, lk: Lookups, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     val info = l.info
     val accounts = lk.accounts.filter { !it.archived && it.type != AccountType.LOAN && it.type != AccountType.BROKERAGE }
@@ -165,20 +162,37 @@ private fun LoanMoveDialog(acc: AccountEntity, l: Repository.LoanStatus, repay: 
         mutableStateOf(info.payAccountId?.let { lk.account(it) }
             ?: repo.settings.value.lastPicks["loan.account"]?.let { n -> accounts.firstOrNull { it.name == n } } ?: accounts.firstOrNull())
     }
+    val who = info.counterparty.ifBlank { acc.name }
+    // 這筆會把欠款結清（收回或還款）：對方欠你時對方給你錢、你欠對方時你給對方錢
+    val repay = l.outstanding > 0 && (incoming == (l.balance > 0))
     val suggested = if (repay) minOf(info.installment ?: l.outstanding, l.outstanding) else 0L
     var amount by remember { mutableStateOf(if (suggested > 0) Money.fromMinor(suggested).stripTrailingZeros().toPlainString() else "") }
     var interest by remember { mutableStateOf(if (repay && l.monthlyInterest > 0) Money.fromMinor(l.monthlyInterest).stripTrailingZeros().toPlainString() else "") }
     var date by remember { mutableStateOf(LocalDate.now()) }
-    val title = if (repay) (if (info.lent) "收回款項" else "還款") else (if (info.lent) "再借出" else "再借入")
+    val title = when {
+        incoming && repay -> "$who 還你"
+        incoming -> "向 $who 借"
+        repay -> "還給 $who"
+        else -> "借給 $who"
+    }
     val amt = Money.parseMinor(amount)?.let { kotlin.math.abs(it) } ?: 0L
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    when {
+                        incoming && repay -> "對方欠你的錢減少；不算收入。"
+                        incoming -> "對方目前沒欠你，這筆記成你向對方借，之後要還；不算收入。"
+                        repay -> "你欠對方的錢減少；不算支出。"
+                        else -> "記成對方欠你，之後收回；不算支出。"
+                    },
+                    fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 NumberField(amount, { amount = it }, "金額")
-                if (repay && info.annualRate > 0) NumberField(interest, { interest = it }, "其中利息（另記為利息${if (info.lent) "收入" else "支出"}）")
-                DropdownField(if (info.lent == repay) "收到哪個帳戶" else "從哪個帳戶付", accounts, other, { it.name }, { other = it }, memoryKey = "loan.account")
+                if (repay && info.annualRate > 0) NumberField(interest, { interest = it }, "其中利息（另記為利息${if (incoming) "收入" else "支出"}）")
+                DropdownField(if (incoming) "存入哪個帳戶" else "從哪個帳戶付", accounts, other, { it.name }, { other = it }, memoryKey = "loan.account")
                 DateField(date, { date = it })
                 if (repay && amt > l.outstanding) Text("超過尚欠金額 ${Money.withSymbol(l.outstanding, acc.currency)}", color = MaterialTheme.colorScheme.error, fontSize = AppText.secondary)
             }
@@ -187,7 +201,7 @@ private fun LoanMoveDialog(acc: AccountEntity, l: Repository.LoanStatus, repay: 
             TextButton(enabled = amt > 0 && other != null, onClick = {
                 val o = other ?: return@TextButton
                 scope.launch {
-                    repo.recordLoanMove(acc.id, o.id, amt, Money.parseMinor(interest)?.let { kotlin.math.abs(it) } ?: 0L, date, repay)
+                    repo.recordDebtMove(acc.id, o.id, amt, Money.parseMinor(interest)?.let { kotlin.math.abs(it) } ?: 0L, date, incoming)
                     onDismiss()
                 }
             }) { Text("記下") }

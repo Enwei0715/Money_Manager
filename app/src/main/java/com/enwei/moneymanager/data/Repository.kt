@@ -105,6 +105,25 @@ private const val AI_TAG = "#AI"
 
 data class IngestResult(val kind: String, val txnId: Long? = null, val message: String, val pending: Boolean = false)
 
+/** 往來的種類 */
+enum class DebtKind(val label: String) { LEND("借出"), ADVANCE("代墊"), COLLECT("收回"), BORROW("借入"), REPAY("還款") }
+
+/** 一筆往來：[personId] 是往來對象，[otherId] 是另一邊的帳戶 */
+data class DebtMove(val kind: DebtKind, val personId: Long, val otherId: Long?) {
+    /** 給人看的一句話，例如「黃子懷 還你」「幫 黃子懷 代墊」 */
+    fun sentence(who: String): String = when (kind) {
+        DebtKind.LEND -> "借給 $who"
+        DebtKind.ADVANCE -> "幫 $who 代墊"
+        DebtKind.COLLECT -> "$who 還你"
+        DebtKind.BORROW -> "向 $who 借"
+        DebtKind.REPAY -> "還給 $who"
+    }
+    /** 錢從哪裡來／到哪裡去 */
+    fun where(account: String): String = if (kind == DebtKind.COLLECT || kind == DebtKind.BORROW) "存入 $account" else "從 $account 付"
+    /** 這筆之後對方欠你更多（借出、代墊）或你欠對方更多（借入）；收回與還款是在結清 */
+    val settles: Boolean get() = kind == DebtKind.COLLECT || kind == DebtKind.REPAY
+}
+
 class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     val accounts = db.accounts().observeAll()
     val categories = db.categories().observeAll()
@@ -128,6 +147,40 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     // 只在主要幣別或手續費設定改變時重算（其他設定變動不影響）
     private val baseCurrency = settings.flow.map { it.baseCurrency }.distinctUntilChanged()
     private val feeSettingsFlow = settings.flow.map { it.feeSettings }.distinctUntilChanged()
+
+    /**
+     * 往來對象（借貸帳戶）的每一筆轉帳是哪一種往來：依當時的欠款方向判斷，不靠使用者選。
+     * 錢付給對方：原本你欠他 → 還款；否則記成借出（店名以「代墊」開頭的是代墊）。
+     * 對方付給你：原本他欠你 → 收回；否則是你向他借入。
+     */
+    val debtMoves: Flow<Map<Long, DebtMove>> = combine(transactions, accounts) { txns, accs ->
+        val loans = accs.filter { it.type == AccountType.LOAN }.map { it.id }.toSet()
+        if (loans.isEmpty()) return@combine emptyMap()
+        val bal = HashMap<Long, Long>()
+        accs.filter { it.id in loans }.forEach { bal[it.id] = it.initialBalance }
+        val out = HashMap<Long, DebtMove>()
+        txns.filter { it.type == TxnType.TRANSFER && ((it.toAccountId in loans) xor (it.accountId in loans)) }
+            .sortedWith(compareBy({ it.date }, { it.id }))
+            .forEach { t ->
+                if (t.toAccountId in loans) {
+                    val p = t.toAccountId!!
+                    val before = bal[p] ?: 0L
+                    val kind = when {
+                        before < 0 -> DebtKind.REPAY
+                        t.merchant?.startsWith("代墊") == true -> DebtKind.ADVANCE
+                        else -> DebtKind.LEND
+                    }
+                    out[t.id] = DebtMove(kind, p, t.accountId)
+                    bal[p] = before + (t.toAmount ?: t.amount)
+                } else {
+                    val p = t.accountId!!
+                    val before = bal[p] ?: 0L
+                    out[t.id] = DebtMove(if (before > 0) DebtKind.COLLECT else DebtKind.BORROW, p, t.toAccountId)
+                    bal[p] = before - t.amount
+                }
+            }
+        out
+    }.shared()
 
     val fx: Flow<FxConverter> = combine(fxRates, baseCurrency) { rates, base ->
         FxConverter(base, rates.associate { it.currency to it.rate })
@@ -1529,7 +1582,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val otherAcc = accounts.firstOrNull { it.id == other.accountId }
             // 只用有根據的帳戶（卡號末四碼、教過的來源、銀行名稱），不用「預設帳戶」：預設帳戶不是這張卡
             val sure = resolveAccount(pkg, p, raw0, learned, bankSrc, accounts, fallback = false)
-            val walletFirst = otherAcc == null || otherAcc.type == AccountType.EWALLET
+            // 先記的那筆來自支付 App 的通知（LINE Pay、街口…）：那則通知不會寫是哪張卡扣款，帳戶只是依習慣猜的，
+            // 即使猜成另一張信用卡，也以這則寫明卡號末四碼的銀行通知為準
+            val walletFirst = otherAcc == null || otherAcc.type == AccountType.EWALLET ||
+                WALLET_PACKAGES.any { log.countForTxnFromPkg(other.id, it) > 0 }
             val funded = sure != null && sure.id != other.accountId && sure.type != AccountType.EWALLET && walletFirst
             // 銀行／信用卡也通知了同一筆，但對不到帳戶（沒登記這張卡）：不能當重複丟掉，
             // 改成待確認並註明實際扣款的卡，使用者選好帳戶後會記住這組末四碼
@@ -2171,30 +2227,31 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     /**
-     * 記一筆借貸往來：[repay] 為還款／收回（欠款減少），否則為再借出／再借入（欠款增加）。
-     * [interest] 另外記成利息收入（借出）或利息支出（借入）。
+     * 往來對象頁的「收款」「付款」：只問錢的方向，種類依目前欠款自動決定。
+     * [incoming] 對方把錢給你（他還你，或你向他借）；否則是你把錢給對方（借他，或還他）。
      */
-    suspend fun recordLoanMove(loanId: Long, otherId: Long, amount: Long, interest: Long, date: LocalDate, repay: Boolean) {
+    suspend fun recordDebtMove(loanId: Long, otherId: Long, amount: Long, interest: Long, date: LocalDate, incoming: Boolean) {
         val acc = db.accounts().get(loanId) ?: return
         val info = settings.value.loans[loanId] ?: LoanInfo()
         val who = info.counterparty.ifBlank { acc.name }
+        val bal = balances.first().firstOrNull { it.account.id == loanId }?.balance ?: 0L
         val millis = date.toMillis(LocalTime.now())
-        // 借出時錢流向借貸帳戶、收回時流回；借入相反
-        val toLoan = if (info.lent) !repay else repay
+        val kind = if (incoming) (if (bal > 0) DebtKind.COLLECT else DebtKind.BORROW) else (if (bal < 0) DebtKind.REPAY else DebtKind.LEND)
         if (amount > 0) db.txns().insert(
             TxnEntity(
                 type = TxnType.TRANSFER, amount = amount, currency = acc.currency,
-                accountId = if (toLoan) otherId else loanId, toAccountId = if (toLoan) loanId else otherId,
-                merchant = "$who ${if (repay) (if (info.lent) "還款" else "我還款") else (if (info.lent) "借出" else "借入")}",
+                accountId = if (incoming) loanId else otherId, toAccountId = if (incoming) otherId else loanId,
+                merchant = DebtMove(kind, loanId, otherId).sentence(who),
                 date = millis, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
             ),
         )
-        if (interest > 0) {
-            val kind = if (info.lent) TxnType.INCOME else TxnType.EXPENSE
-            val cat = db.categories().all().firstOrNull { it.kind == kind && !it.archived && it.name.contains("利息") }?.id
+        // 利息只在結清欠款時另記：對方付你的是利息收入，你付對方的是利息支出
+        if (interest > 0 && (kind == DebtKind.COLLECT || kind == DebtKind.REPAY)) {
+            val type = if (incoming) TxnType.INCOME else TxnType.EXPENSE
+            val cat = db.categories().all().firstOrNull { it.kind == type && !it.archived && it.name.contains("利息") }?.id
             db.txns().insert(
                 TxnEntity(
-                    type = kind, amount = interest, currency = acc.currency, accountId = otherId, categoryId = cat,
+                    type = type, amount = interest, currency = acc.currency, accountId = otherId, categoryId = cat,
                     merchant = "$who 利息", date = millis, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
                 ),
             )
@@ -2483,6 +2540,8 @@ fun netWorth(balances: List<AccountBalance>, holdings: List<HoldingView>, fx: Fx
 private fun sumLong(a: Long, b: Long): Long = a + b
 
 const val LINE_PACKAGE = "jp.naver.line.android"
+/** 支付 App：通知只寫付款成功，不寫實際由哪張卡、哪個帳戶扣款 */
+val WALLET_PACKAGES = setOf(LINE_PACKAGE, "com.jkos.app", "com.easycard.wallet")
 
 /** LINE 的錢包付款通知（標題「LINE錢包」或內文以 LINE Pay 開頭），排除一般聊天訊息。 */
 fun isLineWallet(title: String?, text: String?): Boolean {

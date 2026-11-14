@@ -3472,3 +3472,16 @@ AI 金鑰與模型	AI key & model
 依最新表現重新檢討 ›	Review again with the latest results ›
 AI 檢討中…	AI reviewing…
 AI 暫時無法完成檢討，請稍後再試	AI couldn't finish the review. Try again later.
+對方給我錢	They paid me
+我給對方錢	I paid them
+你給對方	You gave
+對方給你	They gave
+期間增減	Change
+目前沒有欠款	Nothing owed
+幫對方付的錢，在記帳時用「代墊」記，會自動算進對方欠你。	When you pay for someone, record it with "Paid for others" — it is added to what they owe you.
+對方欠你的錢減少；不算收入。	Reduces what they owe you; not income.
+對方目前沒欠你，這筆記成你向對方借，之後要還；不算收入。	They owe you nothing, so this is recorded as borrowing from them; not income.
+你欠對方的錢減少；不算支出。	Reduces what you owe them; not an expense.
+記成對方欠你，之後收回；不算支出。	Recorded as money they owe you; not an expense.
+存入哪個帳戶	Into account
+代墊	Paid for

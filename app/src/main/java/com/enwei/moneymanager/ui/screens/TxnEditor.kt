@@ -726,15 +726,25 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     }) {
                         PlaceholderText(toAcc?.name, "")
                     }
-                    // 有往來對象時，用一句話說明這筆轉帳代表什麼
+                    // 有往來對象時，依目前欠款用一句話說明這筆是哪一種往來（不算收入、支出）
                     val fromP = lk.account(accountId)?.takeIf { it.type == com.enwei.moneymanager.data.AccountType.LOAN }
                     val toP = toAcc?.takeIf { it.type == com.enwei.moneymanager.data.AccountType.LOAN }
-                    val hint = when {
-                        toP != null -> "給 ${toP.name}：借錢給他，或還他錢（他欠你的增加／你欠他的減少）"
-                        fromP != null -> "從 ${fromP.name}：他還你錢，或你向他借（他欠你的減少／你欠他的增加）"
-                        else -> null
+                    if ((fromP == null) != (toP == null)) {
+                        val bals by repo.balances.collectAsStateWithLifecycle(emptyList())
+                        val p = toP ?: fromP!!
+                        // 編輯既有的這筆時，先扣掉它本身對欠款的影響
+                        val selfEffect = original?.takeIf { it.type == TxnType.TRANSFER }?.let { o ->
+                            (if (o.toAccountId == p.id) o.amount else 0L) - (if (o.accountId == p.id) o.amount else 0L)
+                        } ?: 0L
+                        val bal = (bals.firstOrNull { it.account.id == p.id }?.balance ?: 0L) - selfEffect
+                        val hint = if (toP != null) {
+                            if (bal < 0) "還給 ${p.name}：你欠他的減少" else "借給 ${p.name}：他欠你的增加"
+                        } else {
+                            if (bal > 0) "${p.name} 還你：他欠你的減少" else "向 ${p.name} 借：你欠他的增加"
+                        }
+                        Text("$hint（不算收入、支出）", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp))
                     }
-                    @Suppress("UNUSED_VARIABLE") val unusedHint = hint
                     if (crossCurrency) FormRow("轉入金額", color, false, onClick = {}) {
                         UnderlineField(toExpr, { toExpr = it.filter { c -> c.isDigit() || c == '.' } }, "${toAcc!!.currency} 金額")
                     }

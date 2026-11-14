@@ -579,11 +579,11 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                 val isLoan = acc?.type == AccountType.LOAN
                 SummaryBarCustom(
                     listOf(
-                        // 往來對象：用借出、收回的說法；其他帳戶用存入、提出
-                        (if (isLoan) "借出" else "存入") to (Money.full(deposit) to IncomeColor),
-                        (if (isLoan) "收回" else "提出") to (Money.full(withdrawal) to ExpenseColor),
-                        (if (isLoan) "期間淨額" else "合計") to (Money.full(deposit - withdrawal) to MaterialTheme.colorScheme.onSurface),
-                        (if (isLoan) (if (endBalance >= 0) "對方欠你" else "你欠對方") else "餘額") to
+                        // 往來對象：只寫錢的方向（不是收入、支出，不用收支顏色）；其他帳戶用存入、提出
+                        (if (isLoan) "你給對方" else "存入") to (Money.full(deposit) to (if (isLoan) MaterialTheme.colorScheme.onSurface else IncomeColor)),
+                        (if (isLoan) "對方給你" else "提出") to (Money.full(withdrawal) to (if (isLoan) MaterialTheme.colorScheme.onSurface else ExpenseColor)),
+                        (if (isLoan) "期間增減" else "合計") to (Money.full(deposit - withdrawal) to MaterialTheme.colorScheme.onSurface),
+                        (if (isLoan) (if (endBalance > 0) "對方欠你" else if (endBalance < 0) "你欠對方" else "已結清") else "餘額") to
                             (Money.full(if (isLoan) kotlin.math.abs(endBalance) else endBalance) to balanceColor(endBalance, MaterialTheme.colorScheme.onSurface)),
                     ),
                 )
