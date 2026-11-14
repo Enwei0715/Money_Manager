@@ -445,8 +445,16 @@ fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, cent
             var nextTop = size.height
             shownSide.asReversed().forEach { l ->
                 val h = l.h.toFloat()
-                l.y = minOf(l.y, nextTop - h / 2 - 6f).coerceAtLeast(h / 2)
+                l.y = minOf(l.y, nextTop - h / 2 - 6f)
                 nextTop = l.y - h / 2
+            }
+            // 往上推之後最上面的可能超出畫面：再從上往下排一次（不超出上緣、彼此不重疊）。
+            // 原本在往上推時直接夾住上緣，最上面兩個標籤（例如「其他」和「醫療」）會疊在一起
+            prevBottom = 0f
+            shownSide.forEach { l ->
+                val h = l.h.toFloat()
+                l.y = maxOf(l.y, prevBottom + h / 2 + 6f)
+                prevBottom = l.y + h / 2
             }
         }
         labels.forEach { l ->
