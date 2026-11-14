@@ -117,7 +117,7 @@ fun SpendMapScreen(nav: NavController) {
     fun online(t: com.enwei.moneymanager.data.TxnEntity): Boolean {
         val m = t.merchant?.trim().orEmpty()
         val root = lk.category(lk.rootId(t.categoryId))?.name.orEmpty()
-        return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) } || NOT_PLACE.any { m.contains(it, ignoreCase = true) } || m in PlaceHints.excluded() || m.lowercase() in ONLINE_EXACT
+        return (ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) } || NOT_PLACE.any { m.contains(it, ignoreCase = true) } || m in PlaceHints.excluded() || m.lowercase() in ONLINE_EXACT) && m !in PlaceHints.physical()
     }
     fun chain(m: String) = CHAINS.any { m.contains(it, ignoreCase = true) }
     // 連鎖店名稱帶分店（例如「萊爾富 永和貞寧店」）：可以用名稱找到那一間
@@ -202,15 +202,8 @@ fun SpendMapScreen(nav: NavController) {
                     IconButton(onClick = { anchor = when (span) { 0 -> anchor.plusDays(1); 1 -> anchor.plusWeeks(1); else -> anchor.plusMonths(1) } }) { Icon(Icons.Filled.ChevronRight, "下一期") }
                 }
                 val placedSum = placed.sumOf { lk.fx.convert(it.first.amount, it.first.currency) }
-                // 摘要只留一句；點一下才看沒有位置、線上的筆數
-                var more by remember { mutableStateOf(false) }
-                val extra = (unplaced.isNotEmpty() || onlineCount > 0)
-                Row(Modifier.clickable(enabled = extra) { more = !more }, verticalAlignment = Alignment.CenterVertically) {
-                    Text("地圖上 ${placed.size} 筆 ${Money.withSymbol(placedSum, lk.base)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (extra) Text(if (more) "  ︿" else "  ﹀", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (more) Text(listOfNotNull(unplaced.size.takeIf { it > 0 }?.let { "$it 筆沒有記到位置（不會標在地圖上）" }, onlineCount.takeIf { it > 0 }?.let { "$it 筆是線上消費（沒有實體店面，不標在地圖上）" }).joinToString("\n"),
-                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // 摘要只留一句：地圖上有幾筆；沒有位置、線上商店不另外說明（線上商店在「店家位置」設定）
+                Text("地圖上 ${placed.size} 筆 ${Money.withSymbol(placedSum, lk.base)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             // 沒有可標示的支出時地圖照樣顯示（對準常活動的區域），只在下方註明
             val fallback = remember { PlaceHints.anchors(ctx).firstOrNull() ?: (25.0136 to 121.5414) }

@@ -70,6 +70,7 @@ fun MerchantPlacesScreen(nav: NavController) {
     fun online(m: String, cat: Long?): Boolean {
         val root = lk.category(lk.rootId(cat))?.name.orEmpty()
         // 旅遊（國外）的消費不用店名在台灣找位置
+        if (m in PlaceHints.physical()) return false
         return ONLINE.any { m.contains(it, ignoreCase = true) } || ONLINE_ROOTS.any { root.contains(it) } || root.contains("旅遊") ||
             m in PlaceHints.excluded() || m.lowercase() in ONLINE_EXACT
     }
@@ -182,6 +183,10 @@ fun MerchantPlacesScreen(nav: NavController) {
             if (missing.isNotEmpty()) com.enwei.moneymanager.ui.components.Coach.Step("mp.auto", "自動找", "為尚無位置的店家一併搜尋；有多個結果者會標示「選擇」，由您挑選。") else null,
             com.enwei.moneymanager.ui.components.Coach.Step(null, "每一家店", "點選店家可搜尋正確店家、更改名稱，或於地圖上指定位置。"),
         ))
+        val onlineList = remember(txns, tick) {
+            txns.filter { online(it.merchant!!.trim(), it.categoryId) }.groupingBy { it.merchant!!.trim() }.eachCount()
+                .entries.sortedByDescending { it.value }.map { it.key to it.value }
+        }
         LazyColumn(Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             item {
                 Row(
@@ -257,19 +262,24 @@ fun MerchantPlacesScreen(nav: NavController) {
                 }
                 com.enwei.moneymanager.ui.components.LineDivider()
             }
-            // 不是實體店：收在最下面，可以還原
-            val ex = PlaceHints.excluded().filter { it in current }.sorted()
-            if (ex.isNotEmpty()) item(key = "ex-head") {
-                Text("不是實體店", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // 線上商店（自動判斷的與你設定的）：收在最下面，不放地圖；判斷錯了可以改回實體店
+            if (onlineList.isNotEmpty()) item(key = "ex-head") {
+                Text("線上商店（不放地圖）", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp))
                 com.enwei.moneymanager.ui.components.LineDivider()
             }
-            items(ex, key = { "ex-$it" }) { n ->
+            items(onlineList, key = { "ex-${it.first}" }) { (n, c) ->
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text(n, fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("還原", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable { PlaceHints.setExcluded(n, false); tick++ }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(n, fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("$c 筆", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text("改為實體店", fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable {
+                            if (n in PlaceHints.excluded()) PlaceHints.setExcluded(n, false) else PlaceHints.setPhysical(n, true)
+                            tick++
+                        }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
                 }
                 com.enwei.moneymanager.ui.components.LineDivider()
             }
@@ -296,6 +306,7 @@ fun MerchantPlacesScreen(nav: NavController) {
                     if (p.loc == null && !(mbOn || gOn)) action("自動找") { autoFind(listOf(p.name)) }
                     if (p.loc == null) action("在地圖上點選") { picking = p }
                     action("改名") { renaming = p }
+                    action("設為線上商店") { PlaceHints.setExcluded(p.name, true); tick++ }
                     if (!more) Text("其他方式", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.fillMaxWidth().clickable { more = true }.padding(vertical = 12.dp))
                     else {
@@ -313,7 +324,6 @@ fun MerchantPlacesScreen(nav: NavController) {
                                 else android.widget.Toast.makeText(ctx, com.enwei.moneymanager.ui.tr("無法取得目前位置"), android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
-                        action("不是實體店（不放地圖）") { PlaceHints.setExcluded(p.name, true); tick++ }
                         if (p.loc != null) action("清除位置") { PlaceHints.clearMerchantPin(p.name); PlaceHints.clearMerchantGeo(p.name); tick++ }
                     }
                 }

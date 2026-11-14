@@ -359,7 +359,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                         verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.weight(1f).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(2.dp)) {
                         // 季的檢視已移除：只留月與年
-                        listOf(0 to "月", 2 to "年").forEach { (i, l) ->
+                        listOf(0 to "月曆", 2 to "年曆").forEach { (i, l) ->
                             val sel = calSpan == i
                             Box(
                                 Modifier.weight(1f).background(if (sel) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(6.dp))

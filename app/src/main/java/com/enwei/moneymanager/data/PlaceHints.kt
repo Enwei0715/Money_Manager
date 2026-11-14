@@ -63,7 +63,19 @@ object PlaceHints {
     /** 使用者標成「不是實體店」的店名（線上購物、簽證、面交…）：不放地圖、不列在店家位置 */
     private val exPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("merchant_excluded", Context.MODE_PRIVATE) }
     fun excluded(): Set<String> = exPrefs.all.keys
-    fun setExcluded(name: String, on: Boolean) = exPrefs.edit().apply { if (on) putBoolean(name, true) else remove(name) }.apply()
+    fun setExcluded(name: String, on: Boolean) {
+        exPrefs.edit().apply { if (on) putBoolean(name, true) else remove(name) }.apply()
+        // 標成線上商店就不再是「強制實體店」，反之亦然
+        if (on) phPrefs.edit().remove(name).apply()
+    }
+
+    /** 使用者改回「實體店」的店名：即使店名或分類看起來像線上（例如「LINE 」開頭的店），也照樣放地圖 */
+    private val phPrefs by lazy { com.enwei.moneymanager.MoneyApp.instance.getSharedPreferences("merchant_physical", Context.MODE_PRIVATE) }
+    fun physical(): Set<String> = phPrefs.all.keys
+    fun setPhysical(name: String, on: Boolean) {
+        phPrefs.edit().apply { if (on) putBoolean(name, true) else remove(name) }.apply()
+        if (on) exPrefs.edit().remove(name).apply()
+    }
 
     fun setMerchantGeo(name: String, ll: Pair<Double, Double>?) = geoPrefs.edit().putString(name, ll?.let { "${it.first},${it.second}" } ?: "").apply()
     fun clearMerchantGeo(name: String) { geoPrefs.edit().remove(name).apply(); ambPrefs.edit().remove(name).apply() }
