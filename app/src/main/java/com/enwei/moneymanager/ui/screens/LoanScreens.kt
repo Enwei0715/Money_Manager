@@ -93,7 +93,7 @@ fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController)
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("本金進度", Modifier.weight(1f), fontSize = AppText.secondary, color = gray)
+                        Text("本金進度", Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, fontSize = AppText.secondary, color = gray)
                         Text("${(l.progress * 100).toInt()}%", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary)
                     }
                     LinearProgressIndicator(progress = { l.progress }, modifier = Modifier.fillMaxWidth())

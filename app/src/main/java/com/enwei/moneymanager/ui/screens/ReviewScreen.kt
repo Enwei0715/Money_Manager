@@ -196,7 +196,7 @@ fun ReviewContent(
                         val ok = rate >= g
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("儲蓄率", fontSize = AppText.secondary, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                                Text("儲蓄率", fontSize = AppText.secondary, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                 Text("目標 ${"%.0f".format(g)}%  ", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text("${"%.0f".format(rate)}%", fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, color = if (ok) IncomeColor else ExpenseColor)
                             }
@@ -480,7 +480,7 @@ private fun HabitCharts(d: ReviewData, m: (Long) -> String, lk: Lookups) {
     }
     val weekly = n > 62
     com.enwei.moneymanager.ui.components.DailyBarsChart(
-        if (weekly) stats.first.chunked(7).map { it.sum() } else stats.first, m, ExpenseColor, weekly = weekly,
+        if (weekly) stats.first.chunked(7).map { it.sum() } else stats.first, m, ExpenseColor, weekly = weekly, start = d.start,
     )
     val slotNames = listOf("早上 5–11", "中午 11–14", "下午 14–17", "晚上 17–22", "深夜 22–5")
     val total = stats.second.sum().coerceAtLeast(1)
@@ -519,11 +519,11 @@ private fun NextGoals(r: AiReview, m: (Long) -> String, lk: Lookups, nav: NavCon
     androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("下期目標（AI 建議）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
-            r.expenseCap?.let { Row { Text("總支出上限", fontSize = AppText.secondary, modifier = Modifier.weight(1f)); Text(m(it), fontSize = AppText.secondary) } }
+            r.expenseCap?.let { Row { Text("總支出上限", fontSize = AppText.secondary, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis); Text(m(it), fontSize = AppText.secondary) } }
             r.savingsTarget?.let { Row { Text("儲蓄率", fontSize = AppText.secondary, modifier = Modifier.weight(1f)); Text("${"%.0f".format(it)}% 以上", fontSize = AppText.secondary) } }
             capIds.forEach { (id, c) ->
                 Row {
-                    Text(lk.category(id)?.name ?: c.category, fontSize = AppText.secondary, modifier = Modifier.weight(1f))
+                    Text(lk.category(id)?.name ?: c.category, fontSize = AppText.secondary, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     Text("上限 ${m(c.cap)}", fontSize = AppText.secondary)
                 }
             }

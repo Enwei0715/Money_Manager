@@ -672,7 +672,7 @@ fun BudgetScreen(nav: NavController) {
                 com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("分類預算", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text("分類預算", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             Text("合計 ${Money.format(setCats.sumOf { s.budgets[it.id] ?: 0L })}", fontSize = AppText.caption, color = gray)
                         }
                         setCats.forEach { c ->

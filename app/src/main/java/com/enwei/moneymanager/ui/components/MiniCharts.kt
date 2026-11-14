@@ -141,18 +141,19 @@ fun CompareBars(
 
 /** 每日支出長條圖，虛線為每日平均；最高的一天標出金額。 */
 @Composable
-fun DailyBarsChart(values: List<Long>, fmt: (Long) -> String, color: Color = MaterialTheme.colorScheme.primary, modifier: Modifier = Modifier, weekly: Boolean = false) {
+fun DailyBarsChart(values: List<Long>, fmt: (Long) -> String, color: Color = MaterialTheme.colorScheme.primary, modifier: Modifier = Modifier, weekly: Boolean = false,
+                   start: java.time.LocalDate? = null) {
     if (values.isEmpty() || values.all { it == 0L }) return
     val max = values.max().coerceAtLeast(1)
     val avg = values.sum() / values.size
     val peak = values.indexOf(values.max())
     val grid = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier.fillMaxWidth()) {
-        Row {
-            val u = if (weekly) "週" else "天"
-            Text(if (weekly) "每週支出" else "每日支出", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Text("平均 ${fmt(avg)}／$u · 最高第 ${peak + 1} $u ${fmt(values[peak])}", fontSize = AppText.label, color = grid)
-        }
+        // 標題與摘要分兩行：摘要較長（英文更長）時標題不會被擠成一字一行，撐出一大片空白
+        Text(if (weekly) "每週支出" else "每日支出", fontSize = AppText.caption, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        val peakDay = start?.plusDays(if (weekly) peak * 7L else peak.toLong())
+        Text("${if (weekly) "每週平均" else "每天平均"} ${fmt(avg)} · 最高 " + (peakDay?.let { "${it.monthValue}/${it.dayOfMonth}" + if (weekly) " 那週" else "" } ?: "") + " ${fmt(values[peak])}",
+            fontSize = AppText.label, color = grid)
         Canvas(Modifier.fillMaxWidth().height(80.dp).padding(top = 4.dp)) {
             val w = size.width / values.size
             values.forEachIndexed { i, v ->
@@ -261,12 +262,12 @@ fun LabeledBars(title: String, rows: List<Triple<String, Long, String>>, color: 
         Text(title, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
         rows.forEach { (name, v, label) ->
             Row(Modifier.fillMaxWidth().heightIn(min = 30.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(name, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.34f))
-                Box(Modifier.weight(0.36f).padding(horizontal = 8.dp).height(6.dp).background(track, RoundedCornerShape(3.dp))) {
+                Text(name, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.38f))
+                Box(Modifier.weight(0.27f).padding(horizontal = 8.dp).height(6.dp).background(track, RoundedCornerShape(3.dp))) {
                     if (v > 0) Box(Modifier.fillMaxWidth((v.toFloat() / max).coerceIn(0.03f, 1f)).height(6.dp).background(color.copy(alpha = 0.8f), RoundedCornerShape(3.dp)))
                 }
                 Text(label, fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(0.30f))
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(0.35f))
             }
         }
     }
@@ -329,7 +330,7 @@ fun AnnotatedKLine(symbol: String, levels: List<Triple<String, Double, Color>>, 
             levels.sortedByDescending { it.second }.forEach { (label, v, col) ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.width(12.dp).height(2.dp).background(col))
-                    Text(" $label ${"%,.0f".format(v)}", fontSize = AppText.label, modifier = Modifier.weight(1f))
+                    Text(" $label ${"%,.0f".format(v)}", fontSize = AppText.label, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     Text("距現價 ${"%+.1f".format((v / last - 1) * 100)}%", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

@@ -186,7 +186,7 @@ fun CoachOverlay(onTab: (String) -> Unit) {
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(st.title, fontSize = AppText.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(st.title, fontSize = AppText.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     Text("${i + 1} / ${steps.size}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(st.body, fontSize = AppText.body)

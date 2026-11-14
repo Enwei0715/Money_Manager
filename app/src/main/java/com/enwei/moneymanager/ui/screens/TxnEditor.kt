@@ -1042,7 +1042,7 @@ private fun FormRow(
         // 英文標籤（Category、Account）較長，欄寬加大並保持一行
         val english = com.enwei.moneymanager.ui.I18n.english
         // 英文用短標籤，避免和右側內容擠在一起
-        val shown = if (english) when (label) { "轉出" -> "From"; "轉入" -> "To"; "轉入金額" -> "Received"; else -> label } else label
+        val shown = if (english) when (label) { "轉出" -> "From"; "轉入" -> "To"; "轉入金額" -> "Received"; "分類" -> "Category"; "往來" -> "People"; "商家" -> "Merchant"; else -> label } else label
         val icon = when (label) {
             "日期" -> com.enwei.moneymanager.ui.components.LineIcons.IcCalendar; "分類" -> com.enwei.moneymanager.ui.components.LineIcons.IcShapes; "帳戶", "Account", "轉出" -> com.enwei.moneymanager.ui.components.LineIcons.IcWallet
             "轉入" -> com.enwei.moneymanager.ui.components.LineIcons.IcArrowIn; "商家" -> com.enwei.moneymanager.ui.components.LineIcons.IcStore; "說明" -> com.enwei.moneymanager.ui.components.LineIcons.IcLines; "手續費" -> com.enwei.moneymanager.ui.components.LineIcons.IcPercent
@@ -1054,7 +1054,8 @@ private fun FormRow(
         if (icon != null && com.enwei.moneymanager.ui.AppearancePrefs.icons) Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 10.dp).size(20.dp))
         // 分帳的第二、三個人：沒有標籤，跟上一列的內容對齊
         else if (label.isEmpty() && com.enwei.moneymanager.ui.AppearancePrefs.icons) Spacer(Modifier.width(30.dp))
-        Text(shown, Modifier.width(if (english) 84.dp else 56.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+        // 標籤至少這麼寬（各列內容對齊）；大字級或英文較長時往右推，不會和內容疊在一起
+        Text(shown, Modifier.widthIn(min = if (english) 84.dp else 56.dp).padding(end = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = AppText.secondary, maxLines = 1, softWrap = false)
         Column(Modifier.weight(1f)) {
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {

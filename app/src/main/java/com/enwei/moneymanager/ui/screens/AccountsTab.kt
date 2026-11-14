@@ -607,7 +607,7 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                     }
                     list.filter { it.shares > 0 }.forEach { h ->
                         Row(Modifier.fillMaxWidth().clickable { nav.navigate("holding/${h.market}/${h.symbol}") }.padding(vertical = 8.dp)) {
-                            Text("${h.symbol} ${h.name.orEmpty()}", Modifier.weight(1f))
+                            Text("${h.symbol} ${h.name.orEmpty()}", Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             Text("${formatShares(h.shares)}　${Money.withSymbol(Money.toMinor(h.marketValue), h.currency)}")
                         }
                     }
