@@ -1,0 +1,49 @@
+# Ledgerly Privacy Policy
+@ Effective date: November 14, 2026
+This Privacy Policy ("Policy") describes how the Ledgerly application ("App") collects, processes, uses and protects your personal data. By installing or using the App you acknowledge that you have read and agree to this Policy. This Policy is made in accordance with the Personal Data Protection Act of the Republic of China (Taiwan) and related regulations.
+
+## Article 1 — Principles
+The App is a personal finance tool designed so that your data stays on your device. The developer of the App ("Developer") operates no servers that collect user data and does not receive, store, analyze, sell or rent your personal data. The App contains no advertising and no usage tracking.
+
+## Article 2 — Data Stored on Your Device
+The following data is stored only on your device and is used to provide bookkeeping, statistics, and asset and profit/loss calculations:
+- Accounts, transactions, budgets, stock trades and contacts: entered by you or created by the automatic recording described in Article 3.
+- Notification content: notifications from the source apps you select (banks, cards, e-wallets) used to create transactions. Recorded notifications are kept for 60 days and unrecorded ones for 7 days, after which they are deleted automatically.
+- Location: obtained only when you enable "Location and spending map", at the moment you record a transaction or receive a payment notification, to suggest merchants, record where a transaction happened and show the spending map.
+- Public financial information: data from public news and market sources used by the stock assistant.
+
+## Article 3 — Data Sent Off Your Device
+Only when you enable the related feature does the App send the minimum data that feature requires to the following third-party services, each of which processes data under its own privacy policy:
+- AI services (optional): services for which you provide your own key (such as Groq, Google Gemini, OpenRouter) or a server you host yourself. Data sent includes notification text that rules cannot read, transactions you ask to organize or review, questions you ask the stock assistant, news summaries, and the share counts, costs, profit/loss and investable cash needed for investment reports.
+- Map and place search services (optional): OpenStreetMap, Mapbox, Google Places and similar. Data sent is location coordinates or merchant names.
+- Stock price and news sources: Taiwan Stock Exchange, Taipei Exchange, Yahoo Finance, FinMind and public news sources. Data sent is limited to stock codes or search keywords.
+- App updates (GitHub release): version information is checked on GitHub.
+- Backup (optional): the storage location you choose (such as a device folder or cloud drive). You may enable AES-256 backup encryption; the password stays on your device.
+Except as described above, the App does not send your data to any third party.
+
+## Article 4 — Permissions
+- Notification access: reads payment, transfer and trade notifications to record transactions. You may turn it off at any time in system settings.
+- Location, including background location (optional): obtains your location when a payment notification arrives to suggest the merchant. Bookkeeping works without it.
+- Shizuku (optional): reads certain bank notifications hidden by the system on Android 15 and later.
+- Post notifications: reminders for bills, budgets, stock prices and automatic recording results.
+
+## Article 5 — Security
+The App offers passcode lock, biometrics, screen protection and backup encryption. AI and map keys, passcode settings and the backup password stay on your device; they are not written to backup files or included in system cloud backups. No device or network transmission can be guaranteed to be completely secure; please keep your device and backup files safe.
+
+## Article 6 — Retention and Deletion
+Your data is kept on your device until you delete it in the App or uninstall the App. You may export, restore or delete all data at any time in Settings → Security & data. Data already sent to third-party services is retained and deleted under those services' policies.
+
+## Article 7 — Your Rights
+Under Article 3 of the Personal Data Protection Act you may inquire about or review your personal data, obtain copies, supplement or correct it, request that collection, processing or use stop, and request deletion. Because your data is stored on your device, you can exercise these rights directly in the App.
+
+## Article 8 — Children
+The App is not directed to children under 13, and the Developer does not knowingly collect personal data from children.
+
+## Article 9 — Investment Disclaimer
+The stock assistant, stock picks and analysis in the App are for reference only and do not constitute investment advice or an offer. You are responsible for your own investment decisions and risks.
+
+## Article 10 — Changes
+The Developer may revise this Policy due to changes in law or features. The revised version will be published with an App update and takes effect on publication. Significant changes will be announced in the App.
+
+## Article 11 — Contact
+For questions about this Policy or to exercise your rights, contact the Developer through Settings → About → Report a problem in the App.

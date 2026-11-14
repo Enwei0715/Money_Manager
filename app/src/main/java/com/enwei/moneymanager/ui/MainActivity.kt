@@ -418,6 +418,8 @@ private fun AppScaffold(nav: NavHostController) {
                     runCatching { java.time.YearMonth.parse(e.arguments!!.getString("month")) }.getOrNull())
             }
             composable("budget") { BudgetScreen(nav) }
+            composable("privacy") { com.enwei.moneymanager.ui.screens.PrivacyScreen(nav) }
+            composable("report") { com.enwei.moneymanager.ui.screens.ReportScreen(nav) }
             composable("appearance") { com.enwei.moneymanager.ui.screens.AppearanceScreen(nav) }
             composable(
                 "spendmap?month={month}",

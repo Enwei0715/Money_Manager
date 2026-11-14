@@ -469,12 +469,10 @@ fun ConfigScreen(nav: NavController, group: String? = null) {
 
                 sec("關於")
                 cfg("新手導覽") { com.enwei.moneymanager.ui.components.Onboarding.show.value = true }
-                // 回報問題：附上版本、裝置與最近一次閃退紀錄（不含任何帳務資料），用分享選單傳給開發者
-                cfg("回報問題") { shareProblemReport(ctx) }
-                cfg("隱私權政策") {
-                    runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
-                        android.net.Uri.parse("https://github.com/${BuildConfig.UPDATE_REPO}/blob/HEAD/PRIVACY_POLICY.md"))) }
-                }
+                // 回報問題：先在 App 內寫問題、看得到要附上的裝置資訊，再選傳送方式
+                cfg("回報問題") { nav.navigate("report") }
+                // 隱私權政策：正式條文放在 App 內
+                cfg("隱私權政策") { nav.navigate("privacy") }
                 // 贊助：只有 GitHub 版、而且設定了連結才出現；不贊助也不會少任何功能
                 com.enwei.moneymanager.data.Features.sponsorUrl?.let { url ->
                     cfg("支持開發") { runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) } }
@@ -826,23 +824,13 @@ fun PasscodeScreen(nav: NavController) {
 }
 
 
-/** 組出回報內容（版本、Android 版本、機型、最近一次閃退紀錄），交給系統分享選單。不含帳務資料。 */
-fun shareProblemReport(ctx: android.content.Context) {
-    val dir = ctx.filesDir
+/** 回報用的裝置資訊：版本、Android 版本、機型、最近一次閃退紀錄。不含帳務資料。 */
+fun problemDiagnostics(ctx: android.content.Context): String {
     val crash = listOf(com.enwei.moneymanager.MoneyApp.CRASH_FILE, "last_crash_prev.txt")
-        .map { java.io.File(dir, it) }.firstOrNull { it.exists() }?.let { runCatching { it.readText().take(6000) }.getOrNull() }
-    val body = buildString {
+        .map { java.io.File(ctx.filesDir, it) }.firstOrNull { it.exists() }?.let { runCatching { it.readText().take(4000) }.getOrNull() }
+    return buildString {
         appendLine("帳理 ${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）")
-        appendLine("Android ${android.os.Build.VERSION.RELEASE}（API ${android.os.Build.VERSION.SDK_INT}）· ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
-        appendLine()
-        appendLine("問題描述：")
-        appendLine()
-        if (crash != null) { appendLine("最近一次閃退紀錄："); appendLine(crash) }
+        append("Android ${android.os.Build.VERSION.RELEASE}（API ${android.os.Build.VERSION.SDK_INT}）· ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        if (crash != null) { appendLine(); appendLine("最近一次閃退紀錄："); append(crash) }
     }
-    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(android.content.Intent.EXTRA_SUBJECT, "帳理問題回報 ${BuildConfig.VERSION_NAME}")
-        putExtra(android.content.Intent.EXTRA_TEXT, body)
-    }
-    ctx.startActivity(android.content.Intent.createChooser(send, "回報問題").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
 }
