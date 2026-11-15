@@ -202,6 +202,10 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     LaunchedEffect(Unit) {
         if (monthDay != LocalDate.now()) { month = Periods.monthOf(LocalDate.now(), repo.settings.value.monthStartDay); monthDay = LocalDate.now() }
     }
+    // 從小工具、通知開進來：回到本月
+    LaunchedEffect(TxnScroll.freshTick) {
+        if (TxnScroll.freshTick > 0) { month = Periods.monthOf(LocalDate.now(), repo.settings.value.monthStartDay); monthDay = LocalDate.now() }
+    }
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val pending by repo.pending.collectAsStateWithLifecycle(emptyList())
     val balances by repo.balances.collectAsStateWithLifecycle(emptyList())
@@ -493,6 +497,9 @@ object TxnScroll {
     var restoreOffset = 0
     /** 剛記好一筆：回到清單時捲到這筆的日期 */
     var focusDay: LocalDate? = null
+    /** 從小工具、通知開進來：回到交易頁時一律是本月、最上面（最新），不還原之前停的那一天 */
+    var freshTick by androidx.compose.runtime.mutableStateOf(0)
+    fun fresh() { restoreDay = null; pendingTop = true; freshTick++ }
 }
 
 /**

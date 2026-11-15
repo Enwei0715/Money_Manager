@@ -159,6 +159,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     val route by pendingRoute
                     LaunchedEffect(route) {
                         // 小工具、通知開啟的分頁要「切換分頁」，不是疊在目前畫面上，否則底部分頁列會失靈
+                        // 從外面開進來（小工具、通知）：交易頁回到本月最新，不停在上次捲到的那一天
+                        if (route != null) com.enwei.moneymanager.ui.screens.TxnScroll.fresh()
                         route?.takeIf { it != "home" }?.let { r ->
                             com.enwei.moneymanager.notify.AppNotices.clearFor(this@MainActivity, r)
                             // 通知點進來的交易已經被刪掉：提示後改開交易列表，不開一個空白的編輯畫面
@@ -216,6 +218,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         val s = MoneyApp.repo.settings.value
         val away = System.currentTimeMillis() - stoppedAt.longValue
         if (stoppedAt.longValue > 0 && s.passcodeOn && !launchedExternal && away >= s.lockDelaySec * 1000L) locked.value = true
+        // 離開超過 30 分鐘（或已經換日）再回來：交易頁回到本月最新，不停在之前捲到的那一天
+        val stoppedDay = java.time.Instant.ofEpochMilli(stoppedAt.longValue).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        if (stoppedAt.longValue > 0 && (away >= 30 * 60_000L || stoppedDay != java.time.LocalDate.now())) com.enwei.moneymanager.ui.screens.TxnScroll.fresh()
         launchedExternal = false
     }
 
