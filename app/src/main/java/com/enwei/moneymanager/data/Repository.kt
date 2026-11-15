@@ -928,7 +928,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val account = resolveAccount(pkg, p, raw0, learned, bankSrc, accounts)
         val what = when (p.kind) {
             ParsedKind.WITHDRAWAL -> "提款 → 記成轉帳到現金"
-            ParsedKind.TOPUP_OUT -> "電支儲值扣款 → 記成轉帳到錢包"
+            ParsedKind.TOPUP_OUT -> "電支扣款 → 寫明儲值的記成轉帳到錢包，只寫「電支交易」的當成消費"
             ParsedKind.TOPUP_IN -> "錢包儲值入帳"
             ParsedKind.TRANSFER_OUT -> "轉出（有對應轉入時合併為轉帳）"
             ParsedKind.TRANSFER_IN -> "轉入（有對應轉出時合併為轉帳）"
@@ -1348,7 +1348,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             return IngestResult("STOCK", id, "$sideLabel ${fill.symbol} ${fill.name.orEmpty()} ${fill.shares.toLong()} 股 @ ${fill.price} → ${broker?.name ?: "未指定證券帳戶"}")
         }
 
-        val p = parsed!!
+        var p = parsed!!
         val occurred = p.occurredAt?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli() ?: postedAt
         // 通知內有交易時間時，以「金額＋時間」去重：同一筆交易的通知晚點再跳一次也不會重複記帳
         // 方向要算進去：自己兩個帳戶互轉時，轉出與轉入通知常是同一秒、同金額，不能被當成重複
@@ -1465,11 +1465,17 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                     return merged(it, it.copy(accountId = account?.id ?: it.accountId, date = occurred, status = TxnStatus.CONFIRMED),
                         "儲值 $amountText：${account?.name ?: "?"} → ${w.name}")
                 }
-                if (w != null && w.id != account?.id) {
-                    return insert(base.copy(type = TxnType.TRANSFER, toAccountId = w.id, merchant = "電支儲值"), "RECORDED",
-                        "儲值 $amountText：${account?.name ?: "?"} → ${w.name}")
+                // 銀行只寫「電支交易」、沒寫「儲值」：可能是儲值，也可能是用電子支付（街口、LINE Pay 綁帳戶）直接付款。
+                // 沒有錢包端的儲值紀錄可以對，就當成一筆消費照一般流程處理（依位置與紀錄推測店家，沒把握放待確認），
+                // 不再記成「電支儲值」轉帳；之後錢包的儲值通知到了，仍會把這筆改成儲值轉帳。
+                if (!raw0.contains("儲值") && !raw0.contains("加值")) p = p.copy(kind = ParsedKind.NORMAL)
+                else {
+                    if (w != null && w.id != account?.id) {
+                        return insert(base.copy(type = TxnType.TRANSFER, toAccountId = w.id, merchant = "電支儲值"), "RECORDED",
+                            "儲值 $amountText：${account?.name ?: "?"} → ${w.name}")
+                    }
+                    return insert(base.copy(merchant = "電支儲值", status = TxnStatus.PENDING), "RECORDED", "電支儲值 $amountText（請選擇轉入的錢包）")
                 }
-                return insert(base.copy(merchant = "電支儲值", status = TxnStatus.PENDING), "RECORDED", "電支儲值 $amountText（請選擇轉入的錢包）")
             }
             ParsedKind.TOPUP_IN -> {
                 val w = wallet() ?: account

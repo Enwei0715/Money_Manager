@@ -333,7 +333,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         // 編輯舊的一筆：用這筆記帳時記下的位置推薦（沒有記下位置就不推薦）；新的一筆用目前位置
         val loc = if (id != 0L) com.enwei.moneymanager.data.PlaceHints.samples(appCtx).firstOrNull { it.txnId == id }?.let { s0 ->
             android.location.Location("sample").apply { latitude = s0.lat; longitude = s0.lon; accuracy = 30f }
-        } ?: return@LaunchedEffect
+        }
+            // 沒有記下位置，但這筆是 30 分鐘內的（剛收到通知、人還在店裡）：用目前位置推薦
+            ?: repo.getTxn(id)?.takeIf { kotlin.math.abs(System.currentTimeMillis() - it.date) <= 30 * 60_000L }
+                ?.let { kotlinx.coroutines.withTimeoutOrNull(8000) { com.enwei.moneymanager.data.PlaceHints.current(appCtx) } }
+            ?: return@LaunchedEffect
         else kotlinx.coroutines.withTimeoutOrNull(8000) { com.enwei.moneymanager.data.PlaceHints.current(appCtx) } ?: return@LaunchedEffect
         hereLoc = loc
         val ph = com.enwei.moneymanager.data.PlaceHints
@@ -383,7 +387,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         // 否則地圖會回傳只有一個字相同、好幾公里外的地方
         val q = normName(merchant)
         val grams = (0 until (q.length - 1).coerceAtLeast(0)).map { q.substring(it, it + 2) }.filter { g -> g.any { ch -> ch.code > 0x2E80 } }.toSet()
-        val words = merchant.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length >= 4 }.toSet()
+        val words = merchant.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length >= 3 }.toSet()
         mbResults = com.enwei.moneymanager.net.PlaceSearch.search(merchant, c, 6).filter { r ->
             val rn = normName(r.name)
             r.name != merchant && ((r.meters ?: 99_999f) <= 300f || grams.any { rn.contains(it) } || (grams.isEmpty() && words.any { rn.contains(it) }))
