@@ -382,7 +382,12 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         // 打字停下來 0.6 秒、至少 2 個字才查；剛從清單選好的店不再查（減少 API 呼叫）
         if (!settings.locationHints || !merchantFocused || merchant.trim().length < 2 || merchantAt != null || !com.enwei.moneymanager.net.PlaceSearch.online) { mbResults = emptyList(); return@LaunchedEffect }
         kotlinx.coroutines.delay(600)
-        val c = hereLoc?.let { it.latitude to it.longitude } ?: com.enwei.moneymanager.data.PlaceHints.anchors(com.enwei.moneymanager.MoneyApp.instance).firstOrNull()
+        // 距離從這筆的位置算；沒有就用你現在的位置（不是常活動的區域，否則人在店裡卻顯示好幾公里）
+        val c = hereLoc?.let { it.latitude to it.longitude }
+            ?: kotlinx.coroutines.withTimeoutOrNull(5000) { com.enwei.moneymanager.data.PlaceHints.current(com.enwei.moneymanager.MoneyApp.instance) }
+                ?.also { if (id == 0L || original?.let { o -> kotlin.math.abs(System.currentTimeMillis() - o.date) <= 30 * 60_000L } == true) hereLoc = it }
+                ?.let { it.latitude to it.longitude }
+            ?: com.enwei.moneymanager.data.PlaceHints.anchors(com.enwei.moneymanager.MoneyApp.instance).firstOrNull()
         // 只留相關的結果：名稱和輸入的字有共同的兩個字（或英文單字），或就在 300 公尺內；
         // 否則地圖會回傳只有一個字相同、好幾公里外的地方
         val q = normName(merchant)

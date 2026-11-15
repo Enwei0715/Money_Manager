@@ -412,6 +412,16 @@ private fun SpendMap(
     val density = androidx.compose.ui.platform.LocalDensity.current
     val tilePx = with(density) { 256.dp.toPx() }
     val scope = rememberCoroutineScope()
+    // 目前位置（藍色圓點）：有開定位功能與權限時才顯示；每 20 秒更新一次
+    val mapCtx = androidx.compose.ui.platform.LocalContext.current
+    var me by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (!repo.settings.value.locationHints || !PlaceHints.hasPermission(mapCtx)) return@LaunchedEffect
+        while (true) {
+            kotlinx.coroutines.withTimeoutOrNull(8000) { PlaceHints.current(mapCtx) }?.let { me = it.latitude to it.longitude }
+            kotlinx.coroutines.delay(20_000)
+        }
+    }
     var version by remember { mutableStateOf(0) }
     var sizePx by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val viewKey: Any = if (pickOnly) Unit else spots
@@ -602,6 +612,14 @@ private fun SpendMap(
                     if (ty in y0..y1 && tx in x0..x1) continue
                     load(z, ((tx % n) + n) % n, ty, pre = true)
                 }
+            }
+            // 目前位置：藍色圓點加一圈淡藍光暈（畫在店家圓點下面）
+            me?.let { (la, lo) ->
+                val c = androidx.compose.ui.geometry.Offset((wrapDx(mx(lo) - cx) * world + size.width / 2).toFloat(), ((my(la) - cy) * world + size.height / 2).toFloat())
+                val blue = androidx.compose.ui.graphics.Color(0xFF1A73E8)
+                drawCircle(blue.copy(alpha = 0.18f), 16.dp.toPx(), c)
+                drawCircle(androidx.compose.ui.graphics.Color.White, 7.5.dp.toPx(), c)
+                drawCircle(blue, 5.5.dp.toPx(), c)
             }
             // 地點標記：小而精緻的圓點——細白邊、極淡陰影；選中的外圍多一圈淡色光暈（大小隨金額只略為變化）
             spots.sortedBy { if (it == picked) 1 else 0 }.forEach { sp ->
