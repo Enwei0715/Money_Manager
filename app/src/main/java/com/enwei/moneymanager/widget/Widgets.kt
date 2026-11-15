@@ -44,7 +44,9 @@ object Widgets {
         val m = AppWidgetManager.getInstance(context)
         all.forEach { cls ->
             val ids = m.getAppWidgetIds(ComponentName(context, cls.java))
-            if (ids.isNotEmpty()) MoneyApp.instance.appScope.launch { runCatching { build(cls, context)?.let { m.updateAppWidget(ids, it) } } }
+            if (ids.isNotEmpty()) MoneyApp.instance.appScope.launch {
+                ids.forEach { id -> runCatching { build(cls, context)?.let { m.updateAppWidget(id, fit(context, m, id, cls, it)) } } }
+            }
         }
     }
 
@@ -67,6 +69,48 @@ object Widgets {
         v.setInt(R.id.widget_bg, "setImageAlpha", 255)
         primaryIds.forEach { v.setTextColor(it, if (d) 0xFFEEEEEE.toInt() else 0xFF333333.toInt()) }
         secondaryIds.forEach { v.setTextColor(it, if (d) 0xFFAAAAAA.toInt() else 0xFF8A8A8A.toInt()) }
+    }
+
+    /**
+     * 依小工具實際大小調整：字級跟著大小等比例放大縮小（有上下限），太矮時收起次要的那一行、清單只放得下的列數。
+     * 原本字級固定：縮小時字被截掉，放大時只是留白。
+     */
+    class Fit(val baseW: Float, val baseH: Float, val sizes: Map<Int, Float>, val hideShort: List<Int> = emptyList(), val shortH: Float = 0f,
+              val listHeader: Float = 0f, val rowH: Float = 0f)
+
+    private fun specOf(cls: KClass<out AppWidgetProvider>): Fit? = when (cls) {
+        QuickWidget::class -> Fit(70f, 70f, mapOf(R.id.w_title to 12f), hideShort = listOf(R.id.w_title), shortH = 56f)
+        TodayWidget::class -> Fit(150f, 80f, mapOf(R.id.w_title to 12f, R.id.w_value to 22f, R.id.w_sub to 11f),
+            hideShort = listOf(R.id.w_sub, R.id.w_progress), shortH = 64f)
+        StocksWidget::class -> Fit(150f, 80f, mapOf(R.id.w_title to 12f, R.id.w_value to 20f, R.id.w_sub to 12f),
+            hideShort = listOf(R.id.w_sub), shortH = 64f)
+        AccountsWidget::class -> Fit(200f, 160f, mapOf(R.id.w_title to 12f, R.id.w_value to 20f) + (rowName + rowAmount).associateWith { 13f },
+            listHeader = 70f, rowH = 22f)
+        RecentWidget::class -> Fit(260f, 200f, mapOf(R.id.w_title to 12f, R.id.w_sub to 11f) + (rowName + rowAmount).associateWith { 13f },
+            listHeader = 56f, rowH = 24f)
+        else -> null
+    }
+
+    /** 小工具目前的大小（dp）：直向時寬取 minWidth、高取 maxHeight */
+    fun sizeOf(m: AppWidgetManager, id: Int): Pair<Float, Float>? {
+        val o = m.getAppWidgetOptions(id) ?: return null
+        val w = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+        val h = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)
+        return if (w > 0 && h > 0) w.toFloat() to h.toFloat() else null
+    }
+
+    fun fit(context: Context, m: AppWidgetManager, id: Int, cls: KClass<out AppWidgetProvider>, v: RemoteViews): RemoteViews {
+        val spec = specOf(cls) ?: return v
+        val (w, h) = sizeOf(m, id) ?: return v
+        val k = minOf(w / spec.baseW, h / spec.baseH).coerceIn(0.78f, 1.45f)
+        spec.sizes.forEach { (vid, sp) -> v.setTextViewTextSize(vid, android.util.TypedValue.COMPLEX_UNIT_SP, sp * k) }
+        if (spec.shortH > 0 && h < spec.shortH) spec.hideShort.forEach { v.setViewVisibility(it, android.view.View.GONE) }
+        // 清單：只顯示放得下的列數（原本固定 5 列，矮的時候最後幾列被截一半）
+        if (spec.rowH > 0) {
+            val fitRows = ((h - spec.listHeader * k) / (spec.rowH * k)).toInt().coerceIn(1, rows.size)
+            rows.forEachIndexed { i, r -> if (i >= fitRows) v.setViewVisibility(r, android.view.View.GONE) }
+        }
+        return v
     }
 
     const val EXPENSE = 0xFFF0605A.toInt()
@@ -95,8 +139,14 @@ abstract class BaseWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
         val pending = goAsync()
         MoneyApp.instance.appScope.launch {
-            try { runCatching { manager.updateAppWidget(ids, render(context)) } } finally { pending.finish() }
+            try { ids.forEach { id -> runCatching { manager.updateAppWidget(id, Widgets.fit(context, manager, id, this@BaseWidget::class, render(context))) } } }
+            finally { pending.finish() }
         }
+    }
+
+    /** 使用者在桌面縮放小工具：依新的大小重畫 */
+    override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, newOptions: android.os.Bundle) {
+        onUpdate(context, manager, intArrayOf(id))
     }
 }
 

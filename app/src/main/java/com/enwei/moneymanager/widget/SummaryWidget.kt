@@ -34,6 +34,11 @@ class SummaryWidget : AppWidgetProvider() {
         }
     }
 
+    /** 使用者在桌面縮放小工具：依新的大小重畫 */
+    override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, newOptions: android.os.Bundle) {
+        onUpdate(context, manager, intArrayOf(id))
+    }
+
     companion object {
         private val palette = intArrayOf(
             0xFFF0605A.toInt(), 0xFFF59E42.toInt(), 0xFFF5C842.toInt(), 0xFF8BC34A.toInt(), 0xFF26A69A.toInt(), 0xFF90A4AE.toInt(),
@@ -106,7 +111,19 @@ class SummaryWidget : AppWidgetProvider() {
                 val line = if (dark) 0x33FFFFFF else 0x22000000
                 listOf(R.id.widget_div_top, R.id.widget_div_1, R.id.widget_div_2).forEach { setInt(it, "setBackgroundColor", line) }
             }
-            manager.updateAppWidget(ids, views)
+            // 依每個小工具的實際大小調整字級；太窄時收起圓餅圖、太矮時收起圖例，不截字
+            ids.forEach { id ->
+                val v = views.clone()
+                Widgets.sizeOf(manager, id)?.let { (w, h) ->
+                    val k = minOf(w / 260f, h / 150f).coerceIn(0.78f, 1.4f)
+                    mapOf(R.id.widget_title to 12f, R.id.widget_expense to 22f, R.id.widget_income to 12f, R.id.widget_legend to 12f,
+                        R.id.widget_cash to 14f, R.id.widget_income_btn to 14f, R.id.widget_pending to 14f)
+                        .forEach { (vid, sp) -> v.setTextViewTextSize(vid, android.util.TypedValue.COMPLEX_UNIT_SP, sp * k) }
+                    if (w < 220f) v.setViewVisibility(R.id.widget_pie, android.view.View.GONE)
+                    if (h < 130f) v.setViewVisibility(R.id.widget_legend, android.view.View.GONE)
+                }
+                manager.updateAppWidget(id, v)
+            }
         }
 
         private fun pie(values: List<Long>): Bitmap {
