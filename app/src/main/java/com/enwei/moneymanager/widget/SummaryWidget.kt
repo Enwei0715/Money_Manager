@@ -79,8 +79,8 @@ class SummaryWidget : AppWidgetProvider() {
                 .sortedByDescending { it.second }
             val top = byCat.take(4) + listOfNotNull(byCat.drop(4).takeIf { it.isNotEmpty() }?.let { rest -> "其他" to rest.sumOf { it.second } })
             // 圖例：前三名排成一行，圓點顏色和圓餅一樣（不會被小工具的高度截掉）
-            val legend: CharSequence = if (top.isEmpty()) com.enwei.moneymanager.ui.tr("本月還沒有支出") else android.text.SpannableStringBuilder().apply {
-                top.take(3).forEachIndexed { i, (name, v) ->
+            fun legend(n: Int): CharSequence = if (top.isEmpty()) com.enwei.moneymanager.ui.tr("本月還沒有支出") else android.text.SpannableStringBuilder().apply {
+                top.take(n).forEachIndexed { i, (name, v) ->
                     if (i > 0) append("  ")
                     val st = length
                     append("●")
@@ -90,11 +90,13 @@ class SummaryWidget : AppWidgetProvider() {
             }
             val cash = repo.accounts.first().firstOrNull { it.type == AccountType.CASH && !it.archived }
 
-            val views = RemoteViews(context.packageName, R.layout.widget_summary).apply {
+            fun make(layout: Int, twoLines: Boolean, legendN: Int) = RemoteViews(context.packageName, layout).apply {
                 setTextViewText(R.id.widget_title, com.enwei.moneymanager.ui.tr("${month.monthValue} 月支出"))
                 setTextViewText(R.id.widget_expense, Money.withSymbol(expenseTotal, s.baseCurrency))
-                setTextViewText(R.id.widget_income, com.enwei.moneymanager.ui.tr("收入") + " ${Money.withSymbol(incomeTotal, s.baseCurrency)}　" + com.enwei.moneymanager.ui.tr("結餘") + " ${Money.full(incomeTotal - expenseTotal)}")
-                setTextViewText(R.id.widget_legend, legend)
+                // 文字欄不夠寬時收入、結餘各一行，不截掉
+                setTextViewText(R.id.widget_income, com.enwei.moneymanager.ui.tr("收入") + " ${Money.withSymbol(incomeTotal, s.baseCurrency)}" + (if (twoLines) "\n" else "　") +
+                    com.enwei.moneymanager.ui.tr("結餘") + " ${Money.full(incomeTotal - expenseTotal)}")
+                setTextViewText(R.id.widget_legend, legend(legendN))
                 setImageViewBitmap(R.id.widget_pie, pie(top.map { it.second }))
                 setOnClickPendingIntent(R.id.widget_stats, open(context, 10, "stats"))
                 setOnClickPendingIntent(R.id.widget_cash, open(context, 11, "txn/0?type=EXPENSE&account=${cash?.id ?: 0}"))
@@ -111,16 +113,26 @@ class SummaryWidget : AppWidgetProvider() {
                 val line = if (dark) 0x33FFFFFF else 0x22000000
                 listOf(R.id.widget_div_top, R.id.widget_div_1, R.id.widget_div_2).forEach { setInt(it, "setBackgroundColor", line) }
             }
-            // 依每個小工具的實際大小調整字級；太窄時收起圓餅圖、太矮時收起圖例，不截字
+            // 依每個小工具的實際大小選版面：接近正方或直的用直式（圓餅在上、文字在下），橫的用橫式；字級跟著大小調整
             ids.forEach { id ->
-                val v = views.clone()
-                Widgets.sizeOf(manager, id)?.let { (w, h) ->
-                    val k = minOf(w / 260f, h / 150f).coerceIn(0.78f, 1.4f)
-                    mapOf(R.id.widget_title to 12f, R.id.widget_expense to 22f, R.id.widget_income to 12f, R.id.widget_legend to 12f,
-                        R.id.widget_cash to 14f, R.id.widget_income_btn to 14f, R.id.widget_pending to 14f)
-                        .forEach { (vid, sp) -> v.setTextViewTextSize(vid, android.util.TypedValue.COMPLEX_UNIT_SP, sp * k) }
+                val size = Widgets.sizeOf(manager, id)
+                val w = size?.first ?: 260f; val h = size?.second ?: 150f
+                val tall = h >= 200f && h >= w * 0.7f
+                // 橫式的文字欄窄：圖例只放得下的項數（不出現「…」）
+                val v = make(if (tall) R.layout.widget_summary_tall else R.layout.widget_summary, twoLines = !tall && w < 250f,
+                    legendN = if (tall) 4 else if (w < 300f) 2 else 3)
+                val k = (if (tall) minOf(w / 220f, h / 260f) else minOf(w / 260f, h / 150f)).coerceIn(0.8f, 1.6f)
+                mapOf(R.id.widget_title to 12f, R.id.widget_expense to 22f, R.id.widget_income to 12f, R.id.widget_legend to 12f,
+                    R.id.widget_cash to 14f, R.id.widget_income_btn to 14f, R.id.widget_pending to 14f)
+                    .forEach { (vid, sp) -> v.setTextViewTextSize(vid, android.util.TypedValue.COMPLEX_UNIT_SP, sp * k) }
+                if (!tall) {
                     if (w < 220f) v.setViewVisibility(R.id.widget_pie, android.view.View.GONE)
                     if (h < 130f) v.setViewVisibility(R.id.widget_legend, android.view.View.GONE)
+                    // 橫式：圓餅跟著放大（Android 12 以上才能調整大小）
+                    if (android.os.Build.VERSION.SDK_INT >= 31) {
+                        v.setViewLayoutWidth(R.id.widget_pie, 84f * k, android.util.TypedValue.COMPLEX_UNIT_DIP)
+                        v.setViewLayoutHeight(R.id.widget_pie, 84f * k, android.util.TypedValue.COMPLEX_UNIT_DIP)
+                    }
                 }
                 manager.updateAppWidget(id, v)
             }

@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/widget_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_bg"
+        android:contentDescription="@null" />
+
+<LinearLayout
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:id="@+id/widget_stats"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <!-- 直式：圓餅在上（吃掉多出來的高度），文字在下、用整個寬度，不會被截 -->
+        <ImageView
+            android:id="@+id/widget_pie"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginBottom="6dp"
+            android:scaleType="fitCenter"
+            android:contentDescription="支出圓餅圖" />
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FF8A8A8A"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/widget_expense"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFF0605A"
+            android:textSize="22sp" />
+
+        <TextView
+            android:id="@+id/widget_income"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FF3C82E6"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/widget_legend"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textColor="#FF444444"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- 下方三個按鈕：不畫框，上方一條細線、按鈕之間用直線分隔 -->
+    <ImageView
+        android:id="@+id/widget_div_top"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="8dp"
+        android:background="#22000000"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_cash"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1.3"
+            android:gravity="center"
+            android:text="－ 現金支出"
+            android:textColor="#FFF0605A"
+            android:textSize="14sp" />
+
+        <ImageView
+            android:id="@+id/widget_div_1"
+            android:layout_width="1dp"
+            android:layout_height="20dp"
+            android:layout_gravity="center_vertical"
+            android:background="#22000000"
+        android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/widget_income_btn"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="＋ 收入"
+            android:textColor="#FF3C82E6"
+            android:textSize="14sp" />
+
+        <ImageView
+            android:id="@+id/widget_div_2"
+            android:layout_width="1dp"
+            android:layout_height="20dp"
+            android:layout_gravity="center_vertical"
+            android:background="#22000000"
+        android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/widget_pending"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="⇄ 轉帳"
+            android:textColor="#FF8C8C8C"
+            android:textSize="14sp" />
+    </LinearLayout>
+</LinearLayout>
+</FrameLayout>

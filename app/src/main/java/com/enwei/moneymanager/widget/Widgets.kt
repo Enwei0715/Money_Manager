@@ -84,9 +84,9 @@ object Widgets {
             hideShort = listOf(R.id.w_sub, R.id.w_progress), shortH = 64f)
         StocksWidget::class -> Fit(150f, 80f, mapOf(R.id.w_title to 12f, R.id.w_value to 20f, R.id.w_sub to 12f),
             hideShort = listOf(R.id.w_sub), shortH = 64f)
-        AccountsWidget::class -> Fit(200f, 160f, mapOf(R.id.w_title to 12f, R.id.w_value to 20f) + (rowName + rowAmount).associateWith { 13f },
+        AccountsWidget::class -> Fit(165f, 160f, mapOf(R.id.w_title to 12f, R.id.w_value to 20f) + (rowName + rowAmount).associateWith { 13f },
             listHeader = 70f, rowH = 22f)
-        RecentWidget::class -> Fit(260f, 200f, mapOf(R.id.w_title to 12f, R.id.w_sub to 11f) + (rowName + rowAmount).associateWith { 13f },
+        RecentWidget::class -> Fit(230f, 200f, mapOf(R.id.w_title to 12f, R.id.w_sub to 11f) + (rowName + rowAmount).associateWith { 13f },
             listHeader = 56f, rowH = 24f)
         else -> null
     }
