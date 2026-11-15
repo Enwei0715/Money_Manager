@@ -119,19 +119,27 @@ class SummaryWidget : AppWidgetProvider() {
                 val w = size?.first ?: 260f; val h = size?.second ?: 150f
                 val tall = h >= 200f && h >= w * 0.7f
                 // 橫式的文字欄窄：圖例只放得下的項數（不出現「…」）
-                val v = make(if (tall) R.layout.widget_summary_tall else R.layout.widget_summary, twoLines = !tall && w < 250f,
+                val twoLines = !tall && w < 250f
+                val v = make(if (tall) R.layout.widget_summary_tall else R.layout.widget_summary, twoLines = twoLines,
                     legendN = if (tall) 4 else if (w < 300f) 2 else 3)
-                val k = (if (tall) minOf(w / 220f, h / 260f) else minOf(w / 260f, h / 150f)).coerceIn(0.8f, 1.6f)
+                // 橫式：上半部（圓餅＋文字）可用的高度＝總高 − 邊距與下方按鈕列（約 76dp），再留一成餘裕（各家桌面回報的大小不一定準）
+                val avail = (h - 76f) * 0.9f
+                // 四行文字（標題、金額、收入結餘、圖例）在 1 倍字級約 85dp 高；放不下就先拿掉圖例（三行約 61dp），再縮字
+                val k0 = (if (tall) minOf(w / 220f, h / 260f) else w / 260f).coerceIn(0.8f, 1.6f)
+                val lines = if (twoLines) 16f else 0f
+                val showLegend = tall || (h >= 130f && avail / (85f + lines) >= 0.9f)
+                val k = if (tall) k0 else minOf(k0, avail / ((if (showLegend) 85f else 61f) + lines)).coerceIn(0.7f, 1.6f)
                 mapOf(R.id.widget_title to 12f, R.id.widget_expense to 22f, R.id.widget_income to 12f, R.id.widget_legend to 12f,
                     R.id.widget_cash to 14f, R.id.widget_income_btn to 14f, R.id.widget_pending to 14f)
                     .forEach { (vid, sp) -> v.setTextViewTextSize(vid, android.util.TypedValue.COMPLEX_UNIT_SP, sp * k) }
                 if (!tall) {
                     if (w < 220f) v.setViewVisibility(R.id.widget_pie, android.view.View.GONE)
-                    if (h < 130f) v.setViewVisibility(R.id.widget_legend, android.view.View.GONE)
-                    // 橫式：圓餅跟著放大（Android 12 以上才能調整大小）
+                    if (!showLegend) v.setViewVisibility(R.id.widget_legend, android.view.View.GONE)
+                    // 橫式：圓餅跟著放大，但不超過可用高度（Android 12 以上才能調整大小）
                     if (android.os.Build.VERSION.SDK_INT >= 31) {
-                        v.setViewLayoutWidth(R.id.widget_pie, 84f * k, android.util.TypedValue.COMPLEX_UNIT_DIP)
-                        v.setViewLayoutHeight(R.id.widget_pie, 84f * k, android.util.TypedValue.COMPLEX_UNIT_DIP)
+                        val d = minOf(84f * k0, avail).coerceAtLeast(48f)
+                        v.setViewLayoutWidth(R.id.widget_pie, d, android.util.TypedValue.COMPLEX_UNIT_DIP)
+                        v.setViewLayoutHeight(R.id.widget_pie, d, android.util.TypedValue.COMPLEX_UNIT_DIP)
                     }
                 }
                 manager.updateAppWidget(id, v)
