@@ -108,4 +108,10 @@ class LineWalletTest {
     @Test fun failed() {
         assertNull(NotificationParser.parse("LINE錢包", "LINE Pay Purchase NT$ 25\nPayment failed."))
     }
+
+    @Test
+    fun etfDividendPromoIgnored() {
+        assertNull(NotificationParser.parse("📣00878本季預估配息1.25元！把握今天最後買進日", "掌握本次配息時程與ESG高股息選股特色，一次看懂00878🔍"))
+        assertNull(NotificationParser.parse("📣00929月配息列車即將進站！11/17最後買進日倒數提醒", "連續5次每單位配發0.38元，想參與本次收益分配別錯過關鍵時程"))
+    }
 }
