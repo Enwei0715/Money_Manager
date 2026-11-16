@@ -282,6 +282,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
 
     // 依金額推測：過去同類型、金額相近的交易（同時段、最近、同帳戶加分），推測分類與內容
     var merchantAuto by remember { mutableStateOf(false) }
+    // 依位置自動帶入的店名只適用支出：切到收入、轉帳時拿掉（你自己打的照留）
+    LaunchedEffect(type) { if (type != TxnType.EXPENSE && merchantAuto) { merchant = ""; merchantAuto = false } }
     // 記新的一筆：一打開就讀目前位置，推薦附近的店名（這附近記過的店在前，再來是地圖上離你最近的店）
     var nearby by remember { mutableStateOf<List<String>>(emptyList()) }
     var hereLoc by remember { mutableStateOf<android.location.Location?>(null) }
@@ -348,7 +350,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         val known = ph.knownNear(loc, names)
         // 人就在某家記過的店（已知位置 50 公尺內）：店名直接帶入，分類跟著這家店過去的紀錄（比金額推測可靠）
         // 只有記新的一筆才自動帶入；編輯舊的一筆只列推薦，不改你寫過的內容
-        if (id == 0L) ph.storeHere(loc, names)?.let { here ->
+        // 依位置帶入店名只用在支出（收入、往來不是在店裡花錢）
+        if (id == 0L && type == TxnType.EXPENSE) ph.storeHere(loc, names)?.let { here ->
             if (merchant.isBlank() || merchantAuto) {
                 val (m, stall) = splitByHabit(here)
                 merchant = m; merchantAuto = true
@@ -360,7 +363,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             val mb = com.enwei.moneymanager.net.PlaceSearch.nearby(loc.latitude, loc.longitude)
             placeLocs = placeLocs + mb.associate { cleanPlaceName(it.name) to (it.lat to it.lon) }
             // 還沒依位置帶入店名：Google／Mapbox 找到 30 公尺內的店，名稱和記過的店對得上（例如「美麗潔美學牙醫診所 | …」對「美麗潔美學牙醫診所」）就用你記的店名
-            if (id == 0L && merchant.isBlank()) {
+            if (id == 0L && type == TxnType.EXPENSE && merchant.isBlank()) {
                 // 30 公尺內、和你的紀錄對得上的店（店家名稱，或習慣寫在說明的攤位）
                 val cands = mb.filter { (it.meters ?: 999f) <= 30f }.mapNotNull { p ->
                     val pn = normName(p.name)
@@ -496,7 +499,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 val pid = repayPerson ?: repo.debtPerson(repayName)
                 val who = lk.account(pid)?.name ?: repayName.trim()
                 repo.saveTxn(t.copy(type = TxnType.TRANSFER, accountId = pid, toAccountId = t.accountId, categoryId = null,
-                    merchant = t.merchant ?: if (repayKind == 0) "$who 還款" else "向 $who 借款"))
+                    merchant = (if (merchantAuto) null else t.merchant) ?: if (repayKind == 0) "$who 還你" else "向 $who 借"))
                 if (again) {
                     expr = ""; merchant = ""; note = ""; repayPerson = null; repayName = ""
                     snack.showSnackbar(com.enwei.moneymanager.ui.tr("已儲存，繼續記下一筆"))
@@ -787,12 +790,14 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     }
 
                 }
-                FormRow("商家", color, merchantFocused, onClick = {}) {
+                // 選了往來對象（他還你、向他借）：是跟人之間的錢，不是在店裡消費，不顯示商家、附近的店與地圖
+                val isRepay = type == TxnType.INCOME && original == null && (repayPerson != null || repayName.isNotBlank())
+                if (!isRepay) FormRow("商家", color, merchantFocused, onClick = {}) {
                     UnderlineField(merchant, { merchant = it; merchantAuto = false; merchantAt = null }, "",
                         Modifier.onFocusChanged { merchantFocused = it.isFocused; if (it.isFocused) panel = Panel.NONE }.coachTarget("ed.merchant"))
                 }
                 // 附近的店：還沒填商家（或正在填）時，點一下帶入
-                if (nearby.isNotEmpty() && type != TxnType.TRANSFER && (merchant.isBlank() || merchantFocused)) Row(
+                if (!isRepay && nearby.isNotEmpty() && type != TxnType.TRANSFER && (merchant.isBlank() || merchantFocused)) Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(start = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
@@ -808,7 +813,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 }
                 val placeIndent = if (com.enwei.moneymanager.ui.AppearancePrefs.icons) 102.dp else 72.dp
                 // Mapbox 搜尋結果：店名＋地址與距離，點一下帶入店名與位置
-                if (merchantFocused && mbResults.isNotEmpty() && type != TxnType.TRANSFER) Column(Modifier.fillMaxWidth().padding(start = placeIndent, end = 16.dp, top = 4.dp)) {
+                if (!isRepay && merchantFocused && mbResults.isNotEmpty() && type != TxnType.TRANSFER) Column(Modifier.fillMaxWidth().padding(start = placeIndent, end = 16.dp, top = 4.dp)) {
                     mbResults.take(5).forEach { r ->
                         Column(Modifier.fillMaxWidth().clickable {
                             pickPlace(r.name, r.lat to r.lon); mbResults = emptyList(); focusManager.clearFocus()
@@ -823,7 +828,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 // 店家位置預覽：點一下修改位置
                 val at = merchantAt ?: knownPlaces[merchant.trim()]
                 // 輸入店名時地圖照樣顯示；只有列出搜尋結果時才暫時收起，避免畫面太長
-                if (settings.locationHints && at != null && merchant.isNotBlank() && !(merchantFocused && mbResults.isNotEmpty()) && type != TxnType.TRANSFER) {
+                if (!isRepay && settings.locationHints && at != null && merchant.isNotBlank() && !(merchantFocused && mbResults.isNotEmpty()) && type != TxnType.TRANSFER) {
                     MapPreview(merchant.trim(), at, Modifier.fillMaxWidth().height(130.dp).padding(start = placeIndent, end = 16.dp, top = 6.dp)) { pickMap = true }
                 }
                 if (pickMap) MapPicker(merchant.trim(), at ?: hereLoc?.let { it.latitude to it.longitude } ?: (25.0136 to 121.5414)) { ll ->
@@ -831,7 +836,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     pickMap = false
                 }
                 // 自動完成：依過去紀錄建議，點選時一併帶入分類與帳戶
-                if (settings.autocomplete && merchantFocused && merchant.isNotBlank()) {
+                if (!isRepay && settings.autocomplete && merchantFocused && merchant.isNotBlank()) {
                     val suggestions = remember(merchant, merchantPool) {
                         merchantPool.asSequence()
                             .filter { it.merchant!!.contains(merchant, true) && it.merchant != merchant }
