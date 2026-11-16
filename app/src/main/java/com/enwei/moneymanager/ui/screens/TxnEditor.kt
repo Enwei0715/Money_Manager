@@ -381,6 +381,18 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             }
             nearby = (hist + known + mb.map { cleanPlaceName(it.name) }).distinct().take(10)
             if (mb.isEmpty()) nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
+            // 有 Google 地點金鑰：直接帶入你現在所在的店（最近的那一家），推薦列只放 10 公尺內的店（由近到遠），再補你記過的店。
+            // 定位本身有誤差：範圍取 10 公尺與定位精確度（最多 25 公尺）中較大的
+            if (com.enwei.moneymanager.net.GooglePlaces.enabled && mb.isNotEmpty()) {
+                val reach = maxOf(10f, minOf(loc.accuracy, 25f))
+                val close = mb.filter { (it.meters ?: 999f) <= reach }.sortedBy { it.meters ?: 0f }
+                // 名稱和你記過的店對得上就用你記的名字（例如 Google 的長名稱對到你習慣的店名）
+                fun mine(n: String): String = names.firstOrNull { k -> normName(k).let { it.length >= 3 && (normName(n).contains(it) || it.contains(normName(n))) } } ?: cleanPlaceName(n)
+                if (id == 0L && type == TxnType.EXPENSE && (merchant.isBlank() || merchantAuto)) close.firstOrNull()?.let { p ->
+                    merchant = mine(p.name); merchantAuto = true
+                }
+                if (close.isNotEmpty()) nearby = (close.map { mine(it.name) } + hist + known).distinct().take(10)
+            }
         } else nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
     }
     LaunchedEffect(merchant, merchantFocused) {
