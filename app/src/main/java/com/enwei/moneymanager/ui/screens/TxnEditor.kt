@@ -570,7 +570,16 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     }
 
     var showSource by remember { mutableStateOf(false) }
-    if (showSource) original?.let { SourceDialog(it) { showSource = false } }
+    if (showSource) original?.let { o ->
+        SourceDialog(o, onPromo = if (o.source == TxnSource.NOTIFICATION) ({
+            showSource = false
+            scope.launch {
+                repo.learnPromo(o)
+                com.enwei.moneymanager.ui.components.Undo.show(com.enwei.moneymanager.ui.tr("已刪除，之後同類通知不再記帳")) { repo.restoreTxn(o) }
+                nav.popBackStack()
+            }
+        }) else null) { showSource = false }
+    }
     fun applyDebt(person: Long, kind: Int) {
         val name = lk.account(person)?.name.orEmpty()
         when (kind) {
@@ -1322,7 +1331,7 @@ private fun Keypad(expr: String, calcMode: Boolean, onExpr: (String) -> Unit, on
  * 合併過的交易會有多則，用分隔線「—」分開；「#AI」標記代表由 AI 判讀，顯示成小標籤。
  */
 @Composable
-private fun SourceDialog(t: TxnEntity, onDismiss: () -> Unit) {
+private fun SourceDialog(t: TxnEntity, onPromo: (() -> Unit)? = null, onDismiss: () -> Unit) {
     val raw = t.rawText.orEmpty()
     val byAi = raw.contains("#AI")
     val notes = raw.replace("#AI", "").split("\n—\n").map { it.trim() }.filter { it.isNotBlank() }
@@ -1357,6 +1366,8 @@ private fun SourceDialog(t: TxnEntity, onDismiss: () -> Unit) {
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("關閉") } },
+        // 這則其實是廣告、不是交易：刪掉這筆，並記住這類通知以後不再記帳
+        dismissButton = onPromo?.let { f -> { TextButton(onClick = f) { Text("這是廣告，不是交易", color = MaterialTheme.colorScheme.error) } } },
     )
 }
 
