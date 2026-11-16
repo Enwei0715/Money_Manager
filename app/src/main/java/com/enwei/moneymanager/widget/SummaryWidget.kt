@@ -81,7 +81,8 @@ class SummaryWidget : AppWidgetProvider() {
             // 圖例：前三名排成一行，圓點顏色和圓餅一樣（不會被小工具的高度截掉）
             fun legend(n: Int): CharSequence = if (top.isEmpty()) com.enwei.moneymanager.ui.tr("本月還沒有支出") else android.text.SpannableStringBuilder().apply {
                 top.take(n).forEachIndexed { i, (name, v) ->
-                    if (i > 0) append("  ")
+                    // 直式：每行固定兩項（中文在任何字之間都可能換行，自己分行才不會把一項拆開）
+                    if (i > 0) append(if (n >= 4 && i % 2 == 0) "\n" else "  ")
                     val st = length
                     append("●")
                     setSpan(android.text.style.ForegroundColorSpan(palette[i % palette.size]), st, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
