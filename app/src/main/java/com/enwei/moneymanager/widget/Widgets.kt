@@ -102,7 +102,7 @@ object Widgets {
     fun fit(context: Context, m: AppWidgetManager, id: Int, cls: KClass<out AppWidgetProvider>, v: RemoteViews): RemoteViews {
         val spec = specOf(cls) ?: return v
         val (w, h) = sizeOf(m, id) ?: return v
-        val k = minOf(w / spec.baseW, h / spec.baseH).coerceIn(0.78f, 1.45f)
+        val k = minOf(w / spec.baseW, h / spec.baseH).coerceIn(0.8f, 1.25f)
         spec.sizes.forEach { (vid, sp) -> v.setTextViewTextSize(vid, android.util.TypedValue.COMPLEX_UNIT_SP, sp * k) }
         if (spec.shortH > 0 && h < spec.shortH) spec.hideShort.forEach { v.setViewVisibility(it, android.view.View.GONE) }
         // 清單：只顯示放得下的列數（原本固定 5 列，矮的時候最後幾列被截一半）
