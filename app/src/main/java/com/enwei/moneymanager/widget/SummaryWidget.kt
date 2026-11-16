@@ -122,31 +122,14 @@ class SummaryWidget : AppWidgetProvider() {
             // 依某個大小做出版面：接近正方或直的用直式（圓餅在上、文字在下），橫的用橫式；字級跟著大小調整
             fun viewsFor(w: Float, h: Float): RemoteViews {
                 val tall = h >= 200f && h >= w * 0.7f
-                // 橫式的文字欄窄：圖例只放得下的項數（不出現「…」）
-                val twoLines = !tall && w < 250f
-                val v = make(if (tall) R.layout.widget_summary_tall else R.layout.widget_summary, twoLines = twoLines,
+                // 橫式：圖例只放得下的項數（字會自動縮放，項數太多才會擠）
+                val v = make(if (tall) R.layout.widget_summary_tall else R.layout.widget_summary, twoLines = false,
                     legendN = if (tall) 4 else if (w < 300f) 2 else 3)
-                // 橫式：上半部可用的高度＝總高 − 邊距與下方按鈕列
-                val avail = (h - 70f) * 0.95f
-                // 四行文字（標題、金額、收入結餘、圖例）在 1 倍字級約 85dp 高；放不下就先拿掉圖例（三行約 61dp），再縮字
-                val k0 = (if (tall) minOf(w / 220f, h / 260f) else minOf(w / 260f, h / 140f)).coerceIn(0.85f, 1.25f)
-                val lines = if (twoLines) 16f else 0f
-                val showLegend = tall || (h >= 130f && avail / ((85f + lines) * fs) >= 0.85f)
-                val k = if (tall) k0 else minOf(k0, avail / (((if (showLegend) 85f else 61f) + lines) * fs)).coerceIn(0.75f, 1.25f)
-                mapOf(R.id.widget_title to 12f, R.id.widget_expense to 22f, R.id.widget_income to 12f, R.id.widget_legend to 12f)
-                    .forEach { (vid, sp) -> v.setTextViewTextSize(vid, android.util.TypedValue.COMPLEX_UNIT_SP, sp * k) }
-                // 下方按鈕：字級幾乎固定（最多放大一成），不跟著小工具變成大字
-                listOf(R.id.widget_cash, R.id.widget_income_btn, R.id.widget_pending)
-                    .forEach { v.setTextViewTextSize(it, android.util.TypedValue.COMPLEX_UNIT_SP, 14f * minOf(k, 1.1f)) }
-                if (!tall) {
-                    if (w < 220f) v.setViewVisibility(R.id.widget_pie, android.view.View.GONE)
-                    if (!showLegend) v.setViewVisibility(R.id.widget_legend, android.view.View.GONE)
-                    if (android.os.Build.VERSION.SDK_INT >= 31) {
-                        val d = minOf(84f * k0, avail).coerceAtLeast(48f)
-                        v.setViewLayoutWidth(R.id.widget_pie, d, android.util.TypedValue.COMPLEX_UNIT_DIP)
-                        v.setViewLayoutHeight(R.id.widget_pie, d, android.util.TypedValue.COMPLEX_UNIT_DIP)
-                    }
-                }
+                if (tall) {
+                    val k = minOf(w / 220f, h / 260f).coerceIn(0.85f, 1.25f) / fs.coerceAtMost(1.3f)
+                    mapOf(R.id.widget_title to 12f, R.id.widget_expense to 22f, R.id.widget_income to 12f, R.id.widget_legend to 12f)
+                        .forEach { (vid, sp) -> v.setTextViewTextSize(vid, android.util.TypedValue.COMPLEX_UNIT_SP, sp * k) }
+                } else if (w < 200f) v.setViewVisibility(R.id.widget_pie, android.view.View.GONE)
                 return v
             }
             ids.forEach { id ->
@@ -154,8 +137,8 @@ class SummaryWidget : AppWidgetProvider() {
                     // Android 12 以上：一次給好幾種大小的版面，由桌面依實際大小挑「放得下的最大那一個」。
                     // 不靠桌面回報的大小（開關、旋轉、重新整理時常常不準），所以不會忽然換成被截到的版本
                     // 版面數量有上限：取常見的幾種寬高組合
-                    val sizes = listOf(180f to 110f, 180f to 220f, 250f to 110f, 250f to 130f, 250f to 160f, 250f to 260f,
-                        320f to 110f, 320f to 130f, 320f to 160f, 320f to 200f, 320f to 280f)
+                    // 橫式的字會自動縮放，只需要分「窄」「寬」「直式」幾種版面
+                    val sizes = listOf(150f to 100f, 200f to 100f, 300f to 100f, 180f to 220f, 250f to 260f)
                     RemoteViews(sizes.associate { (w, h) -> android.util.SizeF(w, h) to viewsFor(w, h) })
                 } else {
                     val size = Widgets.sizeOf(manager, id)
