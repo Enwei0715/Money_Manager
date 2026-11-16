@@ -125,13 +125,13 @@ class SummaryWidget : AppWidgetProvider() {
                 val v = make(if (tall) R.layout.widget_summary_tall else R.layout.widget_summary, twoLines = twoLines,
                     legendN = if (tall) 4 else if (w < 300f) 2 else 3)
                 // 橫式：上半部（圓餅＋文字）可用的高度＝總高 − 邊距與下方按鈕列（約 76dp），再留一成餘裕（各家桌面回報的大小不一定準）
-                val avail = (h - 76f) * 0.9f
+                val avail = (h - 70f) * 0.95f
                 // 四行文字（標題、金額、收入結餘、圖例）在 1 倍字級約 85dp 高；放不下就先拿掉圖例（三行約 61dp），再縮字
                 // 字級跟著寬、高兩者中比較小的那個放大，而且上限壓低：只拉寬時字不會跟著變很大
-                val k0 = (if (tall) minOf(w / 220f, h / 260f) else minOf(w / 300f, h / 170f)).coerceIn(0.8f, 1.25f)
+                val k0 = (if (tall) minOf(w / 220f, h / 260f) else minOf(w / 260f, h / 140f)).coerceIn(0.85f, 1.25f)
                 val lines = if (twoLines) 16f else 0f
-                val showLegend = tall || (h >= 130f && avail / (85f + lines) >= 0.9f)
-                val k = if (tall) k0 else minOf(k0, avail / ((if (showLegend) 85f else 61f) + lines)).coerceIn(0.7f, 1.25f)
+                val showLegend = tall || (h >= 130f && avail / (85f + lines) >= 0.85f)
+                val k = if (tall) k0 else minOf(k0, avail / ((if (showLegend) 85f else 61f) + lines)).coerceIn(0.85f, 1.25f)
                 mapOf(R.id.widget_title to 12f, R.id.widget_expense to 22f, R.id.widget_income to 12f, R.id.widget_legend to 12f)
                     .forEach { (vid, sp) -> v.setTextViewTextSize(vid, android.util.TypedValue.COMPLEX_UNIT_SP, sp * k) }
                 // 下方按鈕：字級幾乎固定（最多放大一成），不跟著小工具變成大字

@@ -391,7 +391,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 if (id == 0L && type == TxnType.EXPENSE && (merchant.isBlank() || merchantAuto)) close.firstOrNull()?.let { p ->
                     merchant = mine(p.name); merchantAuto = true
                 }
-                if (close.isNotEmpty()) nearby = (close.map { mine(it.name) } + hist + known).distinct().take(10)
+                // 推薦列：帶入的那家可能不對，所以列出離你最近的其他店（包含沒記過的），最多 6 家，再補 2 家你在這附近記過的
+                nearby = (mb.sortedBy { it.meters ?: 999f }.take(6).map { mine(it.name) } + hist.take(2)).distinct().take(8)
             }
         } else nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
     }
