@@ -636,8 +636,10 @@ private fun SpendMap(
             val labelFg = if (dark) androidx.compose.ui.graphics.Color(0xFFEDEDED) else androidx.compose.ui.graphics.Color(0xFF2B2B2B)
             val halo = if (dark) androidx.compose.ui.graphics.Color(0xE61E1E21) else androidx.compose.ui.graphics.Color(0xF2FFFFFF)
             val taken = mutableListOf<androidx.compose.ui.geometry.Rect>()
-            // 畫面內的每家店都寫名字（不是只有金額最高的 5 家）；金額大的先寫，和已寫的名字重疊就略過
-            (listOfNotNull(picked) + spots.sortedByDescending { it.total }).distinct().forEach { sp ->
+            // 店名：縮小看全區時只寫金額最高的 5 家（不擠）；放大到街道層級（15 級以上）時，畫面內的店都寫名字。
+            // 金額大的先寫，和已寫的名字重疊就略過
+            val labeled = if (zoom >= 15.0) spots.sortedByDescending { it.total } else spots.sortedByDescending { it.total }.take(5)
+            (listOfNotNull(picked) + labeled).distinct().forEach { sp ->
                 val px = (wrapDx(mx(sp.lon) - cx) * world + size.width / 2).toFloat(); val py = ((my(sp.lat) - cy) * world + size.height / 2).toFloat()
                 if (px < -40 || px > size.width + 40 || py < -20 || py > size.height + 20) return@forEach
                 val r = (pinR(sp, maxTotal) * 0.8 + 2.4).dp.toPx()
