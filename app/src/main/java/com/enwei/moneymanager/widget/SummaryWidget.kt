@@ -92,6 +92,8 @@ class SummaryWidget : AppWidgetProvider() {
             }
             val cash = repo.accounts.first().firstOrNull { it.type == AccountType.CASH && !it.archived }
 
+            // 圓餅圖只畫一次：好幾種大小的版面共用同一張圖（每個版面各畫一張會超過小工具的資料上限）
+            val pieBmp = pie(top.map { it.second })
             fun make(layout: Int, twoLines: Boolean, legendN: Int) = RemoteViews(context.packageName, layout).apply {
                 setTextViewText(R.id.widget_title, com.enwei.moneymanager.ui.tr("${month.monthValue} 月支出"))
                 setTextViewText(R.id.widget_expense, Money.withSymbol(expenseTotal, s.baseCurrency))
@@ -99,7 +101,7 @@ class SummaryWidget : AppWidgetProvider() {
                 setTextViewText(R.id.widget_income, com.enwei.moneymanager.ui.tr("收入") + " ${Money.withSymbol(incomeTotal, s.baseCurrency)}" + (if (twoLines) "\n" else "　") +
                     com.enwei.moneymanager.ui.tr("結餘") + " ${Money.full(incomeTotal - expenseTotal)}")
                 setTextViewText(R.id.widget_legend, legend(legendN))
-                setImageViewBitmap(R.id.widget_pie, pie(top.map { it.second }))
+                setImageViewBitmap(R.id.widget_pie, pieBmp)
                 setOnClickPendingIntent(R.id.widget_stats, open(context, 10, "stats"))
                 setOnClickPendingIntent(R.id.widget_cash, open(context, 11, "txn/0?type=EXPENSE&account=${cash?.id ?: 0}"))
                 setOnClickPendingIntent(R.id.widget_income_btn, open(context, 12, "txn/0?type=INCOME"))
@@ -115,23 +117,22 @@ class SummaryWidget : AppWidgetProvider() {
                 val line = if (dark) 0x33FFFFFF else 0x22000000
                 listOf(R.id.widget_div_top, R.id.widget_div_1, R.id.widget_div_2).forEach { setInt(it, "setBackgroundColor", line) }
             }
-            // 依每個小工具的實際大小選版面：接近正方或直的用直式（圓餅在上、文字在下），橫的用橫式；字級跟著大小調整
-            ids.forEach { id ->
-                val size = Widgets.sizeOf(manager, id)
-                val w = size?.first ?: 260f; val h = size?.second ?: 150f
+            // 系統字級（設定裡的字型大小）會讓所有 sp 字變大：算空間時一併考慮，否則大字級時圖例會被截
+            val fs = context.resources.configuration.fontScale.coerceAtLeast(1f)
+            // 依某個大小做出版面：接近正方或直的用直式（圓餅在上、文字在下），橫的用橫式；字級跟著大小調整
+            fun viewsFor(w: Float, h: Float): RemoteViews {
                 val tall = h >= 200f && h >= w * 0.7f
                 // 橫式的文字欄窄：圖例只放得下的項數（不出現「…」）
                 val twoLines = !tall && w < 250f
                 val v = make(if (tall) R.layout.widget_summary_tall else R.layout.widget_summary, twoLines = twoLines,
                     legendN = if (tall) 4 else if (w < 300f) 2 else 3)
-                // 橫式：上半部（圓餅＋文字）可用的高度＝總高 − 邊距與下方按鈕列（約 76dp），再留一成餘裕（各家桌面回報的大小不一定準）
+                // 橫式：上半部可用的高度＝總高 − 邊距與下方按鈕列
                 val avail = (h - 70f) * 0.95f
                 // 四行文字（標題、金額、收入結餘、圖例）在 1 倍字級約 85dp 高；放不下就先拿掉圖例（三行約 61dp），再縮字
-                // 字級跟著寬、高兩者中比較小的那個放大，而且上限壓低：只拉寬時字不會跟著變很大
                 val k0 = (if (tall) minOf(w / 220f, h / 260f) else minOf(w / 260f, h / 140f)).coerceIn(0.85f, 1.25f)
                 val lines = if (twoLines) 16f else 0f
-                val showLegend = tall || (h >= 130f && avail / (85f + lines) >= 0.85f)
-                val k = if (tall) k0 else minOf(k0, avail / ((if (showLegend) 85f else 61f) + lines)).coerceIn(0.85f, 1.25f)
+                val showLegend = tall || (h >= 130f && avail / ((85f + lines) * fs) >= 0.85f)
+                val k = if (tall) k0 else minOf(k0, avail / (((if (showLegend) 85f else 61f) + lines) * fs)).coerceIn(0.75f, 1.25f)
                 mapOf(R.id.widget_title to 12f, R.id.widget_expense to 22f, R.id.widget_income to 12f, R.id.widget_legend to 12f)
                     .forEach { (vid, sp) -> v.setTextViewTextSize(vid, android.util.TypedValue.COMPLEX_UNIT_SP, sp * k) }
                 // 下方按鈕：字級幾乎固定（最多放大一成），不跟著小工具變成大字
@@ -140,12 +141,28 @@ class SummaryWidget : AppWidgetProvider() {
                 if (!tall) {
                     if (w < 220f) v.setViewVisibility(R.id.widget_pie, android.view.View.GONE)
                     if (!showLegend) v.setViewVisibility(R.id.widget_legend, android.view.View.GONE)
-                    // 橫式：圓餅跟著放大，但不超過可用高度（Android 12 以上才能調整大小）
                     if (android.os.Build.VERSION.SDK_INT >= 31) {
                         val d = minOf(84f * k0, avail).coerceAtLeast(48f)
                         v.setViewLayoutWidth(R.id.widget_pie, d, android.util.TypedValue.COMPLEX_UNIT_DIP)
                         v.setViewLayoutHeight(R.id.widget_pie, d, android.util.TypedValue.COMPLEX_UNIT_DIP)
                     }
+                }
+                return v
+            }
+            ids.forEach { id ->
+                val v = if (android.os.Build.VERSION.SDK_INT >= 31) {
+                    // Android 12 以上：一次給好幾種大小的版面，由桌面依實際大小挑「放得下的最大那一個」。
+                    // 不靠桌面回報的大小（開關、旋轉、重新整理時常常不準），所以不會忽然換成被截到的版本
+                    // 版面數量有上限：取常見的幾種寬高組合
+                    val sizes = listOf(180f to 110f, 180f to 220f, 250f to 110f, 250f to 130f, 250f to 160f, 250f to 260f,
+                        320f to 110f, 320f to 130f, 320f to 160f, 320f to 200f, 320f to 280f)
+                    RemoteViews(sizes.associate { (w, h) -> android.util.SizeF(w, h) to viewsFor(w, h) })
+                } else {
+                    val size = Widgets.sizeOf(manager, id)
+                    // 舊版 Android：用較保守的高度（最小值），寧可字小一點也不截掉
+                    val o = manager.getAppWidgetOptions(id)
+                    val hMin = o?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)?.takeIf { it > 0 }?.toFloat()
+                    viewsFor(size?.first ?: 260f, hMin ?: size?.second ?: 150f)
                 }
                 manager.updateAppWidget(id, v)
             }
