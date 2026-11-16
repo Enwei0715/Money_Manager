@@ -201,6 +201,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     var calcMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(id) {
+        // 打開了這筆：它的自動記帳通知已經看過，收起來
+        if (id != 0L) com.enwei.moneymanager.notify.QuickActions.cancelFor(com.enwei.moneymanager.MoneyApp.instance, id)
         if (original != null) return@LaunchedEffect
         if (id != 0L) repo.getTxn(id)?.let { t ->
             original = t

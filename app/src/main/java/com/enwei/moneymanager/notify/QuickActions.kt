@@ -31,6 +31,11 @@ object QuickActions {
 
     private fun notifId(txnId: Long) = (txnId % 100_000).toInt() + 20_000
 
+    /** 打開這筆交易（不論從通知本身、通知上的按鈕或 App 內）：收起它的自動記帳通知 */
+    fun cancelFor(context: Context, txnId: Long) {
+        runCatching { context.getSystemService(NotificationManager::class.java).cancel(notifId(txnId)) }
+    }
+
     /**
      * 每一筆自動記帳都發一則通知，內容和帳理裡記下的一樣：日期、金額、分類、帳戶、內容（與說明）。
      * 支出、收入可直接在通知上改分類或輸入說明；改完會用同一則通知更新內容。

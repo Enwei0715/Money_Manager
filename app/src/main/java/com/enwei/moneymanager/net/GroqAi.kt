@@ -172,9 +172,17 @@ object GroqAi {
         }
         val all = routes(task, system.length + user.length)
         if (all.isEmpty()) return@withContext null
-        val now = System.currentTimeMillis()
+        var now = System.currentTimeMillis()
+        val health = com.enwei.moneymanager.work.AiHealth
+        val gemRoutes = all.filter { it.provider == Provider.GEMINI }
+        // 資料太多、只有 Gemini 讀得下：Gemini 剛好被限流、幾分鐘內就恢復時，背景工作先等它恢復再送，
+        // 不要直接交給讀不下的 Groq 然後整份失敗
+        if (task != AiTask.CHAT && system.length + user.length > 5000 && gemRoutes.isNotEmpty() && gemRoutes.none { health.cooldownUntil(it.qid) <= now }) {
+            val soon = gemRoutes.minOf { health.cooldownUntil(it.qid) }
+            if (soon - now in 1..180_000L) { kotlinx.coroutines.delay(soon - now + 500); now = System.currentTimeMillis() }
+        }
         // 剛被限流或沒回應的模型先跳過；全部都在暫停就照原順序再試
-        val ready0 = all.filter { com.enwei.moneymanager.work.AiHealth.cooldownUntil(it.qid) <= now }.ifEmpty { all }
+        val ready0 = all.filter { health.cooldownUntil(it.qid) <= now }.ifEmpty { all }
         // 依每個模型自己的額度排序：還有空間的先用（照原本的優先順序），快滿的排後面，今天用完的跳過
         val estTokens = ((system.length + user.length) * 1.1).toInt() + maxTokens
         val quota = com.enwei.moneymanager.work.AiQuota
@@ -233,7 +241,16 @@ object GroqAi {
         }
         if (best == null && errs.isNotEmpty()) lastError = errs.entries.take(3).joinToString("；") { (p, e) -> "$p：$e" } +
             (if (errs.size > 3) "；另 ${errs.size - 3} 個模型也失敗" else "")
-        else if (best == null && skippedGroq) lastError = "資料太多，Groq 讀不下；需要 Gemini 金鑰"
+        else if (best == null && skippedGroq) lastError = when {
+            // 有填 Gemini 金鑰：說出 Gemini 這次為什麼沒用到，不是要你再填金鑰
+            gemRoutes.isEmpty() -> "資料太多，Groq 讀不下；需要 Gemini 金鑰"
+            gemRoutes.all { quota.waitMs(it.qid, true, estTokens) == null } ->
+                "資料太多，Groq 讀不下；Gemini 今天的免費額度已用完（${s.geminiKeys.size} 組金鑰都用完），明天會恢復"
+            else -> gemRoutes.minOf { health.cooldownUntil(it.qid) }.takeIf { it > System.currentTimeMillis() }?.let { until ->
+                "資料太多，Groq 讀不下；Gemini 暫時被限流，" +
+                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.TAIWAN).format(java.util.Date(until)) + " 後恢復，到時會自動重試"
+            } ?: "資料太多，Groq 讀不下；Gemini 這次沒有回應，稍後會自動重試"
+        }
         best
     }
 

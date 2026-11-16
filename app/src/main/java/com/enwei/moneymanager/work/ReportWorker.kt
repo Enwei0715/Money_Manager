@@ -290,6 +290,26 @@ object ReportJob {
     fun progressNotice(context: Context, state: State, elapsed: Long) {
         if (!com.enwei.moneymanager.notify.AppNotices.allowed(context, com.enwei.moneymanager.notify.NoticeKind.PROGRESS)) return
         context.getSystemService(android.app.NotificationManager::class.java).notify(NOTICE_ID, progressNotification(context, state, elapsed))
+        ensureTicker(context.applicationContext)
+    }
+
+    /**
+     * 同一個步驟可能跑好幾分鐘（例如 block 整理）：每 10 秒用目前的狀態重畫通知，
+     * 「已執行」時間與剩餘時間會一直往前走，不會停在剛進這一步時的數字。工作結束就停。
+     */
+    private var ticker: kotlinx.coroutines.Job? = null
+    @Synchronized private fun ensureTicker(context: Context) {
+        if (ticker?.isActive == true) return
+        ticker = MoneyApp.instance.appScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(10_000)
+                val s = state.value ?: break
+                if (!s.running) break
+                if (!com.enwei.moneymanager.notify.AppNotices.allowed(context, com.enwei.moneymanager.notify.NoticeKind.PROGRESS)) break
+                context.getSystemService(android.app.NotificationManager::class.java)
+                    .notify(NOTICE_ID, progressNotification(context, s, System.currentTimeMillis() - s.startedAt))
+            }
+        }
     }
 
     /** 收起進度通知。 */
@@ -313,6 +333,8 @@ object ReportJob {
             .setProgress(state.total ?: 0, state.done ?: 0, state.total == null || state.total <= 0)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            // 工作被系統中止、沒有再更新：2 分鐘後自動消失，不會一直掛著過時的進度
+            .setTimeoutAfter(2 * 60_000L)
             .setSubText(tr("背景進度"))
             .setCategory(androidx.core.app.NotificationCompat.CATEGORY_PROGRESS)
             .setContentIntent(openIntent(context))
