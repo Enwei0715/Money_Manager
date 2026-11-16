@@ -85,7 +85,8 @@ class SummaryWidget : AppWidgetProvider() {
                     val st = length
                     append("●")
                     setSpan(android.text.style.ForegroundColorSpan(palette[i % palette.size]), st, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    append(" ${com.enwei.moneymanager.ui.tr(name)} ${if (expenseTotal > 0) v * 100 / expenseTotal else 0}%")
+                    // 圓點、名稱、百分比之間用不換行空白：換行只會發生在兩項之間，不會把「日用品」和「17%」拆到兩行
+                    append("\u00A0${com.enwei.moneymanager.ui.tr(name).replace(' ', '\u00A0')}\u00A0${if (expenseTotal > 0) v * 100 / expenseTotal else 0}%")
                 }
             }
             val cash = repo.accounts.first().firstOrNull { it.type == AccountType.CASH && !it.archived }
