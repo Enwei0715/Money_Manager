@@ -95,6 +95,8 @@ object InvestData {
 
     @Volatile
     var lastHeadlineError: String? = null
+    /** 少數查詢失敗：不影響報告，只在報告的資料說明裡註記 */
+    var lastHeadlineWarning: String? = null
         private set
 
     /** Yahoo Finance K 線（預設日線，[interval] 可用 "60m"）；台股依序試 .TW、.TWO。 */
@@ -148,22 +150,22 @@ object InvestData {
 
     /** Google 新聞繁體中文 RSS：只讀 RSS 直接提供的欄位，不抓取文章頁。 */
     suspend fun headlines(queries: List<String>, perQuery: Int = 12, max: Int = 45): List<Headline> = coroutineScope {
-        val failures = AtomicInteger()
         // 一次最多 8 個查詢同時進行，避免被新聞服務限流
-        val lists = queries.chunked(8).flatMap { group ->
-            group.map { q ->
-                async {
-                    try {
-                        val url = "https://news.google.com/rss/search?q=${URLEncoder.encode("$q when:2d", "UTF-8")}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
-                        parseRss(Http.getText(url)).take(perQuery)
-                    } catch (_: Exception) {
-                        failures.incrementAndGet()
-                        emptyList()
-                    }
-                }
-            }.awaitAll()
+        suspend fun fetch(q: String): List<Headline>? = try {
+            val url = "https://news.google.com/rss/search?q=${URLEncoder.encode("$q when:2d", "UTF-8")}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
+            parseRss(Http.getText(url)).take(perQuery)
+        } catch (_: Exception) { null }
+        val first = queries.chunked(8).flatMap { group -> group.map { q -> async { q to fetch(q) } }.awaitAll() }
+        // 失敗的查詢（多半是網路瞬斷或被暫時限流）：稍等一下、一個一個重試一次
+        val retried = first.map { (q, r) ->
+            r ?: run { kotlinx.coroutines.delay(1500); fetch(q) }
         }
-        lastHeadlineError = failures.get().takeIf { it > 0 }?.let { "新聞來源有 $it 個查詢失敗" }
+        val failed = retried.count { it == null }
+        val lists = retried.map { it.orEmpty() }
+        // 少數幾個查詢失敗不影響整體（其他來源已涵蓋大部分新聞）：只有超過一半失敗才當成蒐集失敗
+        lastHeadlineError = if (queries.isNotEmpty() && failed * 2 > queries.size)
+            "新聞來源有 $failed／${queries.size} 個查詢失敗（多半是網路不穩或被暫時限流），稍後會自動重試" else null
+        lastHeadlineWarning = if (failed > 0 && lastHeadlineError == null) "新聞來源有 $failed／${queries.size} 個查詢失敗，其餘已蒐集" else null
         val unique = LinkedHashMap<String, Headline>()
         lists.flatten().forEach { headline ->
             val key = fingerprint(headline.title, headline.content)

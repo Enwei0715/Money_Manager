@@ -308,7 +308,7 @@ private fun datasetDigest(ds: NewsDataset, st: NewsStore, themes: Int, symbols: 
     val text = buildString {
         appendLine("新聞資料集：近 3 天共 ${coverage.recent} 則，待標註 ${coverage.pending} 則，已整理進重點庫 ${coverage.digested} 則；資料集共收 ${st.items.size} 則")
         appendLine("近 3 天來源內容範圍：取得正文或摘要 ${recentAll.count { it.contentLevel != "title" }} 則，只有標題 ${recentAll.count { it.contentLevel == "title" }} 則")
-        com.enwei.moneymanager.net.InvestData.lastHeadlineError?.let { appendLine("新聞搜尋完整性警告：$it") }
+        (com.enwei.moneymanager.net.InvestData.lastHeadlineError ?: com.enwei.moneymanager.net.InvestData.lastHeadlineWarning)?.let { appendLine("新聞搜尋完整性警告：$it") }
         appendLine("題材熱度（則數｜平均多空 -2~2｜重大則數）：")
         ds.themes(st).let { if (full) it else it.take(themes) }.forEach { appendLine("- ${it.key}｜${it.count}｜${"%+.1f".format(it.avgSentiment)}｜${it.important}") }
         appendLine("被提到最多的個股（代號｜則數｜多空｜最新標題）：")
