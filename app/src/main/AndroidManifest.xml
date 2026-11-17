@@ -118,6 +118,17 @@
                 android:resource="@xml/widget_recent_info" />
         </receiver>
 
+        <!-- 本月摘要小工具的設定頁：放上桌面時出現（可略過），之後長按小工具也能重新設定 -->
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.MoneyManager">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".widget.SummaryWidget"
             android:exported="false"

@@ -34,6 +34,9 @@ class SummaryWidget : AppWidgetProvider() {
         }
     }
 
+    /** 小工具從桌面移除：一併刪掉它的設定 */
+    override fun onDeleted(context: Context, ids: IntArray) { ids.forEach { WidgetConfig.remove(context, it) } }
+
     /** 使用者在桌面縮放小工具：依新的大小重畫 */
     override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, newOptions: android.os.Bundle) {
         onUpdate(context, manager, intArrayOf(id))
@@ -64,54 +67,77 @@ class SummaryWidget : AppWidgetProvider() {
             val s = repo.settings.value
             val fx = repo.fx.first()
             val month = Periods.monthOf(LocalDate.now(), s.monthStartDay)
-            val (start, end) = Periods.month(month, s.monthStartDay)
-            val txns = repo.allTxns().filter {
+            val (mStart, mEnd) = Periods.month(month, s.monthStartDay)
+            val allTx = repo.allTxns()
+            val categories = repo.categories.first().associateBy { it.id }
+            val cash = repo.accounts.first().firstOrNull { it.type == AccountType.CASH && !it.archived }
+            val budget = s.budgets[0L]?.takeIf { it > 0 }
+            ids.forEach { id ->
+            // 每個小工具各自的設定（主要數字、期間、按鈕、透明度）
+            val cfg = WidgetConfig.load(context, id)
+            val today = LocalDate.now()
+            val (start, end) = when (if (cfg.metric == 1) 0 else cfg.period) {
+                1 -> today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY)) to today
+                2 -> today to today
+                else -> mStart to mEnd
+            }
+            val periodLabel = when (if (cfg.metric == 1) 0 else cfg.period) { 1 -> "本週"; 2 -> "今天"; else -> "${month.monthValue} 月" }
+            val txns = allTx.filter {
                 val d = it.date.toLocalDate()
                 it.status == TxnStatus.CONFIRMED && !d.isBefore(start) && !d.isAfter(end) && it.accountId?.toString() !in s.statsExcluded
             }
             val expense = txns.filter { it.type == TxnType.EXPENSE }
             val expenseTotal = expense.sumOf { fx.convert(it.amount, it.currency) }
             val incomeTotal = txns.filter { it.type == TxnType.INCOME }.sumOf { fx.convert(it.amount, it.currency) }
-            val categories = repo.categories.first().associateBy { it.id }
             // 子分類併入所屬大分類
             val byCat = expense.groupBy { t -> categories[t.categoryId]?.let { it.parentId ?: it.id } }
-                .map { (id, l) -> (categories[id]?.name ?: "未分類") to l.sumOf { fx.convert(it.amount, it.currency) } }
+                .map { (cid, l) -> (categories[cid]?.name ?: "未分類") to l.sumOf { fx.convert(it.amount, it.currency) } }
                 .sortedByDescending { it.second }
             val top = byCat.take(4) + listOfNotNull(byCat.drop(4).takeIf { it.isNotEmpty() }?.let { rest -> "其他" to rest.sumOf { it.second } })
-            // 圖例：前三名排成一行，圓點顏色和圓餅一樣（不會被小工具的高度截掉）
-            fun legend(n: Int): CharSequence = if (top.isEmpty()) com.enwei.moneymanager.ui.tr("本月還沒有支出") else android.text.SpannableStringBuilder().apply {
+            fun legend(n: Int): CharSequence = if (top.isEmpty()) com.enwei.moneymanager.ui.tr("還沒有支出") else android.text.SpannableStringBuilder().apply {
                 top.take(n).forEachIndexed { i, (name, v) ->
                     // 直式：每行固定兩項（中文在任何字之間都可能換行，自己分行才不會把一項拆開）
                     if (i > 0) append(if (n >= 4 && i % 2 == 0) "\n" else "  ")
                     val st = length
                     append("●")
                     setSpan(android.text.style.ForegroundColorSpan(palette[i % palette.size]), st, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    // 圓點、名稱、百分比之間用不換行空白：換行只會發生在兩項之間，不會把「日用品」和「17%」拆到兩行
                     append("\u00A0${com.enwei.moneymanager.ui.tr(name).replace(' ', '\u00A0')}\u00A0${if (expenseTotal > 0) v * 100 / expenseTotal else 0}%")
                 }
             }
-            val cash = repo.accounts.first().firstOrNull { it.type == AccountType.CASH && !it.archived }
-
             // 圓餅圖只畫一次：好幾種大小的版面共用同一張圖（每個版面各畫一張會超過小工具的資料上限）
             val pieBmp = pie(top.map { it.second })
+            val showBudget = cfg.metric == 1 && budget != null
+            val btnIds = listOf(R.id.widget_cash, R.id.widget_income_btn, R.id.widget_pending)
             fun make(layout: Int, twoLines: Boolean, legendN: Int) = RemoteViews(context.packageName, layout).apply {
-                setTextViewText(R.id.widget_title, com.enwei.moneymanager.ui.tr("${month.monthValue} 月支出"))
-                setTextViewText(R.id.widget_expense, Money.withSymbol(expenseTotal, s.baseCurrency))
-                // 文字欄不夠寬時收入、結餘各一行，不截掉
-                setTextViewText(R.id.widget_income, com.enwei.moneymanager.ui.tr("收入") + " ${Money.withSymbol(incomeTotal, s.baseCurrency)}" + (if (twoLines) "\n" else "　") +
-                    com.enwei.moneymanager.ui.tr("結餘") + " ${Money.full(incomeTotal - expenseTotal)}")
+                if (showBudget) {
+                    val left = budget!! - expenseTotal
+                    setTextViewText(R.id.widget_title, com.enwei.moneymanager.ui.tr("${month.monthValue} 月預算剩餘"))
+                    setTextViewText(R.id.widget_expense, Money.withSymbol(left, s.baseCurrency))
+                    setTextColor(R.id.widget_expense, if (left >= 0) 0xFF3C82E6.toInt() else 0xFFF0605A.toInt())
+                    setTextViewText(R.id.widget_income, com.enwei.moneymanager.ui.tr("已花") + " ${Money.withSymbol(expenseTotal, s.baseCurrency)}／${Money.withSymbol(budget, s.baseCurrency)}（${expenseTotal * 100 / budget}%）")
+                } else {
+                    setTextViewText(R.id.widget_title, com.enwei.moneymanager.ui.tr("${periodLabel}支出"))
+                    setTextViewText(R.id.widget_expense, Money.withSymbol(expenseTotal, s.baseCurrency))
+                    setTextViewText(R.id.widget_income, com.enwei.moneymanager.ui.tr("收入") + " ${Money.withSymbol(incomeTotal, s.baseCurrency)}" + (if (twoLines) "\n" else "　") +
+                        com.enwei.moneymanager.ui.tr("結餘") + " ${Money.full(incomeTotal - expenseTotal)}")
+                }
                 setTextViewText(R.id.widget_legend, legend(legendN))
                 setImageViewBitmap(R.id.widget_pie, pieBmp)
-                setOnClickPendingIntent(R.id.widget_stats, open(context, 10, "stats"))
-                setOnClickPendingIntent(R.id.widget_cash, open(context, 11, "txn/0?type=EXPENSE&account=${cash?.id ?: 0}"))
-                setOnClickPendingIntent(R.id.widget_income_btn, open(context, 12, "txn/0?type=INCOME"))
-                setOnClickPendingIntent(R.id.widget_pending, open(context, 13, "txn/0?type=TRANSFER"))
-                setTextViewText(R.id.widget_cash, com.enwei.moneymanager.ui.tr("－ 現金支出"))
-                setTextViewText(R.id.widget_income_btn, com.enwei.moneymanager.ui.tr("＋ 收入"))
-                setTextViewText(R.id.widget_pending, com.enwei.moneymanager.ui.tr("⇄ 轉帳"))
+                setOnClickPendingIntent(R.id.widget_stats, open(context, id * 10 + 0, "stats"))
+                // 下方按鈕：依設定的順序；沒選滿 3 個時其餘隱藏
+                btnIds.forEachIndexed { slot, vid ->
+                    val b = cfg.buttons.getOrNull(slot)?.let { WidgetConfig.BUTTONS.getOrNull(it) }
+                    if (b == null) { setViewVisibility(vid, android.view.View.GONE); return@forEachIndexed }
+                    setTextViewText(vid, com.enwei.moneymanager.ui.tr(b.label))
+                    setTextColor(vid, b.color)
+                    setOnClickPendingIntent(vid, open(context, id * 10 + slot + 1, b.route.replace("{cash}", "${cash?.id ?: 0}")))
+                }
+                // 按鈕之間的分隔線：按鈕少於 3 個時一起收掉
+                if (cfg.buttons.size < 3) setViewVisibility(R.id.widget_div_2, android.view.View.GONE)
+                if (cfg.buttons.size < 2) setViewVisibility(R.id.widget_div_1, android.view.View.GONE)
                 val dark = Widgets.dark(context)
                 setInt(R.id.widget_bg, "setColorFilter", if (dark) 0xFF26272B.toInt() else 0xFFFFFFFF.toInt())
-                setInt(R.id.widget_bg, "setImageAlpha", 255)
+                setInt(R.id.widget_bg, "setImageAlpha", cfg.alpha * 255 / 100)
                 setTextColor(R.id.widget_legend, if (dark) 0xFFDDDDDD.toInt() else 0xFF444444.toInt())
                 setTextColor(R.id.widget_title, if (dark) 0xFFAAAAAA.toInt() else 0xFF8A8A8A.toInt())
                 val line = if (dark) 0x33FFFFFF else 0x22000000
@@ -132,7 +158,6 @@ class SummaryWidget : AppWidgetProvider() {
                 } else if (w < 200f) v.setViewVisibility(R.id.widget_pie, android.view.View.GONE)
                 return v
             }
-            ids.forEach { id ->
                 val v = if (android.os.Build.VERSION.SDK_INT >= 31) {
                     // Android 12 以上：一次給好幾種大小的版面，由桌面依實際大小挑「放得下的最大那一個」。
                     // 不靠桌面回報的大小（開關、旋轉、重新整理時常常不準），所以不會忽然換成被截到的版本
