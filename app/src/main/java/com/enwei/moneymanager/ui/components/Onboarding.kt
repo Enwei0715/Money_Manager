@@ -92,7 +92,7 @@ object Onboarding {
         if ("notif" in w) add(Page(Icons.Outlined.NotificationsActive, "通知自動記帳", "付款通知將自動記為交易。",
             listOf("無法確定的交易列於交易頁上方的「待確認」", "可指定要讀取哪些 App 的通知")))
         add(Page(Icons.Outlined.PieChart, "統計與預算", "掌握支出分布與每月預算執行情形。", listOfNotNull(
-            "統計：分類比例與每月比較", if ("map" in w) "支出地圖：交易頁右上角的地圖圖示" else null, "預算：接近上限時提醒"), "設定預算", "budget"))
+            "統計：分類比例與收支分析", if ("map" in w) "支出地圖：交易頁右上角的地圖圖示" else null, "預算：接近上限時提醒"), "設定預算", "budget"))
         add(Page(Icons.Outlined.AccountBalanceWallet, "資產", "帳戶、信用卡" + (if ("split" in w) "與往來" else "") + "集中於此。", listOfNotNull(
             "信用卡依帳單週期計算應繳與未出帳金額", if ("split" in w) "往來：列出應收與應付的對象與金額" else null), "新增帳戶", "account/0"))
         if ("stocks" in w || "ai" in w) add(Page(Icons.Outlined.AutoAwesome, if ("ai" in w) "股票與 AI 助理" else "股票", if ("stocks" in w) "位於底部的「投資」分頁。" else "位於「工具 → AI 中心」。", listOfNotNull(

@@ -135,13 +135,13 @@ fun StatsTab(nav: NavController) {
         com.enwei.moneymanager.ui.components.Coach.Step("st.period", "期間", "左右箭頭切換上一期或下一期；點選中間的期間名稱可回到本期（自訂期間時則重新選擇期間）。"),
         com.enwei.moneymanager.ui.components.Coach.Step("st.kind", "類型與期間長度", "切換支出或收入，以及每週、每月、每年或自訂期間。"),
         com.enwei.moneymanager.ui.components.Coach.Step("st.pie", "分類比例", "圓餅圖顯示各分類所佔比例；下方清單點選分類可查看子分類與明細交易。"),
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "每月比較與分析", "往下捲動可查看近 6 個月比較；上方「分析」分頁整理支出總覽、與前期的變化及消費習慣。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "分析", "上方「分析」分頁整理支出總覽、與前期的變化及消費習慣。"),
     ))
     val lk = rememberLookups()
     // 期間與收支種類都記住，下次回來維持上次的檢視
     var period by com.enwei.moneymanager.ui.components.rememberChoice("stats.period", Period.entries, Period.MONTH)
     var anchor by rememberSaveable { mutableStateOf(LocalDate.now()) }
-    // 統計頁是所有分析的家：「分類」看比例與每月比較，「分析」是收支檢討（原本在交易頁）
+    // 統計頁是所有分析的家：「分類」看比例，「分析」是收支檢討（原本在交易頁）
     var view by com.enwei.moneymanager.ui.components.rememberTab("stats.view", 0)
     var reviewSpan by rememberSaveable { mutableStateOf(com.enwei.moneymanager.data.ReviewSpan.MONTH) }
     LaunchedEffect(com.enwei.moneymanager.ui.TabRequest.statsView) {
@@ -273,31 +273,6 @@ fun StatsTab(nav: NavController) {
                             Text(Money.withSymbol(v, lk.base), fontSize = AppText.body)
                         }
                         com.enwei.moneymanager.ui.components.LineDivider()
-                    }
-                }
-                // 近 6 個月比較：同一種收支每個月的總額，最右邊是本月（統計頁導覽說的「每月比較」）
-                if (period == Period.MONTH) item {
-                    val months = remember(all, anchor, kind, settings.monthStartDay, settings.statsExcluded) {
-                        val cur = Periods.monthOf(anchor, settings.monthStartDay)
-                        (5 downTo 0).map { back ->
-                            val ym = cur.minusMonths(back.toLong())
-                            val r = Periods.month(ym, settings.monthStartDay)
-                            val total = all.asSequence().filter { it.type == kind && it.status == TxnStatus.CONFIRMED && it.inStats(settings.statsExcluded) }
-                                .filter { val d = it.date.toLocalDate(); !d.isBefore(r.first) && !d.isAfter(r.second) }
-                                .sumOf { lk.fx.convert(it.amount, it.currency) }
-                            ym to total
-                        }
-                    }
-                    if (months.any { it.second > 0 }) Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(16.dp)) {
-                        com.enwei.moneymanager.ui.components.LabeledBars(
-                            "近 6 個月${kind.label}",
-                            months.map { (ym, v) -> Triple("${ym.year}/${ym.monthValue}", v, Money.withSymbol(v, lk.base)) },
-                            color = if (kind == TxnType.EXPENSE) com.enwei.moneymanager.ui.ExpenseColor else com.enwei.moneymanager.ui.IncomeColor,
-                        )
-                        val avg = months.dropLast(1).map { it.second }.filter { it > 0 }.let { l -> if (l.isEmpty()) 0L else l.sum() / l.size }
-                        if (avg > 0) Text("前 5 個月平均 ${Money.withSymbol(avg, lk.base)}；本期 " +
-                            "%+.0f%%".format((months.last().second - avg) * 100.0 / avg), fontSize = AppText.caption,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
                     }
                 }
                 item { Spacer(Modifier.height(24.dp)) }
