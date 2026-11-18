@@ -651,9 +651,20 @@ fun DayBlock(
         var first = true
         val inset = if (repo.settings.flow.collectAsStateWithLifecycle().value.rowStyle == 0) 64.dp else 14.dp
         @Composable fun sep() { if (!first) HorizontalDivider(Modifier.padding(start = inset), thickness = 0.5.dp, color = divider); first = false }
-        if (ledger != null) ledger.forEach { e ->
-            e.txn?.let { sep(); MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
-            e.trade?.let { tr -> sep(); TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
+        if (ledger != null) {
+            // 同一天、同一檔、同一種股利（每個買進批次各一筆）：合併成一列，餘額用合併後的
+            val shown = mutableListOf<LedgerEntry>()
+            ledger.forEach { e ->
+                val prev = shown.lastOrNull()?.trade
+                val tr = e.trade
+                if (tr != null && prev != null && isDividend(tr) && prev.side == tr.side && prev.symbol == tr.symbol && prev.date == tr.date && prev.cashAccountId == tr.cashAccountId) {
+                    shown[shown.size - 1] = shown.last().copy(trade = prev.copy(cashAmount = prev.cashAmount + tr.cashAmount, shares = prev.shares + tr.shares))
+                } else shown += e
+            }
+            shown.forEach { e ->
+                e.txn?.let { sep(); MmTxnRow(it, lk, balances[it.id]) { nav.navigate("txn/${it.id}") } }
+                e.trade?.let { tr -> sep(); TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
+            }
         } else {
             // 另記的手續費：找出它屬於哪一筆（FEE:主交易 id，舊資料用同時間同帳戶），併到那一筆顯示
             val feeOf = remember(txns) {
@@ -678,7 +689,7 @@ fun DayBlock(
             }
             val hidden = feeOf.values.map { it.id }.toSet() + advOf.values.flatten().map { it.id }
             txns.filter { it.id !in hidden }.sortedByDescending { it.date }.forEach { sep(); MmTxnRow(it, lk, balances[it.id], feeOf[it.id], advOf[it.id].orEmpty()) { nav.navigate("txn/${it.id}") } }
-            trades.sortedByDescending { it.id }.forEach { tr -> sep(); TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
+            mergeDividends(trades.sortedByDescending { it.id }).forEach { tr -> sep(); TradeRow(tr, lk, accountId, tradeBalances[tr.id]) { nav.navigate("trade/${tr.id}") } }
         }
         com.enwei.moneymanager.ui.components.LineDivider()
     }
@@ -1316,4 +1327,18 @@ private fun debtItem(t: TxnEntity): String? {
     val m = t.merchant?.trim().orEmpty()
     if (m.startsWith("代墊")) return m.removePrefix("代墊").trimStart('：', ':', ' ').ifBlank { null }
     return if (Regex("還款|還你|借出|借入|借給|還給|向 .+ 借").containsMatchIn(m) || m.isBlank()) null else m
+}
+
+
+private fun isDividend(t: com.enwei.moneymanager.data.StockTradeEntity) =
+    t.side == com.enwei.moneymanager.core.StockSide.CASH_DIVIDEND || t.side == com.enwei.moneymanager.core.StockSide.STOCK_DIVIDEND
+
+/** 自動股利依買進批次各記一筆：清單上同一天、同一檔、同一種合併成一列（金額、股數加總） */
+fun mergeDividends(list: List<com.enwei.moneymanager.data.StockTradeEntity>): List<com.enwei.moneymanager.data.StockTradeEntity> {
+    val out = mutableListOf<com.enwei.moneymanager.data.StockTradeEntity>()
+    list.forEach { t ->
+        val i = if (isDividend(t)) out.indexOfFirst { o -> isDividend(o) && o.side == t.side && o.symbol == t.symbol && o.date == t.date && o.cashAccountId == t.cashAccountId } else -1
+        if (i >= 0) out[i] = out[i].copy(cashAmount = out[i].cashAmount + t.cashAmount, shares = out[i].shares + t.shares) else out += t
+    }
+    return out
 }

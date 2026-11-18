@@ -2420,21 +2420,27 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                             "自動除息：每股 ${"%.4f".format(ev.perShare).trimEnd('0').trimEnd('.')} 元 × ${lot.shares.toLong()} 股"
                         else "自動除權：每股配 ${"%.4f".format(ev.stockPerShare).trimEnd('0').trimEnd('.')} 股 × ${lot.shares.toLong()} 股"
                         val cashAmt = if (side == StockSide.CASH_DIVIDEND) amt else 0.0
+                        // 股利記在證券帳戶（股票的價值裡），不記進交割用的銀行帳戶：除息日錢還沒真的入帳，
+                        // 銀行帳戶的餘額要等實際入帳時才增加。沒有設定證券帳戶的舊資料才記在交割帳戶
+                        val divAcc = if (side == StockSide.CASH_DIVIDEND) lot.brokerAccountId ?: lot.cashAccountId else lot.cashAccountId
                         val shares = if (side == StockSide.STOCK_DIVIDEND) amt else 0.0
                         if (old == null) {
                             db.stocks().upsertTrade(
                                 StockTradeEntity(
                                     market = market, symbol = sym, name = lot.name, side = side, shares = shares, price = 0.0,
                                     cashAmount = cashAmt, currency = lot.currency, date = ev.exEpochDay,
-                                    cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId,
+                                    cashAccountId = divAcc, brokerAccountId = lot.brokerAccountId,
                                     note = note, source = TxnSource.DIVIDEND, externalKey = key, lotTradeId = lotId,
                                 ),
                             )
                             changed++
-                        } else if (!frozen && (old.cashAmount != cashAmt || old.shares != shares || old.cashAccountId != lot.cashAccountId ||
-                            old.brokerAccountId != lot.brokerAccountId || old.note != note || old.name != lot.name)
+                        } else if ((!frozen && (old.cashAmount != cashAmt || old.shares != shares || old.cashAccountId != divAcc ||
+                            old.brokerAccountId != lot.brokerAccountId || old.note != note || old.name != lot.name)) ||
+                            // 之前記在交割帳戶的自動股利：一律改到證券帳戶（不論多久以前）
+                            (frozen && old.cashAccountId != divAcc)
                         ) {
-                            db.stocks().upsertTrade(old.copy(cashAmount = cashAmt, shares = shares, cashAccountId = lot.cashAccountId, brokerAccountId = lot.brokerAccountId, note = note, name = lot.name))
+                            db.stocks().upsertTrade(if (frozen) old.copy(cashAccountId = divAcc) else
+                                old.copy(cashAmount = cashAmt, shares = shares, cashAccountId = divAcc, brokerAccountId = lot.brokerAccountId, note = note, name = lot.name))
                             changed++
                         }
                     }
