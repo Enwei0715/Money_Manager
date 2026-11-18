@@ -2336,6 +2336,32 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     val dividendCache = java.util.concurrent.ConcurrentHashMap<Pair<Market, String>, List<com.enwei.moneymanager.core.DividendEvent>>()
 
     /** 移除已不成立的自動股利：對應的買進被刪除、改了代號，或買進日改到除權息日當天或之後。 */
+    /**
+     * 現金股利記在哪個帳戶：買進時選的證券帳戶；舊資料沒有證券帳戶時，找連結到該交割銀行的證券帳戶（唯一一個才算），
+     * 都找不到才記在交割帳戶。
+     */
+    private fun dividendAccount(lot: StockTradeEntity, brokers: List<AccountEntity>): Long? =
+        lot.brokerAccountId
+            ?: brokers.filter { it.linkedAccountId != null && it.linkedAccountId == lot.cashAccountId }.singleOrNull()?.id
+            ?: lot.cashAccountId
+
+    /** 開 App 時（不需網路）把記在交割銀行帳戶的自動現金股利移到證券帳戶。 */
+    suspend fun moveAutoDividendsToBroker(): Int {
+        val all = db.stocks().allTrades()
+        val byId = all.associateBy { it.id }
+        val brokers = db.accounts().all().filter { it.type == AccountType.BROKERAGE && !it.archived }
+        var n = 0
+        all.filter { it.side == StockSide.CASH_DIVIDEND && it.externalKey?.startsWith("DIV:") == true }.forEach { d ->
+            val lot = d.lotTradeId?.let { byId[it] } ?: return@forEach
+            val target = dividendAccount(lot, brokers) ?: return@forEach
+            if (d.cashAccountId != target) {
+                db.stocks().upsertTrade(d.copy(cashAccountId = target, brokerAccountId = d.brokerAccountId ?: lot.brokerAccountId ?: target))
+                n++
+            }
+        }
+        return n
+    }
+
     suspend fun pruneAutoDividends(): Int {
         var n = 0
         // 配股本身也是一批持股，刪掉後依附它的股利也要跟著刪，所以重複到沒有變動為止
@@ -2389,6 +2415,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val byId = all.associateBy { it.id }
         val records = all.map { it.toRecord() }
         var changed = 0
+        val brokers = db.accounts().all().filter { it.type == AccountType.BROKERAGE && !it.archived }
         db.withTransaction {
             events.filter { it.exEpochDay > firstDay && it.exEpochDay <= today.toEpochDay() }.forEach { ev ->
                 val manual = all.any { it.side == StockSide.CASH_DIVIDEND && it.externalKey == null && kotlin.math.abs(it.date - ev.exEpochDay) <= 20 }
@@ -2422,7 +2449,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                         val cashAmt = if (side == StockSide.CASH_DIVIDEND) amt else 0.0
                         // 股利記在證券帳戶（股票的價值裡），不記進交割用的銀行帳戶：除息日錢還沒真的入帳，
                         // 銀行帳戶的餘額要等實際入帳時才增加。沒有設定證券帳戶的舊資料才記在交割帳戶
-                        val divAcc = if (side == StockSide.CASH_DIVIDEND) lot.brokerAccountId ?: lot.cashAccountId else lot.cashAccountId
+                        val divAcc = if (side == StockSide.CASH_DIVIDEND) dividendAccount(lot, brokers) else lot.cashAccountId
                         val shares = if (side == StockSide.STOCK_DIVIDEND) amt else 0.0
                         if (old == null) {
                             db.stocks().upsertTrade(

@@ -58,6 +58,7 @@ class MoneyApp : Application() {
             repo.ensureSeedData()
             repo.runRecurring()
             repo.runFeeRebates()
+            runCatching { repo.moveAutoDividendsToBroker() }
         }
         SyncWorker.schedule(this)
         SyncWorker.scheduleTyphoon(this)
