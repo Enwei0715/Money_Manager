@@ -17,6 +17,8 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
@@ -90,7 +92,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     // 第一次打開這頁：介紹分頁、K 線與價格提醒
     com.enwei.moneymanager.ui.components.PageTour("stock", listOf(
         com.enwei.moneymanager.ui.components.Coach.Step("sd.tabs", "三個分頁", "「走勢」為 K 線與技術指標；「分析」為營收、趨勢推估與持股紀律；「資訊」為除權息、新聞與公司簡介。"),
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "K 線操作", "兩指縮放、左右拖曳；點選 K 棒顯示當日開高低收；上方可切換 60 分、日、週、月 K 與顯示區間。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "K 線操作", "兩指撥開或捏合縮放、左右拖曳；兩指按住不動可量測兩點價差；點選 K 棒顯示當日開高低收；上方可切換 60 分、日、週、月 K 與顯示區間。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "均線與指標", "下方可加入或移除均線、布林通道，並切換成交量、RSI、MACD 或 KD 指標。"),
         com.enwei.moneymanager.ui.components.Coach.Step("sd.alert", "價格提醒", "設定目標價與停損價；台股交易時段約每 15 分鐘檢查一次，到價時發出通知。"),
     ))
@@ -753,6 +755,12 @@ private fun maColor(len: Int): Color = when (len) {
     else -> listOf(Color(0xFF00BCD4), Color(0xFFCDDC39), Color(0xFF795548), Color(0xFFF44336), Color(0xFF607D8B))[len % 5]
 }
 
+/** 兩根手指在圖上的水平位置（0–1，由左到右） */
+private fun measureOf(e: PointerEvent, width: Float): Pair<Float, Float>? {
+    val xs = e.changes.filter { it.pressed }.take(2).map { (it.position.x / width).coerceIn(0f, 1f) }.sorted()
+    return if (xs.size == 2) xs[0] to xs[1] else null
+}
+
 /**
  * K 線：紅漲綠跌（台股慣例），疊選擇的均線，下方成交量。顯示 [from] 起的 [n] 根；
  * 雙指縮放改變根數（[onZoom] 傳縮放倍率），單指左右拖曳往回看（[onPan] 傳移動的根數，正數為往過去）。
@@ -780,24 +788,46 @@ private fun CandleChart(
     val tap by androidx.compose.runtime.rememberUpdatedState(onTap)
     // 兩指量測：兩根手指下的兩根 K 棒，畫出區間並標漲跌幅（放開就消失）
     var measure by remember { mutableStateOf<Pair<Float, Float>?>(null) }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val measureCol = MaterialTheme.colorScheme.primary
     Canvas(
         Modifier.fillMaxWidth().height(260.dp).padding(top = 8.dp)
-            // 兩指才算縮放，單指上下滑仍可捲動頁面
+            // 兩指手勢分兩種，不再同時發生：兩指按下後直接移動＝縮放；兩指按住不動一下（長按）＝量測價差，之後移動只改量測區間。
+            // 單指上下滑仍可捲動頁面
             .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
-                    do {
-                        val e = awaitPointerEvent()
-                        val pressed = e.changes.filter { it.pressed }
-                        if (pressed.size >= 2) {
-                            val z = e.calculateZoom()
-                            if (z != 1f) zoom(z)
-                            val xs = pressed.take(2).map { (it.position.x / size.width).coerceIn(0f, 1f) }.sorted()
-                            measure = xs[0] to xs[1]
-                            e.changes.forEach { it.consume() }
+                    var mode = 0 // 0 還沒決定、1 縮放、2 量測
+                    var since = 0L
+                    var start: List<Offset> = emptyList()
+                    var last: PointerEvent? = null
+                    while (true) {
+                        val wait = if (mode == 0 && start.isNotEmpty()) (viewConfiguration.longPressTimeoutMillis - (System.currentTimeMillis() - since)).coerceAtLeast(1L) else Long.MAX_VALUE
+                        // Initial：比點選、長按、拖曳先拿到事件，兩指時先吃掉，避免同時觸發
+                        val e = if (wait == Long.MAX_VALUE) awaitPointerEvent(PointerEventPass.Initial) else withTimeoutOrNull(wait) { awaitPointerEvent(PointerEventPass.Initial) }
+                        if (e == null) {
+                            // 兩指按住沒動到長按時間：進入量測
+                            mode = 2
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            last?.let { ev -> measure = measureOf(ev, size.width.toFloat()) }
+                            continue
                         }
-                    } while (e.changes.any { it.pressed })
+                        last = e
+                        val pressed = e.changes.filter { it.pressed }
+                        if (pressed.isEmpty()) break
+                        if (pressed.size >= 2) {
+                            if (start.isEmpty()) { start = pressed.take(2).map { it.position }; since = System.currentTimeMillis() }
+                            if (mode == 0) {
+                                val moved = pressed.take(2).zip(start).any { (c, p0) -> (c.position - p0).getDistance() > viewConfiguration.touchSlop }
+                                if (moved) mode = 1
+                            }
+                            when (mode) {
+                                1 -> { val z = e.calculateZoom(); if (z != 1f) zoom(z) }
+                                2 -> measure = measureOf(e, size.width.toFloat())
+                            }
+                            e.changes.forEach { it.consume() }
+                        } else if (mode == 2) e.changes.forEach { it.consume() } else if (mode == 0) start = emptyList()
+                    }
                     measure = null
                 }
             }
