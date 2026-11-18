@@ -3533,3 +3533,18 @@ AI 暫時無法完成檢討，請稍後再試	AI couldn't finish the review. Try
 － 記支出	− Expense
 已花	Spent
 還沒有支出	No spending yet
+每位對象一列：藍色是對方欠你，紅色是你欠對方。往來都不算收入或支出，只記錄誰欠誰。	One row per person: blue means they owe you, red means you owe them. People entries are never income or expense; they only track who owes whom.
+幫別人付錢	Paying for someone
+例如聚餐你刷了 410、朋友那份 105：記一筆支出 410，在最下方「往來」點朋友，付款人選「我」，他欠你的金額填 105。你的支出只算 305，朋友欠你 105。	Say you paid 410 for dinner and your friend's share is 105: record a 410 expense, tap the friend under People at the bottom, set Paid by to Me, and enter 105 as what they owe you. Your expense counts as 305 and the friend owes you 105.
+別人幫你付	Someone paid for you
+同樣記支出，在「往來」點對方，付款人改選對方：支出照記，同時記你欠他。	Record the expense the same way, tap the person under People and set Paid by to them: the expense is recorded and you now owe them.
+還錢、借錢	Repaying and borrowing
+對方還你：記收入，在「往來」點對方選「他還你」，帳戶選錢進來的帳戶。向對方借：選「向他借」。你還對方或借錢給對方：到對象頁按「我給對方錢」。	When someone pays you back: record income, tap them under People, choose They repay you, and pick the account the money went into. Borrowing from them: choose Borrow from them. When you repay or lend to them: open their page and tap I gave them money.
+欠款歸零就顯示「已結清」。點對象可看每一筆往來，也能設定分期、利息、到期日。	When the balance reaches zero it shows Settled. Tap a person to see every entry, or set installments, interest and a due date.
+和別人一起付、幫別人付或別人幫你付：點對象，再選付款人與他欠你的金額（預設平分）。收入點對象則是他還你或向他借。往來不算收入、支出。	Splitting a bill, paying for someone, or someone paying for you: tap the person, then choose who paid and how much they owe (split evenly by default). On income, tapping a person means they repay you or you borrow from them. People entries are not income or expense.
+對方給我錢	They gave me money
+對方把錢給你時按這裡。對方本來欠你就是收回，沒欠你就記成你向他借。	Tap this when they give you money. If they owed you, it counts as repayment; otherwise it is recorded as borrowing from them.
+我給對方錢	I gave them money
+你把錢給對方時按這裡。你本來欠他就是還款，沒欠他就記成借給他。	Tap this when you give them money. If you owed them, it counts as repaying; otherwise it is recorded as lending to them.
+記一筆代墊	Record paying for them
+一起吃飯、幫他付：直接開記帳頁並選好這個人，填他那份的金額。	Eating together or paying on their behalf: opens a new expense with this person selected; enter their share.

@@ -45,6 +45,12 @@ import java.time.temporal.ChronoUnit
 /** 借貸帳戶明細上方：還款進度、下次收付款、到期日、利息估算，以及收回／還款、再借出／借入。 */
 @Composable
 fun LoanCard(acc: AccountEntity, balance: Long, lk: Lookups, nav: NavController) {
+    // 第一次打開往來對象頁：說明三個按鈕（畫面上不放說明文字）
+    com.enwei.moneymanager.ui.components.PageTour("loancard", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "對方給我錢", "對方把錢給你時按這裡。對方本來欠你就是收回，沒欠你就記成你向他借。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "我給對方錢", "你把錢給對方時按這裡。你本來欠他就是還款，沒欠他就記成借給他。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "記一筆代墊", "一起吃飯、幫他付：直接開記帳頁並選好這個人，填他那份的金額。"),
+    ))
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val info = settings.loans[acc.id]
     // 0 不顯示、1 收回／還款、2 再借出／再借入

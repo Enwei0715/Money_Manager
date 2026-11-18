@@ -229,7 +229,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     // 第一次記帳：簡短介紹這頁幾個重點
     if (id == 0L) com.enwei.moneymanager.ui.components.PageTour("editor", listOfNotNull(
         com.enwei.moneymanager.ui.components.Coach.Step("ed.amount", "金額", "點選此處以計算機輸入，可輸入算式；右上角可加入手續費。"),
-        if (settings.featureSplit) com.enwei.moneymanager.ui.components.Coach.Step("ed.people", "往來", "與他人分帳、由他人代付或收回欠款時，點選對象即可。") else null,
+        if (settings.featureSplit) com.enwei.moneymanager.ui.components.Coach.Step("ed.people", "往來", "和別人一起付、幫別人付或別人幫你付：點對象，再選付款人與他欠你的金額（預設平分）。收入點對象則是他還你或向他借。往來不算收入、支出。") else null,
         com.enwei.moneymanager.ui.components.Coach.Step("ed.merchant", "商家",
             if (settings.locationHints) "輸入時會推薦附近及曾記錄的店家，選取後將一併記錄位置。" else "輸入時會推薦曾記錄的店家，並帶入上次使用的分類與帳戶。"),
     ))
