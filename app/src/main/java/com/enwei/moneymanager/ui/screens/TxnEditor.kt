@@ -175,6 +175,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     val splitRows = SplitRow.decode(splitRaw)
     // 正在用 App 內鍵盤輸入哪一個人的分帳金額
     var splitIdx by rememberSaveable { mutableStateOf(-1) }
+    // 點金額欄位後的第一個按鍵直接取代原數值（像輸入框全選）；按運算符號則接在原數值後面
+    var amountFresh by remember { mutableStateOf(false) }
     var debtOpen by remember { mutableStateOf(false) }
     // 收入：別人還我錢時選對象 → 存成「從他的往來帳戶轉進來」，不算收入
     var repayPerson by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -670,7 +672,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 })
                 // 金額：這頁的主角，獨立成一塊大字；點一下開計算機
                 Column(
-                    Modifier.fillMaxWidth().clickable { focusManager.clearFocus(); panel = Panel.AMOUNT }.coachTarget("ed.amount").padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
+                    Modifier.fillMaxWidth().clickable { focusManager.clearFocus(); panel = Panel.AMOUNT; amountFresh = true }.coachTarget("ed.amount").padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("金額", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
@@ -687,6 +689,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 (if (currency != lk.base) Money.symbolOf(currency) else "$ ") + expr.ifEmpty { "0" },
+                                modifier = Modifier.background(if (amountTyping && amountFresh && expr.isNotEmpty()) color.copy(alpha = 0.16f) else Color.Transparent, RoundedCornerShape(4.dp)),
                                 fontSize = androidx.compose.ui.unit.TextUnit(34f, androidx.compose.ui.unit.TextUnitType.Sp), fontWeight = FontWeight.SemiBold,
                                 color = if (feeTyping) amtColor.copy(alpha = 0.45f) else amtColor, maxLines = 1,
                             )
@@ -699,7 +702,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                                 Modifier.heightIn(min = 40.dp)
                                     .background(if (feeTyping) primary else Color.Transparent, RoundedCornerShape(20.dp))
                                     .border(1.dp, primary.copy(alpha = if (feeTyping) 1f else 0.5f), RoundedCornerShape(20.dp))
-                                    .clickable { showFee = true; focusManager.clearFocus(); panel = Panel.FEE }
+                                    .clickable { showFee = true; focusManager.clearFocus(); panel = Panel.FEE; amountFresh = true }
                                     .padding(horizontal = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,  // 字上下置中
                             ) {
@@ -908,8 +911,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 if (type != TxnType.TRANSFER && (settings.featureSplit || splitRows.isNotEmpty() || paidBy)) {
                     if (!debtMode && type == TxnType.EXPENSE && (original == null || original?.type == TxnType.EXPENSE)) SplitSection(
                         splitMe, { splitMe = it }, paidBy, { paidBy = it },
-                        editing = if (panel == Panel.SPLIT) splitIdx else -1,
-                        onEditAmount = { i -> splitIdx = i; panel = Panel.SPLIT },
+                        editing = if (panel == Panel.SPLIT) splitIdx else -1, fresh = amountFresh,
+                        onEditAmount = { i -> splitIdx = i; panel = Panel.SPLIT; amountFresh = true },
                         splitRows, { splitRaw = SplitRow.encode(it) }, amountMinor, currency, color,
                         onFieldFocus = { panel = Panel.NONE },
                     )
@@ -962,6 +965,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     Spacer(Modifier.height(16.dp))
                 }
             }
+            LaunchedEffect(panel, splitIdx) { amountFresh = panel == Panel.AMOUNT || panel == Panel.FEE || panel == Panel.SPLIT }
             if (panel != Panel.NONE) BottomPanel(
                 splitTitle = splitRows.getOrNull(splitIdx)?.let { r -> "${r.person?.let { lk.account(it)?.name } ?: r.name.trim()} 欠你" },
                 panel = panel, lk = lk, type = type, expr = when (panel) { Panel.FEE -> feeExpr; Panel.SPLIT -> splitRows.getOrNull(splitIdx)?.expr.orEmpty(); else -> expr },
@@ -969,7 +973,14 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 allCurrencies = currencyOptions(lk), calcMode = calcMode,
                 selectedCategory = categoryId, selectedAccount = if (panel == Panel.TO_ACCOUNT) toAccountId else accountId,
                 excludeAccount = if (panel == Panel.TO_ACCOUNT) accountId else null,
-                onExpr = { v ->
+                onExpr = { v0 ->
+                    val old = when (panel) { Panel.FEE -> feeExpr; Panel.SPLIT -> splitRows.getOrNull(splitIdx)?.expr.orEmpty(); else -> expr }
+                    val v = if (!amountFresh || old.isEmpty() || old == "0") v0 else when {
+                        v0.length < old.length -> ""
+                        v0.startsWith(old) -> v0.substring(old.length).let { add -> if (add.firstOrNull()?.let { it.isDigit() || it == '.' } == true) add else v0 }
+                        else -> v0
+                    }
+                    amountFresh = false
                     when (panel) {
                         Panel.FEE -> feeExpr = v
                         Panel.SPLIT -> splitRows.getOrNull(splitIdx)?.let { r ->
@@ -1454,7 +1465,7 @@ private data class SplitRow(val person: Long?, val name: String, val expr: Strin
 @Composable
 private fun SplitSection(
     includeMe: Boolean, onIncludeMe: (Boolean) -> Unit, paidBy: Boolean, onPaidBy: (Boolean) -> Unit,
-    editing: Int, onEditAmount: (Int) -> Unit,
+    editing: Int, onEditAmount: (Int) -> Unit, fresh: Boolean = false,
     rows: List<SplitRow>, onRows: (List<SplitRow>) -> Unit, total: Long?, currency: String, color: Color,
     onFieldFocus: () -> Unit,
 ) {
@@ -1519,6 +1530,7 @@ private fun SplitSection(
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End,
                 ) {
                     Text(Money.symbolOf(currency) + " " + r.expr.ifEmpty { "0" }, fontSize = AppText.body, maxLines = 1,
+                        modifier = Modifier.background(if (typing && fresh && r.expr.isNotEmpty()) color.copy(alpha = 0.22f) else Color.Transparent, RoundedCornerShape(3.dp)),
                         color = if (r.expr.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                     if (typing) Box(Modifier.padding(start = 2.dp).size(width = 2.dp, height = 20.dp).background(color.copy(alpha = caretAlpha)))
                 }
