@@ -911,10 +911,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 if (type != TxnType.TRANSFER && (settings.featureSplit || splitRows.isNotEmpty() || paidBy)) {
                     if (!debtMode && type == TxnType.EXPENSE && (original == null || original?.type == TxnType.EXPENSE)) SplitSection(
                         splitMe, { splitMe = it }, paidBy, { paidBy = it },
-                        editing = if (panel == Panel.SPLIT) splitIdx else -1, fresh = amountFresh,
+                        editing = if (panel == Panel.SPLIT) splitIdx else -1,
                         onEditAmount = { i -> splitIdx = i; panel = Panel.SPLIT; amountFresh = true },
                         splitRows, { splitRaw = SplitRow.encode(it) }, amountMinor, currency, color,
-                        onFieldFocus = { panel = Panel.NONE },
+                        onFieldFocus = { panel = Panel.NONE }, fresh = amountFresh,
                     )
                     if (type == TxnType.INCOME && original == null) RepayRow(repayPerson, repayName, repayKind, color,
                         onPick = { id, name -> repayPerson = id; repayName = name }, onKind = { repayKind = it },
@@ -1465,9 +1465,10 @@ private data class SplitRow(val person: Long?, val name: String, val expr: Strin
 @Composable
 private fun SplitSection(
     includeMe: Boolean, onIncludeMe: (Boolean) -> Unit, paidBy: Boolean, onPaidBy: (Boolean) -> Unit,
-    editing: Int, onEditAmount: (Int) -> Unit, fresh: Boolean = false,
+    editing: Int, onEditAmount: (Int) -> Unit,
     rows: List<SplitRow>, onRows: (List<SplitRow>) -> Unit, total: Long?, currency: String, color: Color,
     onFieldFocus: () -> Unit,
+    fresh: Boolean = false,
 ) {
     val lk = rememberLookups()
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
