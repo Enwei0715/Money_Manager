@@ -3582,3 +3582,5 @@ AI 暫時無法完成檢討，請稍後再試	AI couldn't finish the review. Try
 例如聚餐你刷了 410、朋友那份 105：記一筆支出 410，在最下方「往來」點朋友，付款人選「我」，他欠你的金額填 105。錢是你付的，支出記 410；朋友欠你 105，他還你時不算收入。	Say you paid 410 for dinner and your friend's share is 105: record a 410 expense, tap the friend under People, set Paid by to Me, and enter 105. You paid, so the expense is 410; the friend owes you 105, and their repayment is not income.
 每位對象一列：藍色是對方欠你，紅色是你欠對方。還錢、借錢不算收入或支出，只記錄誰欠誰。	One row per person: blue means they owe you, red means you owe them. Repaying and borrowing are not income or expense; they only track who owes whom.
 把每次都一樣的一組帳存起來，例如房租：付給房東 25,500，室友各欠你 7,500、9,500。之後按「執行」就一次記好支出與室友的欠款。	Save a set of entries that repeats every time, such as rent: 25,500 paid to the landlord, with roommates owing you 7,500 and 9,500. Tap Run to record the expense and the roommates' debts at once.
+平日	Weekdays
+週末	Weekend

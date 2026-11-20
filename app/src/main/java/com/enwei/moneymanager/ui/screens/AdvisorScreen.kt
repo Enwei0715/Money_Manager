@@ -406,7 +406,7 @@ private fun ReportBody(r: DailyReport, newsById: Map<String, com.enwei.moneymana
     // ③ 今天可以考慮：先比較圖，再依長短線分組；每檔只顯示重點，點開看完整內容
     if (rtab == 1 && r.picks.isNotEmpty()) Section("今天可以考慮（${r.picks.size} 檔）") {
         SubHead("走勢比較")
-        com.enwei.moneymanager.ui.components.CompareChart(r.picks.take(5).map { it.symbol })
+        com.enwei.moneymanager.ui.components.CompareChart(r.picks.take(5).map { it.symbol }) { nav.navigate("stock/$it") }
         SubHead("月營收年增率")
         com.enwei.moneymanager.ui.components.RevenueCompare(r.picks.map { it.symbol })
         r.picks.groupBy { it.style.ifBlank { "其他" } }.toSortedMap(compareBy { listOf("短線", "長線").indexOf(it).let { i -> if (i < 0) 9 else i } }).forEach { (style, list) ->
@@ -2182,7 +2182,7 @@ private fun NewsScheduleInfo() {
 @Composable
 private fun ChatChartView(ch: com.enwei.moneymanager.data.ChatChart, nav: NavController) {
     when (ch.kind) {
-        "compare" -> com.enwei.moneymanager.ui.components.CompareChart(ch.items)
+        "compare" -> com.enwei.moneymanager.ui.components.CompareChart(ch.items) { nav.navigate("stock/$it") }
         "revenue" -> com.enwei.moneymanager.ui.components.RevenueCompare(ch.items)
         "signals" -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ch.items.forEach { sym ->
@@ -2211,7 +2211,7 @@ private fun ChatChartView(ch: com.enwei.moneymanager.data.ChatChart, nav: NavCon
                 val pct = if (cost > 0) pnl / cost * 100 else 0.0
                 Triple("${h.symbol} ${h.name.orEmpty()}".trim(), pct, "%+.1f%%".format(pct))
             }.sortedByDescending { it.second }
-            com.enwei.moneymanager.ui.components.SignedBars("持股損益（%）", rows)
+            com.enwei.moneymanager.ui.components.SignedBars("持股損益（%）", rows) { i -> nav.navigate("stock/${rows[i].first.substringBefore(' ')}") }
         }
     }
 }

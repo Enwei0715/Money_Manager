@@ -2,6 +2,9 @@ package com.enwei.moneymanager.ui.components
 
 import com.enwei.moneymanager.ui.AppText
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -142,7 +145,9 @@ fun CompareBars(
 /** 每日支出長條圖，虛線為每日平均；最高的一天標出金額。 */
 @Composable
 fun DailyBarsChart(values: List<Long>, fmt: (Long) -> String, color: Color = MaterialTheme.colorScheme.primary, modifier: Modifier = Modifier, weekly: Boolean = false,
-                   start: java.time.LocalDate? = null) {
+                   start: java.time.LocalDate? = null,
+                   /** 點某一天（某一週）的長條：傳那一根的索引 */
+                   onBar: ((Int) -> Unit)? = null) {
     if (values.isEmpty() || values.all { it == 0L }) return
     val max = values.max().coerceAtLeast(1)
     val avg = values.sum() / values.size
@@ -154,7 +159,11 @@ fun DailyBarsChart(values: List<Long>, fmt: (Long) -> String, color: Color = Mat
         val peakDay = start?.plusDays(if (weekly) peak * 7L else peak.toLong())
         Text("${if (weekly) "每週平均" else "每天平均"} ${fmt(avg)} · 最高 " + (peakDay?.let { "${it.monthValue}/${it.dayOfMonth}" + if (weekly) " 那週" else "" } ?: "") + " ${fmt(values[peak])}",
             fontSize = AppText.label, color = grid)
-        Canvas(Modifier.fillMaxWidth().height(80.dp).padding(top = 4.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(80.dp).padding(top = 4.dp).let { m ->
+            if (onBar == null) m else m.pointerInput(values.size) {
+                detectTapGestures { o -> val i = (o.x / size.width * values.size).toInt().coerceIn(0, values.lastIndex); if (values[i] > 0) onBar(i) }
+            }
+        }) {
             val w = size.width / values.size
             values.forEachIndexed { i, v ->
                 val h = v.toFloat() / max * size.height
@@ -179,7 +188,9 @@ val SeriesColors = listOf(Color(0xFF3C82E6), Color(0xFFF0605A), Color(0xFF2E9E57
 
 /** 多檔個股走勢比較：近 [days] 個交易日，以第一天為 0% 的漲跌幅折線。 */
 @Composable
-fun CompareChart(symbols: List<String>, days: Int = 60, modifier: Modifier = Modifier) {
+fun CompareChart(symbols: List<String>, days: Int = 60, modifier: Modifier = Modifier,
+                 /** 點圖例的某一檔：打開那檔股票 */
+                 onSymbol: ((String) -> Unit)? = null) {
     val data by produceState<List<Pair<String, List<Double>>>?>(null, symbols) {
         value = symbols.mapNotNull { s ->
             val b = cachedBars(s) ?: return@mapNotNull null
@@ -209,7 +220,8 @@ fun CompareChart(symbols: List<String>, days: Int = 60, modifier: Modifier = Mod
             }
         }
         series.forEachIndexed { si, (name, v) ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            val sym = name.substringBefore(' ').takeIf { it in symbols && onSymbol != null }
+            Row(Modifier.heightIn(min = 28.dp).let { m -> if (sym != null) m.clickable { onSymbol?.invoke(sym) } else m }, verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.width(12.dp).height(3.dp).background(SeriesColors[si % SeriesColors.size]))
                 Text(" $name", fontSize = AppText.label, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val last = v.last()
@@ -224,14 +236,16 @@ fun CompareChart(symbols: List<String>, days: Int = 60, modifier: Modifier = Mod
  * 用在題材多空熱度、持股損益。
  */
 @Composable
-fun SignedBars(title: String, rows: List<Triple<String, Double, String>>, pos: Color = StockUp, neg: Color = StockDown, modifier: Modifier = Modifier) {
+fun SignedBars(title: String, rows: List<Triple<String, Double, String>>, pos: Color = StockUp, neg: Color = StockDown, modifier: Modifier = Modifier,
+               /** 點某一列：傳那一列的索引 */
+               onRow: ((Int) -> Unit)? = null) {
     if (rows.isEmpty()) return
     val max = rows.maxOf { kotlin.math.abs(it.second) }.takeIf { it > 0 } ?: 1.0
     val track = MaterialTheme.colorScheme.surfaceVariant
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, fontSize = AppText.caption, fontWeight = FontWeight.SemiBold)
-        rows.forEach { (name, v, label) ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        rows.forEachIndexed { idx, (name, v, label) ->
+            Row(Modifier.let { m -> if (onRow != null) m.heightIn(min = 28.dp).clickable { onRow(idx) } else m }, verticalAlignment = Alignment.CenterVertically) {
                 Text(name, fontSize = AppText.label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(88.dp))
                 Row(Modifier.weight(1f).height(14.dp).background(track, RoundedCornerShape(3.dp)), verticalAlignment = Alignment.CenterVertically) {
                     val f = (kotlin.math.abs(v) / max).toFloat().coerceIn(0.02f, 1f)
@@ -253,15 +267,17 @@ fun SignedBars(title: String, rows: List<Triple<String, Double, String>>, pos: C
 
 /** 橫條清單：每列名稱、長條、右側文字（金額、次數等），最大值為滿格。 */
 @Composable
-fun LabeledBars(title: String, rows: List<Triple<String, Long, String>>, color: Color = MaterialTheme.colorScheme.primary, modifier: Modifier = Modifier) {
+fun LabeledBars(title: String, rows: List<Triple<String, Long, String>>, color: Color = MaterialTheme.colorScheme.primary, modifier: Modifier = Modifier,
+                /** 點某一列：傳那一列的索引（看組成這一列的交易） */
+                onRow: ((Int) -> Unit)? = null) {
     if (rows.isEmpty() || rows.all { it.second <= 0 }) return
     val max = rows.maxOf { it.second }.coerceAtLeast(1)
     val track = MaterialTheme.colorScheme.surfaceVariant
     // 一項一列：名稱｜細長條｜數值（原本名稱、數值、長條分兩行，項目一多就很擠）
     Column(modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(title, fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
-        rows.forEach { (name, v, label) ->
-            Row(Modifier.fillMaxWidth().heightIn(min = 30.dp), verticalAlignment = Alignment.CenterVertically) {
+        rows.forEachIndexed { idx, (name, v, label) ->
+            Row(Modifier.fillMaxWidth().heightIn(min = 30.dp).let { if (onRow != null) it.clickable { onRow(idx) } else it }, verticalAlignment = Alignment.CenterVertically) {
                 Text(name, fontSize = AppText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(0.38f))
                 Box(Modifier.weight(0.27f).padding(horizontal = 8.dp).height(6.dp).background(track, RoundedCornerShape(3.dp))) {
                     if (v > 0) Box(Modifier.fillMaxWidth((v.toFloat() / max).coerceIn(0.03f, 1f)).height(6.dp).background(color.copy(alpha = 0.8f), RoundedCornerShape(3.dp)))

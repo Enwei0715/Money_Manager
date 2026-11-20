@@ -37,6 +37,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -232,7 +233,7 @@ fun ReviewContent(
             if (rt == 2 && d.expenses.isEmpty()) Text("這期沒有支出", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (rt == 2 && d.expenses.isNotEmpty()) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    HabitCharts(d, ::m, lk)
+                    HabitCharts(d, ::m, lk, nav)
                 }
             }
 
@@ -459,8 +460,13 @@ private fun StructureCard(d: ReviewData, m: (Long) -> String, focus: List<String
 
 /** 消費習慣圖表：每日（或每週）支出、時段分布、平日／週末、常去的商家（金額與次數）。 */
 @Composable
-private fun HabitCharts(d: ReviewData, m: (Long) -> String, lk: Lookups) {
+private fun HabitCharts(d: ReviewData, m: (Long) -> String, lk: Lookups, nav: NavController) {
     val zone = java.time.ZoneId.systemDefault()
+    // 點圖表的某一根／某一列：列出組成它的交易
+    var drill by remember { mutableStateOf<Pair<String, List<com.enwei.moneymanager.data.TxnEntity>>?>(null) }
+    fun at(t: com.enwei.moneymanager.data.TxnEntity) = java.time.Instant.ofEpochMilli(t.date).atZone(zone)
+    fun slotOf(h: Int) = when { h in 5..10 -> 0; h in 11..13 -> 1; h in 14..16 -> 2; h in 17..21 -> 3; else -> 4 }
+    fun weekend(t: com.enwei.moneymanager.data.TxnEntity) = at(t).dayOfWeek.let { it == java.time.DayOfWeek.SATURDAY || it == java.time.DayOfWeek.SUNDAY }
     val last = minOf(d.end, java.time.LocalDate.now())
     val n = (java.time.temporal.ChronoUnit.DAYS.between(d.start, last) + 1).toInt().coerceAtLeast(1)
     val stats = remember(d) {
@@ -481,12 +487,20 @@ private fun HabitCharts(d: ReviewData, m: (Long) -> String, lk: Lookups) {
     val weekly = n > 62
     com.enwei.moneymanager.ui.components.DailyBarsChart(
         if (weekly) stats.first.chunked(7).map { it.sum() } else stats.first, m, ExpenseColor, weekly = weekly, start = d.start,
-    )
+    ) { i ->
+        val from = d.start.plusDays(if (weekly) i * 7L else i.toLong())
+        val to = if (weekly) from.plusDays(6) else from
+        drill = (if (weekly) "${from.monthValue}/${from.dayOfMonth}–${to.monthValue}/${to.dayOfMonth}" else "${from.monthValue}/${from.dayOfMonth}") to
+            d.expenses.filter { val day = at(it).toLocalDate(); !day.isBefore(from) && !day.isAfter(to) }
+    }
     val slotNames = listOf("早上 5–11", "中午 11–14", "下午 14–17", "晚上 17–22", "深夜 22–5")
     val total = stats.second.sum().coerceAtLeast(1)
     com.enwei.moneymanager.ui.components.LabeledBars(
         "時段", slotNames.indices.filter { stats.second[it] > 0 }.map { i -> Triple(slotNames[i], stats.second[i], "${stats.second[i] * 100 / total}%　${m(stats.second[i])}") }, ExpenseColor,
-    )
+    ) { row ->
+        val slot = slotNames.indices.filter { stats.second[it] > 0 }[row]
+        drill = slotNames[slot] to d.expenses.filter { slotOf(at(it).hour) == slot }
+    }
     val (wd, we) = stats.third
     com.enwei.moneymanager.ui.components.LabeledBars(
         "平日／週末（每天平均）",
@@ -496,12 +510,51 @@ private fun HabitCharts(d: ReviewData, m: (Long) -> String, lk: Lookups) {
             rows.map { (k, v, _) -> val per = (v / weeks).toLong(); Triple(k, per, m(per) + "／天") }
         },
         MaterialTheme.colorScheme.tertiary,
-    )
+    ) { row -> drill = (if (row == 0) "平日" else "週末") to d.expenses.filter { weekend(it) == (row == 1) } }
+    val topMerchants = d.merchants().sortedByDescending { it.total }.take(5)
     com.enwei.moneymanager.ui.components.LabeledBars(
         "花費最多的項目",
-        d.merchants().sortedByDescending { it.total }.take(5).map { Triple(it.name.take(12), it.total, "${it.count} 次　${m(it.total)}") },
+        topMerchants.map { Triple(it.name.take(12), it.total, "${it.count} 次　${m(it.total)}") },
         MaterialTheme.colorScheme.primary,
-    )
+    ) { row ->
+        val name = topMerchants[row].name
+        drill = name to d.expenses.filter { (it.merchant ?: lk.catLabel(it.categoryId) ?: "未命名").trim() == name || it.merchant?.trim() == name }
+    }
+    drill?.let { (title, list) -> DrillDialog(title, list, m, lk, nav) { drill = null } }
+}
+
+/** 圖表點進去：這一根／這一列包含的交易（新到舊），點一筆打開。 */
+@Composable
+private fun DrillDialog(
+    title: String, list: List<com.enwei.moneymanager.data.TxnEntity>, m: (Long) -> String, lk: Lookups, nav: NavController, onDismiss: () -> Unit,
+) {
+    val zone = java.time.ZoneId.systemDefault()
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        androidx.compose.material3.Surface(shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), color = MaterialTheme.colorScheme.surface) {
+            Column {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, fontSize = AppText.section, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${list.size} 筆・${m(list.sumOf { lk.fx.convert(it.amount, it.currency) })}", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                com.enwei.moneymanager.ui.components.LineDivider()
+                androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 460.dp)) {
+                    items(list.sortedByDescending { it.date }.size) { i ->
+                        val t = list.sortedByDescending { it.date }[i]
+                        val dt = java.time.Instant.ofEpochMilli(t.date).atZone(zone)
+                        Row(Modifier.fillMaxWidth().clickable { onDismiss(); nav.navigate("txn/${t.id}") }.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(t.merchant?.takeIf { it.isNotBlank() } ?: lk.catLabel(t.categoryId) ?: "未命名", fontSize = AppText.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${dt.monthValue}/${dt.dayOfMonth} ${"%02d:%02d".format(dt.hour, dt.minute)}・${lk.catLabel(t.categoryId) ?: "未分類"}",
+                                    fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            Text(m(lk.fx.convert(t.amount, t.currency)), fontSize = AppText.body, color = ExpenseColor)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 
