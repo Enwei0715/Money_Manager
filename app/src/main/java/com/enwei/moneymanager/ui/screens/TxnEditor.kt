@@ -118,6 +118,7 @@ import com.enwei.moneymanager.data.toLocalDate
 import com.enwei.moneymanager.ui.ExpenseColor
 import com.enwei.moneymanager.ui.IncomeColor
 import com.enwei.moneymanager.ui.components.BackTopBar
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -144,6 +145,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     initialToAccountId: Long? = null, initialAmount: Long? = null,
     /** 從「往來」的「記代墊」進來：預先打開代墊並選好這個人 */
     initialSplitPerson: Long? = null,
+    /** 編輯巨集的一步：用同一個記帳畫面，儲存時寫回巨集（不記帳） */
+    macroMode: Boolean = false,
 ) {
     val lk = rememberLookups()
     val scope = rememberCoroutineScope()
@@ -202,6 +205,24 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     var noteFocused by remember { mutableStateOf(false) }
     var calcMode by remember { mutableStateOf(false) }
 
+    // 巨集的一步：帶入那一步的內容
+    LaunchedEffect(macroMode) {
+        if (!macroMode) return@LaunchedEffect
+        val st = MacroDraft.editing() ?: return@LaunchedEffect
+        val tp = runCatching { TxnType.valueOf(st.type) }.getOrDefault(TxnType.EXPENSE)
+        val people = repo.accounts.first().filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN }.map { it.id }.toSet()
+        when {
+            // 對方幫你付：存成「從對方的往來帳戶付的支出」
+            tp == TxnType.EXPENSE && st.accountId in people -> { type = tp; paidBy = true; splitRaw = SplitRow.encode(listOf(SplitRow(st.accountId, "", "", auto = false))) }
+            // 他還你／向他借：存成「從對方轉到你的帳戶」
+            tp == TxnType.TRANSFER && st.accountId in people -> { type = TxnType.INCOME; repayPerson = st.accountId; repayName = lk.account(st.accountId)?.name.orEmpty(); accountId = st.toAccountId }
+            else -> { type = tp; accountId = st.accountId; toAccountId = st.toAccountId }
+        }
+        if (st.amount > 0) expr = minorToExpr(st.amount)
+        categoryId = st.categoryId; merchant = st.merchant
+        if (st.shares.isNotEmpty()) { splitOn = true; splitRaw = SplitRow.encode(st.shares.map { SplitRow(it.personId, "", minorToExpr(it.amount), auto = false) }) }
+        panel = if (st.amount > 0) Panel.NONE else panel
+    }
     LaunchedEffect(id) {
         // 打開了這筆：它的自動記帳通知已經看過，收起來
         if (id != 0L) com.enwei.moneymanager.notify.QuickActions.cancelFor(com.enwei.moneymanager.MoneyApp.instance, id)
@@ -334,7 +355,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         merchantAt = if (stall == null) at else null
     }
     LaunchedEffect(Unit) {
-        if (!settings.locationHints) return@LaunchedEffect
+        if (!settings.locationHints || macroMode) return@LaunchedEffect
         val appCtx = com.enwei.moneymanager.MoneyApp.instance
         // 編輯舊的一筆：用這筆記帳時記下的位置推薦（沒有記下位置就不推薦）；新的一筆用目前位置
         val loc = if (id != 0L) com.enwei.moneymanager.data.PlaceHints.samples(appCtx).firstOrNull { it.txnId == id }?.let { s0 ->
@@ -494,6 +515,22 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
 
     fun save(again: Boolean) {
         val t0 = build() ?: return
+        // 巨集的一步：不記帳，寫回巨集
+        if (macroMode) {
+            val repay = type == TxnType.INCOME && (repayPerson != null || repayName.isNotBlank())
+            scope.launch {
+                val step = when {
+                    payer != null -> com.enwei.moneymanager.data.MacroStep("EXPENSE", t0.amount, payer.person ?: repo.debtPerson(payer.name), null, t0.categoryId, t0.merchant.orEmpty())
+                    repay -> com.enwei.moneymanager.data.MacroStep("TRANSFER", t0.amount, repayPerson ?: repo.debtPerson(repayName), t0.accountId, null,
+                        t0.merchant ?: "${repayName.ifBlank { lk.account(repayPerson)?.name.orEmpty() }} ${if (repayKind == 0) "還你" else "借給你"}")
+                    else -> com.enwei.moneymanager.data.MacroStep(t0.type.name, t0.amount, t0.accountId, t0.toAccountId, t0.categoryId, t0.merchant.orEmpty(),
+                        splitParts.mapNotNull { (r, v) -> (r.person ?: r.name.takeIf { it.isNotBlank() }?.let { repo.debtPerson(it) })?.let { com.enwei.moneymanager.data.MacroShare(it, v) } })
+                }
+                MacroDraft.put(step)
+                nav.popBackStack()
+            }
+            return
+        }
         // 選了店家位置（搜尋結果、附近的店或在地圖上修改）：存成這家店的位置
         merchantAt?.let { ll -> merchant.trim().takeIf { it.isNotEmpty() }?.let { com.enwei.moneymanager.data.PlaceHints.setMerchantPin(it, ll.first, ll.second, merchantVia) } }
         if (payer != null) {
@@ -623,13 +660,14 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             BackTopBar(when {
+                macroMode -> "巨集步驟"
                 debtMode -> "往來"
                 type == TxnType.INCOME && original == null && (repayPerson != null || repayName.isNotBlank()) -> if (repayKind == 0) "收到還款" else "借入"
                 type == TxnType.EXPENSE && payer != null -> "別人先付"
                 else -> type.label
             }, { nav.popBackStack() }) {
                 // 當天備註（不是交易）：收在右上角
-                if (original == null) androidx.compose.material3.IconButton(onClick = { memoNew = true }) {
+                if (original == null && !macroMode) androidx.compose.material3.IconButton(onClick = { memoNew = true }) {
                     Icon(com.enwei.moneymanager.ui.components.LineIcons.IcNote, "當天備註")
                 }
                 // 來源通知收在右上角的通知圖示：點了才看原文，表單保持乾淨
@@ -648,7 +686,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 val segs = buildList {
                     TxnType.entries.forEach { t -> add(Triple(t.label, !debtMode && type == t, typeColor(t)) to { debtMode = false; if (type != t) { type = t; categoryId = null } }) }
                     // 往來已整合：代墊在「支出 → 分帳」、別人還錢在「收入 → 誰還的」、借錢還錢在「轉帳」選往來對象
-                    if (original == null && settings.featureStocks) add(Triple("股票", false, MaterialTheme.colorScheme.onSurfaceVariant) to { nav.popBackStack(); nav.navigate("trade/0") })
+                    if (original == null && !macroMode && settings.featureStocks) add(Triple("股票", false, MaterialTheme.colorScheme.onSurfaceVariant) to { nav.popBackStack(); nav.navigate("trade/0") })
                 }
                 Row(
                     Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)
@@ -695,7 +733,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                             )
                             if (amountTyping) Box(Modifier.padding(start = 2.dp).size(width = 2.dp, height = 32.dp).background(color.copy(alpha = caretAlpha)))
                         }
-                        if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && !debtMode) {
+                        if ((type == TxnType.TRANSFER || type == TxnType.EXPENSE) && !debtMode && !macroMode) {
                             // 輸入手續費時：按鈕填滿主題色、後面有閃爍游標，一看就知道鍵盤正在輸入手續費
                             val primary = MaterialTheme.colorScheme.primary
                             Row(
@@ -723,7 +761,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         Text("≈ ${Money.withSymbol(lk.fx.convert(amountMinor, currency), lk.base)}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     // 預算：緊貼在金額下方（記這筆之後還剩多少），不把表單隔開
-                    if (budget.isNotEmpty() && type == TxnType.EXPENSE) {
+                    if (budget.isNotEmpty() && type == TxnType.EXPENSE && !macroMode) {
                         // 預算只算你的支出：別人欠你的部分不算
                         val others = if (!paidBy) splitRows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L } else 0L
                         val own = ((amountMinor ?: 0) - others).coerceAtLeast(0)
@@ -737,7 +775,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     HorizontalDivider(Modifier.padding(top = 8.dp), thickness = if (panel == Panel.AMOUNT) 2.dp else 1.dp,
                         color = if (panel == Panel.AMOUNT) color else MaterialTheme.colorScheme.outlineVariant)
                 }
-                FormRow("日期", color, active = false, onClick = { panel = Panel.NONE; showDate = true }, trailing = {
+                if (!macroMode) FormRow("日期", color, active = false, onClick = { panel = Panel.NONE; showDate = true }, trailing = {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
@@ -942,7 +980,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                             onClick = { trySave(again = false) }, modifier = Modifier.weight(2f).height(48.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(6.dp),
                         ) { Text("儲存") }
-                        OutlinedButton(
+                        if (!macroMode) OutlinedButton(
                             onClick = { trySave(again = true) }, modifier = Modifier.weight(1f).height(48.dp),
                             shape = RoundedCornerShape(6.dp),
                         ) { Text("繼續", color = MaterialTheme.colorScheme.onSurface) }

@@ -466,7 +466,7 @@ private fun AppScaffold(nav: NavHostController) {
                 } else CategoryStatScreen(nav, cat, kind, period, anchor)
             }
             composable(
-                "txn/{id}?type={type}&date={date}&account={account}&to={to}&amount={amount}&split={split}",
+                "txn/{id}?type={type}&date={date}&account={account}&to={to}&amount={amount}&split={split}&macro={macro}",
                 arguments = listOf(
                     navArgument("id") { type = NavType.LongType },
                     navArgument("type") { type = NavType.StringType; nullable = true; defaultValue = null },
@@ -475,11 +475,12 @@ private fun AppScaffold(nav: NavHostController) {
                     navArgument("to") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("amount") { type = NavType.LongType; defaultValue = 0L },
                     navArgument("split") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("macro") { type = NavType.BoolType; defaultValue = false },
                 ),
             ) { e ->
                 val a = e.arguments!!
                 TxnEditScreen(nav, a.getLong("id"), a.getString("type"), a.getLong("date").takeIf { it != Long.MIN_VALUE }, a.getLong("account").takeIf { it > 0 },
-                    a.getLong("to").takeIf { it > 0 }, a.getLong("amount").takeIf { it > 0 }, a.getLong("split").takeIf { it > 0 })
+                    a.getLong("to").takeIf { it > 0 }, a.getLong("amount").takeIf { it > 0 }, a.getLong("split").takeIf { it > 0 }, macroMode = a.getBoolean("macro"))
             }
             composable(
                 "account/{id}?type={type}",

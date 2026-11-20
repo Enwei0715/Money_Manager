@@ -1488,7 +1488,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
         // 巨集：付款通知的金額等於某個巨集（且內文含它的關鍵字）→ 直接照巨集記（例如房租＋室友各欠的部分）
         s.macros.firstOrNull { m ->
-            m.fromNotif && (m.keyword.isBlank() || raw0.contains(m.keyword.trim(), ignoreCase = true)) &&
+            // 關鍵字比對忽略千分位逗號與空白（填 25500 也對得到通知裡的 25,500）
+            m.fromNotif && (m.keyword.isBlank() || raw0.replace(",", "").replace(" ", "").contains(m.keyword.trim().replace(",", "").replace(" ", ""), ignoreCase = true)) &&
                 m.allSteps().any { st -> st.amount == p.amountMinor && (st.type == "INCOME") == (p.type == ParsedType.INCOME) }
         }?.let { m ->
             val hitStep = m.allSteps().first { it.amount == p.amountMinor }

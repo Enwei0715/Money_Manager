@@ -134,153 +134,109 @@ fun MacroListScreen(nav: NavController) {
     }
 }
 
-/** 編輯中的一步（金額用文字，往來是對象 id 與金額文字） */
-private data class StepDraft(
-    val type: String = "EXPENSE", val amount: String = "", val accountId: Long? = null, val toAccountId: Long? = null,
-    val categoryId: Long? = null, val merchant: String = "", val shares: List<Pair<Long, String>> = emptyList(),
-) {
-    val total get() = parseMinor(amount)
-    val owed get() = shares.sumOf { parseMinor(it.second) }
-    val ok get() = total > 0 && accountId != null && (type != "TRANSFER" || toAccountId != null) && (type != "EXPENSE" || owed <= total)
-    fun toStep() = MacroStep(type, total, accountId, if (type == "TRANSFER") toAccountId else null, if (type == "TRANSFER") null else categoryId,
-        merchant.trim(), if (type == "EXPENSE") shares.map { MacroShare(it.first, parseMinor(it.second)) }.filter { it.amount > 0 } else emptyList())
+/**
+ * 編輯中的巨集（名稱、步驟、通知設定）。每一步用記帳畫面編輯（txn/0?macro=true），
+ * 離開這頁去編輯步驟時畫面狀態會被釋放，所以草稿放在這裡，回來時接著用。
+ */
+object MacroDraft {
+    var forId by mutableStateOf<Long?>(null)
+    var name by mutableStateOf("")
+    val steps = mutableStateListOf<MacroStep>()
+    var fromNotif by mutableStateOf(false)
+    var keyword by mutableStateOf("")
+    /** 正在記帳畫面編輯第幾步（-1 為新增一步） */
+    private var editIndex = -1
+    /** 去記帳畫面編輯步驟、回來時不要重新載入 */
+    var returning = false
+
+    fun load(id: Long, m: TxnMacro?) {
+        forId = id; name = m?.name.orEmpty(); fromNotif = m?.fromNotif ?: false; keyword = m?.keyword.orEmpty()
+        steps.clear(); steps.addAll(m?.allSteps().orEmpty())
+    }
+    fun editing(): MacroStep? = steps.getOrNull(editIndex) ?: MacroStep(accountId = steps.lastOrNull()?.accountId)
+    fun open(nav: NavController, index: Int) { editIndex = index; returning = true; nav.navigate("txn/0?macro=true") }
+    fun put(step: MacroStep) { if (editIndex in steps.indices) steps[editIndex] = step else steps.add(step) }
 }
 
-/** 新增或修改巨集。[id] 為 0 時新增。 */
+/** 新增或修改巨集。[id] 為 0 時新增。每一步點開就是記帳畫面（分類、鍵盤、帳戶、往來都一樣）。 */
 @Composable
 fun MacroEditScreen(nav: NavController, id: Long) {
     val lk = rememberLookups()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val orig = remember(id) { repo.settings.value.macros.firstOrNull { it.id == id } }
-    var name by remember { mutableStateOf(orig?.name.orEmpty()) }
-    val steps = remember {
-        mutableStateListOf<StepDraft>().apply {
-            addAll(orig?.allSteps().orEmpty().map { st ->
-                StepDraft(st.type, macroAmt(st.amount), st.accountId, st.toAccountId, st.categoryId, st.merchant, st.shares.map { it.personId to macroAmt(it.amount) })
-            })
-            if (isEmpty()) add(StepDraft())
-        }
+    val d = MacroDraft
+    remember(id) {
+        if (!d.returning || d.forId != id) d.load(id, orig)
+        d.returning = false
+        true
     }
-    var fromNotif by remember { mutableStateOf(orig?.fromNotif ?: false) }
-    var keyword by remember { mutableStateOf(orig?.keyword.orEmpty()) }
-    // 選擇視窗：哪一步、選什麼（acc／to／cat／person）
-    var pick by remember { mutableStateOf<Pair<Int, String>?>(null) }
     val base = settings.baseCurrency
-    val ready = name.isNotBlank() && steps.isNotEmpty() && steps.all { it.ok }
-    val mine = lk.accounts.filter { !it.archived && it.type != AccountType.LOAN }
-    val people = lk.accounts.filter { !it.archived && it.type == AccountType.LOAN }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    fun set(i: Int, f: (StepDraft) -> StepDraft) { steps[i] = f(steps[i]) }
+    val ready = d.name.isNotBlank() && d.steps.isNotEmpty() && d.steps.all { it.amount > 0 }
 
     fun save() {
-        val m = TxnMacro(id = orig?.id ?: System.currentTimeMillis(), name = name.trim(), steps = steps.map { it.toStep() },
-            fromNotif = fromNotif, keyword = keyword.trim())
+        val m = TxnMacro(id = orig?.id ?: System.currentTimeMillis(), name = d.name.trim(), steps = d.steps.toList(),
+            fromNotif = d.fromNotif, keyword = d.keyword.trim())
         repo.settings.update { s -> s.copy(macros = if (orig == null) s.macros + m else s.macros.map { if (it.id == m.id) m else it }) }
+        d.forId = null
         nav.popBackStack()
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        BackTopBar(if (orig == null) "新增巨集" else "編輯巨集", { nav.popBackStack() }) {
+        BackTopBar(if (orig == null) "新增巨集" else "編輯巨集", { d.forId = null; nav.popBackStack() }) {
             if (orig != null) TextButton(onClick = {
                 repo.settings.update { s -> s.copy(macros = s.macros.filter { it.id != orig.id }) }
                 com.enwei.moneymanager.ui.components.Undo.show(com.enwei.moneymanager.ui.tr("已刪除巨集")) {
                     repo.settings.update { s -> s.copy(macros = s.macros + orig) }
                 }
+                d.forId = null
                 nav.popBackStack()
             }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).imePadding()) {
             Box(Modifier.background(MaterialTheme.colorScheme.surface)) {
-                FormLine("名稱") { FormInput(name, { name = it }, placeholder = "例如：房租、發薪日") }
+                FormLine("名稱") { FormInput(d.name, { d.name = it }, placeholder = "例如：房租、發薪日") }
             }
-
-            // 每一步一張卡片：步驟編號、類型、金額、帳戶、分類或轉入帳戶、商家、往來
-            steps.forEachIndexed { i, st ->
-                AppCard(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("步驟 ${i + 1}", fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        if (steps.size > 1) TextButton(onClick = { steps.removeAt(i) }) { Text("移除", color = muted, fontSize = AppText.secondary) }
-                    }
-                    FormLine("類型") {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TYPES.forEach { (v, l) -> Choice(l, st.type == v) { set(i) { it.copy(type = v) } } }
-                        }
-                    }
-                    FormLine("金額") { FormInput(st.amount, { s -> set(i) { it.copy(amount = s.filter { c -> c.isDigit() || c == '.' }) } }, placeholder = "0", number = true) }
-                    FormLine(if (st.type == "INCOME") "存入帳戶" else "帳戶", onClick = { pick = i to "acc" }) {
-                        Text(lk.account(st.accountId)?.name ?: "選擇帳戶", color = if (st.accountId == null) muted else Color.Unspecified)
-                    }
-                    if (st.type == "TRANSFER") FormLine("轉入帳戶", onClick = { pick = i to "to" }) {
-                        Text(lk.account(st.toAccountId)?.name ?: "選擇帳戶", color = if (st.toAccountId == null) muted else Color.Unspecified)
-                    } else FormLine("分類", onClick = { pick = i to "cat" }) {
-                        Text(lk.catLabel(st.categoryId) ?: "選擇分類", color = if (st.categoryId == null) muted else Color.Unspecified)
-                    }
-                    FormLine(if (st.type == "INCOME") "來源" else "商家") { FormInput(st.merchant, { v -> set(i) { it.copy(merchant = v) } }, placeholder = "選填") }
-                    // 往來（只有支出）：每人一列「X 欠你」
-                    if (st.type == "EXPENSE") {
-                        st.shares.forEachIndexed { j, (pid, v) ->
-                            FormLine("${lk.account(pid)?.name ?: "?"} 欠你", trailing = {
-                                Text("✕", color = muted, modifier = Modifier.clickable { set(i) { it.copy(shares = it.shares.filterIndexed { k, _ -> k != j }) } }
-                                    .padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
-                            }) {
-                                FormInput(v, { s -> set(i) { it.copy(shares = it.shares.mapIndexed { k, e -> if (k == j) e.first to s.filter { c -> c.isDigit() || c == '.' } else e }) } },
-                                    placeholder = "0", number = true)
-                            }
-                        }
-                        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (people.any { p -> st.shares.none { it.first == p.id } }) Text("＋ 往來對象", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.clickable { pick = i to "person" }.padding(vertical = 6.dp))
-                            Spacer(Modifier.weight(1f))
-                            if (st.shares.isNotEmpty() && st.total > 0) Text(
-                                if (st.owed > st.total) "超過金額 ${Money.withSymbol(st.total, base)}" else "別人欠你 ${Money.withSymbol(st.owed, base)}",
-                                fontSize = AppText.secondary, color = if (st.owed > st.total) MaterialTheme.colorScheme.error else muted,
+            // 步驟：每一步一列摘要，點了用記帳畫面編輯
+            Text("步驟", fontSize = AppText.caption, color = muted, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 6.dp))
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+                d.steps.forEachIndexed { i, st ->
+                    Row(Modifier.fillMaxWidth().clickable { d.open(nav, i) }.padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("${i + 1}", fontSize = AppText.secondary, color = muted, modifier = Modifier.padding(end = 12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(stepLine(st, lk, base), fontSize = AppText.body, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                color = when (st.type) { "INCOME" -> IncomeColor; "TRANSFER" -> MaterialTheme.colorScheme.onSurface; else -> ExpenseColor })
+                            if (st.type == "EXPENSE" && st.shares.isNotEmpty()) Text(
+                                st.shares.joinToString("・") { s -> "${lk.account(s.personId)?.name ?: "?"} 欠你 ${Money.withSymbol(s.amount, base)}" } +
+                                    "・你的支出 ${Money.withSymbol((st.amount - st.shares.sumOf { it.amount }).coerceAtLeast(0), base)}",
+                                fontSize = AppText.caption, color = muted,
                             )
                         }
-                    } else Spacer(Modifier.height(8.dp))
+                        Text("✕", color = muted, modifier = Modifier.clickable { d.steps.removeAt(i) }.padding(12.dp))
+                    }
+                    com.enwei.moneymanager.ui.components.LineDivider(Modifier.padding(start = 16.dp))
                 }
+                Text("＋ 新增步驟", fontSize = AppText.body, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.fillMaxWidth().clickable { d.open(nav, -1) }.padding(horizontal = 16.dp, vertical = 14.dp))
             }
-            OutlinedButton(onClick = { steps.add(StepDraft(accountId = steps.lastOrNull()?.accountId)) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) { Text("＋ 新增步驟") }
 
             // 通知自動套用
+            Text("通知", fontSize = AppText.caption, color = muted, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 6.dp))
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
-                Row(Modifier.fillMaxWidth().clickable { fromNotif = !fromNotif }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clickable { d.fromNotif = !d.fromNotif }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("通知自動套用", fontSize = AppText.body)
-                        val amts = steps.map { it.total }.filter { it > 0 }.distinct()
+                        val amts = d.steps.map { it.amount }.filter { it > 0 }.distinct()
                         if (amts.isNotEmpty()) Text("通知金額為 " + amts.joinToString("、") { Money.withSymbol(it, base) } + " 時執行整套", fontSize = AppText.caption, color = muted)
                     }
-                    Switch(fromNotif, { fromNotif = it })
+                    Switch(d.fromNotif, { d.fromNotif = it })
                 }
-                if (fromNotif) FormLine("關鍵字") { FormInput(keyword, { keyword = it }, placeholder = "選填，例如對方戶名") }
+                if (d.fromNotif) FormLine("關鍵字") { FormInput(d.keyword, { d.keyword = it }, placeholder = "選填，例如對方戶名") }
             }
             Spacer(Modifier.height(24.dp))
         }
         Button(onClick = { save() }, enabled = ready, modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding()) { Text("儲存") }
-    }
-
-    pick?.let { (i, kind) ->
-        val st = steps.getOrNull(i) ?: return@let
-        when (kind) {
-            "acc", "to" -> OptionDialog(
-                if (kind == "acc") "帳戶" else "轉入帳戶",
-                (if (kind == "to") mine + people else mine).filter { kind != "to" || it.id != st.accountId }.map { it.id to it.name },
-                if (kind == "acc") st.accountId else st.toAccountId, onDismiss = { pick = null },
-            ) { v -> set(i) { if (kind == "acc") it.copy(accountId = v) else it.copy(toAccountId = v) } }
-            "cat" -> {
-                val k = if (st.type == "INCOME") TxnType.INCOME else TxnType.EXPENSE
-                OptionDialog(
-                    "分類",
-                    lk.categories.filter { !it.archived && it.kind == k }
-                        .sortedWith(compareBy({ lk.rootId(it.id)?.let { r -> lk.category(r)?.sortOrder } ?: 0 }, { lk.rootId(it.id) ?: 0L }, { if (it.parentId == null) 0 else 1 }, { it.sortOrder }))
-                        .map { it.id to (lk.catLabel(it.id) ?: it.name) },
-                    st.categoryId, onDismiss = { pick = null },
-                ) { v -> set(i) { it.copy(categoryId = v) } }
-            }
-            "person" -> OptionDialog(
-                "往來對象", people.filter { p -> st.shares.none { it.first == p.id } }.map { it.id to it.name }, null, onDismiss = { pick = null },
-            ) { pid -> set(i) { it.copy(shares = it.shares + (pid to "")) } }
-        }
     }
 }
 

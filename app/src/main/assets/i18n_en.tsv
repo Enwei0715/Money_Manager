@@ -3608,3 +3608,5 @@ AI 暫時無法完成檢討，請稍後再試	AI couldn't finish the review. Try
 你付	You paid
 幫別人付或一起付：點對象，付款人選「我」，再填他欠你的金額（預設平分）。你的支出＝整筆－別人欠你的；他還你時不算收入。別人幫你付：付款人選對方。	Paying for someone or splitting: tap the person, set Paid by to Me, and enter what they owe you (split evenly by default). Your expense = total − what others owe you; their repayment is not income. If someone paid for you, set Paid by to them.
 例如聚餐你刷了 410、朋友那份 105：記一筆支出 410，在最下方「往來」點朋友，付款人選「我」，他欠你的金額填 105。你的支出算 305，朋友欠你 105，他還你時不算收入。	Say you paid 410 for dinner and your friend's share is 105: record a 410 expense, tap the friend under People, set Paid by to Me, and enter 105. Your expense is 305, the friend owes you 105, and their repayment is not income.
+巨集步驟	Macro step
+通知	Notifications
