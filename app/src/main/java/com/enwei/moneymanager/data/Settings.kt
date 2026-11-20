@@ -499,6 +499,8 @@ data class AppSettings(
     val payerExpenseMigrated: Boolean = false,
     /** 上面那次轉換是錯的：已還原成「支出只記自己負擔的部分」 */
     val payerExpenseReverted: Boolean = false,
+    /** 已清掉整筆代墊留下的 $0 支出 */
+    val zeroAdvanceCleaned: Boolean = false,
     /** 上次通知的借貸提醒（避免重複通知） */
     val loanWarnKey: String = "",
     /** 已提醒過的信用卡繳款（"卡片id:繳款日"），同一期只提醒一次 */

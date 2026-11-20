@@ -760,6 +760,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val own = (t.amount - parts.sumOf { it.second }).coerceAtLeast(0)
         val label = listOfNotNull("代墊", t.merchant?.takeIf { it.isNotBlank() }).joinToString("：")
         val existing = splitsOf(t).toMutableList()
+        // 整筆都是幫別人付（自己負擔 0）的新紀錄：沒有你的支出，只記他欠你（不留一筆 $0 的支出）
+        if (own == 0L && t.id == 0L && parts.isNotEmpty()) {
+            return parts.map { (pid, v) ->
+                saveTxn(TxnEntity(type = TxnType.TRANSFER, amount = v, currency = t.currency, accountId = t.accountId, toAccountId = pid,
+                    merchant = label, note = t.note, date = t.date, source = t.source, status = TxnStatus.CONFIRMED))
+            }.first()
+        }
         val mainId = saveTxn(t.copy(amount = own))
         parts.forEach { (pid, v) ->
             val old = existing.firstOrNull { it.toAccountId == pid }?.also { existing.remove(it) }
@@ -778,6 +785,21 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 還原 2.2.77–2.2.78 的錯誤改法（整筆記成支出、代墊不從帳戶扣）：支出扣回別人那份，
      * 代墊改回從同一個帳戶轉給對方。只做一次。
      */
+    /** 整筆幫別人付而留下的 $0 支出：刪掉這筆空支出，代墊照舊（他欠你），清單上不再出現「−$0」。只做一次。 */
+    suspend fun dropZeroAdvanceExpenses() {
+        if (settings.value.zeroAdvanceCleaned) return
+        db.withTransaction {
+            val all = db.txns().all()
+            all.filter { it.type == TxnType.EXPENSE && it.amount == 0L }.forEach { main ->
+                val splits = all.filter { it.externalKey == "SPLIT:${main.id}" || it.externalKey?.startsWith("SPLIT:${main.id}:") == true }
+                if (splits.isEmpty()) return@forEach
+                splits.forEach { db.txns().upsert(it.copy(externalKey = null, accountId = it.accountId ?: main.accountId, note = it.note ?: main.note)) }
+                db.txns().delete(main.id)
+            }
+        }
+        settings.update { it.copy(zeroAdvanceCleaned = true) }
+    }
+
     suspend fun revertPayerExpense() {
         if (settings.value.payerExpenseReverted) return
         val loans = db.accounts().all().filter { it.type == AccountType.LOAN }.map { it.id }.toSet()
@@ -793,6 +815,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             }
             sub.forEach { (id, v) -> byId[id]?.let { db.txns().upsert(it.copy(amount = (it.amount - v).coerceAtLeast(0))) } }
         }
+        dropZeroAdvanceExpenses()
         settings.update { it.copy(payerExpenseReverted = true, payerExpenseMigrated = true) }
     }
 

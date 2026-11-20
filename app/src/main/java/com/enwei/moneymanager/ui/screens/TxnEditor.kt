@@ -252,7 +252,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     // 第一次記帳：簡短介紹這頁幾個重點
     if (id == 0L) com.enwei.moneymanager.ui.components.PageTour("editor", listOfNotNull(
         com.enwei.moneymanager.ui.components.Coach.Step("ed.amount", "金額", "點選此處以計算機輸入，可輸入算式；右上角可加入手續費。"),
-        if (settings.featureSplit) com.enwei.moneymanager.ui.components.Coach.Step("ed.people", "往來", "幫別人付或一起付：點對象，付款人選「我」，再填他欠你的金額（預設平分）。你的支出＝整筆－別人欠你的；他還你時不算收入。別人幫你付：付款人選對方。") else null,
+        if (settings.featureSplit) com.enwei.moneymanager.ui.components.Coach.Step("ed.people", "往來", "幫別人付或一起付：點對象，付款人選「我」，再填他欠你的金額（預設平分）。你的支出＝整筆－別人欠你的；他還你時不算收入。別人幫你付：付款人選對方，填他自己的部分，你的支出與你欠他的都是其餘部分。") else null,
         com.enwei.moneymanager.ui.components.Coach.Step("ed.merchant", "商家",
             if (settings.locationHints) "輸入時會推薦附近及曾記錄的店家，選取後將一併記錄位置。" else "輸入時會推薦曾記錄的店家，並帶入上次使用的分類與帳戶。"),
     ))
@@ -520,7 +520,9 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             val repay = type == TxnType.INCOME && (repayPerson != null || repayName.isNotBlank())
             scope.launch {
                 val step = when {
-                    payer != null -> com.enwei.moneymanager.data.MacroStep("EXPENSE", t0.amount, payer.person ?: repo.debtPerson(payer.name), null, t0.categoryId, t0.merchant.orEmpty())
+                    payer != null -> com.enwei.moneymanager.data.MacroStep("EXPENSE",
+                        t0.amount - (Calculator.evaluate(payer.expr)?.abs()?.let(Money::toMinor) ?: 0L).coerceAtMost(t0.amount),
+                        payer.person ?: repo.debtPerson(payer.name), null, t0.categoryId, t0.merchant.orEmpty())
                     repay -> com.enwei.moneymanager.data.MacroStep("TRANSFER", t0.amount, repayPerson ?: repo.debtPerson(repayName), t0.accountId, null,
                         t0.merchant ?: "${repayName.ifBlank { lk.account(repayPerson)?.name.orEmpty() }} ${if (repayKind == 0) "還你" else "借給你"}")
                     else -> com.enwei.moneymanager.data.MacroStep(t0.type.name, t0.amount, t0.accountId, t0.toAccountId, t0.categoryId, t0.merchant.orEmpty(),
@@ -536,7 +538,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         if (payer != null) {
             scope.launch {
                 val pid = payer.person ?: repo.debtPerson(payer.name)
-                val t = t0.copy(accountId = pid)
+                // 他自己的部分不是你的支出，也不是你欠他的：只記你那份（從他的往來帳戶付＝你欠他）
+                val his = Calculator.evaluate(payer.expr)?.abs()?.let(Money::toMinor) ?: 0L
+                if (his >= t0.amount) { snack.showSnackbar(com.enwei.moneymanager.ui.tr("他自己的部分不能大於或等於總額")); return@launch }
+                val t = t0.copy(accountId = pid, amount = t0.amount - his)
                 val mid = repo.saveTxn(t)
                 saveFee(t0.copy(accountId = accountId ?: pid), mid)
                 TxnScroll.focusDay = date
@@ -763,7 +768,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     // 預算：緊貼在金額下方（記這筆之後還剩多少），不把表單隔開
                     if (budget.isNotEmpty() && type == TxnType.EXPENSE && !macroMode) {
                         // 預算只算你的支出：別人欠你的部分不算
-                        val others = if (!paidBy) splitRows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L } else 0L
+                        val others = splitRows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L }
                         val own = ((amountMinor ?: 0) - others).coerceAtLeast(0)
                         val add = if (currency == lk.base) own else lk.fx.convert(own, currency)
                         Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -1019,7 +1024,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             }
             LaunchedEffect(panel, splitIdx) { amountFresh = panel == Panel.AMOUNT || panel == Panel.FEE || panel == Panel.SPLIT }
             if (panel != Panel.NONE) BottomPanel(
-                splitTitle = splitRows.getOrNull(splitIdx)?.let { r -> "${r.person?.let { lk.account(it)?.name } ?: r.name.trim()} 欠你" },
+                splitTitle = splitRows.getOrNull(splitIdx)?.let { r -> "${r.person?.let { lk.account(it)?.name } ?: r.name.trim()} ${if (paidBy) "自己的部分" else "欠你"}" },
                 panel = panel, lk = lk, type = type, expr = when (panel) { Panel.FEE -> feeExpr; Panel.SPLIT -> splitRows.getOrNull(splitIdx)?.expr.orEmpty(); else -> expr },
                 currency = currency, currencies = listOf(settings.baseCurrency, settings.subCurrency).distinct(),
                 allCurrencies = currencyOptions(lk), calcMode = calcMode,
@@ -1552,13 +1557,8 @@ private fun SplitSection(
     val payers = listOf("我") + rows.map { nameOf(it) }
     ChoiceLine("付款人", payers, if (paidBy) 1 else 0, color) { m ->
         if (m == 0) { onPaidBy(false); onRows(rows.map { it.copy(auto = true) }) }
-        else { onPaidBy(true); onRows(listOf(rows[m - 1])) }
-    }
-    if (paidBy) {
-        if (total != null) FormRow("", color, false, onClick = {}) {
-            Text("你欠 ${nameOf(rows.first())} ${Money.withSymbol(total, currency)}", fontSize = AppText.secondary, color = muted)
-        }
-        return
+        // 別人付：只留付錢的那個人，他那一列改成「他自己的部分」（預設平分），你欠他、你的支出都是整筆減掉他那份
+        else { onPaidBy(true); onIncludeMe(true); onRows(listOf(rows[m - 1].copy(auto = true))) }
     }
     // 每個人一列：他要還你的金額（預設和你平分，可改）。正在輸入的那一列整列標色、有閃爍游標，並自動捲到鍵盤上方
     val caretAlpha by androidx.compose.animation.core.rememberInfiniteTransition(label = "splitCaret").animateFloat(
@@ -1574,7 +1574,7 @@ private fun SplitSection(
         }
         FormRow("", color, typing, onClick = { onEditAmount(i) }, trailing = del) {
             Row(Modifier.bringIntoViewRequester(bring), verticalAlignment = Alignment.CenterVertically) {
-                Text("${nameOf(r)} 欠你", fontSize = AppText.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(if (paidBy) "${nameOf(r)} 自己的部分" else "${nameOf(r)} 欠你", fontSize = AppText.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Row(
                     Modifier.widthIn(min = 96.dp)
                         .background(if (typing) color.copy(alpha = 0.12f) else Color.Transparent, RoundedCornerShape(6.dp))
@@ -1593,7 +1593,9 @@ private fun SplitSection(
     val others = rows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L }
     if (total != null) FormRow("", color, false, onClick = {}) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (others > total) "超過總額 ${Money.withSymbol(total, currency)}" else "你付 ${Money.withSymbol(total, currency)}・別人欠你 ${Money.withSymbol(others, currency)}・你的支出 ${Money.withSymbol(total - others, currency)}",
+            Text(if (others > total) "超過總額 ${Money.withSymbol(total, currency)}"
+                else if (paidBy) "你欠 ${nameOf(rows.first())} ${Money.withSymbol(total - others, currency)}・你的支出 ${Money.withSymbol(total - others, currency)}"
+                else "你付 ${Money.withSymbol(total, currency)}・別人欠你 ${Money.withSymbol(others, currency)}・你的支出 ${Money.withSymbol(total - others, currency)}",
                 fontSize = AppText.secondary, color = if (others > total) MaterialTheme.colorScheme.error else muted, modifier = Modifier.weight(1f))
             // 一鍵平分（含你一份）；手動改過金額後才需要
             if (!rows.all { it.auto } || !includeMe) Text("平分", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
