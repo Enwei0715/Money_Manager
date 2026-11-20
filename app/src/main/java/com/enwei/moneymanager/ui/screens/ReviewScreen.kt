@@ -158,6 +158,27 @@ fun ReviewContent(
                             }
                         }
                     }
+                    // 每天還可花多少：本月（當期）才顯示，放在總覽最上方。沒有設定總預算時提供設定入口
+                    val today = java.time.LocalDate.now()
+                    if (span == ReviewSpan.MONTH && offset == 0 && !today.isAfter(d.end)) {
+                        com.enwei.moneymanager.ui.components.RowDivider(Modifier.padding(vertical = 4.dp))
+                        val cap = settings.budgets[0L]
+                        if (cap != null && cap > 0) {
+                            val left = cap - d.expense
+                            val days = java.time.temporal.ChronoUnit.DAYS.between(today, d.end) + 1
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("每天還可花", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(if (left > 0) m(left / days) else "已超出 ${m(-left)}", fontSize = AppText.title, fontWeight = FontWeight.SemiBold,
+                                        color = if (left > 0) IncomeColor else ExpenseColor)
+                                }
+                                Text("剩 ${m(left.coerceAtLeast(0))}・$days 天", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else Row(Modifier.fillMaxWidth().clickable { nav.navigate("budget") }, verticalAlignment = Alignment.CenterVertically) {
+                            Text("每天還可花", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
+                            Text("設定每月預算", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                     // 其餘指標：兩欄小格子，不再擠成一行
                     val metrics = listOfNotNull(
                         if (d.income > 0) Triple("儲蓄率", "${"%.0f".format(d.savingsRate)}%", if (d.savingsRate >= 0) IncomeColor else ExpenseColor) else null,

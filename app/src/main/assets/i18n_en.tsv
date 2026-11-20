@@ -3597,3 +3597,10 @@ AI 暫時無法完成檢討，請稍後再試	AI couldn't finish the review. Try
 超過金額	Exceeds amount
 把一整套固定的動作存起來：每一步可以是支出、收入或轉帳，支出可加往來對象各欠你的金額。按「執行」就依序全部記好，例如房租、發薪日分配、固定的團購代墊。	Save a fixed set of actions: each step can be an expense, income or transfer, and expenses can include what people owe you. Tap Run to record every step in order, e.g. rent, payday allocation, or a regular group purchase.
 開啟後，收到金額等於某一步的付款或入帳通知，就自動執行整套，那一步用通知的日期與帳戶；可加關鍵字（例如對方戶名），避免同金額的其他交易被套用。	When on, a payment or deposit notification whose amount matches a step runs the whole macro, using the notification's date and account for that step. Add a keyword (such as the other party's account name) so other transactions of the same amount are not matched.
+每天還可花	Left to spend per day
+設定每月預算	Set a monthly budget
+已超出	Over by
+付款	Paid from
+存入	Deposit to
+自動	Auto
+選擇帳戶	Choose account

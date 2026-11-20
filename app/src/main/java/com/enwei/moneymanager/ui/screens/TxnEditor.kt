@@ -786,8 +786,19 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     if (!(type == TxnType.INCOME && (repayPerson != null || repayName.isNotBlank()))) FormRow("分類", color, panel == Panel.CATEGORY, onClick = { focusManager.clearFocus(); panel = Panel.CATEGORY }) {
                         PlaceholderText(lk.catLabel(categoryId), "")
                     }
-                    if (payer == null) FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else "帳戶", color, panel == Panel.ACCOUNT, onClick = { focusManager.clearFocus(); panel = Panel.ACCOUNT }) {
-                        PlaceholderText(lk.account(accountId)?.name, "")
+                    // 帳戶：支出是「從哪個帳戶付」、收入是「存進哪個帳戶」。別人幫你付時不隱藏（避免欄位忽然消失），
+                    // 改成寫「由 X 付」，點了改回自己付並選帳戶。依習慣自動帶入的帳戶標「自動」
+                    FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else if (type == TxnType.INCOME) "存入" else "付款", color, panel == Panel.ACCOUNT,
+                        onClick = { focusManager.clearFocus(); if (payer != null) paidBy = false; panel = Panel.ACCOUNT }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (payer != null) Text("由 ${payer.person?.let { lk.account(it)?.name } ?: payer.name.trim()} 付", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            else {
+                                Box(Modifier.weight(1f, fill = false)) { PlaceholderText(lk.account(accountId)?.name, "選擇帳戶") }
+                                if (accountId != null && accountId == autoAccount) Text("自動", fontSize = AppText.label, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 8.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp))
+                            }
+                        }
                     }
 
                 }
@@ -1018,7 +1029,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 },
                 onAccount = { a ->
                     if (panel == Panel.TO_ACCOUNT) { toAccountId = a.id; panel = Panel.NONE }
-                    else { accountId = a.id; panel = if (type == TxnType.TRANSFER && toAccountId == null) Panel.TO_ACCOUNT else Panel.NONE }
+                    else { accountId = a.id; autoAccount = null; panel = if (type == TxnType.TRANSFER && toAccountId == null) Panel.TO_ACCOUNT else Panel.NONE }
                 },
                 onEditCategories = { nav.navigate("categories?kind=${if (type == TxnType.INCOME) "INCOME" else "EXPENSE"}") },
                 onEditAccounts = { nav.navigate("accounts") },
@@ -1076,7 +1087,7 @@ private fun FormRow(
         // 英文用短標籤，避免和右側內容擠在一起
         val shown = if (english) when (label) { "轉出" -> "From"; "轉入" -> "To"; "轉入金額" -> "Received"; "分類" -> "Category"; "往來" -> "People"; "商家" -> "Merchant"; else -> label } else label
         val icon = when (label) {
-            "日期" -> com.enwei.moneymanager.ui.components.LineIcons.IcCalendar; "分類" -> com.enwei.moneymanager.ui.components.LineIcons.IcShapes; "帳戶", "Account", "轉出" -> com.enwei.moneymanager.ui.components.LineIcons.IcWallet
+            "日期" -> com.enwei.moneymanager.ui.components.LineIcons.IcCalendar; "分類" -> com.enwei.moneymanager.ui.components.LineIcons.IcShapes; "帳戶", "Account", "轉出", "付款", "存入" -> com.enwei.moneymanager.ui.components.LineIcons.IcWallet
             "轉入" -> com.enwei.moneymanager.ui.components.LineIcons.IcArrowIn; "商家" -> com.enwei.moneymanager.ui.components.LineIcons.IcStore; "說明" -> com.enwei.moneymanager.ui.components.LineIcons.IcLines; "手續費" -> com.enwei.moneymanager.ui.components.LineIcons.IcPercent
             "分帳", "往來" -> com.enwei.moneymanager.ui.components.LineIcons.IcPeople; "對象" -> com.enwei.moneymanager.ui.components.LineIcons.IcPerson
             "對方付", "誰還的" -> com.enwei.moneymanager.ui.components.LineIcons.IcCash
