@@ -755,16 +755,16 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 全部都是別人的（自己的部分是 0）時，整筆記成代墊轉帳。
      */
     suspend fun saveWithSplits(t: TxnEntity, shares: List<Pair<Long, Long>>): Long {
-        // 付錢的人記支出：整筆金額都是你的支出（錢是你付的）；別人那份記成他欠你（從「無帳戶」轉到他的往來帳戶，
-        // 不再從你的帳戶扣一次）。他還你時是往來的收回，不算收入。
+        // 支出只記自己負擔的部分（整筆 − 別人各欠你的），別人那份從同一個帳戶轉到他的往來帳戶（他欠你）。
         val parts = shares.filter { it.second > 0 }
+        val own = (t.amount - parts.sumOf { it.second }).coerceAtLeast(0)
         val label = listOfNotNull("代墊", t.merchant?.takeIf { it.isNotBlank() }).joinToString("：")
         val existing = splitsOf(t).toMutableList()
-        val mainId = saveTxn(t)
+        val mainId = saveTxn(t.copy(amount = own))
         parts.forEach { (pid, v) ->
             val old = existing.firstOrNull { it.toAccountId == pid }?.also { existing.remove(it) }
             saveTxn(TxnEntity(
-                id = old?.id ?: 0L, type = TxnType.TRANSFER, amount = v, currency = t.currency, accountId = null, toAccountId = pid,
+                id = old?.id ?: 0L, type = TxnType.TRANSFER, amount = v, currency = t.currency, accountId = t.accountId, toAccountId = pid,
                 merchant = label, date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
                 // externalKey 有唯一索引：每個人要不同，否則只存得進第一人
                 externalKey = old?.externalKey ?: "SPLIT:$mainId:$pid",
@@ -775,28 +775,25 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     /**
-     * 舊版的代墊：支出只記自己那份、別人那份從你的帳戶轉給他。改成「付錢的人記整筆支出」：
-     * 支出加回別人那份、代墊不再從你的帳戶扣（帳戶餘額不變）。只做一次。
+     * 還原 2.2.77–2.2.78 的錯誤改法（整筆記成支出、代墊不從帳戶扣）：支出扣回別人那份，
+     * 代墊改回從同一個帳戶轉給對方。只做一次。
      */
-    suspend fun migratePayerExpense() {
-        if (settings.value.payerExpenseMigrated) return
+    suspend fun revertPayerExpense() {
+        if (settings.value.payerExpenseReverted) return
         val loans = db.accounts().all().filter { it.type == AccountType.LOAN }.map { it.id }.toSet()
         db.withTransaction {
             val all = db.txns().all()
             val byId = all.associateBy { it.id }
-            val expenses = all.filter { it.type == TxnType.EXPENSE }
-            val add = HashMap<Long, Long>()
-            all.filter { it.type == TxnType.TRANSFER && it.toAccountId in loans && it.accountId != null && it.accountId !in loans }.forEach { a ->
-                val parent = a.externalKey?.takeIf { it.startsWith("SPLIT:") }?.removePrefix("SPLIT:")?.substringBefore(':')?.toLongOrNull()?.let { byId[it] }
-                    ?: if (a.externalKey == null && a.merchant?.startsWith("代墊") == true)
-                        expenses.firstOrNull { p -> p.date == a.date && p.accountId == a.accountId } else null
-                if (parent == null || parent.type != TxnType.EXPENSE || parent.currency != a.currency) return@forEach
-                add.merge(parent.id, a.amount, Long::plus)
-                db.txns().upsert(a.copy(accountId = null, externalKey = a.externalKey ?: "SPLIT:${parent.id}:${a.toAccountId}"))
+            val sub = HashMap<Long, Long>()
+            all.filter { it.type == TxnType.TRANSFER && it.accountId == null && it.toAccountId in loans && it.externalKey?.startsWith("SPLIT:") == true }.forEach { a ->
+                val parent = a.externalKey!!.removePrefix("SPLIT:").substringBefore(':').toLongOrNull()?.let { byId[it] } ?: return@forEach
+                if (parent.type != TxnType.EXPENSE) return@forEach
+                sub.merge(parent.id, a.amount, Long::plus)
+                db.txns().upsert(a.copy(accountId = parent.accountId))
             }
-            add.forEach { (id, v) -> byId[id]?.let { db.txns().upsert(it.copy(amount = it.amount + v)) } }
+            sub.forEach { (id, v) -> byId[id]?.let { db.txns().upsert(it.copy(amount = (it.amount - v).coerceAtLeast(0))) } }
         }
-        settings.update { it.copy(payerExpenseMigrated = true) }
+        settings.update { it.copy(payerExpenseReverted = true, payerExpenseMigrated = true) }
     }
 
     /**

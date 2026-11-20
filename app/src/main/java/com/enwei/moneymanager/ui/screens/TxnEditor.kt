@@ -218,8 +218,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             note = com.enwei.moneymanager.data.stripSplitNote(t.note).orEmpty()
             val splits = repo.splitsOf(t)
             if (splits.isNotEmpty()) {
-                // 新的代墊不從帳戶扣（整筆就是支出金額）；還沒轉換的舊資料要加回別人那份
-                expr = minorToExpr(t.amount + splits.filter { it.accountId != null }.sumOf { it.amount })
+                expr = minorToExpr(t.amount + splits.sumOf { it.amount })
                 splitOn = true; splitMe = true
                 splitRaw = SplitRow.encode(splits.map { SplitRow(it.toAccountId, "", minorToExpr(it.amount), auto = false) })
             }
@@ -232,7 +231,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
     // 第一次記帳：簡短介紹這頁幾個重點
     if (id == 0L) com.enwei.moneymanager.ui.components.PageTour("editor", listOfNotNull(
         com.enwei.moneymanager.ui.components.Coach.Step("ed.amount", "金額", "點選此處以計算機輸入，可輸入算式；右上角可加入手續費。"),
-        if (settings.featureSplit) com.enwei.moneymanager.ui.components.Coach.Step("ed.people", "往來", "幫別人付或一起付：點對象，付款人選「我」，再填他欠你的金額（預設平分）。整筆是付錢的人的支出，他欠你的另記欠款；他還你時不算收入。別人幫你付：付款人選對方。") else null,
+        if (settings.featureSplit) com.enwei.moneymanager.ui.components.Coach.Step("ed.people", "往來", "幫別人付或一起付：點對象，付款人選「我」，再填他欠你的金額（預設平分）。你的支出＝整筆－別人欠你的；他還你時不算收入。別人幫你付：付款人選對方。") else null,
         com.enwei.moneymanager.ui.components.Coach.Step("ed.merchant", "商家",
             if (settings.locationHints) "輸入時會推薦附近及曾記錄的店家，選取後將一併記錄位置。" else "輸入時會推薦曾記錄的店家，並帶入上次使用的分類與帳戶。"),
     ))
@@ -725,8 +724,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     }
                     // 預算：緊貼在金額下方（記這筆之後還剩多少），不把表單隔開
                     if (budget.isNotEmpty() && type == TxnType.EXPENSE) {
-                        // 付錢的人記整筆支出（別人欠你的部分另記欠款），預算也算整筆
-                        val add = if (currency == lk.base) (amountMinor ?: 0) else lk.fx.convert(amountMinor ?: 0, currency)
+                        // 預算只算你的支出：別人欠你的部分不算
+                        val others = if (!paidBy) splitRows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L } else 0L
+                        val own = ((amountMinor ?: 0) - others).coerceAtLeast(0)
+                        val add = if (currency == lk.base) own else lk.fx.convert(own, currency)
                         Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             budget.forEach { u ->
                                 com.enwei.moneymanager.ui.components.BudgetInline(u.name.removeSuffix("預算").ifBlank { u.name }, u.used, u.cap, add, Modifier.fillMaxWidth())
@@ -1554,7 +1555,7 @@ private fun SplitSection(
     val others = rows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L }
     if (total != null) FormRow("", color, false, onClick = {}) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (others > total) "超過總額 ${Money.withSymbol(total, currency)}" else "支出 ${Money.withSymbol(total, currency)}・別人欠你 ${Money.withSymbol(others, currency)}",
+            Text(if (others > total) "超過總額 ${Money.withSymbol(total, currency)}" else "你付 ${Money.withSymbol(total, currency)}・別人欠你 ${Money.withSymbol(others, currency)}・你的支出 ${Money.withSymbol(total - others, currency)}",
                 fontSize = AppText.secondary, color = if (others > total) MaterialTheme.colorScheme.error else muted, modifier = Modifier.weight(1f))
             // 一鍵平分（含你一份）；手動改過金額後才需要
             if (!rows.all { it.auto } || !includeMe) Text("平分", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,

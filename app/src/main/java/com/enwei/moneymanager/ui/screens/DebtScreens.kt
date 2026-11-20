@@ -59,7 +59,7 @@ fun DebtsScreen(nav: NavController) {
     // 第一次打開這頁：介紹往來
     com.enwei.moneymanager.ui.components.PageTour("debts", listOf(
         com.enwei.moneymanager.ui.components.Coach.Step(null, "往來對象", "每位對象一列：藍色是對方欠你，紅色是你欠對方。還錢、借錢不算收入或支出，只記錄誰欠誰。"),
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "幫別人付錢", "例如聚餐你刷了 410、朋友那份 105：記一筆支出 410，在最下方「往來」點朋友，付款人選「我」，他欠你的金額填 105。錢是你付的，支出記 410；朋友欠你 105，他還你時不算收入。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "幫別人付錢", "例如聚餐你刷了 410、朋友那份 105：記一筆支出 410，在最下方「往來」點朋友，付款人選「我」，他欠你的金額填 105。你的支出算 305，朋友欠你 105，他還你時不算收入。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "別人幫你付", "同樣記支出，在「往來」點對方，付款人改選對方：支出照記，同時記你欠他。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "還錢、借錢", "對方還你：記收入，在「往來」點對方選「他還你」，帳戶選錢進來的帳戶。向對方借：選「向他借」。你還對方或借錢給對方：到對象頁按「我給對方錢」。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "結清", "欠款歸零就顯示「已結清」。點對象可看每一筆往來，也能設定分期、利息、到期日。"),

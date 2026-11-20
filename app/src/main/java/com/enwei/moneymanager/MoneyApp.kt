@@ -59,7 +59,7 @@ class MoneyApp : Application() {
             repo.runRecurring()
             repo.runFeeRebates()
             runCatching { repo.moveAutoDividendsToBroker() }
-            runCatching { repo.migratePayerExpense() }
+            runCatching { repo.revertPayerExpense() }
             // 新工具「巨集」：放進工具頁一次（使用者之後移除就不再加回）
             if (!repo.settings.value.macroToolAdded) repo.settings.update { s ->
                 s.copy(macroToolAdded = true, toolOrder = if ("macros" in s.toolOrder) s.toolOrder else
