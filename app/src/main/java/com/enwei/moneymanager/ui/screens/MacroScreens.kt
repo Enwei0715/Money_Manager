@@ -65,7 +65,7 @@ private fun parseMinor(s: String): Long = s.replace(",", "").trim().toDoubleOrNu
 @Composable
 fun MacroListScreen(nav: NavController) {
     com.enwei.moneymanager.ui.components.PageTour("macros", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "巨集", "把每次都一樣的一組帳存起來，例如房租：付給房東 25,500，室友各欠你 7,500、9,500。之後按「執行」就一次記好，自己只負擔剩下的部分。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "巨集", "把每次都一樣的一組帳存起來，例如房租：付給房東 25,500，室友各欠你 7,500、9,500。之後按「執行」就一次記好支出與室友的欠款。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "通知自動套用", "在巨集裡開啟「通知自動套用」：收到金額相同的付款通知時，直接照巨集記帳；可加關鍵字（例如房東戶名）避免同金額的其他付款被套用。"),
     ))
     val lk = rememberLookups()
@@ -88,7 +88,6 @@ fun MacroListScreen(nav: NavController) {
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(settings.macros, key = { it.id }) { m ->
                 val transfer = m.type == "TRANSFER"
-                val own = m.amount - m.shares.sumOf { it.amount }
                 AppCard(Modifier.fillMaxWidth().clickable { nav.navigate("macro/${m.id}") }) {
                     Column(Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -111,8 +110,7 @@ fun MacroListScreen(nav: NavController) {
                             lk.account(m.accountId)?.let { if (transfer) "${it.name} → ${lk.account(m.toAccountId)?.name ?: "未選"}" else it.name },
                         ).joinToString("・"), fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (!transfer && m.shares.isNotEmpty()) Text(
-                            m.shares.joinToString("・") { s -> "${lk.account(s.personId)?.name ?: "?"} 欠你 ${Money.withSymbol(s.amount, base)}" } +
-                                "・自己負擔 ${Money.withSymbol(own.coerceAtLeast(0), base)}",
+                            m.shares.joinToString("・") { s -> "${lk.account(s.personId)?.name ?: "?"} 欠你 ${Money.withSymbol(s.amount, base)}" },
                             fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         if (m.fromNotif) Text(
@@ -209,7 +207,7 @@ fun MacroEditScreen(nav: NavController, id: Long) {
                         modifier = Modifier.clickable { pick = "person" }.padding(vertical = 6.dp))
                     Spacer(Modifier.weight(1f))
                     if (shares.isNotEmpty() && total > 0) Text(
-                        if (over) "超過總額 ${Money.withSymbol(total, base)}" else "自己負擔 ${Money.withSymbol(total - owed, base)}",
+                        if (over) "超過總額 ${Money.withSymbol(total, base)}" else "別人欠你 ${Money.withSymbol(owed, base)}",
                         fontSize = AppText.secondary, color = if (over) MaterialTheme.colorScheme.error else muted,
                     )
                 }

@@ -477,6 +477,8 @@ data class AppSettings(
     val macros: List<TxnMacro> = emptyList(),
     /** 已把「巨集」加到工具頁（只加一次，使用者移除後不再加回） */
     val macroToolAdded: Boolean = false,
+    /** 舊的代墊已改成「付錢的人記整筆支出」 */
+    val payerExpenseMigrated: Boolean = false,
     /** 上次通知的借貸提醒（避免重複通知） */
     val loanWarnKey: String = "",
     /** 已提醒過的信用卡繳款（"卡片id:繳款日"），同一期只提醒一次 */

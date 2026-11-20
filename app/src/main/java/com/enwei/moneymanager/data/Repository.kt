@@ -256,7 +256,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             HoldingView(
                 market = key.first,
                 symbol = key.second,
-                name = list.firstNotNullOfOrNull { it.name } ?: q?.name,
+                // 台股名稱一律用中文（股票清單 → 紀錄或報價裡的中文名稱），沒有中文才用英文
+                name = (if (key.first == Market.TW) com.enwei.moneymanager.net.TwData.nameOf(key.second)
+                    ?: (list.map { it.name } + q?.name).firstOrNull { n -> n?.any { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN } == true }
+                    else null) ?: list.firstNotNullOfOrNull { it.name } ?: q?.name,
                 currency = list.first().currency,
                 shares = book.shares,
                 avgCost = if (book.shares > 0) book.cost / book.shares else 0.0,
@@ -752,23 +755,48 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 全部都是別人的（自己的部分是 0）時，整筆記成代墊轉帳。
      */
     suspend fun saveWithSplits(t: TxnEntity, shares: List<Pair<Long, Long>>): Long {
+        // 付錢的人記支出：整筆金額都是你的支出（錢是你付的）；別人那份記成他欠你（從「無帳戶」轉到他的往來帳戶，
+        // 不再從你的帳戶扣一次）。他還你時是往來的收回，不算收入。
         val parts = shares.filter { it.second > 0 }
-        val own = (t.amount - parts.sumOf { it.second }).coerceAtLeast(0)
         val label = listOfNotNull("代墊", t.merchant?.takeIf { it.isNotBlank() }).joinToString("：")
         val existing = splitsOf(t).toMutableList()
-        if (own == 0L && parts.size == 1 && t.id == 0L) {
-            return saveTxn(t.copy(type = TxnType.TRANSFER, toAccountId = parts[0].first, categoryId = null, merchant = label))
-        }
-        val mainId = saveTxn(t.copy(amount = own))
+        val mainId = saveTxn(t)
         parts.forEach { (pid, v) ->
             val old = existing.firstOrNull { it.toAccountId == pid }?.also { existing.remove(it) }
             saveTxn(TxnEntity(
-                id = old?.id ?: 0L, type = TxnType.TRANSFER, amount = v, currency = t.currency, accountId = t.accountId, toAccountId = pid,
-                merchant = label, date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED, externalKey = old?.externalKey ?: "SPLIT:$mainId:$pid",
+                id = old?.id ?: 0L, type = TxnType.TRANSFER, amount = v, currency = t.currency, accountId = null, toAccountId = pid,
+                merchant = label, date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
+                // externalKey 有唯一索引：每個人要不同，否則只存得進第一人
+                externalKey = old?.externalKey ?: "SPLIT:$mainId:$pid",
             ))
         }
         existing.forEach { db.txns().delete(it.id) }
         return mainId
+    }
+
+    /**
+     * 舊版的代墊：支出只記自己那份、別人那份從你的帳戶轉給他。改成「付錢的人記整筆支出」：
+     * 支出加回別人那份、代墊不再從你的帳戶扣（帳戶餘額不變）。只做一次。
+     */
+    suspend fun migratePayerExpense() {
+        if (settings.value.payerExpenseMigrated) return
+        val loans = db.accounts().all().filter { it.type == AccountType.LOAN }.map { it.id }.toSet()
+        db.withTransaction {
+            val all = db.txns().all()
+            val byId = all.associateBy { it.id }
+            val expenses = all.filter { it.type == TxnType.EXPENSE }
+            val add = HashMap<Long, Long>()
+            all.filter { it.type == TxnType.TRANSFER && it.toAccountId in loans && it.accountId != null && it.accountId !in loans }.forEach { a ->
+                val parent = a.externalKey?.takeIf { it.startsWith("SPLIT:") }?.removePrefix("SPLIT:")?.substringBefore(':')?.toLongOrNull()?.let { byId[it] }
+                    ?: if (a.externalKey == null && a.merchant?.startsWith("代墊") == true)
+                        expenses.firstOrNull { p -> p.date == a.date && p.accountId == a.accountId } else null
+                if (parent == null || parent.type != TxnType.EXPENSE || parent.currency != a.currency) return@forEach
+                add.merge(parent.id, a.amount, Long::plus)
+                db.txns().upsert(a.copy(accountId = null, externalKey = a.externalKey ?: "SPLIT:${parent.id}:${a.toAccountId}"))
+            }
+            add.forEach { (id, v) -> byId[id]?.let { db.txns().upsert(it.copy(amount = it.amount + v)) } }
+        }
+        settings.update { it.copy(payerExpenseMigrated = true) }
     }
 
     /**
@@ -2528,7 +2556,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     suspend fun saveQuotes(list: List<QuoteEntity>) {
         if (list.isEmpty()) return
         val old = db.stocks().allQuotes().associateBy { it.key }
+        fun cjk(n: String?) = n?.any { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN } == true
         val keep = list.filter { q -> old[q.key]?.let { o -> !(q.updatedAt < o.updatedAt && o.updatedAt - q.updatedAt < 30 * 60_000L) } ?: true }
+            // 台股名稱：股票清單還沒載入時 Yahoo 給的是英文，已有中文名稱就沿用，不會忽然變成英文
+            .map { q -> val o = old[q.key]; if (q.key.startsWith("TW:") && !cjk(q.name) && cjk(o?.name)) q.copy(name = o?.name) else q }
         if (keep.isNotEmpty()) db.stocks().upsertQuotes(keep)
     }
 

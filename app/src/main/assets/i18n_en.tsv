@@ -3576,3 +3576,9 @@ AI 暫時無法完成檢討，請稍後再試	AI couldn't finish the review. Try
 在巨集裡開啟「通知自動套用」：收到金額相同的付款通知時，直接照巨集記帳；可加關鍵字（例如房東戶名）避免同金額的其他付款被套用。	Turn on Apply from notifications in a macro: a payment notification with the same amount is recorded using the macro. Add a keyword (such as the landlord's account name) so other payments of the same amount are not matched.
 顯示完整內容	Show full text
 收起	Collapse
+別人欠你	Others owe you
+代墊	Paid for others
+幫別人付或一起付：點對象，付款人選「我」，再填他欠你的金額（預設平分）。整筆是付錢的人的支出，他欠你的另記欠款；他還你時不算收入。別人幫你付：付款人選對方。	Paying for someone or splitting: tap the person, set Paid by to Me, and enter what they owe you (split evenly by default). The full amount is the payer's expense and their share is recorded as a debt; when they repay, it is not income. If someone paid for you, set Paid by to them.
+例如聚餐你刷了 410、朋友那份 105：記一筆支出 410，在最下方「往來」點朋友，付款人選「我」，他欠你的金額填 105。錢是你付的，支出記 410；朋友欠你 105，他還你時不算收入。	Say you paid 410 for dinner and your friend's share is 105: record a 410 expense, tap the friend under People, set Paid by to Me, and enter 105. You paid, so the expense is 410; the friend owes you 105, and their repayment is not income.
+每位對象一列：藍色是對方欠你，紅色是你欠對方。還錢、借錢不算收入或支出，只記錄誰欠誰。	One row per person: blue means they owe you, red means you owe them. Repaying and borrowing are not income or expense; they only track who owes whom.
+把每次都一樣的一組帳存起來，例如房租：付給房東 25,500，室友各欠你 7,500、9,500。之後按「執行」就一次記好支出與室友的欠款。	Save a set of entries that repeats every time, such as rent: 25,500 paid to the landlord, with roommates owing you 7,500 and 9,500. Tap Run to record the expense and the roommates' debts at once.

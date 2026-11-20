@@ -754,7 +754,8 @@ fun MmTxnRow(t: TxnEntity, lk: Lookups, balanceAfter: Long? = null, fee: TxnEnti
     // 往來：標題直接寫「黃子懷 還你」「幫 黃子懷 代墊」，第二行寫錢存入／付出的帳戶，原本的店名或項目放在後面
     val who = move?.let { lk.account(it.personId)?.name }.orEmpty()
     val title = move?.let { m -> listOfNotNull(m.sentence(who), debtItem(t)?.takeIf { it != who }).joinToString(" · ") } ?: t.merchant?.takeIf { it.isNotBlank() }
-    val accountText = move?.let { m -> m.where(lk.account(m.otherId)?.name ?: "?") }
+    // 代墊沒有另一邊的帳戶（錢已記在那筆支出）：只寫「代墊」
+    val accountText = move?.let { m -> lk.account(m.otherId)?.name?.let { m.where(it) } ?: if (m.kind == com.enwei.moneymanager.data.DebtKind.ADVANCE) "代墊" else "?" }
         ?: if (t.type == TxnType.TRANSFER) "${acc?.name ?: "?"} → ${lk.account(t.toAccountId)?.name ?: "?"}" else acc?.name.orEmpty()
     val selecting = TxnSelect.active
     val picked = selecting && t.id in TxnSelect.ids
@@ -813,7 +814,8 @@ private fun IconTxnRow(
     val catName = if (move != null) "往來・${move.kind.label}" else if (transfer) "轉帳" else listOfNotNull(root?.name, cat?.name?.takeIf { cat.parentId != null }).joinToString("／").ifBlank { "未分類" }
     val who = move?.let { lk.account(it.personId)?.name }.orEmpty()
     val title = move?.let { m -> listOfNotNull(m.sentence(who), debtItem(t)?.takeIf { it != who }).joinToString(" · ") } ?: t.merchant?.takeIf { it.isNotBlank() } ?: catName
-    val accountText = move?.let { m -> m.where(lk.account(m.otherId)?.name ?: "?") }
+    // 代墊沒有另一邊的帳戶（錢已記在那筆支出）：只寫「代墊」
+    val accountText = move?.let { m -> lk.account(m.otherId)?.name?.let { m.where(it) } ?: if (m.kind == com.enwei.moneymanager.data.DebtKind.ADVANCE) "代墊" else "?" }
         ?: if (transfer) "${lk.account(t.accountId)?.name ?: "?"} → ${lk.account(t.toAccountId)?.name ?: "?"}" else lk.account(t.accountId)?.name.orEmpty()
     val sub = listOfNotNull(catName.takeIf { (t.merchant?.isNotBlank() == true && !transfer) || move != null }, accountText.ifBlank { null }).joinToString(" · ")
     val selecting = TxnSelect.active
