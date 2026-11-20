@@ -681,7 +681,7 @@ fun DayBlock(
             val advOf = remember(txns, lk) {
                 txns.filter { a -> a.type == TxnType.TRANSFER && a.merchant?.startsWith("代墊") == true && lk.account(a.toAccountId)?.type == com.enwei.moneymanager.data.AccountType.LOAN }
                     .mapNotNull { a ->
-                        val key = a.externalKey?.removePrefix("SPLIT:")?.toLongOrNull()
+                        val key = a.externalKey?.takeIf { it.startsWith("SPLIT:") }?.removePrefix("SPLIT:")?.substringBefore(':')?.toLongOrNull()
                         (if (key != null) txns.firstOrNull { it.id == key }
                         else txns.firstOrNull { p -> p.type == TxnType.EXPENSE && p.date == a.date && p.accountId == a.accountId })
                             ?.let { it.id to a }

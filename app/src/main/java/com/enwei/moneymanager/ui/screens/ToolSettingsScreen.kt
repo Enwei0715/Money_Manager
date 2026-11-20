@@ -42,6 +42,7 @@ object ToolCatalog {
     val items = listOf(
         ToolItem("pending", "待確認", "pending", L.ToolPending),
         ToolItem("recurring", "週期交易", "recurring", L.ToolRecurring),
+        ToolItem("macros", "巨集", "macros", L.ToolMacro),
         ToolItem("fx", "匯率", "fx", L.ToolFx),
         ToolItem("backup", "備份", "backup", L.ToolBackup),
         ToolItem("ai-hub", "AI 中心", "ai-hub", L.ToolAi),

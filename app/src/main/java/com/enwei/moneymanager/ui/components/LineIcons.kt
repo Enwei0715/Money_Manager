@@ -146,6 +146,9 @@ object LineIcons {
     /** 工具：通知記帳 */
     val ToolBell = accent("ToolBell", listOf("M6.5 15.5v-4.5a5.5 5.5 0 0 1 11 0v4.5l1.5 2h-14z", "M10.25 20a1.9 1.9 0 0 0 3.5 0"), listOf(Triple(17.6f, 5.4f, 1.6f)))
 
+    /** 工具：巨集（閃電：一鍵記一組帳） */
+    val ToolMacro = accent("ToolMacro", listOf("M13.2 3.8L6.2 13.2h5.2l-1 7l7.4-9.6h-5.4z"), listOf())
+
     /** 工具：手續費 */
     val ToolReceipt = accent("ToolReceipt", listOf("M6.5 3.8h11v16.4l-1.85-1.2-1.85 1.2-1.8-1.2-1.8 1.2-1.85-1.2-1.85 1.2z", "M9.6 14.4l4.8-4.8"), listOf(Triple(9.9f, 9.9f, 0.95f), Triple(14.1f, 14.1f, 0.95f)))
 

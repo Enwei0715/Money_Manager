@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.EventRepeat
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -255,6 +257,7 @@ private fun rememberToolSummaries(): Map<String, String> {
     }
     return buildMap {
         put("pending", if (pending.isEmpty()) "沒有待確認的交易" else "${pending.size} 筆待確認")
+        put("macros", if (settings.macros.isEmpty()) "一鍵記一組固定的帳" else settings.macros.take(3).joinToString("・") { it.name })
         put("recurring", next?.let { (r, d) -> "下一筆 ${d.monthValue}/${d.dayOfMonth} ${r.name}" } ?: "沒有週期交易")
         if (settings.subCurrency != lk.base) put("fx", "1 ${settings.subCurrency} ≈ ${"%.2f".format(lk.fx.convert(1_000_000, settings.subCurrency) / 1_000_000.0)} ${lk.base}")
         put("backup", if (settings.lastAutoBackup > 0) "上次備份 ${fmt.format(Date(settings.lastAutoBackup))}" else "尚未設定自動備份")
@@ -520,6 +523,15 @@ fun NotificationSettingsScreen(nav: NavController) {
             }
             }
             if (tab == 2) {
+            // 巨集：通知金額相符時直接照巨集記（例如房租＋室友各欠的部分）
+            item {
+                Row(Modifier.fillMaxWidth().clickable { nav.navigate("macros") }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("巨集", fontSize = AppText.body, modifier = Modifier.weight(1f))
+                    Text(if (settings.macros.isEmpty()) "未設定" else "${settings.macros.count { it.fromNotif }} 個自動套用", fontSize = AppText.secondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                com.enwei.moneymanager.ui.components.LineDivider()
+            }
             // 測試區（讀通知列、貼上通知）預設收起，需要時再展開
             // 「進階」分頁本身就是收起來的地方，測試區直接展開
             if (settings.locationHints) {
@@ -640,6 +652,8 @@ fun NotificationSettingsScreen(nav: NavController) {
                 items(shown.take(if (allLog) 100 else 20), key = { "log${it.id}" }) { e ->
                     val gone = deleted(e)
                     val pending = e.txnId in pendingIds
+                    // 展開看完整通知內容（可選取複製）
+                    var open by remember(e.id) { mutableStateOf(false) }
                     val (label, col) = when {
                         e.result == "DISMISSED" -> "待確認已刪除" to MaterialTheme.colorScheme.onSurfaceVariant
                         gone -> "交易已刪除" to MaterialTheme.colorScheme.onSurfaceVariant
@@ -679,10 +693,22 @@ fun NotificationSettingsScreen(nav: NavController) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1)
                                 Text(label, fontSize = AppText.label, color = col,
                                     modifier = Modifier.background(col.copy(alpha = 0.12f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
+                                Icon(if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, if (open) "收起" else "顯示完整內容",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 4.dp).size(28.dp).clickable { open = !open }.padding(4.dp))
                             }
                             // 已記帳：先寫記成什麼（金額・店名），通知原文縮成一行放下面
                             val rec = e.txnId?.let { id -> txnById[id] }
-                            if (rec != null && !gone) {
+                            if (open) {
+                                if (rec != null && !gone) Text(listOfNotNull(Money.withSymbol(rec.amount, rec.currency), rec.merchant?.takeIf { it.isNotBlank() }).joinToString("・"),
+                                    fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                                androidx.compose.foundation.text.selection.SelectionContainer {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        e.title?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = AppText.secondary, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                                        e.text?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = AppText.secondary) }
+                                    }
+                                }
+                            } else if (rec != null && !gone) {
                                 Text(listOfNotNull(Money.withSymbol(rec.amount, rec.currency), rec.merchant?.takeIf { it.isNotBlank() }).joinToString("・"),
                                     fontSize = AppText.body, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)

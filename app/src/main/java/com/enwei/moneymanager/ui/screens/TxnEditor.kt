@@ -724,7 +724,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     }
                     // 預算：緊貼在金額下方（記這筆之後還剩多少），不把表單隔開
                     if (budget.isNotEmpty() && type == TxnType.EXPENSE) {
-                        val add = if (currency == lk.base) (amountMinor ?: 0) else lk.fx.convert(amountMinor ?: 0, currency)
+                        // 預算只算自己負擔的部分：別人欠你的代墊不算進你的支出
+                        val others = if (splitOn && !paidBy) splitRows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L } else 0L
+                        val own = ((amountMinor ?: 0) - others).coerceAtLeast(0)
+                        val add = if (currency == lk.base) own else lk.fx.convert(own, currency)
                         Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             budget.forEach { u ->
                                 com.enwei.moneymanager.ui.components.BudgetInline(u.name.removeSuffix("預算").ifBlank { u.name }, u.used, u.cap, add, Modifier.fillMaxWidth())

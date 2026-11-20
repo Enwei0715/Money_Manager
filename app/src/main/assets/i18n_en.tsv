@@ -3555,3 +3555,24 @@ AI 暫時無法完成檢討，請稍後再試	AI couldn't finish the review. Try
 你付	You paid
 自己負擔	Your share
 和別人一起付、幫別人付或別人幫你付：點對象，再選付款人與他欠你的金額（預設平分；全額代墊時他欠你全部，自己負擔為 0）。收入點對象則是他還你或向他借。往來不算收入、支出。	Splitting a bill, paying for someone, or someone paying for you: tap the person, then choose who paid and how much they owe (split evenly by default; when you pay entirely for them, they owe it all and your share is 0). On income, tapping a person means they repay you or you borrow from them. People entries are not income or expense.
+巨集	Macros
+新增巨集	New macro
+編輯巨集	Edit macro
+還沒有巨集	No macros yet
+執行	Run
+已刪除巨集	Macro deleted
+通知自動套用	Apply from notifications
+選填，例如房東戶名	Optional, e.g. landlord's account name
+例如：房租	e.g. Rent
+例如：房東	e.g. Landlord
+＋ 加入對象	+ Add person
+往來對象	Person
+先在「往來」新增對象，才能加入	Add people in People first
+一鍵記一組固定的帳	Record a fixed set of entries in one tap
+未設定	Not set
+個自動套用	auto-applied
+自己負擔	Your share
+把每次都一樣的一組帳存起來，例如房租：付給房東 25,500，室友各欠你 7,500、9,500。之後按「執行」就一次記好，自己只負擔剩下的部分。	Save a set of entries that repeats every time, such as rent: 25,500 paid to the landlord, with roommates owing you 7,500 and 9,500. Tap Run to record it all at once; only the remainder counts as your expense.
+在巨集裡開啟「通知自動套用」：收到金額相同的付款通知時，直接照巨集記帳；可加關鍵字（例如房東戶名）避免同金額的其他付款被套用。	Turn on Apply from notifications in a macro: a payment notification with the same amount is recorded using the macro. Add a keyword (such as the landlord's account name) so other payments of the same amount are not matched.
+顯示完整內容	Show full text
+收起	Collapse

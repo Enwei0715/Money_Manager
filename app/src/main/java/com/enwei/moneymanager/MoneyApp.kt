@@ -59,6 +59,11 @@ class MoneyApp : Application() {
             repo.runRecurring()
             repo.runFeeRebates()
             runCatching { repo.moveAutoDividendsToBroker() }
+            // 新工具「巨集」：放進工具頁一次（使用者之後移除就不再加回）
+            if (!repo.settings.value.macroToolAdded) repo.settings.update { s ->
+                s.copy(macroToolAdded = true, toolOrder = if ("macros" in s.toolOrder) s.toolOrder else
+                    s.toolOrder.indexOf("recurring").let { i -> if (i >= 0) s.toolOrder.take(i + 1) + "macros" + s.toolOrder.drop(i + 1) else s.toolOrder + "macros" })
+            }
         }
         SyncWorker.schedule(this)
         SyncWorker.scheduleTyphoon(this)

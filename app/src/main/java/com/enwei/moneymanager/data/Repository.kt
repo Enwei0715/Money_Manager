@@ -734,14 +734,14 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     /**
      * 這筆支出裡幫別人代墊的部分（各記成一筆轉到往來對象的轉帳）：
-     * 新記的用 externalKey「SPLIT:主交易 id」連起來；舊資料找同時間、同帳戶、名稱以「代墊」開頭、轉到往來對象的轉帳。
+     * 新記的用 externalKey「SPLIT:主交易 id:對象 id」連起來（externalKey 有唯一索引，每人要不同，否則只存得進第一人）；舊資料找同時間、同帳戶、名稱以「代墊」開頭、轉到往來對象的轉帳。
      */
     suspend fun splitsOf(t: TxnEntity): List<TxnEntity> {
         if (t.id == 0L || t.type != TxnType.EXPENSE) return emptyList()
         val loans = db.accounts().all().filter { it.type == AccountType.LOAN }.map { it.id }.toSet()
         return db.txns().between(t.date, t.date).filter {
             it.type == TxnType.TRANSFER && it.toAccountId in loans &&
-                (it.externalKey == "SPLIT:${t.id}" || (it.externalKey == null && it.date == t.date && it.accountId == t.accountId && it.merchant?.startsWith("代墊") == true))
+                (it.externalKey == "SPLIT:${t.id}" || it.externalKey?.startsWith("SPLIT:${t.id}:") == true || (it.externalKey == null && it.date == t.date && it.accountId == t.accountId && it.merchant?.startsWith("代墊") == true))
         }
     }
 
@@ -764,11 +764,31 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val old = existing.firstOrNull { it.toAccountId == pid }?.also { existing.remove(it) }
             saveTxn(TxnEntity(
                 id = old?.id ?: 0L, type = TxnType.TRANSFER, amount = v, currency = t.currency, accountId = t.accountId, toAccountId = pid,
-                merchant = label, date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED, externalKey = "SPLIT:$mainId",
+                merchant = label, date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED, externalKey = old?.externalKey ?: "SPLIT:$mainId:$pid",
             ))
         }
         existing.forEach { db.txns().delete(it.id) }
         return mainId
+    }
+
+    /**
+     * 執行巨集：記一筆支出（有往來對象時一起記代墊）或轉帳。[base] 是通知記帳時已判讀出的交易
+     * （用通知的日期、帳戶與原文），手動執行時為 null（用現在時間與巨集設定的帳戶）。回傳主交易 id。
+     */
+    suspend fun runMacro(m: TxnMacro, base: TxnEntity? = null): Long {
+        val transfer = m.type == "TRANSFER"
+        val t = (base ?: TxnEntity(
+            type = TxnType.EXPENSE, amount = m.amount, currency = settings.value.baseCurrency, accountId = m.accountId,
+            date = System.currentTimeMillis(), source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
+        )).copy(
+            type = if (transfer) TxnType.TRANSFER else TxnType.EXPENSE,
+            accountId = base?.accountId ?: m.accountId,
+            toAccountId = if (transfer) m.toAccountId else null,
+            categoryId = if (transfer) null else m.categoryId,
+            merchant = m.merchant.ifBlank { m.name },
+            status = TxnStatus.CONFIRMED,
+        )
+        return if (!transfer && m.shares.isNotEmpty()) saveWithSplits(t, m.shares.map { it.personId to it.amount }) else saveTxn(t)
     }
 
     /** 收付款通知對得到哪個往來對象：通知裡有對方名字（確定），或入帳金額等於他欠的整筆／某一筆（不確定）。 */
@@ -1435,6 +1455,16 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             type = TxnType.EXPENSE, amount = p.amountMinor, currency = p.currency, accountId = account?.id,
             date = occurred, source = TxnSource.NOTIFICATION, status = status, externalKey = key, rawText = raw,
         )
+
+        // 巨集：付款通知的金額等於某個巨集（且內文含它的關鍵字）→ 直接照巨集記（例如房租＋室友各欠的部分）
+        if (p.type != ParsedType.INCOME) s.macros.firstOrNull { m ->
+            m.fromNotif && m.amount == p.amountMinor && (m.keyword.isBlank() || raw0.contains(m.keyword.trim(), ignoreCase = true))
+        }?.let { m ->
+            val id = runMacro(m, base.copy(accountId = account?.id ?: m.accountId))
+            if (id <= 0) { log.insert(logAs("DUPLICATE")); return null }
+            log.insert(logAs("RECORDED", id))
+            return IngestResult("RECORDED", id, "套用巨集「${m.name}」：$amountText")
+        }
 
         // 往來：入帳通知寫了欠我錢的人的名字，或金額剛好等於他欠的（整筆或某一筆代墊／借出）→ 記成他還款（轉帳，不算收入）；
         // 付款通知寫了我欠的人的名字 → 記成我還款（不算支出）。只靠金額對到的放「待確認」。

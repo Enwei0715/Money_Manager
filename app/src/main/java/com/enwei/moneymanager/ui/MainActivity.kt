@@ -272,7 +272,7 @@ fun NavController.openRoute(r: String) {
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
 /** 屬於「工具」分頁的頁面（從通知、小工具打開時先回到工具首頁） */
-private val TOOL_OWNED = setOf("settings", "backup", "pending", "config", "notif", "budget", "recurring", "ai", "ai-hub")
+private val TOOL_OWNED = setOf("settings", "backup", "pending", "config", "notif", "budget", "recurring", "macros", "ai", "ai-hub")
 
 /** 編輯畫面：不顯示底部分頁列（避免按到分頁丟掉正在輸入的內容） */
 private val EDITOR_PREFIXES = listOf("txn/", "account/", "trade/", "recurring/{", "search")
@@ -491,6 +491,10 @@ private fun AppScaffold(nav: NavHostController) {
                 AccountEditScreen(nav, e.arguments!!.getLong("id"), e.arguments?.getString("type"))
             }
             composable("recurring") { RecurringScreen(nav) }
+            composable("macros") { com.enwei.moneymanager.ui.screens.MacroListScreen(nav) }
+            composable("macro/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->
+                com.enwei.moneymanager.ui.screens.MacroEditScreen(nav, e.arguments!!.getLong("id"))
+            }
             composable("recurring/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->
                 RecurringEditScreen(nav, e.arguments!!.getLong("id"))
             }

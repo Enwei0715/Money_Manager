@@ -33,6 +33,29 @@ data class Bookmark(
 data class AiSuggestion(val txnId: Long, val categoryId: Long, val reason: String = "", val rejected: Boolean = false)
 
 /**
+ * 巨集：一鍵記下固定的一組帳（例如房租：轉給房東 25,500，室友各欠你 7,500、9,500）。
+ * [type] 為 EXPENSE 或 TRANSFER；[shares] 是往來對象各欠你的金額（只用於支出）。
+ * [fromNotif] 開啟時，通知金額等於 [amount]（且內文含 [keyword]，空白則不限）就自動套用。金額皆為最小單位。
+ */
+@Serializable
+data class TxnMacro(
+    val id: Long,
+    val name: String,
+    val type: String = "EXPENSE",
+    val amount: Long = 0,
+    val accountId: Long? = null,
+    val toAccountId: Long? = null,
+    val categoryId: Long? = null,
+    val merchant: String = "",
+    val shares: List<MacroShare> = emptyList(),
+    val fromNotif: Boolean = false,
+    val keyword: String = "",
+)
+
+@Serializable
+data class MacroShare(val personId: Long, val amount: Long)
+
+/**
  * 借貸帳戶的細節：[lent] 為借出（別人欠你）或借入（你欠別人）；金額皆為最小單位。
  * 設定每月還款時會建立一個週期轉帳（[recurringId]），到期產生的轉帳先放「待確認」。
  */
@@ -450,6 +473,10 @@ data class AppSettings(
     val reviews: Map<String, AiReview> = emptyMap(),
     /** 借貸帳戶 id → 借貸細節 */
     val loans: Map<Long, LoanInfo> = emptyMap(),
+    /** 巨集（一鍵記一組固定的帳） */
+    val macros: List<TxnMacro> = emptyList(),
+    /** 已把「巨集」加到工具頁（只加一次，使用者移除後不再加回） */
+    val macroToolAdded: Boolean = false,
     /** 上次通知的借貸提醒（避免重複通知） */
     val loanWarnKey: String = "",
     /** 已提醒過的信用卡繳款（"卡片id:繳款日"），同一期只提醒一次 */
