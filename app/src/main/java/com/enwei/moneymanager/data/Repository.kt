@@ -1583,7 +1583,10 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         // 同一個 App 三分鐘內又來一則同金額、內容不同的通知：多半是連續兩筆同額消費（例如買兩杯飲料分開刷），
         // 不是另一個 App 對同一筆的通知 → 照樣記下，但放待確認讓使用者確認不是重複
         var secondSame = false
-        nearby.firstOrNull { it.type == type && kotlin.math.abs(it.date - occurred) <= 3 * 60_000 }
+        // 兩則通知都寫了精確到秒的交易時間、而且時間不同：是兩筆交易（例如同時買兩張票分開刷），不是同一筆的重複通知
+        val exactTime = p.occurredAt?.let { it.second != 0 || it.nano != 0 || Regex("""\d{1,2}:\d{2}:\d{2}""").containsMatchIn(raw0) } == true
+        fun distinct(o: TxnEntity) = exactTime && o.externalKey?.startsWith("N:") == true && kotlin.math.abs(o.date - occurred) >= 1000
+        nearby.firstOrNull { it.type == type && kotlin.math.abs(it.date - occurred) <= 3 * 60_000 && !distinct(it) }
             ?.takeIf { other -> (log.countForTxnFromPkg(other.id, pkg) == 0).also { if (!it) secondSame = true } }
             ?.let { other ->
             // 實際扣款的帳戶：支付 App 的通知先到時先記在電子錢包，接著銀行／信用卡也通知同一筆
