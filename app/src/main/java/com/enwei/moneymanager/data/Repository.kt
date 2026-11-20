@@ -159,24 +159,32 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val bal = HashMap<Long, Long>()
         accs.filter { it.id in loans }.forEach { bal[it.id] = it.initialBalance }
         val out = HashMap<Long, DebtMove>()
-        txns.filter { it.type == TxnType.TRANSFER && ((it.toAccountId in loans) xor (it.accountId in loans)) }
-            .sortedWith(compareBy({ it.date }, { it.id }))
+        // 欠款餘額要算進所有影響對象帳戶的紀錄：對方幫你付的支出（帳戶是對方）、記在對方的收入也算，
+        // 不然「你欠他」的部分看不到，還他錢會被當成借給他。
+        // 同一天內先算支出、代墊，再算雙方之間的給錢，記帳順序不同也能正確判斷是還款還是借出
+        fun settleLike(t: TxnEntity) = t.type == TxnType.TRANSFER && !(t.merchant?.startsWith("代墊") == true || t.externalKey?.startsWith("SPLIT:") == true)
+        txns.filter { it.status == TxnStatus.CONFIRMED && ((it.toAccountId in loans) xor (it.accountId in loans)) }
+            .sortedWith(compareBy({ java.time.Instant.ofEpochMilli(it.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }, { if (settleLike(it)) 1 else 0 }, { it.date }, { it.id }))
             .forEach { t ->
-                if (t.toAccountId in loans) {
-                    val p = t.toAccountId!!
-                    val before = bal[p] ?: 0L
-                    val kind = when {
-                        before < 0 -> DebtKind.REPAY
-                        t.merchant?.startsWith("代墊") == true -> DebtKind.ADVANCE
-                        else -> DebtKind.LEND
+                when (t.type) {
+                    TxnType.EXPENSE -> t.accountId?.let { p -> bal[p] = (bal[p] ?: 0L) - t.amount }
+                    TxnType.INCOME -> t.accountId?.let { p -> bal[p] = (bal[p] ?: 0L) + t.amount }
+                    TxnType.TRANSFER -> if (t.toAccountId in loans) {
+                        val p = t.toAccountId!!
+                        val before = bal[p] ?: 0L
+                        val kind = when {
+                            t.merchant?.startsWith("代墊") == true || t.externalKey?.startsWith("SPLIT:") == true -> DebtKind.ADVANCE
+                            before < 0 -> DebtKind.REPAY
+                            else -> DebtKind.LEND
+                        }
+                        out[t.id] = DebtMove(kind, p, t.accountId)
+                        bal[p] = before + (t.toAmount ?: t.amount)
+                    } else {
+                        val p = t.accountId!!
+                        val before = bal[p] ?: 0L
+                        out[t.id] = DebtMove(if (before > 0) DebtKind.COLLECT else DebtKind.BORROW, p, t.toAccountId)
+                        bal[p] = before - t.amount
                     }
-                    out[t.id] = DebtMove(kind, p, t.accountId)
-                    bal[p] = before + (t.toAmount ?: t.amount)
-                } else {
-                    val p = t.accountId!!
-                    val before = bal[p] ?: 0L
-                    out[t.id] = DebtMove(if (before > 0) DebtKind.COLLECT else DebtKind.BORROW, p, t.toAccountId)
-                    bal[p] = before - t.amount
                 }
             }
         out
