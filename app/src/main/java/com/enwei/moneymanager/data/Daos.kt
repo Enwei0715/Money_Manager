@@ -202,6 +202,9 @@ interface StockDao {
     @Query("SELECT * FROM quotes")
     fun observeQuotes(): Flow<List<QuoteEntity>>
 
+    @Query("SELECT * FROM quotes")
+    suspend fun allQuotes(): List<QuoteEntity>
+
     @Upsert
     suspend fun upsertQuotes(list: List<QuoteEntity>)
 }

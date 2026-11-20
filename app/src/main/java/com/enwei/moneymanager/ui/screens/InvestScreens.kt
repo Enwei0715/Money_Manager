@@ -281,7 +281,11 @@ fun StockContent(nav: NavController, refreshTick: Int = 0, onMessage: (String) -
                             Text(sym + if (held) " · 已持有" else "", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(q?.let { formatNum(it.price) } ?: "—", fontSize = AppText.body)
+                            // 盤中超過 5 分鐘沒更新的報價先以灰字顯示，更新後才是正常顏色，不會把舊價當成現價
+                            val stale = q != null && mk == Market.TW && com.enwei.moneymanager.core.TaiwanHolidays.isTwTradingTime() &&
+                                System.currentTimeMillis() - q.updatedAt > 5 * 60_000L
+                            Text(q?.let { formatNum(it.price) } ?: "—", fontSize = AppText.body,
+                                color = if (stale) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else Color.Unspecified)
                             if (pct != null) Text((if (pct >= 0) "▲" else "▼") + formatPct(pct), fontSize = AppText.secondary, color = pnlColor(pct))
                         }
                         Spacer(Modifier.width(8.dp))

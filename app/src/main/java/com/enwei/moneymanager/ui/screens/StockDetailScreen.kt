@@ -83,6 +83,7 @@ import com.enwei.moneymanager.ui.StockDown
 import com.enwei.moneymanager.ui.StockUp
 import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.Text
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 /** 股票資訊：K 線（含均線、成交量）、基本數據、相對大盤強弱、公司業務、持股紀律與相關新聞。 */
@@ -134,10 +135,23 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     LaunchedEffect(Unit) {
         if (!listReady) { runCatching { com.enwei.moneymanager.net.TwData.stockList(MoneyApp.instance) }; listReady = true }
     }
+    // 即時價的資料時間：之後抓到比它舊的（例如證交所暫時失敗改用延遲的 Yahoo）就不採用，數字不會跳回去
+    var liveSrcAt by remember { mutableStateOf(0L) }
+    var liveAt by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(symbol) {
-        bars = InvestData.bars(symbol, "5y", tw = market == Market.TW)?.let { b0 ->
-            // 一打開就併入即時價（Yahoo 的日 K 可能延遲）
-            runCatching { com.enwei.moneymanager.net.QuoteService.live(market, symbol) }.getOrNull()?.let { b0.withLive(it) } ?: b0
+        // K 線與即時價同時抓，一打開就是即時價（Yahoo 的日 K 可能延遲）
+        val liveJob = async { runCatching { com.enwei.moneymanager.net.QuoteService.live(market, symbol) }.getOrNull() }
+        val b0 = InvestData.bars(symbol, "5y", tw = market == Market.TW)
+        val l0 = liveJob.await()
+        bars = if (b0 != null && l0 != null) b0.withLive(l0) else b0
+        if (l0 != null) {
+            liveSrcAt = l0.at; liveAt = System.currentTimeMillis()
+            // 存起來：返回觀察清單、持股時也是這個即時價
+            runCatching {
+                repo.saveQuotes(listOf(com.enwei.moneymanager.data.QuoteEntity(com.enwei.moneymanager.data.quoteKey(market, symbol), l0.price, l0.prev,
+                    if (market == Market.TW) "TWD" else "USD",
+                    (if (market == Market.TW) com.enwei.moneymanager.net.TwData.nameOf(symbol) else null) ?: l0.name, l0.at.coerceAtMost(System.currentTimeMillis()))))
+            }
         }
         // 價格與 K 線先顯示，大盤、新聞之後再補（即時報價不必等它們）
         loading = false
@@ -175,18 +189,20 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
     }
 
     // 畫面開著時每 30 秒更新即時價，並併入今天的 K 棒（報價也存起來，持股與觀察清單同步）
-    var liveAt by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(symbol, loading) {
         if (loading) return@LaunchedEffect
+        // 打開時已抓過即時價：等下一輪再更新，不要一打開就連抓兩次、數字跳一下
+        if (liveAt != null) kotlinx.coroutines.delay(if (market != Market.TW || com.enwei.moneymanager.core.TaiwanHolidays.isTwTradingTime()) 30_000 else 600_000)
         while (true) {
-            val l = runCatching { com.enwei.moneymanager.net.QuoteService.live(market, symbol) }.getOrNull()
+            val l = runCatching { com.enwei.moneymanager.net.QuoteService.live(market, symbol) }.getOrNull()?.takeIf { it.at >= liveSrcAt }
             if (l != null) {
                 bars = bars?.withLive(l)
+                liveSrcAt = l.at
                 liveAt = System.currentTimeMillis()
                 runCatching {
                     repo.saveQuotes(listOf(com.enwei.moneymanager.data.QuoteEntity(com.enwei.moneymanager.data.quoteKey(market, symbol), l.price, l.prev,
                         if (market == Market.TW) "TWD" else "USD",
-                        (if (market == Market.TW) com.enwei.moneymanager.net.TwData.nameOf(symbol) else null) ?: l.name, System.currentTimeMillis())))
+                        (if (market == Market.TW) com.enwei.moneymanager.net.TwData.nameOf(symbol) else null) ?: l.name, l.at.coerceAtMost(System.currentTimeMillis()))))
                 }
             }
             // 台股盤中才每 30 秒更新，收盤後每 10 分鐘（美股照樣能更新）

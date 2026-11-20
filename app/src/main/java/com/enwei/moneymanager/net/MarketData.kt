@@ -86,7 +86,13 @@ object QuoteService {
         val volume: Double?, val prev: Double?, val name: String?,
         /** 台北時間的日期（epochDay） */
         val day: Long,
+        /** 報價來源的資料時間（毫秒）；比畫面上已顯示的舊就不採用，避免數字跳回去 */
+        val at: Long = System.currentTimeMillis(),
     )
+
+    /** MIS 資料時間（tlong，毫秒） */
+    private fun misAt(e: kotlinx.serialization.json.JsonElement): Long =
+        e.str("tlong")?.toLongOrNull()?.takeIf { it > 0 } ?: System.currentTimeMillis()
 
     private fun misNum(s: String?) = s?.trim()?.takeIf { it.isNotEmpty() && it != "-" }?.toDoubleOrNull()?.takeIf { it > 0 }
 
@@ -130,7 +136,7 @@ object QuoteService {
         return arr.mapNotNull { e ->
             val code = e.str("c") ?: return@mapNotNull null
             val last = misPrice(e) ?: return@mapNotNull null
-            QuoteEntity(quoteKey(Market.TW, code), last, misNum(e.str("y")), "TWD", e.str("n"), now)
+            QuoteEntity(quoteKey(Market.TW, code), last, misNum(e.str("y")), "TWD", e.str("n"), misAt(e).coerceAtMost(now))
         }.distinctBy { it.key }
     }
 
@@ -140,7 +146,7 @@ object QuoteService {
             misRaw(listOf(symbol))?.firstOrNull { it.str("c") == symbol }?.let { e ->
                 val p = misPrice(e) ?: return@let null
                 return LiveBar(p, misNum(e.str("o")), misNum(e.str("h")), misNum(e.str("l")),
-                    misNum(e.str("v"))?.times(1000), misNum(e.str("y")), e.str("n"), misDay(e))
+                    misNum(e.str("v"))?.times(1000), misNum(e.str("y")), e.str("n"), misDay(e), misAt(e))
             }
         }
         val candidates = if (market == Market.TW) listOf("$symbol.TW", "$symbol.TWO") else listOf(symbol)
@@ -154,7 +160,8 @@ object QuoteService {
             val day = meta.num("regularMarketTime")?.toLong()?.let { java.time.Instant.ofEpochSecond(it).atZone(zone).toLocalDate().toEpochDay() }
                 ?: java.time.LocalDate.now(zone).toEpochDay()
             return LiveBar(p, null, meta.num("regularMarketDayHigh"), meta.num("regularMarketDayLow"), meta.num("regularMarketVolume"),
-                meta.num("regularMarketPreviousClose") ?: meta.num("chartPreviousClose") ?: meta.num("previousClose"), meta.str("shortName"), day)
+                meta.num("regularMarketPreviousClose") ?: meta.num("chartPreviousClose") ?: meta.num("previousClose"), meta.str("shortName"), day,
+                meta.num("regularMarketTime")?.toLong()?.times(1000) ?: System.currentTimeMillis())
         }
         return null
     }
@@ -226,7 +233,8 @@ object QuoteService {
             previousClose = meta.num("regularMarketPreviousClose") ?: meta.num("chartPreviousClose") ?: meta.num("previousClose"),
             currency = meta.str("currency") ?: if (market == Market.TW) "TWD" else "USD",
             name = meta.str("shortName") ?: meta.str("longName"),
-            updatedAt = System.currentTimeMillis(),
+            // 報價的資料時間（Yahoo 台股可能延遲）：存檔時不會蓋掉比它新的證交所報價
+            updatedAt = meta.num("regularMarketTime")?.toLong()?.times(1000)?.coerceAtMost(System.currentTimeMillis()) ?: System.currentTimeMillis(),
         )
     }
 }

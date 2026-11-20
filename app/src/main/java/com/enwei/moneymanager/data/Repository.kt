@@ -2491,7 +2491,16 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     /** 刪除整檔持股（這個代號的所有買賣與股利紀錄）；交割帳戶餘額會自動回復。 */
     suspend fun deleteHolding(market: Market, symbol: String) = db.stocks().deleteSymbol(market, symbol.uppercase())
-    suspend fun saveQuotes(list: List<QuoteEntity>) = db.stocks().upsertQuotes(list)
+    /**
+     * 存報價：同一檔已有較新的報價（資料時間較晚、30 分鐘內）時不覆蓋。
+     * 證交所即時價與延遲的 Yahoo 價交替寫入時，觀察清單與持股的數字才不會跳來跳去。
+     */
+    suspend fun saveQuotes(list: List<QuoteEntity>) {
+        if (list.isEmpty()) return
+        val old = db.stocks().allQuotes().associateBy { it.key }
+        val keep = list.filter { q -> old[q.key]?.let { o -> !(q.updatedAt < o.updatedAt && o.updatedAt - q.updatedAt < 30 * 60_000L) } ?: true }
+        if (keep.isNotEmpty()) db.stocks().upsertQuotes(keep)
+    }
 
     /**
      * 使用者說這筆是促銷、不該記帳：刪除交易，並記住「來源 App＋幾個關鍵詞」（AI 擷取，沒有 AI 時用規則），
