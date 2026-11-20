@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -26,14 +26,15 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,9 +47,12 @@ import androidx.navigation.NavController
 import com.enwei.moneymanager.core.Money
 import com.enwei.moneymanager.data.AccountType
 import com.enwei.moneymanager.data.MacroShare
+import com.enwei.moneymanager.data.MacroStep
 import com.enwei.moneymanager.data.TxnMacro
 import com.enwei.moneymanager.data.TxnType
 import com.enwei.moneymanager.ui.AppText
+import com.enwei.moneymanager.ui.ExpenseColor
+import com.enwei.moneymanager.ui.IncomeColor
 import com.enwei.moneymanager.ui.components.AppCard
 import com.enwei.moneymanager.ui.components.BackTopBar
 import com.enwei.moneymanager.ui.components.FormInput
@@ -60,25 +64,36 @@ import kotlinx.coroutines.launch
 /** 巨集裡的金額文字：整數不帶小數 */
 private fun macroAmt(minor: Long): String = if (minor % 100 == 0L) (minor / 100).toString() else "%.2f".format(minor / 100.0)
 private fun parseMinor(s: String): Long = s.replace(",", "").trim().toDoubleOrNull()?.takeIf { it > 0 }?.let { Money.toMinor(it) } ?: 0L
+private val TYPES = listOf("EXPENSE" to "支出", "INCOME" to "收入", "TRANSFER" to "轉帳")
+private fun typeLabel(t: String) = TYPES.firstOrNull { it.first == t }?.second ?: "支出"
 
-/** 巨集清單：每個巨集一張卡片，按「執行」立刻記下（可復原），點卡片修改。 */
+/** 一步的一行摘要：類型 金額・分類・商家・帳戶 */
+private fun stepLine(st: MacroStep, lk: Lookups, base: String): String = listOfNotNull(
+    "${typeLabel(st.type)} ${Money.withSymbol(st.amount, base)}",
+    if (st.type == "TRANSFER") null else lk.catLabel(st.categoryId),
+    st.merchant.takeIf { it.isNotBlank() },
+    lk.account(st.accountId)?.name?.let { a -> if (st.type == "TRANSFER") "$a → ${lk.account(st.toAccountId)?.name ?: "未選"}" else a },
+).joinToString("・")
+
+/** 巨集清單：每個巨集一張卡片，列出每一步；按「執行」依序全部記下（可復原），點卡片修改。 */
 @Composable
 fun MacroListScreen(nav: NavController) {
-    com.enwei.moneymanager.ui.components.PageTour("macros", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "巨集", "把每次都一樣的一組帳存起來，例如房租：付給房東 25,500，室友各欠你 7,500、9,500。之後按「執行」就一次記好支出與室友的欠款。"),
-        com.enwei.moneymanager.ui.components.Coach.Step(null, "通知自動套用", "在巨集裡開啟「通知自動套用」：收到金額相同的付款通知時，直接照巨集記帳；可加關鍵字（例如房東戶名）避免同金額的其他付款被套用。"),
+    com.enwei.moneymanager.ui.components.PageTour("macros2", listOf(
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "巨集", "把一整套固定的動作存起來：每一步可以是支出、收入或轉帳，支出可加往來對象各欠你的金額。按「執行」就依序全部記好，例如房租、發薪日分配、固定的團購代墊。"),
+        com.enwei.moneymanager.ui.components.Coach.Step(null, "通知自動套用", "開啟後，收到金額等於某一步的付款或入帳通知，就自動執行整套，那一步用通知的日期與帳戶；可加關鍵字（例如對方戶名），避免同金額的其他交易被套用。"),
     ))
     val lk = rememberLookups()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val base = settings.baseCurrency
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         BackTopBar("巨集", { nav.popBackStack() }) {
             IconButton(onClick = { nav.navigate("macro/0") }) { Icon(Icons.Filled.Add, "新增巨集") }
         }
         if (settings.macros.isEmpty()) {
             Column(Modifier.fillMaxWidth().padding(top = 64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("還沒有巨集", fontSize = AppText.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("還沒有巨集", fontSize = AppText.body, color = muted)
                 Spacer(Modifier.height(14.dp))
                 Button(onClick = { nav.navigate("macro/0") }) { Text("新增巨集") }
             }
@@ -87,41 +102,48 @@ fun MacroListScreen(nav: NavController) {
         LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(settings.macros, key = { it.id }) { m ->
-                val transfer = m.type == "TRANSFER"
+                val steps = m.allSteps()
                 AppCard(Modifier.fillMaxWidth().clickable { nav.navigate("macro/${m.id}") }) {
                     Column(Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(m.name, fontSize = AppText.body, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(Money.withSymbol(m.amount, base), fontSize = AppText.title, fontWeight = FontWeight.SemiBold,
-                                    color = if (transfer) MaterialTheme.colorScheme.onSurface else com.enwei.moneymanager.ui.ExpenseColor)
+                                Text("${steps.size} 步", fontSize = AppText.caption, color = muted)
                             }
                             FilledTonalButton(onClick = {
                                 scope.launch {
-                                    val id = repo.runMacro(m)
-                                    com.enwei.moneymanager.ui.components.Undo.show(com.enwei.moneymanager.ui.tr("已記下「${m.name}」")) { repo.deleteTxn(id) }
+                                    val ids = repo.runMacro(m)
+                                    com.enwei.moneymanager.ui.components.Undo.show(com.enwei.moneymanager.ui.tr("已記下「${m.name}」")) { ids.forEach { repo.deleteTxn(it) } }
                                 }
-                            }) { Text("執行") }
+                            }, enabled = steps.isNotEmpty()) { Text("執行") }
                         }
-                        // 記成什麼：類型・分類或轉入帳戶・從哪個帳戶
-                        Text(listOfNotNull(
-                            if (transfer) "轉帳" else lk.catLabel(m.categoryId) ?: "支出",
-                            m.merchant.takeIf { it.isNotBlank() },
-                            lk.account(m.accountId)?.let { if (transfer) "${it.name} → ${lk.account(m.toAccountId)?.name ?: "未選"}" else it.name },
-                        ).joinToString("・"), fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (!transfer && m.shares.isNotEmpty()) Text(
-                            m.shares.joinToString("・") { s -> "${lk.account(s.personId)?.name ?: "?"} 欠你 ${Money.withSymbol(s.amount, base)}" },
-                            fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (m.fromNotif) Text(
-                            "通知 ${Money.withSymbol(m.amount, base)}" + (if (m.keyword.isNotBlank()) "・含「${m.keyword}」" else "") + " 時自動套用",
-                            fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary,
-                        )
+                        steps.forEachIndexed { i, st ->
+                            Text("${i + 1}. " + stepLine(st, lk, base), fontSize = AppText.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                color = when (st.type) { "INCOME" -> IncomeColor; "TRANSFER" -> MaterialTheme.colorScheme.onSurface; else -> ExpenseColor })
+                            if (st.type == "EXPENSE" && st.shares.isNotEmpty()) Text(
+                                st.shares.joinToString("・") { s -> "${lk.account(s.personId)?.name ?: "?"} 欠你 ${Money.withSymbol(s.amount, base)}" },
+                                fontSize = AppText.caption, color = muted, modifier = Modifier.padding(start = 16.dp),
+                            )
+                        }
+                        if (m.fromNotif) Text("通知金額相符時自動套用" + (if (m.keyword.isNotBlank()) "・含「${m.keyword}」" else ""),
+                            fontSize = AppText.caption, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
         }
     }
+}
+
+/** 編輯中的一步（金額用文字，往來是對象 id 與金額文字） */
+private data class StepDraft(
+    val type: String = "EXPENSE", val amount: String = "", val accountId: Long? = null, val toAccountId: Long? = null,
+    val categoryId: Long? = null, val merchant: String = "", val shares: List<Pair<Long, String>> = emptyList(),
+) {
+    val total get() = parseMinor(amount)
+    val owed get() = shares.sumOf { parseMinor(it.second) }
+    val ok get() = total > 0 && accountId != null && (type != "TRANSFER" || toAccountId != null) && (type != "EXPENSE" || owed <= total)
+    fun toStep() = MacroStep(type, total, accountId, if (type == "TRANSFER") toAccountId else null, if (type == "TRANSFER") null else categoryId,
+        merchant.trim(), if (type == "EXPENSE") shares.map { MacroShare(it.first, parseMinor(it.second)) }.filter { it.amount > 0 } else emptyList())
 }
 
 /** 新增或修改巨集。[id] 為 0 時新增。 */
@@ -130,41 +152,34 @@ fun MacroEditScreen(nav: NavController, id: Long) {
     val lk = rememberLookups()
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val orig = remember(id) { repo.settings.value.macros.firstOrNull { it.id == id } }
-    var name by rememberSaveable { mutableStateOf(orig?.name.orEmpty()) }
-    var transfer by rememberSaveable { mutableStateOf(orig?.type == "TRANSFER") }
-    var amount by rememberSaveable { mutableStateOf(orig?.amount?.let(::macroAmt).orEmpty()) }
-    var accountId by rememberSaveable { mutableStateOf(orig?.accountId) }
-    var toAccountId by rememberSaveable { mutableStateOf(orig?.toAccountId) }
-    var categoryId by rememberSaveable { mutableStateOf(orig?.categoryId) }
-    var merchant by rememberSaveable { mutableStateOf(orig?.merchant.orEmpty()) }
-    // 往來：對象 id 與金額文字（「id=金額」以 ; 串起來，旋轉畫面也保留）
-    var sharesRaw by rememberSaveable { mutableStateOf(orig?.shares.orEmpty().joinToString(";") { "${it.personId}=${macroAmt(it.amount)}" }) }
-    val shares = sharesRaw.split(';').filter { it.contains('=') }.mapNotNull { e -> e.substringBefore('=').toLongOrNull()?.let { it to e.substringAfter('=') } }
-    fun setShares(l: List<Pair<Long, String>>) { sharesRaw = l.joinToString(";") { "${it.first}=${it.second}" } }
-    var fromNotif by rememberSaveable { mutableStateOf(orig?.fromNotif ?: false) }
-    var keyword by rememberSaveable { mutableStateOf(orig?.keyword.orEmpty()) }
-    var pick by remember { mutableStateOf<String?>(null) }
+    var name by remember { mutableStateOf(orig?.name.orEmpty()) }
+    val steps = remember {
+        mutableStateListOf<StepDraft>().apply {
+            addAll(orig?.allSteps().orEmpty().map { st ->
+                StepDraft(st.type, macroAmt(st.amount), st.accountId, st.toAccountId, st.categoryId, st.merchant, st.shares.map { it.personId to macroAmt(it.amount) })
+            })
+            if (isEmpty()) add(StepDraft())
+        }
+    }
+    var fromNotif by remember { mutableStateOf(orig?.fromNotif ?: false) }
+    var keyword by remember { mutableStateOf(orig?.keyword.orEmpty()) }
+    // 選擇視窗：哪一步、選什麼（acc／to／cat／person）
+    var pick by remember { mutableStateOf<Pair<Int, String>?>(null) }
     val base = settings.baseCurrency
-    val total = parseMinor(amount)
-    val owed = shares.sumOf { parseMinor(it.second) }
-    val over = !transfer && owed > total
-    val ready = name.isNotBlank() && total > 0 && accountId != null && !over && (!transfer || toAccountId != null)
+    val ready = name.isNotBlank() && steps.isNotEmpty() && steps.all { it.ok }
     val mine = lk.accounts.filter { !it.archived && it.type != AccountType.LOAN }
     val people = lk.accounts.filter { !it.archived && it.type == AccountType.LOAN }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    fun set(i: Int, f: (StepDraft) -> StepDraft) { steps[i] = f(steps[i]) }
 
     fun save() {
-        val m = TxnMacro(
-            id = orig?.id ?: System.currentTimeMillis(), name = name.trim(), type = if (transfer) "TRANSFER" else "EXPENSE", amount = total,
-            accountId = accountId, toAccountId = if (transfer) toAccountId else null, categoryId = if (transfer) null else categoryId,
-            merchant = merchant.trim(), shares = if (transfer) emptyList() else shares.map { MacroShare(it.first, parseMinor(it.second)) }.filter { it.amount > 0 },
-            fromNotif = fromNotif, keyword = keyword.trim(),
-        )
+        val m = TxnMacro(id = orig?.id ?: System.currentTimeMillis(), name = name.trim(), steps = steps.map { it.toStep() },
+            fromNotif = fromNotif, keyword = keyword.trim())
         repo.settings.update { s -> s.copy(macros = if (orig == null) s.macros + m else s.macros.map { if (it.id == m.id) m else it }) }
         nav.popBackStack()
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         BackTopBar(if (orig == null) "新增巨集" else "編輯巨集", { nav.popBackStack() }) {
             if (orig != null) TextButton(onClick = {
                 repo.settings.update { s -> s.copy(macros = s.macros.filter { it.id != orig.id }) }
@@ -175,82 +190,98 @@ fun MacroEditScreen(nav: NavController, id: Long) {
             }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).imePadding()) {
-            FormLine("名稱") { FormInput(name, { name = it }, placeholder = "例如：房租") }
-            FormLine("類型") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(false to "支出", true to "轉帳").forEach { (v, l) -> Choice(l, transfer == v) { transfer = v } }
-                }
+            Box(Modifier.background(MaterialTheme.colorScheme.surface)) {
+                FormLine("名稱") { FormInput(name, { name = it }, placeholder = "例如：房租、發薪日") }
             }
-            FormLine("金額") { FormInput(amount, { s -> amount = s.filter { it.isDigit() || it == '.' } }, placeholder = "0", number = true) }
-            FormLine("帳戶", onClick = { pick = "acc" }) {
-                Text(lk.account(accountId)?.name ?: "選擇帳戶", color = if (accountId == null) muted else Color.Unspecified)
-            }
-            if (transfer) FormLine("轉入帳戶", onClick = { pick = "to" }) {
-                Text(lk.account(toAccountId)?.name ?: "選擇帳戶", color = if (toAccountId == null) muted else Color.Unspecified)
-            } else FormLine("分類", onClick = { pick = "cat" }) {
-                Text(lk.catLabel(categoryId) ?: "選擇分類", color = if (categoryId == null) muted else Color.Unspecified)
-            }
-            FormLine("商家") { FormInput(merchant, { merchant = it }, placeholder = "例如：房東") }
 
-            // 往來：每位對象一列「X 欠你」，最後一列是自己負擔
-            if (!transfer) {
-                SectionLabel("往來")
-                shares.forEachIndexed { i, (pid, v) ->
-                    FormLine("${lk.account(pid)?.name ?: "?"} 欠你", trailing = {
-                        Text("✕", color = muted, modifier = Modifier.clickable { setShares(shares.filterIndexed { j, _ -> j != i }) }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
-                    }) {
-                        FormInput(v, { s -> setShares(shares.mapIndexed { j, e -> if (j == i) e.first to s.filter { it.isDigit() || it == '.' } else e }) }, placeholder = "0", number = true)
+            // 每一步一張卡片：步驟編號、類型、金額、帳戶、分類或轉入帳戶、商家、往來
+            steps.forEachIndexed { i, st ->
+                AppCard(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("步驟 ${i + 1}", fontSize = AppText.secondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        if (steps.size > 1) TextButton(onClick = { steps.removeAt(i) }) { Text("移除", color = muted, fontSize = AppText.secondary) }
                     }
+                    FormLine("類型") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TYPES.forEach { (v, l) -> Choice(l, st.type == v) { set(i) { it.copy(type = v) } } }
+                        }
+                    }
+                    FormLine("金額") { FormInput(st.amount, { s -> set(i) { it.copy(amount = s.filter { c -> c.isDigit() || c == '.' }) } }, placeholder = "0", number = true) }
+                    FormLine(if (st.type == "INCOME") "存入帳戶" else "帳戶", onClick = { pick = i to "acc" }) {
+                        Text(lk.account(st.accountId)?.name ?: "選擇帳戶", color = if (st.accountId == null) muted else Color.Unspecified)
+                    }
+                    if (st.type == "TRANSFER") FormLine("轉入帳戶", onClick = { pick = i to "to" }) {
+                        Text(lk.account(st.toAccountId)?.name ?: "選擇帳戶", color = if (st.toAccountId == null) muted else Color.Unspecified)
+                    } else FormLine("分類", onClick = { pick = i to "cat" }) {
+                        Text(lk.catLabel(st.categoryId) ?: "選擇分類", color = if (st.categoryId == null) muted else Color.Unspecified)
+                    }
+                    FormLine(if (st.type == "INCOME") "來源" else "商家") { FormInput(st.merchant, { v -> set(i) { it.copy(merchant = v) } }, placeholder = "選填") }
+                    // 往來（只有支出）：每人一列「X 欠你」
+                    if (st.type == "EXPENSE") {
+                        st.shares.forEachIndexed { j, (pid, v) ->
+                            FormLine("${lk.account(pid)?.name ?: "?"} 欠你", trailing = {
+                                Text("✕", color = muted, modifier = Modifier.clickable { set(i) { it.copy(shares = it.shares.filterIndexed { k, _ -> k != j }) } }
+                                    .padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
+                            }) {
+                                FormInput(v, { s -> set(i) { it.copy(shares = it.shares.mapIndexed { k, e -> if (k == j) e.first to s.filter { c -> c.isDigit() || c == '.' } else e }) } },
+                                    placeholder = "0", number = true)
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (people.any { p -> st.shares.none { it.first == p.id } }) Text("＋ 往來對象", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { pick = i to "person" }.padding(vertical = 6.dp))
+                            Spacer(Modifier.weight(1f))
+                            if (st.shares.isNotEmpty() && st.total > 0) Text(
+                                if (st.owed > st.total) "超過金額 ${Money.withSymbol(st.total, base)}" else "別人欠你 ${Money.withSymbol(st.owed, base)}",
+                                fontSize = AppText.secondary, color = if (st.owed > st.total) MaterialTheme.colorScheme.error else muted,
+                            )
+                        }
+                    } else Spacer(Modifier.height(8.dp))
                 }
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (people.any { p -> shares.none { it.first == p.id } }) Text("＋ 加入對象", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable { pick = "person" }.padding(vertical = 6.dp))
-                    Spacer(Modifier.weight(1f))
-                    if (shares.isNotEmpty() && total > 0) Text(
-                        if (over) "超過總額 ${Money.withSymbol(total, base)}" else "別人欠你 ${Money.withSymbol(owed, base)}",
-                        fontSize = AppText.secondary, color = if (over) MaterialTheme.colorScheme.error else muted,
-                    )
-                }
-                if (people.isEmpty()) Text("先在「往來」新增對象，才能加入", fontSize = AppText.caption, color = muted, modifier = Modifier.padding(horizontal = 16.dp))
             }
+            OutlinedButton(onClick = { steps.add(StepDraft(accountId = steps.lastOrNull()?.accountId)) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) { Text("＋ 新增步驟") }
 
-            SectionLabel("通知")
-            Row(Modifier.fillMaxWidth().clickable { fromNotif = !fromNotif }.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("通知自動套用", fontSize = AppText.body)
-                    if (total > 0) Text("付款通知金額為 ${Money.withSymbol(total, base)} 時套用", fontSize = AppText.caption, color = muted)
+            // 通知自動套用
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+                Row(Modifier.fillMaxWidth().clickable { fromNotif = !fromNotif }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("通知自動套用", fontSize = AppText.body)
+                        val amts = steps.map { it.total }.filter { it > 0 }.distinct()
+                        if (amts.isNotEmpty()) Text("通知金額為 " + amts.joinToString("、") { Money.withSymbol(it, base) } + " 時執行整套", fontSize = AppText.caption, color = muted)
+                    }
+                    Switch(fromNotif, { fromNotif = it })
                 }
-                Switch(fromNotif, { fromNotif = it })
+                if (fromNotif) FormLine("關鍵字") { FormInput(keyword, { keyword = it }, placeholder = "選填，例如對方戶名") }
             }
-            if (fromNotif) FormLine("關鍵字") { FormInput(keyword, { keyword = it }, placeholder = "選填，例如房東戶名") }
             Spacer(Modifier.height(24.dp))
         }
         Button(onClick = { save() }, enabled = ready, modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding()) { Text("儲存") }
     }
 
-    when (pick) {
-        "acc", "to" -> OptionDialog(
-            if (pick == "acc") "帳戶" else "轉入帳戶",
-            (if (pick == "to") mine + people else mine).filter { pick != "to" || it.id != accountId }.map { it.id to it.name },
-            if (pick == "acc") accountId else toAccountId, onDismiss = { pick = null },
-        ) { v -> if (pick == "acc") accountId = v else toAccountId = v }
-        "cat" -> OptionDialog(
-            "分類",
-            lk.categories.filter { !it.archived && it.kind == TxnType.EXPENSE }
-                .sortedWith(compareBy({ lk.rootId(it.id)?.let { r -> lk.category(r)?.sortOrder } ?: 0 }, { if (it.parentId == null) 0 else 1 }, { it.sortOrder }))
-                .map { it.id to (lk.catLabel(it.id) ?: it.name) },
-            categoryId, onDismiss = { pick = null },
-        ) { categoryId = it }
-        "person" -> OptionDialog(
-            "往來對象", people.filter { p -> shares.none { it.first == p.id } }.map { it.id to it.name }, null, onDismiss = { pick = null },
-        ) { pid -> setShares(shares + (pid to "")) }
+    pick?.let { (i, kind) ->
+        val st = steps.getOrNull(i) ?: return@let
+        when (kind) {
+            "acc", "to" -> OptionDialog(
+                if (kind == "acc") "帳戶" else "轉入帳戶",
+                (if (kind == "to") mine + people else mine).filter { kind != "to" || it.id != st.accountId }.map { it.id to it.name },
+                if (kind == "acc") st.accountId else st.toAccountId, onDismiss = { pick = null },
+            ) { v -> set(i) { if (kind == "acc") it.copy(accountId = v) else it.copy(toAccountId = v) } }
+            "cat" -> {
+                val k = if (st.type == "INCOME") TxnType.INCOME else TxnType.EXPENSE
+                OptionDialog(
+                    "分類",
+                    lk.categories.filter { !it.archived && it.kind == k }
+                        .sortedWith(compareBy({ lk.rootId(it.id)?.let { r -> lk.category(r)?.sortOrder } ?: 0 }, { lk.rootId(it.id) ?: 0L }, { if (it.parentId == null) 0 else 1 }, { it.sortOrder }))
+                        .map { it.id to (lk.catLabel(it.id) ?: it.name) },
+                    st.categoryId, onDismiss = { pick = null },
+                ) { v -> set(i) { it.copy(categoryId = v) } }
+            }
+            "person" -> OptionDialog(
+                "往來對象", people.filter { p -> st.shares.none { it.first == p.id } }.map { it.id to it.name }, null, onDismiss = { pick = null },
+            ) { pid -> set(i) { it.copy(shares = it.shares + (pid to "")) } }
+        }
     }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(text, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 2.dp))
 }
 
 @Composable

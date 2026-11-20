@@ -33,14 +33,16 @@ data class Bookmark(
 data class AiSuggestion(val txnId: Long, val categoryId: Long, val reason: String = "", val rejected: Boolean = false)
 
 /**
- * 巨集：一鍵記下固定的一組帳（例如房租：轉給房東 25,500，室友各欠你 7,500、9,500）。
- * [type] 為 EXPENSE 或 TRANSFER；[shares] 是往來對象各欠你的金額（只用於支出）。
- * [fromNotif] 開啟時，通知金額等於 [amount]（且內文含 [keyword]，空白則不限）就自動套用。金額皆為最小單位。
+ * 巨集：一鍵依序記下一整套固定的帳（[steps]，每一步是一筆支出、收入或轉帳，支出可帶往來對象各欠你的金額）。
+ * [fromNotif] 開啟時，付款或入帳通知金額等於某一步的金額（且內文含 [keyword]，空白則不限）就自動執行整套，
+ * 那一步用通知的日期與帳戶。金額皆為最小單位。
+ * 舊版只有一步，存在 [type]、[amount]… 欄位；讀取一律用 [allSteps]。
  */
 @Serializable
 data class TxnMacro(
     val id: Long,
     val name: String,
+    val steps: List<MacroStep> = emptyList(),
     val type: String = "EXPENSE",
     val amount: Long = 0,
     val accountId: Long? = null,
@@ -50,6 +52,22 @@ data class TxnMacro(
     val shares: List<MacroShare> = emptyList(),
     val fromNotif: Boolean = false,
     val keyword: String = "",
+) {
+    fun allSteps(): List<MacroStep> = steps.ifEmpty {
+        if (amount > 0) listOf(MacroStep(type, amount, accountId, toAccountId, categoryId, merchant, shares)) else emptyList()
+    }
+}
+
+/** 巨集的一步：[type] 為 EXPENSE、INCOME 或 TRANSFER */
+@Serializable
+data class MacroStep(
+    val type: String = "EXPENSE",
+    val amount: Long = 0,
+    val accountId: Long? = null,
+    val toAccountId: Long? = null,
+    val categoryId: Long? = null,
+    val merchant: String = "",
+    val shares: List<MacroShare> = emptyList(),
 )
 
 @Serializable

@@ -800,23 +800,28 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     /**
-     * 執行巨集：記一筆支出（有往來對象時一起記代墊）或轉帳。[base] 是通知記帳時已判讀出的交易
-     * （用通知的日期、帳戶與原文），手動執行時為 null（用現在時間與巨集設定的帳戶）。回傳主交易 id。
+     * 執行巨集：依序記下每一步（支出有往來對象時一起記代墊）。[base] 是通知記帳時已判讀出的交易，
+     * 套用在金額相同的那一步（用通知的日期、帳戶與原文）；其他步驟用同一個時間。回傳記下的主交易 id（復原用）。
      */
-    suspend fun runMacro(m: TxnMacro, base: TxnEntity? = null): Long {
-        val transfer = m.type == "TRANSFER"
-        val t = (base ?: TxnEntity(
-            type = TxnType.EXPENSE, amount = m.amount, currency = settings.value.baseCurrency, accountId = m.accountId,
-            date = System.currentTimeMillis(), source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
-        )).copy(
-            type = if (transfer) TxnType.TRANSFER else TxnType.EXPENSE,
-            accountId = base?.accountId ?: m.accountId,
-            toAccountId = if (transfer) m.toAccountId else null,
-            categoryId = if (transfer) null else m.categoryId,
-            merchant = m.merchant.ifBlank { m.name },
-            status = TxnStatus.CONFIRMED,
-        )
-        return if (!transfer && m.shares.isNotEmpty()) saveWithSplits(t, m.shares.map { it.personId to it.amount }) else saveTxn(t)
+    suspend fun runMacro(m: TxnMacro, base: TxnEntity? = null): List<Long> {
+        val now = base?.date ?: System.currentTimeMillis()
+        val hit = base?.let { b -> m.allSteps().indexOfFirst { it.amount == b.amount } } ?: -1
+        return m.allSteps().mapIndexed { i, st ->
+            val type = runCatching { TxnType.valueOf(st.type) }.getOrDefault(TxnType.EXPENSE)
+            val t0 = if (i == hit && base != null) base else TxnEntity(
+                type = type, amount = st.amount, currency = settings.value.baseCurrency, accountId = st.accountId,
+                date = now, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
+            )
+            val t = t0.copy(
+                type = type, amount = st.amount,
+                accountId = (if (i == hit) base?.accountId else null) ?: st.accountId,
+                toAccountId = if (type == TxnType.TRANSFER) st.toAccountId else null,
+                categoryId = if (type == TxnType.TRANSFER) null else st.categoryId,
+                merchant = st.merchant.ifBlank { m.name },
+                status = TxnStatus.CONFIRMED,
+            )
+            if (type == TxnType.EXPENSE && st.shares.isNotEmpty()) saveWithSplits(t, st.shares.map { it.personId to it.amount }) else saveTxn(t)
+        }
     }
 
     /** 收付款通知對得到哪個往來對象：通知裡有對方名字（確定），或入帳金額等於他欠的整筆／某一筆（不確定）。 */
@@ -1485,13 +1490,15 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         )
 
         // 巨集：付款通知的金額等於某個巨集（且內文含它的關鍵字）→ 直接照巨集記（例如房租＋室友各欠的部分）
-        if (p.type != ParsedType.INCOME) s.macros.firstOrNull { m ->
-            m.fromNotif && m.amount == p.amountMinor && (m.keyword.isBlank() || raw0.contains(m.keyword.trim(), ignoreCase = true))
+        s.macros.firstOrNull { m ->
+            m.fromNotif && (m.keyword.isBlank() || raw0.contains(m.keyword.trim(), ignoreCase = true)) &&
+                m.allSteps().any { st -> st.amount == p.amountMinor && (st.type == "INCOME") == (p.type == ParsedType.INCOME) }
         }?.let { m ->
-            val id = runMacro(m, base.copy(accountId = account?.id ?: m.accountId))
-            if (id <= 0) { log.insert(logAs("DUPLICATE")); return null }
+            val hitStep = m.allSteps().first { it.amount == p.amountMinor }
+            val ids = runMacro(m, base.copy(accountId = account?.id ?: hitStep.accountId))
+            val id = ids.firstOrNull { it > 0 } ?: run { log.insert(logAs("DUPLICATE")); return null }
             log.insert(logAs("RECORDED", id))
-            return IngestResult("RECORDED", id, "套用巨集「${m.name}」：$amountText")
+            return IngestResult("RECORDED", id, "套用巨集「${m.name}」：$amountText（${ids.size} 步）")
         }
 
         // 往來：入帳通知寫了欠我錢的人的名字，或金額剛好等於他欠的（整筆或某一筆代墊／借出）→ 記成他還款（轉帳，不算收入）；

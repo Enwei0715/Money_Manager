@@ -3584,3 +3584,16 @@ AI 暫時無法完成檢討，請稍後再試	AI couldn't finish the review. Try
 把每次都一樣的一組帳存起來，例如房租：付給房東 25,500，室友各欠你 7,500、9,500。之後按「執行」就一次記好支出與室友的欠款。	Save a set of entries that repeats every time, such as rent: 25,500 paid to the landlord, with roommates owing you 7,500 and 9,500. Tap Run to record the expense and the roommates' debts at once.
 平日	Weekdays
 週末	Weekend
+步驟	Step
+＋ 新增步驟	+ Add step
+＋ 往來對象	+ Person
+移除	Remove
+存入帳戶	Deposit to
+來源	Source
+選填	Optional
+例如：房租、發薪日	e.g. Rent, Payday
+選填，例如對方戶名	Optional, e.g. the other party's account name
+通知金額相符時自動套用	Applied automatically when a notification amount matches
+超過金額	Exceeds amount
+把一整套固定的動作存起來：每一步可以是支出、收入或轉帳，支出可加往來對象各欠你的金額。按「執行」就依序全部記好，例如房租、發薪日分配、固定的團購代墊。	Save a fixed set of actions: each step can be an expense, income or transfer, and expenses can include what people owe you. Tap Run to record every step in order, e.g. rent, payday allocation, or a regular group purchase.
+開啟後，收到金額等於某一步的付款或入帳通知，就自動執行整套，那一步用通知的日期與帳戶；可加關鍵字（例如對方戶名），避免同金額的其他交易被套用。	When on, a payment or deposit notification whose amount matches a step runs the whole macro, using the notification's date and account for that step. Add a keyword (such as the other party's account name) so other transactions of the same amount are not matched.
