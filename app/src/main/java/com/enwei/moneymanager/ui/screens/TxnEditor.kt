@@ -376,13 +376,10 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         // 人就在某家記過的店（已知位置 50 公尺內）：店名直接帶入，分類跟著這家店過去的紀錄（比金額推測可靠）
         // 只有記新的一筆才自動帶入；編輯舊的一筆只列推薦，不改你寫過的內容
         // 依位置帶入店名只用在支出（收入、往來不是在店裡花錢）
-        if (id == 0L && type == TxnType.EXPENSE) ph.storeHere(loc, names)?.let { here ->
-            if (merchant.isBlank() || merchantAuto) {
-                val (m, stall) = splitByHabit(here)
-                merchant = m; merchantAuto = true
-            }
-        }
-        nearby = (hist + known).distinct().take(8)
+        // 店名不自動帶入（位置常有誤差）：最可能的那家排在推薦列第一個，由你點選
+        var best: String? = if (type == TxnType.EXPENSE) ph.storeHere(loc, names)?.let { splitByHabit(it).first } else null
+        fun withBest(l: List<String>) = (listOfNotNull(best) + l).distinct().take(8)
+        nearby = withBest((hist + known).distinct())
         // 附近的店：有 Mapbox 金鑰用 Mapbox，否則用 OpenStreetMap（Overpass）
         if (com.enwei.moneymanager.net.PlaceSearch.online) {
             val mb = com.enwei.moneymanager.net.PlaceSearch.nearby(loc.latitude, loc.longitude)
@@ -398,12 +395,12 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 // 只有全部指向同一個店家才自動帶入；有好幾家（美食街）就不猜，留給下方的推薦讓你點
                 val ms = cands.map { it.first }.distinct()
                 if (ms.size == 1) {
-                    merchant = ms.first(); merchantAuto = true
+                    if (best == null) best = ms.first()
                     val stalls = cands.mapNotNull { it.second }.distinct()
                 }
             }
-            nearby = (hist + known + mb.map { cleanPlaceName(it.name) }).distinct().take(10)
-            if (mb.isEmpty()) nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
+            nearby = withBest(hist + known + mb.map { cleanPlaceName(it.name) })
+            if (mb.isEmpty()) nearby = withBest(hist + known + ph.nearbyStores(loc))
             // 有 Google 地點金鑰：直接帶入你現在所在的店（最近的那一家），推薦列只放 10 公尺內的店（由近到遠），再補你記過的店。
             // 定位本身有誤差：範圍取 10 公尺與定位精確度（最多 25 公尺）中較大的
             if (com.enwei.moneymanager.net.GooglePlaces.enabled && mb.isNotEmpty()) {
@@ -411,13 +408,11 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 val close = mb.filter { (it.meters ?: 999f) <= reach }.sortedBy { it.meters ?: 0f }
                 // 名稱和你記過的店對得上就用你記的名字（例如 Google 的長名稱對到你習慣的店名）
                 fun mine(n: String): String = names.firstOrNull { k -> normName(k).let { it.length >= 3 && (normName(n).contains(it) || it.contains(normName(n))) } } ?: cleanPlaceName(n)
-                if (id == 0L && type == TxnType.EXPENSE && (merchant.isBlank() || merchantAuto)) close.firstOrNull()?.let { p ->
-                    merchant = mine(p.name); merchantAuto = true
-                }
+                if (best == null && type == TxnType.EXPENSE) close.firstOrNull()?.let { p -> best = mine(p.name) }
                 // 推薦列：帶入的那家可能不對，所以列出離你最近的其他店（包含沒記過的），最多 6 家，再補 2 家你在這附近記過的
-                nearby = (mb.sortedBy { it.meters ?: 999f }.take(6).map { mine(it.name) } + hist.take(2)).distinct().take(8)
+                nearby = withBest(mb.sortedBy { it.meters ?: 999f }.take(6).map { mine(it.name) } + hist.take(2))
             }
-        } else nearby = (hist + known + ph.nearbyStores(loc)).distinct().take(8)
+        } else nearby = withBest(hist + known + ph.nearbyStores(loc))
     }
     LaunchedEffect(merchant, merchantFocused) {
         // 打字停下來 0.6 秒、至少 2 個字才查；剛從清單選好的店不再查（減少 API 呼叫）
@@ -1594,9 +1589,9 @@ private fun SplitSection(
     if (total != null) FormRow("", color, false, onClick = {}) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(if (others > total) "超過總額 ${Money.withSymbol(total, currency)}"
-                else if (paidBy) "你欠 ${nameOf(rows.first())} ${Money.withSymbol(total - others, currency)}・你的支出 ${Money.withSymbol(total - others, currency)}"
-                else "你付 ${Money.withSymbol(total, currency)}・別人欠你 ${Money.withSymbol(others, currency)}・你的支出 ${Money.withSymbol(total - others, currency)}",
-                fontSize = AppText.secondary, color = if (others > total) MaterialTheme.colorScheme.error else muted, modifier = Modifier.weight(1f))
+                else if (paidBy) "你欠 ${nameOf(rows.first())} ${Money.withSymbol(total - others, currency)}"
+                else "你的支出 ${Money.withSymbol(total - others, currency)}",
+                fontSize = AppText.secondary, color = if (others > total) MaterialTheme.colorScheme.error else muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             // 一鍵平分（含你一份）；手動改過金額後才需要
             if (!rows.all { it.auto } || !includeMe) Text("平分", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable { onIncludeMe(true); onRows(rows.map { it.copy(auto = true) }) }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
