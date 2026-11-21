@@ -1,0 +1,63 @@
+[shot] 01_txns
+[shot] 02_txns_calendar
+[shot] 03_stats
+[shot] 04_stats_months
+[shot] 05_stats_analysis
+[shot] 06_assets
+[shot] 07_stocks
+[shot] 08_stocks_watch
+[shot] 09_assistant
+[shot] 10_assistant_discipline
+[shot] 11_tools
+[shot] 12_settings
+[shot] 13_settings_2
+[shot] 14_editor_at_cafeteria2
+[shot] 15_editor_amount_85
+[miss] 找不到「捨棄」
+[miss] 找不到「不儲存」
+[shot] 16_txns_after_notifications
+[shot] 17_txn_linepay_60
+[shot] 18_txn_kyoto_85
+[miss] 找不到「紀錄」
+[shot] 19_notif_log
+[shot] 20_holding_2330
+[shot] 21_stock_2330_mid
+[shot] 22_stock_2330_analysis
+[shot] 23_stock_2330_projection
+[shot] 24_dark_txns
+[shot] 25_dark_editor
+[miss] 找不到「捨棄」
+[shot] 26_bigfont_txns
+[shot] 27_bigfont_assets
+[shot] 28_bigfont_editor
+[anr]
+11-21 11:25:21.305   543   650 I WindowManager: ANR in ActivityRecord{3881a9a u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t7}.  Reason: Input dispatching timed out (Application does not have a focused window)
+11-21 11:25:21.310  1137  1137 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=android.app.Activity$$ExternalSyntheticLambda0@33f6e5f
+11-21 11:25:21.314  1731  2410 I SP.AiAi : Scheduling: download registered, 0 started, 0 paused, 6 scheduled, 6 pending: manifests:webref-2-en-us-19071200 * {m:b:u:l, bg}, manifests:spelling_correction-22110320 * {W:b:I:l, bg}, manifests:kg_collections_table-21051103 * {W:b:u:l, bg}, manifests:actions-ranking-table-211005 * {W:b:u:l, bg}, manifests:text-classifier-annotator-272525175 * {W:b:u:l, bg}, manifests:text-classifier-actions-1140547708 * {W:b:u:l, bg}
+11-21 11:25:21.315  3254  3254 D nativeloader: InitLlndkLibrariesProduct: libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libRS.so:libandroid_net.so:libbinder_ndk.so:libc.so:libcgrouprc.so:libclang_rt.asan-x86_64-android.so:libcom.android.tethering.connectivity_native.so:libdl.so:libft2.so:liblog.so:libm.so:libmediandk.so:libnativewindow.so:libneuralnetworks.so:libselinux.so:libsync.so:libvndksupport.so:libvulkan.so
+11-21 11:25:21.315  3254  3254 D nativeloader: Configuring product-clns-6 for unbundled product apk /product/app/GoogleTTS/GoogleTTS.apk. target_sdk_version=33, uses_libraries=, library_path=/product/app/GoogleTTS/lib/x86_64:/product/app/GoogleTTS/GoogleTTS.apk!/lib/x86_64:/product/lib64:/system/product/lib64, permitted_path=/data:/mnt/expand:/data/user/0/com.google.android.tts:/product/lib64:/system/product/lib64
+11-21 11:25:21.316  3254  3254 D nativeloader: InitVndkspLibrariesProduct: android.hardware.common-V2-ndk.so:android.hardware.common.fmq-V1-ndk.so:android.hardware.graphics.allocator-V2-ndk.so:android.hardware.graphics.common-V4-ndk.so:android.hardware.graphics.common@1.0.so:android.hardware.graphics.common@1.1.so:android.hardware.graphics.common@1.2.so:android.hardware.graphics.composer3-V1-ndk.so:android.hardware.graphics.mapper@2.0.so:android.hardware.graphics.mapper@2.1.so:android.hardware.graphics.mapper@3.0.so:android.hardware.graphics.mapper@4.0.so:android.hardware.renderscript@1.0.so:android.hidl.memory.token@1.0.so:android.hidl.memory@1.0-impl.so:android.hidl.memory@1.0.so:android.hidl.safe_union@1.0.so:libRSCpuRef.so:libRSDriver.so:libRS_internal.so:libbase.so:libbcinfo.so:libblas.so:libc++.so:libcompiler_rt.so:libcutils.so:libdmabufheap.so:libgralloctypes.so:libhardware.so:libhidlbase.so:libhidlmemory.so:libion.so:libjsoncpp.so:liblzma.so:libprocessgroup.so:libunwindstack.so:libutils.so:libutilscallstack.so:libz.so
+11-21 11:25:21.318  1902  2566 W SearchServiceCore: Abort, client detached.
+11-21 11:25:21.319   543  1080 D CoreBackPreview: Window{1048735 u0 com.android.settings/com.android.settings.FallbackHome}: Setting back callback null
+11-21 11:25:21.320  1902  2566 W SearchServiceCore: Abort, client detached.
+11-21 11:25:21.321   543  1208 W ServiceManagerCppClient: Permission failure: android.permission.ROTATE_SURFACE_FLINGER from uid=10132 pid=0
+11-21 11:25:21.321   543  1208 D PermissionCache: checking android.permission.ROTATE_SURFACE_FLINGER for uid=10132 => denied (260 us)
+11-21 11:25:21.321   543  1208 W ServiceManagerCppClient: Permission failure: android.permission.INTERNAL_SYSTEM_WINDOW from uid=10132 pid=0
+11-21 11:25:21.321   543  1208 D PermissionCache: checking android.permission.INTERNAL_SYSTEM_WINDOW for uid=10132 => denied (196 us)
+--
+11-21 11:25:27.696   543  3351 E ActivityManager: ANR in com.google.android.apps.nexuslauncher (com.google.android.apps.nexuslauncher/.NexusLauncherActivity)
+11-21 11:25:27.696   543  3351 E ActivityManager: PID: 1178
+11-21 11:25:27.696   543  3351 E ActivityManager: Reason: Input dispatching timed out (Application does not have a focused window)
+11-21 11:25:27.696   543  3351 E ActivityManager: Parent: com.google.android.apps.nexuslauncher/.NexusLauncherActivity
+11-21 11:25:27.696   543  3351 E ActivityManager: ErrorId: 04ca8108-8081-4f29-9177-e8e9bd990f81
+11-21 11:25:27.696   543  3351 E ActivityManager: Frozen: false
+11-21 11:25:27.696   543  3351 E ActivityManager: Load: 8.22 / 1.83 / 0.6
+11-21 11:25:27.696   543  3351 E ActivityManager: ----- Output from /proc/pressure/memory -----
+11-21 11:25:27.696   543  3351 E ActivityManager: some avg10=2.89 avg60=0.57 avg300=0.12 total=408254
+11-21 11:25:27.696   543  3351 E ActivityManager: full avg10=0.09 avg60=0.02 avg300=0.00 total=70268
+11-21 11:25:27.696   543  3351 E ActivityManager: ----- End output from /proc/pressure/memory -----
+11-21 11:25:27.696   543  3351 E ActivityManager: ----- Output from /proc/pressure/cpu -----
+11-21 11:25:27.696   543  3351 E ActivityManager: some avg10=52.13 avg60=14.19 avg300=3.24 total=10199681
+
+[anr traces] anr_2026-11-21-11-25-21-809 
+done
