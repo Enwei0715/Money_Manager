@@ -278,6 +278,10 @@ interface NotificationLogDao {
     @Query("SELECT COUNT(*) FROM notification_log WHERE packageName = :pkg AND title IS :title AND text IS :text AND postedAt > :since")
     suspend fun countSame(pkg: String, title: String?, text: String?, since: Long): Int
 
+    /** 同一則通知（發送時間完全相同）是否已處理過 */
+    @Query("SELECT COUNT(*) FROM notification_log WHERE packageName = :pkg AND title IS :title AND text IS :text AND postedAt = :postedAt")
+    suspend fun countSameAt(pkg: String, title: String?, text: String?, postedAt: Long): Int
+
     @Query("DELETE FROM notification_log WHERE postedAt < :before")
     suspend fun prune(before: Long)
 

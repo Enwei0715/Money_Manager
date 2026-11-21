@@ -38,8 +38,10 @@ data class HoldingPlan(
     val autoPrincipal: Boolean = true,
     /** 日 K 均線（5、10、20、72、100、200）的位置 */
     val trend: com.enwei.moneymanager.core.ProfitGuard.MaTrend? = null,
+    /** 報酬率（未實現損益 ÷ 淨成本，和個股頁、持股頁同一種算法） */
+    val netRet: Double? = null,
 ) {
-    val gainPct: Double? get() = price?.let { (it / avgCost - 1) * 100 }
+    val gainPct: Double? get() = netRet ?: price?.let { (it / avgCost - 1) * 100 }
 }
 
 /** 投資助理的現況：資金分配、持股紀律與大盤。 */
@@ -172,6 +174,7 @@ suspend fun Repository.advisorSnapshot(fetch: Boolean = true): AdvisorSnapshot =
             gi?.takeIf { plan.disciplineOn && plan.guardOn }?.let { com.enwei.moneymanager.core.ProfitGuard.advise(it, plan.guardRule()) },
             gs?.principal == null,
             bars?.close?.let { com.enwei.moneymanager.core.ProfitGuard.dailyTrend(it) },
+            netRet = price?.let { list.sumOf { h -> h.netCost }.takeIf { it > 0 }?.let { c -> list.sumOf { h -> h.unrealized } / c * 100 } },
         )
     }.sortedByDescending { it.value }
     // 記下移動停利的最高價（下次從這裡繼續往上移）

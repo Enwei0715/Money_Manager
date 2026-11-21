@@ -286,12 +286,14 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         // 準確度統計（只在本機）：通知記的交易被改了哪一欄
         if (before != null) AutoAccuracy.onEdit(before, t)
         // 交易已經存好了：之後的學習步驟出錯不能讓呼叫端以為沒存成功（否則會重存一筆）
-        if (t.status == TxnStatus.CONFIRMED) runCatching { learnMerchant(t) }
+        // 改成代墊（轉給往來對象、名稱「代墊：…」）不是在改店名或分類：不學（否則會把這家店學成「代墊：店名」）
+        val toAdvance = t.type == TxnType.TRANSFER && t.merchant?.startsWith("代墊") == true
+        if (t.status == TxnStatus.CONFIRMED && !toAdvance) runCatching { learnMerchant(t) }
         if (before?.status == TxnStatus.PENDING && t.status == TxnStatus.CONFIRMED) runCatching { learnFromConfirmed(t) }
         // 通知記的交易被改到別的帳戶：記住通知裡的卡號末四碼屬於這個帳戶，下次同一張卡直接記對
         if (before != null && t.source == TxnSource.NOTIFICATION && t.accountId != null && before.accountId != t.accountId) runCatching { learnCardLast4(t) }
         // 通知記的店名被改掉：記住「通知店名 → 改成的店名」，之後同一家店的通知直接用改過的名字，舊交易一併統一
-        if (before != null && t.source == TxnSource.NOTIFICATION) runCatching { learnMerchantAlias(before.merchant, t.merchant) }
+        if (before != null && t.source == TxnSource.NOTIFICATION && !toAdvance) runCatching { learnMerchantAlias(before.merchant, t.merchant) }
         // 預算跨過 80%／100% 時提醒
         if (before == null || before.status != TxnStatus.CONFIRMED || before.amount != t.amount || before.categoryId != t.categoryId)
             runCatching { checkBudgetAlert(t) }
@@ -800,7 +802,11 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val loans = db.accounts().all().filter { it.type == AccountType.LOAN }.map { it.id }.toSet()
             val used = all.mapNotNull { it.externalKey }.toHashSet()
             all.filter { it.type == TxnType.TRANSFER && it.externalKey == null && it.toAccountId in loans && it.merchant?.startsWith("代墊") == true }.forEach { a ->
-                val parent = all.firstOrNull { p -> p.type == TxnType.EXPENSE && p.date == a.date && p.accountId == a.accountId && p.accountId != null }
+                // 主支出：同時間、同帳戶的支出，不能是手續費列；有好幾筆時要店名對得上，不確定就當成獨立的代墊
+                val cands = all.filter { p -> p.type == TxnType.EXPENSE && p.date == a.date && p.accountId == a.accountId && p.accountId != null &&
+                    p.externalKey?.startsWith("FEE:") != true && p.merchant?.contains("手續費") != true }
+                val name = a.merchant?.removePrefix("代墊")?.trimStart('：', ':', ' ').orEmpty()
+                val parent = cands.singleOrNull() ?: cands.firstOrNull { name.isNotBlank() && it.merchant?.trim() == name }
                 val key = parent?.let { "SPLIT:${it.id}:${a.toAccountId}" }?.takeIf { it !in used } ?: "ADV:${a.id}"
                 used += key
                 db.txns().upsert(a.copy(externalKey = key))
@@ -1360,7 +1366,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         // 超過 1 分鐘的相同內容可能是另一筆同額消費（通知沒寫時間），交給下面判斷並留下紀錄，不默默丟掉
         // 只略過「同一則」（發送時間相同，例如重新連線時補讀到已處理過的）；
         // App 更新同一則通知由監聽端依通知編號略過。內容相同但時間不同的可能是另一筆同額消費，不能默默丟掉
-        if (!force && !recordAnyway && log.countSame(pkg, title, text, postedAt - 1) > 0) return null
+        if (!force && !recordAnyway && log.countSameAt(pkg, title, text, postedAt) > 0) return null
         // 通知紀錄：記成交易的保留 60 天；沒有記帳的（略過、非付款通知）保留 7 天
         // 每小時最多清一次：每則通知（包含其他 App 的一般通知）都跑兩次 DELETE 太耗電
         if (System.currentTimeMillis() - lastLogPrune > 3600_000L) {
@@ -1546,8 +1552,14 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
         // 巨集：付款通知的金額等於某個巨集（且內文含它的關鍵字）→ 直接照巨集記（例如房租＋室友各欠的部分）
         // 3 分鐘內已有另一個 App 通知同一筆（例如銀行＋LINE Pay）：不再執行一次巨集，交給下面合併
-        val sameFromOther = s.macros.any { it.fromNotif } && db.txns().between(occurred - 180_000, occurred + 180_000)
-            .any { it.source == TxnSource.NOTIFICATION && (it.amount == p.amountMinor || splitsOf(it).sumOf { x -> x.amount } + it.amount == p.amountMinor) }
+        val recentSame = if (s.macros.none { it.fromNotif }) emptyList() else db.txns().between(occurred - 180_000, occurred + 180_000)
+            .filter { it.source == TxnSource.NOTIFICATION && (it.type != TxnType.INCOME) == (p.type != ParsedType.INCOME) }
+        // 巨集（分帳）記下的那筆只剩自己的份：金額要加回代墊才對得上；對上了就是同一筆，記成合併，不再記一次
+        recentSame.firstOrNull { it.amount != p.amountMinor && splitsOf(it).sumOf { x -> x.amount } + it.amount == p.amountMinor }?.let { other ->
+            log.insert(logAs("MERGED", other.id))
+            return IngestResult("RECORDED", other.id, "${Money.format(p.amountMinor, p.currency)}（和已記的同一筆）")
+        }
+        val sameFromOther = recentSame.any { it.amount == p.amountMinor }
         if (!sameFromOther) s.macros.firstOrNull { m ->
             // 關鍵字比對忽略千分位逗號與空白（填 25500 也對得到通知裡的 25,500）
             m.fromNotif && (m.keyword.isBlank() || raw0.replace(",", "").replace(" ", "").contains(m.keyword.trim().replace(",", "").replace(" ", ""), ignoreCase = true)) &&
@@ -1712,7 +1724,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val exactTime = p.occurredAt?.let { it.second != 0 || it.nano != 0 || Regex("""\d{1,2}:\d{2}:\d{2}""").containsMatchIn(raw0) } == true
         // 兩邊都要有秒數才算不同筆（錢包通知只到分鐘、銀行到秒時，是同一筆）
         fun distinct(o: TxnEntity) = exactTime && o.externalKey?.startsWith("N:") == true &&
-            Regex("""T\d{2}:\d{2}:\d{2}""").containsMatchIn(o.externalKey.orEmpty()) && kotlin.math.abs(o.date - occurred) >= 1000
+            // 秒數後面必定接「:卡號或來源」：只到分鐘的「T12:30:1234」不能把卡號末四碼當成秒數
+            Regex("""T\d{2}:\d{2}:\d{2}:""").containsMatchIn(o.externalKey.orEmpty()) && kotlin.math.abs(o.date - occurred) >= 1000
         nearby.firstOrNull { it.type == type && kotlin.math.abs(it.date - occurred) <= 3 * 60_000 && !distinct(it) }
             ?.takeIf { other -> (log.countForTxnFromPkg(other.id, pkg) == 0).also { if (!it) secondSame = true } }
             ?.let { other ->

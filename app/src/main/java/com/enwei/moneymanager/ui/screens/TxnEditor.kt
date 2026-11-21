@@ -841,7 +841,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     // 帳戶：支出是「從哪個帳戶付」、收入是「存進哪個帳戶」。別人幫你付時不隱藏（避免欄位忽然消失），
                     // 改成寫「由 X 付」，點了改回自己付並選帳戶。依習慣自動帶入的帳戶標「自動」
                     FormRow(if (com.enwei.moneymanager.ui.I18n.english) "Account" else if (type == TxnType.INCOME) "存入" else "付款", color, panel == Panel.ACCOUNT,
-                        onClick = { focusManager.clearFocus(); if (payer != null) paidBy = false; panel = Panel.ACCOUNT }) {
+                        // 點「由 X 付」改回自己付：X 也從往來移除（否則會多出一列「X 欠你」）
+                        onClick = { focusManager.clearFocus(); if (payer != null) { paidBy = false; splitRaw = "" }; panel = Panel.ACCOUNT }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (payer != null) Text("由 ${payer.person?.let { lk.account(it)?.name } ?: payer.name.trim()} 付", color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1044,7 +1045,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     val v = if (!amountFresh || old.isEmpty() || old == "0") v0 else when {
                         v0.length < old.length -> ""
                         // 舊值已有兩位小數，數字接不上去（v0 沒變）：先清空，下一個數字就能直接輸入
-                        v0 == old -> ""
+                        v0 == old && Regex("""\.\d{2}$""").containsMatchIn(old) -> ""
                         v0.startsWith(old) -> v0.substring(old.length).let { add -> if (add.firstOrNull()?.let { it.isDigit() || it == '.' } == true) add else v0 }
                         else -> v0
                     }

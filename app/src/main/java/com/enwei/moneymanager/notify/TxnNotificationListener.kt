@@ -40,7 +40,7 @@ class TxnNotificationListener : NotificationListenerService() {
             val log = app.repo.db.notificationLog()
             list.forEach { sbn ->
                 val (title, text) = textOf(sbn) ?: return@forEach
-                if (log.countSame(sbn.packageName, title, text, sbn.postTime - 60_000) == 0) enqueue(sbn.packageName, sbn.key, title, text, sbn.postTime)
+                if (log.countSameAt(sbn.packageName, title, text, sbn.postTime) == 0) enqueue(sbn.packageName, sbn.key, title, text, sbn.postTime)
             }
         }
     }
@@ -81,15 +81,18 @@ class TxnNotificationListener : NotificationListenerService() {
         if (!com.enwei.moneymanager.MoneyApp.repo.settings.value.featureNotif) return
         val (title, text) = textOf(sbn) ?: return
         // App 更新同一則通知（同一個通知編號、內容沒變）：已經處理過，略過。編號不同的是另一則，照常處理
+        // 只在 2 分鐘內才當成同一則的更新：App 固定用同一個通知編號時，下午另一筆同額消費不能被吞掉
         val sig = "$title\u0000$text"
+        val now = System.currentTimeMillis()
         synchronized(recentKeys) {
-            if (recentKeys[sbn.key] == sig) return
-            recentKeys[sbn.key] = sig
+            val prev = recentKeys[sbn.key]
+            if (prev != null && prev.first == sig && now - prev.second < 120_000) return
+            recentKeys[sbn.key] = sig to now
             if (recentKeys.size > 300) recentKeys.remove(recentKeys.keys.first())
         }
         enqueue(sbn.packageName, sbn.key, title, text, sbn.postTime)
     }
-    private val recentKeys = LinkedHashMap<String, String>()
+    private val recentKeys = LinkedHashMap<String, Pair<String, Long>>()
 
     private fun enqueue(pkg: String, key: String, title: String?, text: String?, postTime: Long) {
         val app = application as MoneyApp

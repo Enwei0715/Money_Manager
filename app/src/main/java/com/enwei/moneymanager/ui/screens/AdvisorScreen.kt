@@ -2264,7 +2264,7 @@ private fun AiHoldLine(a: com.enwei.moneymanager.data.AdvisorHolding) {
 /** 一檔持股：名稱、長短線、損益、價位圖、紀律動作與 AI 動作。 */
 @Composable
 private fun HoldingCard(h: com.enwei.moneymanager.data.HoldingPlan, ai: com.enwei.moneymanager.data.AdvisorHolding?, discipline: Boolean, nav: NavController) {
-    val g = h.price?.let { (it / h.avgCost - 1) * 100 }
+    val g = h.gainPct
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${h.symbol} ${h.name.orEmpty()}", fontSize = AppText.section, fontWeight = FontWeight.SemiBold, maxLines = 1,
