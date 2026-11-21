@@ -431,7 +431,11 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
             confirmButton = { TextButton(onClick = { batchCat = false }) { Text("取消") } },
         )
     }
-    if (batchSplit) BatchSplitDialog(chosen.filter { it.type == TxnType.EXPENSE }, lk, onDismiss = { batchSplit = false }) {
+    if (batchSplit) BatchSplitDialog(chosen.filter { t ->
+        // 只分你付的支出：別人付的（帳戶是往來對象）、待確認的不分；幣別要相同才能加總
+        t.type == TxnType.EXPENSE && t.status == com.enwei.moneymanager.data.TxnStatus.CONFIRMED &&
+            lk.account(t.accountId)?.type != com.enwei.moneymanager.data.AccountType.LOAN
+    }.let { l -> val cur = l.groupingBy { it.currency }.eachCount().maxByOrNull { it.value }?.key; l.filter { it.currency == cur } }, lk, onDismiss = { batchSplit = false }) {
         TxnSelect.ids = emptySet(); batchSplit = false
     }
     if (batchAcc) AlertDialog(
@@ -688,7 +692,7 @@ fun DayBlock(
                     .mapNotNull { a ->
                         val key = a.externalKey?.takeIf { it.startsWith("SPLIT:") }?.removePrefix("SPLIT:")?.substringBefore(':')?.toLongOrNull()
                         (if (key != null) txns.firstOrNull { it.id == key }
-                        else txns.firstOrNull { p -> p.type == TxnType.EXPENSE && p.date == a.date && p.accountId == a.accountId })
+                        else if (a.externalKey == null) txns.firstOrNull { p -> p.type == TxnType.EXPENSE && p.date == a.date && p.accountId == a.accountId } else null)
                             ?.let { it.id to a }
                     }.groupBy({ it.first }, { it.second })
             }
@@ -1368,7 +1372,12 @@ private fun BatchSplitDialog(list: List<TxnEntity>, lk: Lookups, onDismiss: () -
     fun plan(): List<Pair<TxnEntity, List<Pair<Long, Long>>>> {
         val ids = picked.toList()
         if (ids.isEmpty()) return emptyList()
-        val parts = ids.size + if (includeMe) 1 else 0
+        // 全由他們：每筆整筆分給他們，零頭給最後一位（不留 $1 這種殘額支出）
+        if (!includeMe) return list.map { t ->
+            val base = t.amount / ids.size / 100 * 100
+            t to ids.mapIndexed { i, id -> id to if (i == ids.lastIndex) t.amount - base * (ids.size - 1) else base }
+        }
+        val parts = ids.size + 1
         var cum = 0L; var given = 0L
         return list.map { t ->
             cum += t.amount
@@ -1411,13 +1420,14 @@ private fun BatchSplitDialog(list: List<TxnEntity>, lk: Lookups, onDismiss: () -
         },
         confirmButton = {
             TextButton(enabled = picked.isNotEmpty() && list.isNotEmpty(), onClick = {
-                scope.launch {
+                // 在 App 層執行：對話框關掉也會做完（原本用畫面的 scope，關掉就可能只做一半）
+                com.enwei.moneymanager.MoneyApp.instance.appScope.launch {
                     p.forEach { (t, shares) ->
                         if (repo.splitsOf(t).isNotEmpty()) return@forEach
                         val sh = shares.filter { it.second > 0 }
                         if (sh.isEmpty()) return@forEach
-                        if (sh.sumOf { it.second } >= t.amount) { repo.deleteTxn(t.id); repo.saveWithSplits(t.copy(id = 0), sh) }
-                        else repo.saveWithSplits(t, sh)
+                        // 全由他們：沿用原本那筆改成代墊（通知原文、手續費不會遺失），不再刪掉重建
+                        repo.saveWithSplits(t, sh)
                     }
                 }
                 onDone()

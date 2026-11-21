@@ -59,6 +59,7 @@ class MoneyApp : Application() {
             repo.runRecurring()
             repo.runFeeRebates()
             runCatching { repo.moveAutoDividendsToBroker() }
+            runCatching { repo.keyLegacyAdvances() }
             runCatching { repo.revertPayerExpense() }
             runCatching { repo.dropZeroAdvanceExpenses() }
             // 新工具「巨集」：放進工具頁一次（使用者之後移除就不再加回）

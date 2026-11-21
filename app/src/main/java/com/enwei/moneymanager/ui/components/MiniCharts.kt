@@ -159,9 +159,16 @@ fun DailyBarsChart(values: List<Long>, fmt: (Long) -> String, color: Color = Mat
         val peakDay = start?.plusDays(if (weekly) peak * 7L else peak.toLong())
         Text("${if (weekly) "每週平均" else "每天平均"} ${fmt(avg)} · 最高 " + (peakDay?.let { "${it.monthValue}/${it.dayOfMonth}" + if (weekly) " 那週" else "" } ?: "") + " ${fmt(values[peak])}",
             fontSize = AppText.label, color = grid)
+        // 換期間時長條數可能一樣（例如 7 月與 8 月都是 31 天）：用最新的資料與動作，不會點到上一期同一天
+        val curValues by androidx.compose.runtime.rememberUpdatedState(values)
+        val curOnBar by androidx.compose.runtime.rememberUpdatedState(onBar)
         Canvas(Modifier.fillMaxWidth().height(80.dp).padding(top = 4.dp).let { m ->
-            if (onBar == null) m else m.pointerInput(values.size) {
-                detectTapGestures { o -> val i = (o.x / size.width * values.size).toInt().coerceIn(0, values.lastIndex); if (values[i] > 0) onBar(i) }
+            if (onBar == null) m else m.pointerInput(Unit) {
+                detectTapGestures { o ->
+                    val v = curValues
+                    val i = (o.x / size.width * v.size).toInt().coerceIn(0, v.lastIndex)
+                    if (v[i] > 0) curOnBar?.invoke(i)
+                }
             }
         }) {
             val w = size.width / values.size

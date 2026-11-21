@@ -50,8 +50,10 @@ object QuoteService {
         val us = items.filter { it.first == Market.US }.map { it.second.uppercase() }.distinct()
         // 證交所與 Yahoo 同時查（各最多約 6 秒），證交所的價格合理就用證交所，否則用 Yahoo
         val twseJob = async { if (tw.isEmpty()) emptyList() else runCatching { fetchTwse(tw) }.getOrDefault(emptyList()) }
+        // Yahoo 台股查詢放在獨立的 scope：證交所已有價格時不必等它（網路請求無法中途取消，留在這裡會拖住整個更新）
+        val detached = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
         val yahooTw = tw.map { sym ->
-            sym to async {
+            sym to detached.async {
                 runCatching { fetchYahoo("$sym.TW", Market.TW, sym) }.getOrNull()
                     ?: runCatching { fetchYahoo("$sym.TWO", Market.TW, sym) }.getOrNull()
             }
@@ -61,7 +63,10 @@ object QuoteService {
         val out = mutableListOf<QuoteEntity>()
         for ((sym, job) in yahooTw) {
             val raw = twse[quoteKey(Market.TW, sym)]
-            val q = raw?.takeIf { sane(it) } ?: job.await()?.takeIf { sane(it) } ?: raw ?: job.await()
+            // 證交所的價格合理就直接用，取消這檔的 Yahoo 查詢（不必等最慢的那個請求，觀察清單更快更新）
+            val ok = raw?.takeIf { sane(it) }
+            if (ok != null) { out += ok; continue }
+            val q = job.await()?.takeIf { sane(it) } ?: raw ?: job.await()
             if (q != null) out += q
         }
         out += usJobs.mapNotNull { it.await() }

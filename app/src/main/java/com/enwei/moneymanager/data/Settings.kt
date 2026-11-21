@@ -501,6 +501,8 @@ data class AppSettings(
     val payerExpenseReverted: Boolean = false,
     /** 已清掉整筆代墊留下的 $0 支出 */
     val zeroAdvanceCleaned: Boolean = false,
+    /** 舊的代墊已補上編號（不再靠時間比對） */
+    val advancesKeyed: Boolean = false,
     /** 上次通知的借貸提醒（避免重複通知） */
     val loanWarnKey: String = "",
     /** 已提醒過的信用卡繳款（"卡片id:繳款日"），同一期只提醒一次 */
@@ -720,6 +722,7 @@ class SettingsStore(context: Context) {
         payerExpenseMigrated = prefs.getBoolean("payerExpenseMigrated", false),
         payerExpenseReverted = prefs.getBoolean("payerExpenseReverted", false),
         zeroAdvanceCleaned = prefs.getBoolean("zeroAdvanceCleaned", false),
+        advancesKeyed = prefs.getBoolean("advancesKeyed", false),
         loanWarnKey = prefs.getString("loanWarnKey", "")!!,
         cardDueWarned = prefs.getStringSet("cardDueWarned", emptySet())!!.toSet(),
         pendingNudgeDay = prefs.getLong("pendingNudgeDay", 0),
@@ -937,6 +940,7 @@ class SettingsStore(context: Context) {
             .putBoolean("payerExpenseMigrated", s.payerExpenseMigrated)
             .putBoolean("payerExpenseReverted", s.payerExpenseReverted)
             .putBoolean("zeroAdvanceCleaned", s.zeroAdvanceCleaned)
+            .putBoolean("advancesKeyed", s.advancesKeyed)
             .putString("loanWarnKey", s.loanWarnKey)
             .putStringSet("cardDueWarned", s.cardDueWarned)
             .putLong("pendingNudgeDay", s.pendingNudgeDay)

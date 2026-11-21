@@ -277,7 +277,8 @@ private suspend fun Repository.spendingReviewImpl(span: ReviewSpan, offset: Int)
         categories = categories, top = exp.sortedByDescending(::amt).take(8), fixedMonthly = fixed,
         unknownCount = unknown.size, unknownAmount = unknown.sumOf(::amt), overBudget = budgets,
         weekendShare = if (expense > 0) weekend * 100.0 / expense else 0.0, txnCount = cur.size,
-        expenses = exp.sortedBy { it.date },
+        // 換算成基準幣別：店家排行、時段、明細合計都用同一種幣別（外幣不再以原數字直接加總）
+        expenses = exp.sortedBy { it.date }.map { if (it.currency == s.baseCurrency) it else it.copy(amount = amt(it), currency = s.baseCurrency) },
         catNames = cats.mapValues { (_, c) -> c.parentId?.let { cats[it]?.name + "／" }.orEmpty() + c.name },
         partial = partial, fixedIds = fixedIds,
         lastYearExpense = if (span == ReviewSpan.YEAR) null else cut(reviewPeriod(span, offset - 12 / span.months, s.monthStartDay).first).let { r ->

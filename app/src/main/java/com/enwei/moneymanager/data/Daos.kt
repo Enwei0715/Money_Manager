@@ -95,6 +95,10 @@ interface TxnDao {
     @Query("SELECT * FROM transactions WHERE externalKey = :key LIMIT 1")
     suspend fun byExternalKey(key: String): TxnEntity?
 
+    /** 某筆支出的代墊：externalKey 為「SPLIT:主 id」或「SPLIT:主 id:對象 id」 */
+    @Query("SELECT * FROM transactions WHERE externalKey = :exact OR externalKey LIKE :prefix")
+    suspend fun byKeyPrefix(exact: String, prefix: String): List<TxnEntity>
+
     @Query("SELECT * FROM transactions WHERE type = :type AND amount = :amount AND date BETWEEN :from AND :to")
     suspend fun findSimilar(type: TxnType, amount: Long, from: Long, to: Long): List<TxnEntity>
 

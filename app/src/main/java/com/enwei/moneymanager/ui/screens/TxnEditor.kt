@@ -537,6 +537,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 val his = Calculator.evaluate(payer.expr)?.abs()?.let(Money::toMinor) ?: 0L
                 if (his >= t0.amount) { snack.showSnackbar(com.enwei.moneymanager.ui.tr("他自己的部分不能大於或等於總額")); return@launch }
                 val t = t0.copy(accountId = pid, amount = t0.amount - his)
+                // 原本是「我付、別人欠我」的分帳，改成別人付：舊的代墊要刪掉，否則變成他欠我又我欠他
+                original?.let { o -> repo.splitsOf(o).forEach { repo.deleteTxn(it.id) } }
                 val mid = repo.saveTxn(t)
                 saveFee(t0.copy(accountId = accountId ?: pid), mid)
                 TxnScroll.focusDay = date
@@ -585,7 +587,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         // 新記的一筆：回到交易清單時捲到這筆的日期
         if (original == null) TxnScroll.focusDay = date
         scope.launch {
-            // 編輯支出：原本有代墊但這次把人都移除了 → 一起刪掉那幾筆代墊
+            // 編輯支出：原本有代墊但這次把人都移除了 → 一起刪掉那幾筆代墊；支出改成收入或轉帳，代墊也一起刪
+            original?.takeIf { t.type != TxnType.EXPENSE }?.let { o -> repo.splitsOf(o).forEach { repo.deleteTxn(it.id) } }
             val newId = if (original != null && t.type == TxnType.EXPENSE) repo.saveWithSplits(t, emptyList()) else repo.saveTxn(t)
             // 新記的支出、時間在 30 分鐘內：記下目前位置，之後在這裡付款時可推測店家
             if (original == null && t.type == TxnType.EXPENSE && settings.locationHints && !t.merchant.isNullOrBlank() &&
@@ -614,6 +617,9 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             amountMinor == null -> { panel = Panel.AMOUNT; scope.launch { snack.showSnackbar("請輸入金額") } }
             !accountOk -> { panel = Panel.ACCOUNT; scope.launch { snack.showSnackbar("請選帳戶") } }
             type == TxnType.TRANSFER && toAccountId == null -> { panel = Panel.TO_ACCOUNT; scope.launch { snack.showSnackbar("請選轉入帳戶") } }
+            // 別人欠你的合計超過總額：不能存（否則分帳會被忽略、整筆算成你的支出）
+            type == TxnType.EXPENSE && !paidBy && splitRows.sumOf { Calculator.evaluate(it.expr)?.abs()?.let(Money::toMinor) ?: 0L } > (amountMinor ?: 0L) ->
+                scope.launch { snack.showSnackbar(com.enwei.moneymanager.ui.tr("別人欠你的合計超過總額")) }
             else -> save(again)
         }
     }
@@ -926,7 +932,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                         }
                     }
                 }
-                FormRow("說明", color, noteFocused, onClick = {}) {
+                // 巨集步驟沒有說明欄（存不下來），不顯示
+                if (!macroMode) FormRow("說明", color, noteFocused, onClick = {}) {
                     UnderlineField(note, { note = it }, "", Modifier.onFocusChanged { noteFocused = it.isFocused; if (it.isFocused) panel = Panel.NONE }, singleLine = false)
                 }
                 // 說明的推薦：這家店以前寫過的說明在前，再來是打的字對得上的；點一下帶入
@@ -1032,6 +1039,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     val old = when (panel) { Panel.FEE -> feeExpr; Panel.SPLIT -> splitRows.getOrNull(splitIdx)?.expr.orEmpty(); else -> expr }
                     val v = if (!amountFresh || old.isEmpty() || old == "0") v0 else when {
                         v0.length < old.length -> ""
+                        // 舊值已有兩位小數，數字接不上去（v0 沒變）：先清空，下一個數字就能直接輸入
+                        v0 == old -> ""
                         v0.startsWith(old) -> v0.substring(old.length).let { add -> if (add.firstOrNull()?.let { it.isDigit() || it == '.' } == true) add else v0 }
                         else -> v0
                     }

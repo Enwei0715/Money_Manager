@@ -169,10 +169,10 @@ fun ReviewContent(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text("每天還可花", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(if (left > 0) m(left / days) else "已超出 ${m(-left)}", fontSize = AppText.title, fontWeight = FontWeight.SemiBold,
-                                        color = if (left > 0) IncomeColor else ExpenseColor)
+                                    Text(when { left > 0 -> m(left / days); left == 0L -> "預算已用完"; else -> "已超出 ${m(-left)}" }, fontSize = AppText.title, fontWeight = FontWeight.SemiBold,
+                                        color = if (left > 0) IncomeColor else ExpenseColor, maxLines = 1)
                                 }
-                                Text("剩 ${m(left.coerceAtLeast(0))}・$days 天", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (left > 0) Text("剩 ${m(left)}・$days 天", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             }
                         } else Row(Modifier.fillMaxWidth().clickable { nav.navigate("budget") }, verticalAlignment = Alignment.CenterVertically) {
                             Text("每天還可花", fontSize = AppText.secondary, modifier = Modifier.weight(1f))
@@ -237,7 +237,8 @@ fun ReviewContent(
                     // 當月才顯示「每天約」：過去的月份已經結束
                     val daysLeft = if (offset == 0 && !java.time.LocalDate.now().isAfter(d.end)) java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), d.end) + 1 else null
                     // 總預算完整顯示（含每天約可花多少）；分類預算每個一行、依使用比例排序
-                    settings.budgets[0L]?.let { cap -> BudgetBar("總預算", d.expense, cap, daysLeft) }
+                    // 每天還可花已在總覽卡片顯示，這裡不再重複
+                    settings.budgets[0L]?.let { cap -> BudgetBar("總預算", d.expense, cap, null) }
                     val cats = budgetRows.filter { it.key != 0L }.map { (cid, cap) ->
                         Triple(lk.category(cid)?.name ?: "已刪除分類", d.categories.find { it.id == cid }?.amount ?: 0L, cap)
                     }.sortedByDescending { (_, u, c) -> u.toDouble() / c.coerceAtLeast(1) }

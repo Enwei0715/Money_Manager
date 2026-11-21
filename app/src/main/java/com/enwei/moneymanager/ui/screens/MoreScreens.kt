@@ -676,8 +676,11 @@ fun NotificationSettingsScreen(nav: NavController) {
                                 !gone && e.txnId != null && (e.result == "RECORDED" || e.result == "MERGED") -> nav.navigate("txn/${e.txnId}")
                                 // 被當成重複的那則（可能是另一筆同額消費）：點選仍然記帳
                                 gone || e.result == "ERROR" || e.result == "DUPLICATE" -> testScope.launch {
-                                    val r = repo.ingestNotification(e.packageName, e.title, e.text, e.postedAt, force = true)
-                                    testMsg = r?.let { "已重新記帳：${it.message}" } ?: "沒有記下（看不出是交易）"
+                                    val r = repo.ingestNotification(e.packageName, e.title, e.text, e.postedAt, force = true, recordAnyway = e.result == "DUPLICATE" || gone)
+                                    val msg = r?.let { "已記帳：${it.message}" } ?: "沒有記下（看不出是交易）"
+                                    testMsg = msg
+                                    // 結果訊息放在列表最下面看不到：記下了就用底部提示顯示（可復原）
+                                    r?.txnId?.let { id -> com.enwei.moneymanager.ui.components.Undo.show(com.enwei.moneymanager.ui.tr(msg.take(60))) { repo.deleteTxn(id) } }
                                 }
                                 // 先前看不懂、現在認得出是成交通知（只是缺股數或價格）：直接重新判讀，放進股票交易待確認
                                 e.result == "UNPARSED" && com.enwei.moneymanager.core.NotificationParser.parseStockFillPartial(e.title, e.text) != null -> testScope.launch {

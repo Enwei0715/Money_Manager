@@ -80,8 +80,16 @@ class TxnNotificationListener : NotificationListenerService() {
         // 設定裡關掉「通知自動記帳」：不讀任何通知
         if (!com.enwei.moneymanager.MoneyApp.repo.settings.value.featureNotif) return
         val (title, text) = textOf(sbn) ?: return
+        // App 更新同一則通知（同一個通知編號、內容沒變）：已經處理過，略過。編號不同的是另一則，照常處理
+        val sig = "$title\u0000$text"
+        synchronized(recentKeys) {
+            if (recentKeys[sbn.key] == sig) return
+            recentKeys[sbn.key] = sig
+            if (recentKeys.size > 300) recentKeys.remove(recentKeys.keys.first())
+        }
         enqueue(sbn.packageName, sbn.key, title, text, sbn.postTime)
     }
+    private val recentKeys = LinkedHashMap<String, String>()
 
     private fun enqueue(pkg: String, key: String, title: String?, text: String?, postTime: Long) {
         val app = application as MoneyApp

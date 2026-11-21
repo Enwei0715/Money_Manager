@@ -285,7 +285,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     }
                 }
                 // 我的持股：有持有時在最上方看到股數、均價與損益（持股明細合進這一頁，不用另開一頁）
-                if (held.isNotEmpty()) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth().clickable { nav.navigate("holding/TW/$symbol") }) {
+                if (held.isNotEmpty()) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth().clickable { nav.navigate("holding/${market.name}/$symbol") }) {
                     val sh = held.sumOf { it.shares }
                     val avg = held.sumOf { it.avgCost * it.shares } / sh
                     val pnl = held.sumOf { it.unrealized }
@@ -705,7 +705,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { nav.navigate("trade/0?market=${market.name}&symbol=$symbol") }) { Text("記一筆交易") }
-                if (held.isNotEmpty()) OutlinedButton(onClick = { nav.navigate("holding/TW/$symbol") }) { Text("持股明細") }
+                if (held.isNotEmpty()) OutlinedButton(onClick = { nav.navigate("holding/${market.name}/$symbol") }) { Text("持股明細") }
             }
             Spacer(Modifier.height(24.dp))
         }

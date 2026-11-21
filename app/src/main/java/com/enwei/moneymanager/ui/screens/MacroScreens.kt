@@ -165,11 +165,9 @@ fun MacroEditScreen(nav: NavController, id: Long) {
     val settings by repo.settings.flow.collectAsStateWithLifecycle()
     val orig = remember(id) { repo.settings.value.macros.firstOrNull { it.id == id } }
     val d = MacroDraft
-    remember(id) {
-        if (!d.returning || d.forId != id) d.load(id, orig)
-        d.returning = false
-        true
-    }
+    // 這一頁第一次打開才載入；旋轉螢幕、從步驟編輯回來時保留正在改的草稿（狀態跟著這一頁保存）
+    var loaded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    if (!loaded || d.forId != id) { if (!loaded || d.forId == null) d.load(id, orig); loaded = true; d.returning = false }
     val base = settings.baseCurrency
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val ready = d.name.isNotBlank() && d.steps.isNotEmpty() && d.steps.all { it.amount > 0 }

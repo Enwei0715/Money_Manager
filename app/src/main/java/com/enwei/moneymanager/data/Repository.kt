@@ -578,6 +578,12 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 val near = kotlin.math.abs(a.date - b.date) <= 30 * 60_000L ||
                     ((midnight(a) || midnight(b)) && a.date.toLocalDate() == b.date.toLocalDate())
                 if (!near) continue
+                // 同一個 App 的兩則內容不同的通知：是兩筆消費（例如同時買兩張票），不是重複
+                if (a.source == TxnSource.NOTIFICATION && b.source == TxnSource.NOTIFICATION && a.rawText != null && b.rawText != null &&
+                    a.rawText != b.rawText && !a.rawText.contains(b.rawText) && !b.rawText.contains(a.rawText)) {
+                    val pa = db.notificationLog().byTxn(a.id)?.packageName
+                    if (pa != null && pa == db.notificationLog().byTxn(b.id)?.packageName) continue
+                }
                 val (keep, drop) = if (rank(a) <= rank(b)) a to b else b to a
                 val p = DupPair(keep, drop)
                 if (p.key in dismissed) continue
@@ -736,36 +742,38 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
     }
 
     /**
-     * 這筆支出裡幫別人代墊的部分（各記成一筆轉到往來對象的轉帳）：
-     * 新記的用 externalKey「SPLIT:主交易 id:對象 id」連起來（externalKey 有唯一索引，每人要不同，否則只存得進第一人）；舊資料找同時間、同帳戶、名稱以「代墊」開頭、轉到往來對象的轉帳。
+     * 這筆支出裡幫別人代墊的部分（各記成一筆轉到往來對象的轉帳），只認 externalKey「SPLIT:主交易 id:對象 id」。
+     * 不用日期比對：改了日期、時間帶秒數也找得到；也不會把別筆的代墊認成這筆的。
+     * 沒有編號的舊資料在開 App 時由 [keyLegacyAdvances] 補上編號。
      */
     suspend fun splitsOf(t: TxnEntity): List<TxnEntity> {
-        if (t.id == 0L || t.type != TxnType.EXPENSE) return emptyList()
-        val loans = db.accounts().all().filter { it.type == AccountType.LOAN }.map { it.id }.toSet()
-        return db.txns().between(t.date, t.date).filter {
-            it.type == TxnType.TRANSFER && it.toAccountId in loans &&
-                (it.externalKey == "SPLIT:${t.id}" || it.externalKey?.startsWith("SPLIT:${t.id}:") == true || (it.externalKey == null && it.date == t.date && it.accountId == t.accountId && it.merchant?.startsWith("代墊") == true))
-        }
+        if (t.id == 0L) return emptyList()
+        return db.txns().byKeyPrefix("SPLIT:${t.id}", "SPLIT:${t.id}:%").filter { it.type == TxnType.TRANSFER }
     }
 
     /**
      * 存一筆有代墊的支出：[t] 的金額是整筆總額，[shares] 是每個往來對象要還你的部分。
-     * 支出只記自己的部分（統計不會多算），別人的部分各記一筆轉到他的往來帳戶（對方欠你）。
-     * 編輯時更新原本那幾筆代墊、移除的人就刪掉，不會重複新增；說明欄不寫入任何代墊文字。
-     * 全部都是別人的（自己的部分是 0）時，整筆記成代墊轉帳。
+     * 你的支出＝整筆－別人各欠你的；別人那份各記一筆從同一個帳戶轉到他的往來帳戶（他欠你）。
+     * 編輯時更新原本那幾筆代墊（日期、帳戶跟著改），移除的人就刪掉。
+     * 全部都是別人的（你的部分是 0）：不留 $0 支出，整筆記成代墊轉帳（編輯時沿用原本那筆，通知原文與手續費不會遺失）。
      */
-    suspend fun saveWithSplits(t: TxnEntity, shares: List<Pair<Long, Long>>): Long {
-        // 支出只記自己負擔的部分（整筆 − 別人各欠你的），別人那份從同一個帳戶轉到他的往來帳戶（他欠你）。
+    suspend fun saveWithSplits(t: TxnEntity, shares: List<Pair<Long, Long>>): Long = db.withTransaction {
         val parts = shares.filter { it.second > 0 }
         val own = (t.amount - parts.sumOf { it.second }).coerceAtLeast(0)
         val label = listOfNotNull("代墊", t.merchant?.takeIf { it.isNotBlank() }).joinToString("：")
         val existing = splitsOf(t).toMutableList()
-        // 整筆都是幫別人付（自己負擔 0）的新紀錄：沒有你的支出，只記他欠你（不留一筆 $0 的支出）
-        if (own == 0L && t.id == 0L && parts.isNotEmpty()) {
-            return parts.map { (pid, v) ->
+        if (own == 0L && parts.isNotEmpty()) {
+            existing.forEach { db.txns().delete(it.id) }
+            val (p0, v0) = parts.first()
+            // 第一個人：沿用原本那筆（新記的就是新的一筆）
+            val firstId = saveTxn(t.copy(type = TxnType.TRANSFER, amount = v0, toAccountId = p0, categoryId = null, merchant = label,
+                externalKey = t.externalKey ?: "ADV:${System.nanoTime()}"))
+            parts.drop(1).forEach { (pid, v) ->
                 saveTxn(TxnEntity(type = TxnType.TRANSFER, amount = v, currency = t.currency, accountId = t.accountId, toAccountId = pid,
-                    merchant = label, note = t.note, date = t.date, source = t.source, status = TxnStatus.CONFIRMED))
-            }.first()
+                    merchant = label, note = t.note, date = t.date, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
+                    externalKey = "ADV:${System.nanoTime()}:$pid"))
+            }
+            return@withTransaction firstId
         }
         val mainId = saveTxn(t.copy(amount = own))
         parts.forEach { (pid, v) ->
@@ -778,7 +786,27 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             ))
         }
         existing.forEach { db.txns().delete(it.id) }
-        return mainId
+        mainId
+    }
+
+    /**
+     * 舊資料的代墊沒有編號（以前靠同時間、同帳戶、名稱「代墊」比對）：一次補上編號。
+     * 找得到主支出的補「SPLIT:主 id:對象 id」，找不到的（整筆幫別人付）補「ADV:id」。只做一次。
+     */
+    suspend fun keyLegacyAdvances() {
+        if (settings.value.advancesKeyed) return
+        db.withTransaction {
+            val all = db.txns().all()
+            val loans = db.accounts().all().filter { it.type == AccountType.LOAN }.map { it.id }.toSet()
+            val used = all.mapNotNull { it.externalKey }.toHashSet()
+            all.filter { it.type == TxnType.TRANSFER && it.externalKey == null && it.toAccountId in loans && it.merchant?.startsWith("代墊") == true }.forEach { a ->
+                val parent = all.firstOrNull { p -> p.type == TxnType.EXPENSE && p.date == a.date && p.accountId == a.accountId && p.accountId != null }
+                val key = parent?.let { "SPLIT:${it.id}:${a.toAccountId}" }?.takeIf { it !in used } ?: "ADV:${a.id}"
+                used += key
+                db.txns().upsert(a.copy(externalKey = key))
+            }
+        }
+        settings.update { it.copy(advancesKeyed = true) }
     }
 
     /**
@@ -793,7 +821,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             all.filter { it.type == TxnType.EXPENSE && it.amount == 0L }.forEach { main ->
                 val splits = all.filter { it.externalKey == "SPLIT:${main.id}" || it.externalKey?.startsWith("SPLIT:${main.id}:") == true }
                 if (splits.isEmpty()) return@forEach
-                splits.forEach { db.txns().upsert(it.copy(externalKey = null, accountId = it.accountId ?: main.accountId, note = it.note ?: main.note)) }
+                splits.forEach { db.txns().upsert(it.copy(externalKey = "ADV:${it.id}", accountId = it.accountId ?: main.accountId, note = it.note ?: main.note)) }
                 db.txns().delete(main.id)
             }
         }
@@ -826,7 +854,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      */
     suspend fun runMacro(m: TxnMacro, base: TxnEntity? = null): List<Long> {
         val now = base?.date ?: System.currentTimeMillis()
-        val hit = base?.let { b -> m.allSteps().indexOfFirst { it.amount == b.amount } } ?: -1
+        // 通知命中的那一步：金額相同、收支方向也要相同（支出通知不會套到收入步驟）
+        val hit = base?.let { b -> m.allSteps().indexOfFirst { it.amount == b.amount && (it.type == "INCOME") == (b.type == TxnType.INCOME) } } ?: -1
         return m.allSteps().mapIndexed { i, st ->
             val type = runCatching { TxnType.valueOf(st.type) }.getOrDefault(TxnType.EXPENSE)
             val t0 = if (i == hit && base != null) base else TxnEntity(
@@ -1318,6 +1347,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         aiHandled: Boolean = false,
         /** 沒網路時排隊、恢復網路後重新判讀的通知：一律放「待確認」 */
         offlineRetry: Boolean = false,
+        /** 使用者在通知紀錄點「不是重複？點選記帳」：略過所有重複判斷，一定記下 */
+        recordAnyway: Boolean = false,
     ): IngestResult? {
         // LINE：只處理「LINE錢包」付款通知（LINE Bank Money／LINE Pay），聊天訊息一律略過；不需另外勾選 LINE
         val isLine = pkg == LINE_PACKAGE
@@ -1327,7 +1358,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         // 同一則通知可能因更新而重複送達
         // 系統重送或 App 更新同一則通知（內容完全相同、1 分鐘內）：第一則已經處理過，這則略過。
         // 超過 1 分鐘的相同內容可能是另一筆同額消費（通知沒寫時間），交給下面判斷並留下紀錄，不默默丟掉
-        if (!force && log.countSame(pkg, title, text, postedAt - 60_000) > 0) return null
+        // 只略過「同一則」（發送時間相同，例如重新連線時補讀到已處理過的）；
+        // App 更新同一則通知由監聽端依通知編號略過。內容相同但時間不同的可能是另一筆同額消費，不能默默丟掉
+        if (!force && !recordAnyway && log.countSame(pkg, title, text, postedAt - 1) > 0) return null
         // 通知紀錄：記成交易的保留 60 天；沒有記帳的（略過、非付款通知）保留 7 天
         // 每小時最多清一次：每則通知（包含其他 App 的一般通知）都跑兩次 DELETE 太耗電
         if (System.currentTimeMillis() - lastLogPrune > 3600_000L) {
@@ -1437,16 +1470,16 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         // 方向要算進去：自己兩個帳戶互轉時，轉出與轉入通知常是同一秒、同金額，不能被當成重複
         val sign = if (p.type == ParsedType.INCOME) "+" else "-"
         // 加上卡號末四碼（沒有就用來源 App）：兩張卡同一分鐘刷同金額不會被當成同一筆
-        val key = p.occurredAt?.let { "N:$sign${p.amountMinor}:${it.withNano(0)}:${p.cardLast4 ?: pkg}" }
+        val key = if (recordAnyway) null else p.occurredAt?.let { "N:$sign${p.amountMinor}:${it.withNano(0)}:${p.cardLast4 ?: pkg}" }
         if (key != null && db.txns().byExternalKey(key) != null) { log.insert(logAs("DUPLICATE")); return null }
 
         val raw0 = listOfNotNull(title, text).joinToString("\n")
         // 同一則通知隔幾小時又跳出（內文完全相同）：已經記過或已合併成轉帳的不再處理
         val dayMs = 24L * 3600 * 1000
         val rawWindow = if (p.occurredAt != null) dayMs else 30L * 60 * 1000
-        if (db.txns().between(occurred - rawWindow, occurred + rawWindow).any { it.rawText != null && it.rawText.contains(raw0) }) {
-            log.insert(logAs("DUPLICATE")); return null
-        }
+        // 內文完全相同：有寫交易時間的視為同一筆；沒寫時間的可能是另一筆同額消費 → 照樣記下，放待確認讓你確認
+        val sameText = !recordAnyway && db.txns().between(occurred - rawWindow, occurred + rawWindow).any { it.rawText != null && it.rawText.contains(raw0) }
+        if (sameText && p.occurredAt != null) { log.insert(logAs("DUPLICATE")); return null }
         val accounts = db.accounts().all().filter { !it.archived }
         val account = resolveAccount(pkg, p, raw0, learned, bankSrc, accounts)
         // 銀行的股利入帳通知：已由「自動除息」記到這個帳戶時不再重複記收入
@@ -1474,7 +1507,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         }
         val raw = listOfNotNull(title, text).joinToString("\n")
         val window = 10 * 60_000L
-        val nearby = db.txns().between(occurred - window, occurred + window).filter {
+        val nearby = if (recordAnyway) emptyList() else db.txns().between(occurred - window, occurred + window).filter {
             it.source == TxnSource.NOTIFICATION && it.amount == p.amountMinor && kotlin.math.abs(it.date - occurred) <= window
         }
 
@@ -1512,13 +1545,17 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         )
 
         // 巨集：付款通知的金額等於某個巨集（且內文含它的關鍵字）→ 直接照巨集記（例如房租＋室友各欠的部分）
-        s.macros.firstOrNull { m ->
+        // 3 分鐘內已有另一個 App 通知同一筆（例如銀行＋LINE Pay）：不再執行一次巨集，交給下面合併
+        val sameFromOther = s.macros.any { it.fromNotif } && db.txns().between(occurred - 180_000, occurred + 180_000)
+            .any { it.source == TxnSource.NOTIFICATION && (it.amount == p.amountMinor || splitsOf(it).sumOf { x -> x.amount } + it.amount == p.amountMinor) }
+        if (!sameFromOther) s.macros.firstOrNull { m ->
             // 關鍵字比對忽略千分位逗號與空白（填 25500 也對得到通知裡的 25,500）
             m.fromNotif && (m.keyword.isBlank() || raw0.replace(",", "").replace(" ", "").contains(m.keyword.trim().replace(",", "").replace(" ", ""), ignoreCase = true)) &&
                 m.allSteps().any { st -> st.amount == p.amountMinor && (st.type == "INCOME") == (p.type == ParsedType.INCOME) }
         }?.let { m ->
-            val hitStep = m.allSteps().first { it.amount == p.amountMinor }
-            val ids = runMacro(m, base.copy(accountId = account?.id ?: hitStep.accountId))
+            val hitStep = m.allSteps().first { it.amount == p.amountMinor && (it.type == "INCOME") == (p.type == ParsedType.INCOME) }
+            val ids = runMacro(m, base.copy(accountId = account?.id ?: hitStep.accountId,
+                type = if (p.type == ParsedType.INCOME) TxnType.INCOME else TxnType.EXPENSE))
             val id = ids.firstOrNull { it > 0 } ?: run { log.insert(logAs("DUPLICATE")); return null }
             log.insert(logAs("RECORDED", id))
             return IngestResult("RECORDED", id, "套用巨集「${m.name}」：$amountText（${ids.size} 步）")
@@ -1673,7 +1710,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         var secondSame = false
         // 兩則通知都寫了精確到秒的交易時間、而且時間不同：是兩筆交易（例如同時買兩張票分開刷），不是同一筆的重複通知
         val exactTime = p.occurredAt?.let { it.second != 0 || it.nano != 0 || Regex("""\d{1,2}:\d{2}:\d{2}""").containsMatchIn(raw0) } == true
-        fun distinct(o: TxnEntity) = exactTime && o.externalKey?.startsWith("N:") == true && kotlin.math.abs(o.date - occurred) >= 1000
+        // 兩邊都要有秒數才算不同筆（錢包通知只到分鐘、銀行到秒時，是同一筆）
+        fun distinct(o: TxnEntity) = exactTime && o.externalKey?.startsWith("N:") == true &&
+            Regex("""T\d{2}:\d{2}:\d{2}""").containsMatchIn(o.externalKey.orEmpty()) && kotlin.math.abs(o.date - occurred) >= 1000
         nearby.firstOrNull { it.type == type && kotlin.math.abs(it.date - occurred) <= 3 * 60_000 && !distinct(it) }
             ?.takeIf { other -> (log.countForTxnFromPkg(other.id, pkg) == 0).also { if (!it) secondSame = true } }
             ?.let { other ->
@@ -1785,6 +1824,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             catFromPlace -> "（分類依同地點其他店家推測）"
             aiGuessed -> "（店名或分類由 AI 推測）"
             secondSame -> "（同一來源三分鐘內第二筆同金額，請確認不是重複）"
+            sameText -> "（和稍早另一則通知內容相同，請確認不是重複）"
             aiParsed && !aiAmountOk -> "（AI 判讀的金額不在通知原文中）"
             account != null && accountByEvidence == null -> "（帳戶為預設帳戶，請確認）"
             else -> null
