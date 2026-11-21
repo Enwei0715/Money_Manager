@@ -580,9 +580,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                 val near = kotlin.math.abs(a.date - b.date) <= 30 * 60_000L ||
                     ((midnight(a) || midnight(b)) && a.date.toLocalDate() == b.date.toLocalDate())
                 if (!near) continue
-                // 同一個 App 的兩則內容不同的通知：是兩筆消費（例如同時買兩張票），不是重複
-                if (a.source == TxnSource.NOTIFICATION && b.source == TxnSource.NOTIFICATION && a.rawText != null && b.rawText != null &&
-                    a.rawText != b.rawText && !a.rawText.contains(b.rawText) && !b.rawText.contains(a.rawText)) {
+                // 同一個 App 的兩則通知：是兩筆消費（同一則的重送在記帳時就已略過），內容一樣也一樣（同店同額連刷兩次），不是重複
+                if (a.source == TxnSource.NOTIFICATION && b.source == TxnSource.NOTIFICATION) {
                     val pa = db.notificationLog().byTxn(a.id)?.packageName
                     if (pa != null && pa == db.notificationLog().byTxn(b.id)?.packageName) continue
                 }
