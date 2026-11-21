@@ -3615,3 +3615,8 @@ AI 暫時無法完成檢討，請稍後再試	AI couldn't finish the review. Try
 同樣記支出，在「往來」點對方，付款人改選對方，填他自己的部分（預設平分）：你的支出與你欠他的，都是整筆減掉他那份。借錢、還錢不算支出。	Record the expense the same way, tap the person under People, set Paid by to them and enter their own share (split evenly by default): your expense and what you owe them are both the total minus their share. Lending and repaying are not expenses.
 幫別人付或一起付：點對象，付款人選「我」，再填他欠你的金額（預設平分）。你的支出＝整筆－別人欠你的；他還你時不算收入。別人幫你付：付款人選對方，填他自己的部分，你的支出與你欠他的都是其餘部分。	Paying for someone or splitting: tap the person, set Paid by to Me, and enter what they owe you (split evenly by default). Your expense = total − what others owe you; their repayment is not income. If someone paid for you: set Paid by to them and enter their own share; your expense and what you owe them are the rest.
 不是重複？點選記帳	Not a duplicate? Tap to record
+分帳	Split
+一起分帳	split together
+平分（含你）	Split evenly (incl. you)
+全由他們	All on them
+選取的交易裡沒有支出。	No expenses in the selection.

@@ -250,6 +250,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
     val scope = rememberCoroutineScope()
     var batchCat by remember { mutableStateOf(false) }
     var batchAcc by remember { mutableStateOf(false) }
+    var batchSplit by remember { mutableStateOf(false) }
     var batchDelete by remember { mutableStateOf(false) }
     // 往下捲時標題列、分頁列與摘要收起，往上捲立刻出現
     val topScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -265,6 +266,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
                 title = { Text("已選 ${TxnSelect.ids.size} 筆", fontSize = AppText.section) },
                 actions = {
                     TextButton(onClick = { TxnSelect.ids = inPeriod.map { it.id }.toSet() }) { Text("全選") }
+                    TextButton(onClick = { batchSplit = true }) { Text("分帳") }
                     TextButton(onClick = { batchCat = true }) { Text("分類") }
                     TextButton(onClick = { batchAcc = true }) { Text("帳戶") }
                     TextButton(onClick = { batchDelete = true }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
@@ -428,6 +430,9 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
             },
             confirmButton = { TextButton(onClick = { batchCat = false }) { Text("取消") } },
         )
+    }
+    if (batchSplit) BatchSplitDialog(chosen.filter { it.type == TxnType.EXPENSE }, lk, onDismiss = { batchSplit = false }) {
+        TxnSelect.ids = emptySet(); batchSplit = false
     }
     if (batchAcc) AlertDialog(
         onDismissRequest = { batchAcc = false },
@@ -1343,4 +1348,81 @@ fun mergeDividends(list: List<com.enwei.moneymanager.data.StockTradeEntity>): Li
         if (i >= 0) out[i] = out[i].copy(cashAmount = out[i].cashAmount + t.cashAmount, shares = out[i].shares + t.shares) else out += t
     }
     return out
+}
+
+
+/**
+ * 多選的支出一次分帳：選往來對象，每筆照「平分（含你）」或「全由他們」分；
+ * 零頭用累計的方式分配（例如 419 平分給兩人：這筆 210／209，下一筆換另一邊多 1 元），合計不會偏向某一方。
+ * 已經有代墊的支出不重複處理。
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun BatchSplitDialog(list: List<TxnEntity>, lk: Lookups, onDismiss: () -> Unit, onDone: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val people = lk.accounts.filter { it.type == com.enwei.moneymanager.data.AccountType.LOAN && !it.archived }
+    var picked by remember { mutableStateOf(setOf<Long>()) }
+    var includeMe by remember { mutableStateOf(true) }
+    val total = list.sumOf { it.amount }
+    // 每人合計欠你（累計分配，總和精確）
+    fun plan(): List<Pair<TxnEntity, List<Pair<Long, Long>>>> {
+        val ids = picked.toList()
+        if (ids.isEmpty()) return emptyList()
+        val parts = ids.size + if (includeMe) 1 else 0
+        var cum = 0L; var given = 0L
+        return list.map { t ->
+            cum += t.amount
+            // 到這筆為止，每人應分的累計金額（取整到元）
+            val target = cum / parts / 100 * 100
+            val each = (target - given).coerceAtLeast(0)
+            given += each
+            t to ids.map { it to each.coerceAtMost(t.amount / ids.size) }
+        }
+    }
+    val p = plan()
+    val owed = p.sumOf { (_, sh) -> sh.sumOf { it.second } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${list.size} 筆支出一起分帳") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (list.isEmpty()) Text("選取的交易裡沒有支出。", fontSize = AppText.secondary)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    people.forEach { a ->
+                        val on = a.id in picked
+                        Text(a.name, fontSize = AppText.secondary, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.background(if (on) ExpenseColor else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(14.dp))
+                                .clickable { picked = if (on) picked - a.id else picked + a.id }.padding(horizontal = 12.dp, vertical = 6.dp))
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(true to "平分（含你）", false to "全由他們").forEach { (v, l) ->
+                        val on = includeMe == v
+                        Text(l, fontSize = AppText.secondary, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.border(1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+                                .clickable { includeMe = v }.padding(horizontal = 12.dp, vertical = 5.dp))
+                    }
+                }
+                if (picked.isNotEmpty()) Text(
+                    "合計 ${Money.full(total)}・別人欠你 ${Money.full(owed)}・你的支出 ${Money.full(total - owed)}",
+                    fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = picked.isNotEmpty() && list.isNotEmpty(), onClick = {
+                scope.launch {
+                    p.forEach { (t, shares) ->
+                        if (repo.splitsOf(t).isNotEmpty()) return@forEach
+                        val sh = shares.filter { it.second > 0 }
+                        if (sh.isEmpty()) return@forEach
+                        if (sh.sumOf { it.second } >= t.amount) { repo.deleteTxn(t.id); repo.saveWithSplits(t.copy(id = 0), sh) }
+                        else repo.saveWithSplits(t, sh)
+                    }
+                }
+                onDone()
+            }) { Text("分帳") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }

@@ -568,7 +568,9 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 saveFee(t, mid)
                 TxnScroll.focusDay = date
                 if (again) {
-                    expr = ""; merchant = ""; note = ""; splitRaw = ""; splitMe = true; splitOn = false
+                    // 繼續記下一筆（例如市場買好幾樣）：店家、分類、帳戶與分帳對象都保留，金額照樣自動平分
+                    expr = ""; note = ""
+                    splitRaw = SplitRow.encode(splitRows.map { it.copy(expr = "", auto = true) })
                     snack.showSnackbar(com.enwei.moneymanager.ui.tr("已儲存，繼續記下一筆"))
                 } else nav.popBackStack()
             }
@@ -597,7 +599,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             // 手續費另記一筆支出
             saveFee(t, newId)
             if (again) {
-                expr = ""; merchant = ""; note = ""; toExpr = ""; feeExpr = ""; showFee = false
+                // 店家與分類保留（同一家店連續記好幾樣），金額、說明清空
+                expr = ""; note = ""; toExpr = ""; feeExpr = ""; showFee = false
                 time = LocalTime.now().withSecond(0).withNano(0)
                 panel = if (settings.inputFromCategory && type != TxnType.TRANSFER) Panel.CATEGORY else Panel.AMOUNT
                 snack.showSnackbar(com.enwei.moneymanager.ui.tr("已儲存，繼續記下一筆"))
