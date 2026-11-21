@@ -2206,8 +2206,9 @@ private fun ChatChartView(ch: com.enwei.moneymanager.data.ChatChart, nav: NavCon
             // 同一檔在不同券商帳戶：合併成一列（總成本、總市值算報酬），不重複列出
             val rows = holdings.values.flatten().filter { it.shares > 0.0001 && it.price != null }.groupBy { it.symbol }.map { (_, hs) ->
                 val h = hs.first()
-                val cost = hs.sumOf { it.avgCost * it.shares }
-                val pnl = hs.sumOf { it.marketValue } - cost
+                // 和個股頁、持股頁同一種算法：未實現損益 ÷ 淨成本
+                val cost = hs.sumOf { it.netCost }
+                val pnl = hs.sumOf { it.unrealized }
                 val pct = if (cost > 0) pnl / cost * 100 else 0.0
                 Triple("${h.symbol} ${h.name.orEmpty()}".trim(), pct, "%+.1f%%".format(pct))
             }.sortedByDescending { it.second }

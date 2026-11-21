@@ -219,6 +219,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
             else -> { type = tp; accountId = st.accountId; toAccountId = st.toAccountId }
         }
         if (st.amount > 0) expr = minorToExpr(st.amount)
+        if (st.currency.isNotBlank()) currency = st.currency
         categoryId = st.categoryId; merchant = st.merchant
         if (st.shares.isNotEmpty()) { splitOn = true; splitRaw = SplitRow.encode(st.shares.map { SplitRow(it.personId, "", minorToExpr(it.amount), auto = false) }) }
         panel = if (st.amount > 0) Panel.NONE else panel
@@ -296,6 +297,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         // 沒有這家店的紀錄就不帶入（不拿「上一次用的帳戶」來猜，避免默默記錯帳戶）
         val pick = top?.takeIf { it.value >= 2 && it.value * 10 >= recent.size * 6 }?.key
         if (pick != null && pick != accountId) { accountId = pick; autoAccount = pick }
+        // 換成沒有紀錄的店家：之前依別家店自動帶入的帳戶不再適用，清掉讓你選（不留著「自動」標籤）
+        else if (pick == null && autoAccount != null && accountId == autoAccount) { accountId = null; autoAccount = null }
     }
 
     // 預算：選了分類後顯示這個月這個大分類（與總預算）還剩多少、記這筆之後剩多少
@@ -378,7 +381,8 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         // 依位置帶入店名只用在支出（收入、往來不是在店裡花錢）
         // 店名不自動帶入（位置常有誤差）：最可能的那家排在推薦列第一個，由你點選
         var best: String? = if (type == TxnType.EXPENSE) ph.storeHere(loc, names)?.let { splitByHabit(it).first } else null
-        fun withBest(l: List<String>) = (listOfNotNull(best) + l).distinct().take(8)
+        // 推薦列分幾次補齊（先列記過的店，再補網路查到的）：已經在列上的店保持原位，只把新的接在後面，不會整排跳動點錯
+        fun withBest(l: List<String>) = (listOfNotNull(best) + nearby.filter { it in l } + l).distinct().take(8)
         nearby = withBest((hist + known).distinct())
         // 附近的店：有 Mapbox 金鑰用 Mapbox，否則用 OpenStreetMap（Overpass）
         if (com.enwei.moneymanager.net.PlaceSearch.online) {
@@ -523,7 +527,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     else -> com.enwei.moneymanager.data.MacroStep(t0.type.name, t0.amount, t0.accountId, t0.toAccountId, t0.categoryId, t0.merchant.orEmpty(),
                         splitParts.mapNotNull { (r, v) -> (r.person ?: r.name.takeIf { it.isNotBlank() }?.let { repo.debtPerson(it) })?.let { com.enwei.moneymanager.data.MacroShare(it, v) } })
                 }
-                MacroDraft.put(step)
+                MacroDraft.put(step.copy(currency = t0.currency))
                 nav.popBackStack()
             }
             return

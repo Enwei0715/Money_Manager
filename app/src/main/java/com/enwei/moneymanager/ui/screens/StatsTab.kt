@@ -51,6 +51,8 @@ import com.enwei.moneymanager.ui.components.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
@@ -245,7 +247,13 @@ fun StatsTab(nav: NavController) {
             LazyColumn(Modifier.fillMaxSize()) {
                 item {
                     Column(Modifier.background(MaterialTheme.colorScheme.surface).coachTarget("st.pie")) {
-                        PieChart(byCat.map { (cid, v) -> (lk.category(cid)?.name ?: "未分類") to v }, "${kind.label}合計", Money.withSymbol(sum, lk.base))
+                        PieChart(byCat.map { (cid, v) -> (lk.category(cid)?.name ?: "未分類") to v }, "${kind.label}合計", Money.withSymbol(sum, lk.base)) { i ->
+                            // 點圓餅的某一塊：和點下方分類列一樣，打開那個分類的明細
+                            byCat.getOrNull(i)?.let { (cid, _) ->
+                                val p = if (period == Period.CUSTOM) Period.MONTH else period
+                                nav.navigate("catstat/${cid ?: 0}/${kind.name}/${p.name}/${anchor.toEpochDay()}")
+                            }
+                        }
                     }
                     com.enwei.moneymanager.ui.components.LineDivider()
                     Spacer(Modifier.height(10.dp))
@@ -304,7 +312,11 @@ fun StatsTab(nav: NavController) {
 }
 
 @Composable
-fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, centerValue: String? = null) {
+fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, centerValue: String? = null,
+             /** 點某一塊：傳那一塊的索引（打開那個分類的明細） */
+             onSlice: ((Int) -> Unit)? = null) {
+    val curSlices by androidx.compose.runtime.rememberUpdatedState(slices)
+    val curOnSlice by androidx.compose.runtime.rememberUpdatedState(onSlice)
     val total = slices.sumOf { it.second }
     val measurer = rememberTextMeasurer()
     // 圖上的字用設定的字型（主題的字型家族），不是系統預設
@@ -318,7 +330,27 @@ fun PieChart(slices: List<Pair<String, Long>>, centerTitle: String? = null, cent
     val centerStyle = baseText.copy(fontSize = AppText.title, fontWeight = FontWeight.SemiBold, color = labelColor)
     val centerSub = baseText.copy(fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
     // 圓環：中間寫本期總額（最重要的數字），高度比原本的實心圓餅小
-    Canvas(Modifier.fillMaxWidth().height(if (slices.count { total > 0 && it.second * 100f / total >= 3f } > 7) 360.dp else 320.dp).padding(vertical = 12.dp)) {
+    Canvas(Modifier.fillMaxWidth().height(if (slices.count { total > 0 && it.second * 100f / total >= 3f } > 7) 360.dp else 320.dp).padding(vertical = 12.dp)
+        .pointerInput(Unit) {
+            // 點圓環上的某一塊（或它外側的標籤附近）：依角度找出是哪一塊
+            detectTapGestures { o ->
+                val sl = curSlices; val tot = sl.sumOf { it.second }
+                val cb = curOnSlice ?: return@detectTapGestures
+                if (tot <= 0L) return@detectTapGestures
+                val r = minOf(size.width * 0.27f, size.height * 0.42f)
+                val dx = o.x - size.width / 2f; val dy = o.y - size.height / 2f
+                val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+                if (dist < r * 0.55f || dist > r * 1.7f) return@detectTapGestures
+                // 從 12 點鐘方向順時針的角度
+                var ang = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat() + 90f
+                if (ang < 0) ang += 360f
+                var acc = 0f
+                sl.forEachIndexed { i, (_, v) ->
+                    acc += v.toFloat() / tot * 360f
+                    if (ang <= acc) { cb(i); return@detectTapGestures }
+                }
+            }
+        }) {
         val r = minOf(size.width * 0.27f, size.height * 0.42f)
         val c = Offset(size.width / 2, size.height / 2)
         val topLeft = Offset(c.x - r, c.y - r)
@@ -468,8 +500,10 @@ fun CategoryStatScreen(nav: NavController, categoryId: Long, kind: TxnType, peri
     val all by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val cat = lk.category(categoryId.takeIf { it > 0 })
     val anchor = LocalDate.ofEpochDay(anchorDay)
-    val mine = remember(all, categoryId, kind, lk) {
-        all.filter { it.status == TxnStatus.CONFIRMED && it.type == kind && (lk.rootId(it.categoryId) ?: 0L) == categoryId }
+    val excluded = repo.settings.value.statsExcluded
+    // 和分類列表一致：不計入收支統計的帳戶不算
+    val mine = remember(all, categoryId, kind, lk, excluded) {
+        all.filter { it.status == TxnStatus.CONFIRMED && it.type == kind && it.inStats(excluded) && (lk.rootId(it.categoryId) ?: 0L) == categoryId }
     }
     val ranges = (5 downTo 0).map { rangeOf(period, shift(period, anchor, -it.toLong())) }
     val values = ranges.map { r -> mine.inRange(r).sumOf { lk.fx.convert(it.amount, it.currency) } }

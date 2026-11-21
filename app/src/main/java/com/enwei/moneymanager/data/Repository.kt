@@ -859,7 +859,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         return m.allSteps().mapIndexed { i, st ->
             val type = runCatching { TxnType.valueOf(st.type) }.getOrDefault(TxnType.EXPENSE)
             val t0 = if (i == hit && base != null) base else TxnEntity(
-                type = type, amount = st.amount, currency = settings.value.baseCurrency, accountId = st.accountId,
+                type = type, amount = st.amount, currency = st.currency.ifBlank { settings.value.baseCurrency }, accountId = st.accountId,
                 date = now, source = TxnSource.MANUAL, status = TxnStatus.CONFIRMED,
             )
             val t = t0.copy(

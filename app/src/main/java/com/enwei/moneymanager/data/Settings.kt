@@ -68,6 +68,8 @@ data class MacroStep(
     val categoryId: Long? = null,
     val merchant: String = "",
     val shares: List<MacroShare> = emptyList(),
+    /** 幣別（空白＝主幣別） */
+    val currency: String = "",
 )
 
 @Serializable

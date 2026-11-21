@@ -593,8 +593,11 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         val style = settings.styleOf(symbol)
                         val ad = Discipline.advise(style, avg, last, peak, settings.investPlan.rule())
                         Text("我的持股（${style.label}）", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
-                        Text("${"%,.0f".format(shares)} 股 · 損益 ${"%+.2f".format((last / avg - 1) * 100)}%", fontSize = AppText.body,
-                            color = if (last >= avg) StockUp else StockDown)
+                        // 損益%和上方持股卡、持股頁同一種算法（未實現損益 ÷ 淨成本，含預估賣出費用、股利）
+                        val upnl = held.sumOf { it.unrealized }; val ncost = held.sumOf { it.netCost }
+                        val ret = if (ncost > 0) upnl / ncost * 100 else 0.0
+                        Text("${"%,.0f".format(shares)} 股 · 損益 ${"%+.2f".format(ret)}%", fontSize = AppText.body,
+                            color = if (ret >= 0) StockUp else StockDown, maxLines = 1)
                         // 價位圖：均價、現價、買進後最高與停利／減碼／提醒價的相對位置
                         PriceLadder(buildList {
                             add(Triple("均價", avg, Color(0xFF607D8B)))

@@ -69,7 +69,7 @@ private fun typeLabel(t: String) = TYPES.firstOrNull { it.first == t }?.second ?
 
 /** 一步的一行摘要：類型 金額・分類・商家・帳戶 */
 private fun stepLine(st: MacroStep, lk: Lookups, base: String): String = listOfNotNull(
-    "${typeLabel(st.type)} ${Money.withSymbol(st.amount, base)}",
+    "${typeLabel(st.type)} ${Money.withSymbol(st.amount, st.currency.ifBlank { base })}",
     if (st.type == "TRANSFER") null else lk.catLabel(st.categoryId),
     st.merchant.takeIf { it.isNotBlank() },
     lk.account(st.accountId)?.name?.let { a -> if (st.type == "TRANSFER") "$a → ${lk.account(st.toAccountId)?.name ?: "未選"}" else a },
