@@ -2,6 +2,7 @@ package com.enwei.moneymanager.ui.components
 
 import com.enwei.moneymanager.ui.AppText
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.Canvas
@@ -153,7 +154,7 @@ private fun Modifier.tapIndex(n: Int, onIndex: ((Int) -> Unit)?): Modifier {
     val cb by androidx.compose.runtime.rememberUpdatedState(onIndex)
     val count by androidx.compose.runtime.rememberUpdatedState(n)
     return this.then(Modifier.pointerInput(Unit) {
-        androidx.compose.foundation.gestures.detectTapGestures { o ->
+        detectTapGestures { o ->
             val left = AxisWidth * density
             val w = size.width - left
             if (o.x < left || w <= 0) return@detectTapGestures
