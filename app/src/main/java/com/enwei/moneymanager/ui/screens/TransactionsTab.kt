@@ -14,6 +14,8 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -263,7 +265,7 @@ fun TransactionsTab(nav: NavController, initialTab: Int = 0) {
             if (TxnSelect.active) com.enwei.moneymanager.ui.ChromeScale { TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                 navigationIcon = { IconButton(onClick = { TxnSelect.ids = emptySet() }) { Icon(Icons.Filled.Close, "取消選取") } },
-                title = { Text("已選 ${TxnSelect.ids.size} 筆", fontSize = AppText.section) },
+                title = { Text("${TxnSelect.ids.size} 筆", fontSize = AppText.section, maxLines = 1) },
                 actions = {
                     TextButton(onClick = { TxnSelect.ids = inPeriod.map { it.id }.toSet() }) { Text("全選") }
                     TextButton(onClick = { batchSplit = true }) { Text("分帳") }
@@ -1390,49 +1392,67 @@ private fun BatchSplitDialog(list: List<TxnEntity>, lk: Lookups, onDismiss: () -
     }
     val p = plan()
     val owed = p.sumOf { (_, sh) -> sh.sumOf { it.second } }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("${list.size} 筆支出一起分帳") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (list.isEmpty()) Text("選取的交易裡沒有支出。", fontSize = AppText.secondary)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val primary = MaterialTheme.colorScheme.primary
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val line = MaterialTheme.colorScheme.outlineVariant
+    fun run() {
+        // 在 App 層執行：對話框關掉也會做完（原本用畫面的 scope，關掉就可能只做一半）
+        com.enwei.moneymanager.MoneyApp.instance.appScope.launch {
+            p.forEach { (t, shares) ->
+                if (repo.splitsOf(t).isNotEmpty()) return@forEach
+                val sh = shares.filter { it.second > 0 }
+                if (sh.isEmpty()) return@forEach
+                // 全由他們：沿用原本那筆改成代墊（通知原文、手續費不會遺失），不再刪掉重建
+                repo.saveWithSplits(t, sh)
+            }
+        }
+        onDone()
+    }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        androidx.compose.material3.Surface(shape = RoundedCornerShape(com.enwei.moneymanager.ui.AppearancePrefs.cardRadius), color = MaterialTheme.colorScheme.surface) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                // 標題：一起分帳｜幾筆・合計
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text("一起分帳", fontSize = AppText.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
+                    Text("${list.size} 筆・${Money.full(total)}", fontSize = AppText.secondary, color = muted, maxLines = 1)
+                }
+                if (list.isEmpty()) Text("選取的交易裡沒有支出。", fontSize = AppText.secondary, color = muted)
+                // 對象：外框標籤，選中的填色並打勾
+                Text("和誰分", fontSize = AppText.caption, color = muted)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     people.forEach { a ->
                         val on = a.id in picked
-                        Text(a.name, fontSize = AppText.secondary, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.background(if (on) ExpenseColor else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(14.dp))
-                                .clickable { picked = if (on) picked - a.id else picked + a.id }.padding(horizontal = 12.dp, vertical = 6.dp))
+                        Text((if (on) "✓ " else "") + a.name, fontSize = AppText.secondary, maxLines = 1,
+                            color = if (on) primary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier
+                                .background(if (on) primary.copy(alpha = 0.14f) else Color.Transparent, RoundedCornerShape(18.dp))
+                                .border(1.dp, if (on) primary else line, RoundedCornerShape(18.dp))
+                                .clickable { picked = if (on) picked - a.id else picked + a.id }
+                                .padding(horizontal = 14.dp, vertical = 7.dp))
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // 方式：一條分段選擇（和記帳頁的支出／收入／轉帳同樣式）
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small).padding(3.dp)) {
                     listOf(true to "平分（含你）", false to "全由他們").forEach { (v, l) ->
                         val on = includeMe == v
-                        Text(l, fontSize = AppText.secondary, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.border(1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
-                                .clickable { includeMe = v }.padding(horizontal = 12.dp, vertical = 5.dp))
+                        Box(Modifier.weight(1f).heightIn(min = 36.dp)
+                            .background(if (on) MaterialTheme.colorScheme.surface else Color.Transparent, MaterialTheme.shapes.small)
+                            .clickable { includeMe = v }, contentAlignment = Alignment.Center) {
+                            Text(l, fontSize = AppText.secondary, maxLines = 1, color = if (on) primary else muted, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                        }
                     }
                 }
-                if (picked.isNotEmpty()) Text(
-                    "合計 ${Money.full(total)}・別人欠你 ${Money.full(owed)}・你的支出 ${Money.full(total - owed)}",
-                    fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
+                // 結果：兩行對齊的金額
+                if (picked.isNotEmpty()) Column(Modifier.fillMaxWidth().border(1.dp, line, RoundedCornerShape(10.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row { Text("別人欠你", fontSize = AppText.secondary, color = muted, modifier = Modifier.weight(1f)); Text(Money.full(owed), fontSize = AppText.body) }
+                    Row { Text("你的支出", fontSize = AppText.secondary, color = muted, modifier = Modifier.weight(1f)); Text(Money.full(total - owed), fontSize = AppText.body, color = ExpenseColor) }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("取消") }
+                    Button(onClick = { run() }, enabled = picked.isNotEmpty() && list.isNotEmpty(), modifier = Modifier.weight(1f)) { Text("分帳") }
+                }
             }
-        },
-        confirmButton = {
-            TextButton(enabled = picked.isNotEmpty() && list.isNotEmpty(), onClick = {
-                // 在 App 層執行：對話框關掉也會做完（原本用畫面的 scope，關掉就可能只做一半）
-                com.enwei.moneymanager.MoneyApp.instance.appScope.launch {
-                    p.forEach { (t, shares) ->
-                        if (repo.splitsOf(t).isNotEmpty()) return@forEach
-                        val sh = shares.filter { it.second > 0 }
-                        if (sh.isEmpty()) return@forEach
-                        // 全由他們：沿用原本那筆改成代墊（通知原文、手續費不會遺失），不再刪掉重建
-                        repo.saveWithSplits(t, sh)
-                    }
-                }
-                onDone()
-            }) { Text("分帳") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
+        }
+    }
 }
