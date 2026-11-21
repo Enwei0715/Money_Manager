@@ -29,11 +29,27 @@ class TxnNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         instance = this
+        // 服務被系統暫停期間進來的通知收不到：重新連上時補讀通知列上還在的（近 24 小時、還沒有紀錄的）
+        val app = application as MoneyApp
+        if (!app.repo.settings.value.featureNotif) return
+        app.appScope.launch {
+            delay(2000)
+            val since = System.currentTimeMillis() - 24 * 3600_000L
+            val list = runCatching { activeNotifications }.getOrNull().orEmpty()
+                .filter { it.packageName != packageName && it.postTime >= since }
+            val log = app.repo.db.notificationLog()
+            list.forEach { sbn ->
+                val (title, text) = textOf(sbn) ?: return@forEach
+                if (log.countSame(sbn.packageName, title, text, sbn.postTime - 60_000) == 0) enqueue(sbn.packageName, sbn.key, title, text, sbn.postTime)
+            }
+        }
     }
 
     override fun onListenerDisconnected() {
         if (instance === this) instance = null
         super.onListenerDisconnected()
+        // 被系統中斷時要求重新連線，否則之後的通知都收不到
+        runCatching { requestRebind(ComponentName(this, TxnNotificationListener::class.java)) }
     }
 
     override fun onDestroy() {
@@ -46,24 +62,36 @@ class TxnNotificationListener : NotificationListenerService() {
         super.onDestroy()
     }
 
+    /** 標題與內文（長內文、多行內文都讀，沒有時用跑馬燈文字） */
+    private fun textOf(sbn: StatusBarNotification): Pair<String?, String?>? {
+        val n = sbn.notification ?: return null
+        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return null
+        val extras = n.extras
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.joinToString("\n")
+        val text = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString()?.takeIf { it.isNotBlank() }
+            ?: lines?.takeIf { it.isNotBlank() } ?: n.tickerText?.toString()
+        if (title.isNullOrBlank() && text.isNullOrBlank()) return null
+        return title to text
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName == packageName) return
         // 設定裡關掉「通知自動記帳」：不讀任何通知
         if (!com.enwei.moneymanager.MoneyApp.repo.settings.value.featureNotif) return
-        val n = sbn.notification ?: return
-        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
-        val extras = n.extras
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
-        val text = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString()
-        if (title.isNullOrBlank() && text.isNullOrBlank()) return
+        val (title, text) = textOf(sbn) ?: return
+        enqueue(sbn.packageName, sbn.key, title, text, sbn.postTime)
+    }
 
+    private fun enqueue(pkg: String, key: String, title: String?, text: String?, postTime: Long) {
         val app = application as MoneyApp
         synchronized(pendingLock) {
-            pendingNotes["${sbn.packageName}:${sbn.key}:${sbn.postTime}"] = ActiveNote(sbn.packageName, title, text, sbn.postTime)
+            pendingNotes["$pkg:$key:$postTime"] = ActiveNote(pkg, title, text, postTime)
             // 等 0.9 秒收齊同一筆交易的多則通知；但通知一直進來時，最多等 3 秒或 20 則就先處理，不會一直延後
             if (firstPendingAt == 0L) firstPendingAt = System.currentTimeMillis()
             val waited = System.currentTimeMillis() - firstPendingAt
             val wait = if (pendingNotes.size >= 20 || waited >= 3000) 0L else 900L
+            // 只取消「還在等」的那次；已經開始處理的批次不能取消（原本新通知一進來就把處理到一半的批次取消，那幾則就不見了）
             flushJob?.cancel()
             flushJob = app.appScope.launch {
                 delay(wait)
@@ -75,21 +103,30 @@ class TxnNotificationListener : NotificationListenerService() {
                     }
                 }
                 if (batch.isEmpty()) return@launch
-                val results = try {
-                    app.repo.ingestNotificationBatch(batch.map { Repository.NotificationInput(it.pkg, it.title, it.text, it.postedAt) })
-                } catch (e: Exception) {
-                    android.util.Log.e("TxnNotificationListener", "Failed to process notification batch", e)
-                    return@launch
-                }
-                results.filterNotNull().forEach { result ->
-                    if (result.kind == "RECORDED") app.repo.scheduleAutoTidy()
-                    // 有網路且有把握的直接記帳；沒網路或不確定的在「待確認」
-                    val pending = result.kind == "RECORDED" && result.pending
-                    QuickActions.notifyRecorded(
-                        this@TxnNotificationListener, result.txnId.takeIf { result.kind != "STOCK" }, tr(result.message), pending,
-                    )
-                }
+                app.appScope.launch { process(app, batch) }
             }
+        }
+    }
+
+    private suspend fun process(app: MoneyApp, batch: List<ActiveNote>) {
+        val results = try {
+            app.repo.ingestNotificationBatch(batch.map { Repository.NotificationInput(it.pkg, it.title, it.text, it.postedAt) })
+        } catch (e: Exception) {
+            android.util.Log.e("TxnNotificationListener", "Failed to process notification batch", e)
+            // 整批失敗也要留下紀錄（通知記帳頁可點選重試），不能整批消失
+            runCatching {
+                batch.forEach { n -> app.repo.db.notificationLog().insert(com.enwei.moneymanager.data.NotificationLogEntity(
+                    packageName = n.pkg, title = n.title, text = n.text, postedAt = n.postedAt, result = "ERROR")) }
+            }
+            return
+        }
+        results.filterNotNull().forEach { result ->
+            if (result.kind == "RECORDED") app.repo.scheduleAutoTidy()
+            // 有網路且有把握的直接記帳；沒網路或不確定的在「待確認」
+            val pending = result.kind == "RECORDED" && result.pending
+            QuickActions.notifyRecorded(
+                this@TxnNotificationListener, result.txnId.takeIf { result.kind != "STOCK" }, tr(result.message), pending,
+            )
         }
     }
 

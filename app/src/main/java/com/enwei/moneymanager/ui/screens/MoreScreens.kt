@@ -674,7 +674,8 @@ fun NotificationSettingsScreen(nav: NavController) {
                         modifier = Modifier.fillMaxWidth().listRow().clickable {
                             when {
                                 !gone && e.txnId != null && (e.result == "RECORDED" || e.result == "MERGED") -> nav.navigate("txn/${e.txnId}")
-                                gone || e.result == "ERROR" -> testScope.launch {
+                                // 被當成重複的那則（可能是另一筆同額消費）：點選仍然記帳
+                                gone || e.result == "ERROR" || e.result == "DUPLICATE" -> testScope.launch {
                                     val r = repo.ingestNotification(e.packageName, e.title, e.text, e.postedAt, force = true)
                                     testMsg = r?.let { "已重新記帳：${it.message}" } ?: "沒有記下（看不出是交易）"
                                 }
@@ -717,6 +718,7 @@ fun NotificationSettingsScreen(nav: NavController) {
                             } else Text(listOfNotNull(e.title, e.text).joinToString(" "), fontSize = AppText.secondary, maxLines = 2,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             if (gone) Text("點選重新記帳", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
+                            else if (e.result == "DUPLICATE" && e.txnId == null) Text("不是重複？點選記帳", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
                             else if (e.result == "UNPARSED" && com.enwei.moneymanager.core.NotificationParser.parseStockFillPartial(e.title, e.text) != null)
                                 Text("點選放到股票交易待確認", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)
                             else if (e.result in setOf("UNPARSED", "CANDIDATE", "PROMO")) Text("點選設定為交易", fontSize = AppText.label, color = MaterialTheme.colorScheme.primary)

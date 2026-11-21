@@ -1324,8 +1324,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
         val s = settings.value
         val log = db.notificationLog()
         // 同一則通知可能因更新而重複送達
-        // 系統重送同一則通知（內容完全相同、10 分鐘內）：第一則已經處理過，這則略過
-        if (!force && log.countSame(pkg, title, text, postedAt - 10 * 60_000) > 0) return null
+        // 系統重送或 App 更新同一則通知（內容完全相同、1 分鐘內）：第一則已經處理過，這則略過。
+        // 超過 1 分鐘的相同內容可能是另一筆同額消費（通知沒寫時間），交給下面判斷並留下紀錄，不默默丟掉
+        if (!force && log.countSame(pkg, title, text, postedAt - 60_000) > 0) return null
         // 通知紀錄：記成交易的保留 60 天；沒有記帳的（略過、非付款通知）保留 7 天
         // 每小時最多清一次：每則通知（包含其他 App 的一般通知）都跑兩次 DELETE 太耗電
         if (System.currentTimeMillis() - lastLogPrune > 3600_000L) {
