@@ -568,6 +568,7 @@ class SettingsStore(context: Context) {
     private val aiSuggestionSerializer = ListSerializer(AiSuggestion.serializer())
     private val reviewSerializer = MapSerializer(String.serializer(), AiReview.serializer())
     private val loanSerializer = MapSerializer(Long.serializer(), LoanInfo.serializer())
+    private val macroSerializer = ListSerializer(TxnMacro.serializer())
     private val dupVerdictSerializer = MapSerializer(String.serializer(), DupJudgement.serializer())
     private val strMapSerializer = MapSerializer(String.serializer(), String.serializer())
     private val cashSerializer = MapSerializer(Long.serializer(), MapSerializer(Int.serializer(), Int.serializer()))
@@ -714,6 +715,11 @@ class SettingsStore(context: Context) {
         statsExcluded = prefs.getStringSet("statsExcluded", emptySet())!!.toSet(),
         merchantAlias = dec("merchantAlias", "{}", strMapSerializer, emptyMap()),
         loans = dec("loans", "{}", loanSerializer, emptyMap()),
+        macros = dec("macros", "[]", macroSerializer, emptyList()),
+        macroToolAdded = prefs.getBoolean("macroToolAdded", false),
+        payerExpenseMigrated = prefs.getBoolean("payerExpenseMigrated", false),
+        payerExpenseReverted = prefs.getBoolean("payerExpenseReverted", false),
+        zeroAdvanceCleaned = prefs.getBoolean("zeroAdvanceCleaned", false),
         loanWarnKey = prefs.getString("loanWarnKey", "")!!,
         cardDueWarned = prefs.getStringSet("cardDueWarned", emptySet())!!.toSet(),
         pendingNudgeDay = prefs.getLong("pendingNudgeDay", 0),
@@ -926,6 +932,11 @@ class SettingsStore(context: Context) {
             .putStringSet("statsExcluded", s.statsExcluded)
             .putString("merchantAlias", json.encodeToString(strMapSerializer, s.merchantAlias))
             .putString("loans", json.encodeToString(loanSerializer, s.loans))
+            .putString("macros", json.encodeToString(macroSerializer, s.macros))
+            .putBoolean("macroToolAdded", s.macroToolAdded)
+            .putBoolean("payerExpenseMigrated", s.payerExpenseMigrated)
+            .putBoolean("payerExpenseReverted", s.payerExpenseReverted)
+            .putBoolean("zeroAdvanceCleaned", s.zeroAdvanceCleaned)
             .putString("loanWarnKey", s.loanWarnKey)
             .putStringSet("cardDueWarned", s.cardDueWarned)
             .putLong("pendingNudgeDay", s.pendingNudgeDay)

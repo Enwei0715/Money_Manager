@@ -809,7 +809,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val sub = HashMap<Long, Long>()
             all.filter { it.type == TxnType.TRANSFER && it.accountId == null && it.toAccountId in loans && it.externalKey?.startsWith("SPLIT:") == true }.forEach { a ->
                 val parent = a.externalKey!!.removePrefix("SPLIT:").substringBefore(':').toLongOrNull()?.let { byId[it] } ?: return@forEach
-                if (parent.type != TxnType.EXPENSE) return@forEach
+                // 主支出沒有帳戶（例如待確認的通知）：這筆本來就是正確的記法，不能再扣（否則每次開 App 都扣一次）
+                if (parent.type != TxnType.EXPENSE || parent.accountId == null) return@forEach
                 sub.merge(parent.id, a.amount, Long::plus)
                 db.txns().upsert(a.copy(accountId = parent.accountId))
             }
