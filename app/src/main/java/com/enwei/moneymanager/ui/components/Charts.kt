@@ -2,6 +2,8 @@ package com.enwei.moneymanager.ui.components
 
 import com.enwei.moneymanager.ui.AppText
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,7 +50,9 @@ private val AxisWidth = 44f
 
 /** 折線圖（例如餘額走勢），下方顯示各點標籤與數值。 */
 @Composable
-fun LineChart(values: List<Long>, labels: List<String>, color: Color, modifier: Modifier = Modifier, autoMin: Boolean = true) {
+fun LineChart(values: List<Long>, labels: List<String>, color: Color, modifier: Modifier = Modifier, autoMin: Boolean = true,
+              /** 點某一期：傳那一期的索引 */
+              onIndex: ((Int) -> Unit)? = null) {
     val measurer = rememberTextMeasurer()
     val baseText = androidx.compose.material3.MaterialTheme.typography.bodySmall
     val grid = MaterialTheme.colorScheme.outlineVariant
@@ -62,7 +66,7 @@ fun LineChart(values: List<Long>, labels: List<String>, color: Color, modifier: 
     lo = floor(lo / step) * step
     hi = ceil(hi / step) * step
     Column(modifier) {
-        Canvas(Modifier.fillMaxWidth().height(200.dp).padding(top = 8.dp, end = 8.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(200.dp).padding(top = 8.dp, end = 8.dp).tapIndex(values.size, onIndex)) {
             val left = AxisWidth * density
             val w = size.width - left
             val h = size.height
@@ -94,7 +98,9 @@ fun LineChart(values: List<Long>, labels: List<String>, color: Color, modifier: 
 
 /** 收入／支出並排長條圖。 */
 @Composable
-fun DualBarChart(first: List<Long>, second: List<Long>, labels: List<String>, firstColor: Color, secondColor: Color, modifier: Modifier = Modifier) {
+fun DualBarChart(first: List<Long>, second: List<Long>, labels: List<String>, firstColor: Color, secondColor: Color, modifier: Modifier = Modifier,
+                 /** 點某一期：傳那一期的索引 */
+                 onIndex: ((Int) -> Unit)? = null) {
     val measurer = rememberTextMeasurer()
     val baseText = androidx.compose.material3.MaterialTheme.typography.bodySmall
     val grid = MaterialTheme.colorScheme.outlineVariant
@@ -104,7 +110,7 @@ fun DualBarChart(first: List<Long>, second: List<Long>, labels: List<String>, fi
     val step = niceStep(maxV)
     val hi = ceil(maxV / step) * step
     Column(modifier) {
-        Canvas(Modifier.fillMaxWidth().height(220.dp).padding(top = 8.dp, end = 8.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(220.dp).padding(top = 8.dp, end = 8.dp).tapIndex(first.size, onIndex)) {
             val left = AxisWidth * density
             val w = size.width - left
             val h = size.height
@@ -137,4 +143,21 @@ fun DualBarChart(first: List<Long>, second: List<Long>, labels: List<String>, fi
             }
         }
     }
+}
+
+
+/** 圖表點選：依點的位置（扣掉左邊的刻度欄）換算是第幾期 */
+@Composable
+private fun Modifier.tapIndex(n: Int, onIndex: ((Int) -> Unit)?): Modifier {
+    if (onIndex == null || n <= 0) return this
+    val cb by androidx.compose.runtime.rememberUpdatedState(onIndex)
+    val count by androidx.compose.runtime.rememberUpdatedState(n)
+    return this.then(Modifier.pointerInput(Unit) {
+        androidx.compose.foundation.gestures.detectTapGestures { o ->
+            val left = AxisWidth * density
+            val w = size.width - left
+            if (o.x < left || w <= 0) return@detectTapGestures
+            cb(((o.x - left) / w * count).toInt().coerceIn(0, count - 1))
+        }
+    })
 }

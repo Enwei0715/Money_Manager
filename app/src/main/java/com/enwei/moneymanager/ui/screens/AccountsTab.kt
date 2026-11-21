@@ -679,9 +679,10 @@ fun AccountDetailScreen(nav: NavController, id: Long) {
                     val wds = ranges.map { r -> -entriesIn(r.first, r.second).sumOf { minOf(0, it.delta) } }
                     val labels = months.map { "${it.monthValue}月" }
                     Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(vertical = 8.dp)) {
-                        LineChart(ends, labels, MaterialTheme.colorScheme.primary, autoMin = false)
+                        // 點某個月：下方明細換成那個月
+                        LineChart(ends, labels, MaterialTheme.colorScheme.primary, autoMin = false) { i -> month = months[i] }
                         com.enwei.moneymanager.ui.components.LineDivider(Modifier.padding(vertical = 12.dp))
-                        DualBarChart(deps, wds, labels, IncomeColor, ExpenseColor)
+                        DualBarChart(deps, wds, labels, IncomeColor, ExpenseColor) { i -> month = months[i] }
                         if (isBroker) Text(
                             "折線：現金＋持股市值　長條：存入／提出",
                             fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -838,9 +839,10 @@ fun TotalStatsScreen(nav: NavController) {
                     Text(Money.full(worth.last()), fontSize = AppText.display, fontWeight = FontWeight.SemiBold)
                 }
                 com.enwei.moneymanager.ui.components.LineDivider()
-                LineChart(worth, labels, MaterialTheme.colorScheme.primary, Modifier.padding(vertical = 12.dp))
+                // 點某個月：上方的餘額與圖表改成以那個月為最後一期
+                LineChart(worth, labels, MaterialTheme.colorScheme.primary, Modifier.padding(vertical = 12.dp)) { i -> month = months[i] }
                 com.enwei.moneymanager.ui.components.LineDivider()
-                DualBarChart(totals.map { it.income }, totals.map { it.expense }, labels, IncomeColor, ExpenseColor, Modifier.padding(vertical = 12.dp))
+                DualBarChart(totals.map { it.income }, totals.map { it.expense }, labels, IncomeColor, ExpenseColor, Modifier.padding(vertical = 12.dp)) { i -> month = months[i] }
             }
         }
     }

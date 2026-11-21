@@ -507,24 +507,28 @@ fun CategoryStatScreen(nav: NavController, categoryId: Long, kind: TxnType, peri
     }
     val ranges = (5 downTo 0).map { rangeOf(period, shift(period, anchor, -it.toLong())) }
     val values = ranges.map { r -> mine.inRange(r).sumOf { lk.fx.convert(it.amount, it.currency) } }
-    val current = mine.inRange(ranges.last())
+    // 點某一期的長條：上方金額與下方明細換成那一期（預設本期）
+    var sel by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(5) }
+    val current = mine.inRange(ranges[sel.coerceIn(0, ranges.lastIndex)])
     val color = if (kind == TxnType.INCOME) IncomeColor else ExpenseColor
 
     Scaffold(topBar = { BackTopBar(cat?.name ?: "未分類", { nav.popBackStack() }) }) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             item {
                 Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(16.dp)) {
-                    Text(ranges.last().title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(Money.format(values.last(), lk.base), style = MaterialTheme.typography.headlineSmall, color = color)
+                    Text(ranges[sel].title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(Money.format(values[sel], lk.base), style = MaterialTheme.typography.headlineSmall, color = color)
                     Spacer(Modifier.height(12.dp))
                     val maxV = values.maxOrNull()?.coerceAtLeast(1) ?: 1
                     Row(Modifier.fillMaxWidth().heightIn(min = 150.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
                         values.forEachIndexed { i, v ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(if (v > 0) Money.format(v) else "", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { sel = i }
+                                    .padding(horizontal = 4.dp)) {
+                                Text(if (v > 0) Money.format(v) else "", fontSize = AppText.badge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                 Canvas(Modifier.width(22.dp).height(100.dp)) {
                                     val h = size.height * v / maxV
-                                    drawRect(if (i == values.lastIndex) color else color.copy(alpha = 0.4f), Offset(0f, size.height - h), Size(size.width, h))
+                                    drawRect(if (i == sel) color else color.copy(alpha = 0.4f), Offset(0f, size.height - h), Size(size.width, h))
                                 }
                                 Text(
                                     when (period) {
