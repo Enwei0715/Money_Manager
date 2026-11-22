@@ -347,6 +347,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      */
     suspend fun feeOf(t: TxnEntity): TxnEntity? {
         if (t.id == 0L || (t.type != TxnType.EXPENSE && t.type != TxnType.TRANSFER)) return null
+        // 代墊（轉給往來對象）本身沒有手續費：不能用時間比對把主支出的手續費認成它的（刪代墊時會連手續費一起刪）
+        if (t.externalKey?.startsWith("SPLIT:") == true || t.externalKey?.startsWith("ADV:") == true) return null
         db.txns().byExternalKey("FEE:${t.id}")?.let { return it }
         return db.txns().between(t.date, t.date).firstOrNull {
             it.id != t.id && it.type == TxnType.EXPENSE && it.accountId == t.accountId && it.date == t.date &&
@@ -818,6 +820,9 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 還原 2.2.77–2.2.78 的錯誤改法（整筆記成支出、代墊不從帳戶扣）：支出扣回別人那份，
      * 代墊改回從同一個帳戶轉給對方。只做一次。
      */
+    /** 刪掉代墊列本身（不連帶刪手續費或其他資料）：改付款人、改類型時用 */
+    suspend fun deleteSplitRows(list: List<TxnEntity>) = list.forEach { db.txns().delete(it.id) }
+
     /** 整筆幫別人付而留下的 $0 支出：刪掉這筆空支出，代墊照舊（他欠你），清單上不再出現「−$0」。只做一次。 */
     suspend fun dropZeroAdvanceExpenses() {
         if (settings.value.zeroAdvanceCleaned) return

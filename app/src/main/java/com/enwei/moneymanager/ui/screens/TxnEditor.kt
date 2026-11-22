@@ -542,7 +542,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                 if (his >= t0.amount) { snack.showSnackbar(com.enwei.moneymanager.ui.tr("他自己的部分不能大於或等於總額")); return@launch }
                 val t = t0.copy(accountId = pid, amount = t0.amount - his)
                 // 原本是「我付、別人欠我」的分帳，改成別人付：舊的代墊要刪掉，否則變成他欠我又我欠他
-                original?.let { o -> repo.splitsOf(o).forEach { repo.deleteTxn(it.id) } }
+                original?.let { o -> repo.deleteSplitRows(repo.splitsOf(o)) }
                 val mid = repo.saveTxn(t)
                 saveFee(t0.copy(accountId = accountId ?: pid), mid)
                 TxnScroll.focusDay = date
@@ -592,7 +592,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         if (original == null) TxnScroll.focusDay = date
         scope.launch {
             // 編輯支出：原本有代墊但這次把人都移除了 → 一起刪掉那幾筆代墊；支出改成收入或轉帳，代墊也一起刪
-            original?.takeIf { t.type != TxnType.EXPENSE }?.let { o -> repo.splitsOf(o).forEach { repo.deleteTxn(it.id) } }
+            original?.takeIf { t.type != TxnType.EXPENSE }?.let { o -> repo.deleteSplitRows(repo.splitsOf(o)) }
             val newId = if (original != null && t.type == TxnType.EXPENSE) repo.saveWithSplits(t, emptyList()) else repo.saveTxn(t)
             // 新記的支出、時間在 30 分鐘內：記下目前位置，之後在這裡付款時可推測店家
             if (original == null && t.type == TxnType.EXPENSE && settings.locationHints && !t.merchant.isNullOrBlank() &&
