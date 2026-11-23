@@ -377,6 +377,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     suspend fun deleteTxn(id: Long) {
         val t = db.txns().get(id)
+        // 只刪掉分帳裡的一筆代墊（他不欠你了）：那份錢還是你付的，加回主支出，帳戶餘額才不會少算
+        t?.let { s -> splitParent(s) }?.let { parent -> db.txns().upsert(parent.copy(amount = parent.amount + t.amount)) }
         // 主交易刪掉，另記的手續費也一起刪（不留下孤兒）
         t?.let { main -> feeOf(main)?.let { fee -> db.txns().delete(fee.id); cascadedFees[id] = fee } }
         // 代墊的部分也一起刪（復原時一起還原）
@@ -391,6 +393,8 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
 
     /** 復原剛刪除的交易（保留原本的 id，通知紀錄等關聯不會斷） */
     suspend fun restoreTxn(t: TxnEntity) {
+        // 復原單獨刪掉的代墊：從主支出扣回那份
+        splitParent(t)?.let { parent -> db.txns().upsert(parent.copy(amount = (parent.amount - t.amount).coerceAtLeast(0))) }
         db.txns().upsert(t)
         cascadedFees.remove(t.id)?.let { db.txns().upsert(it) }
         cascadedSplits.remove(t.id)?.forEach { db.txns().upsert(it) }
@@ -820,6 +824,13 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
      * 還原 2.2.77–2.2.78 的錯誤改法（整筆記成支出、代墊不從帳戶扣）：支出扣回別人那份，
      * 代墊改回從同一個帳戶轉給對方。只做一次。
      */
+    /** 分帳代墊所屬的主支出（還存在、而且是支出才算） */
+    private suspend fun splitParent(t: TxnEntity): TxnEntity? {
+        if (t.type != TxnType.TRANSFER) return null
+        val pid = t.externalKey?.takeIf { it.startsWith("SPLIT:") }?.removePrefix("SPLIT:")?.substringBefore(':')?.toLongOrNull() ?: return null
+        return db.txns().get(pid)?.takeIf { it.type == TxnType.EXPENSE && it.currency == t.currency }
+    }
+
     /** 刪掉代墊列本身（不連帶刪手續費或其他資料）：改付款人、改類型時用 */
     suspend fun deleteSplitRows(list: List<TxnEntity>) = list.forEach { db.txns().delete(it.id) }
 
