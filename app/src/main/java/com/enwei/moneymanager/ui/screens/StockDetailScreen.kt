@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
+import com.enwei.moneymanager.data.stockScore
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -92,7 +93,7 @@ import kotlinx.coroutines.launch
 fun StockDetailScreen(nav: NavController, symbol: String) {
     // 第一次打開這頁：介紹分頁、K 線與價格提醒
     com.enwei.moneymanager.ui.components.PageTour("stock", listOf(
-        com.enwei.moneymanager.ui.components.Coach.Step("sd.tabs", "三個分頁", "「走勢」為 K 線與技術指標；「分析」為營收、趨勢推估與持股紀律；「資訊」為除權息、新聞與公司簡介。"),
+        com.enwei.moneymanager.ui.components.Coach.Step("sd.tabs", "三個分頁", "「走勢」為 K 線與技術指標；「分析」為評分、營收、趨勢推估與持股紀律；「資訊」為除權息、新聞與公司簡介。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "K 線操作", "兩指撥開或捏合縮放、左右拖曳；兩指按住不動可量測兩點價差；點選 K 棒顯示當日開高低收；上方可切換 60 分、日、週、月 K 與顯示區間。"),
         com.enwei.moneymanager.ui.components.Coach.Step(null, "均線與指標", "下方可加入或移除均線、布林通道，並切換成交量、RSI、MACD 或 KD 指標。"),
         com.enwei.moneymanager.ui.components.Coach.Step("sd.alert", "價格提醒", "設定目標價與停損價；台股交易時段約每 15 分鐘檢查一次，到價時發出通知。"),
@@ -404,7 +405,10 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                             val from = (total - n - back.toInt()).coerceIn(warm, total - n)
                             // 點一下 K 棒看當天的開高低收與量
                             val sel = picked?.takeIf { it in from until from + n }
-                            if (sel != null) {
+                            // 資訊列一直佔位：沒選 K 棒時顯示畫面最右那根（灰字），選了才換成那根；圖不會因為資訊列出現或消失而上下跳
+                            val shown = sel ?: (from + n - 1)
+                            run {
+                                val sel = shown
                                 val dd = java.time.LocalDate.ofEpochDay(kb.days[sel])
                                 val chg = if (sel > 0) (kb.close[sel] / kb.close[sel - 1] - 1) * 100 else null
                                 // 第一行：日期（含年份）、漲跌幅、量；第二行：開高低收四欄對齊
@@ -416,7 +420,8 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                 }
                                 Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(dateLabel, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                                        Text(dateLabel, fontSize = AppText.caption, maxLines = 1, modifier = Modifier.weight(1f),
+                                            color = if (shown == picked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                                         chg?.let { Text("%+.2f%%".format(it), fontSize = AppText.caption, color = upC, fontWeight = FontWeight.Medium) }
                                         kb.volume.getOrNull(sel)?.let {
                                             Text("　量 ${"%,.0f".format(it / 1000)} 張", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -457,6 +462,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                                 onPan = { bars -> back = (back + bars).coerceIn(0f, (usable - count).coerceAtLeast(0f)) },
                                 selected = sel,
                                 onTap = { f -> val j = from + (f * n).toInt().coerceIn(0, n - 1); picked = if (picked == j) null else j },
+                                onScrub = { f -> picked = from + (f * n).toInt().coerceIn(0, n - 1) },
                             )
                             // 均線（只列出顯示中的，點 ✕ 移除，＋ 可加任意天數）與布林
                             var addMa by remember { mutableStateOf(false) }
@@ -584,6 +590,7 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                         )
                     }
                 }
+                if (dtab == 1 && market == Market.TW) ScoreCard(symbol, name.orEmpty())
                 if (dtab == 1 && market == Market.TW) RevenueCard(symbol)
                 if (dtab == 1) ProjectionCard(b)
                 if (dtab == 1 && held.isNotEmpty() && settings.investPlan.disciplineOn) com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
@@ -790,6 +797,8 @@ private fun measureOf(e: PointerEvent, width: Float): Pair<Float, Float>? {
 private fun CandleChart(
     b: DailyBars, from: Int, n: Int, showBB: Boolean, mas: List<Int>, onZoom: (Float) -> Unit, onPan: (Float) -> Unit,
     levels: List<Pair<Double, Color>> = emptyList(), selected: Int? = null, onTap: (Float) -> Unit = {},
+    /** 長按後左右滑：選到手指下的那根（不切換、不會一下出現一下消失） */
+    onScrub: (Float) -> Unit = onTap,
     signals: List<com.enwei.moneymanager.core.TradeSignals.Signal> = emptyList(),
     /** 價位線（價格、顏色、名稱）：在圖右邊標名稱與價格 */
     labeledLevels: List<Triple<Double, Color, String>> = emptyList(),
@@ -807,6 +816,7 @@ private fun CandleChart(
     val pan by androidx.compose.runtime.rememberUpdatedState(onPan)
     val nNow by androidx.compose.runtime.rememberUpdatedState(n)
     val tap by androidx.compose.runtime.rememberUpdatedState(onTap)
+    val scrub by androidx.compose.runtime.rememberUpdatedState(onScrub)
     // 兩指量測：兩根手指下的兩根 K 棒，畫出區間並標漲跌幅（放開就消失）
     var measure by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -856,8 +866,8 @@ private fun CandleChart(
             // 長按後左右滑：逐根顯示每根 K 棒的開高低收（不會變成拖動圖表）
             .pointerInput(Unit) {
                 detectDragGesturesAfterLongPress(
-                    onDragStart = { o -> tap(o.x / size.width) },
-                    onDrag = { ch, _ -> ch.consume(); tap((ch.position.x / size.width).coerceIn(0f, 0.999f)) },
+                    onDragStart = { o -> scrub(o.x / size.width) },
+                    onDrag = { ch, _ -> ch.consume(); scrub((ch.position.x / size.width).coerceIn(0f, 0.999f)) },
                 )
             }
             .pointerInput(Unit) {
@@ -1251,6 +1261,53 @@ internal fun PriceLadder(points: List<Triple<String, Double, Color>>) {
 
 
 /** 月營收：近 13 個月營收長條（億元），顏色依年增率；附最新一個月的年增、月增。 */
+/** 評分：與每日報告選股同一套的五大面向分數與總分。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ScoreCard(symbol: String, name: String) {
+    // null＝計算中；讀不到資料時整張卡不顯示
+    val res by produceState<Result<com.enwei.moneymanager.data.StockEngine.Candidate?>?>(null, symbol) {
+        value = runCatching { com.enwei.moneymanager.MoneyApp.repo.stockScore(symbol, name) }
+    }
+    val r = res
+    if (r != null && r.getOrNull() == null) return
+    val c = r?.getOrNull()
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    fun tone(v: Int) = if (v >= 65) StockUp else if (v <= 35) StockDown else null
+    com.enwei.moneymanager.ui.components.AppCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("評分", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(8.dp))
+                if (c == null) Text("計算中…", fontSize = AppText.caption, color = muted)
+                else Text("${c.score} 分", fontSize = AppText.section, fontWeight = FontWeight.SemiBold,
+                    color = if (c.score >= 65) StockUp else if (c.score <= 40) StockDown else MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.weight(1f))
+                com.enwei.moneymanager.ui.components.HelpIcon("分數怎麼算", com.enwei.moneymanager.ui.components.HelpText.SCORES)
+            }
+            if (c != null) {
+                Row(Modifier.fillMaxWidth()) {
+                    listOf("趨勢" to c.sTrend, "籌碼" to c.sChip, "基本" to c.sFund, "消息" to c.sNews, "穩定" to c.sRisk).forEach { (l, v) ->
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$v", fontSize = AppText.body, fontWeight = FontWeight.SemiBold, color = tone(v) ?: MaterialTheme.colorScheme.onSurface)
+                            Text(l, fontSize = AppText.label, color = muted, maxLines = 1)
+                        }
+                    }
+                }
+                val tags = c.tags()
+                if (tags.isNotEmpty()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    tags.forEach { t ->
+                        val neg = t.contains("弱於") || t.contains("跌破") || t.contains("連賣") || t.contains("年減") || Regex("[-−]\\d").containsMatchIn(t)
+                        androidx.compose.material3.Surface(color = (if (neg) StockDown else StockUp).copy(alpha = 0.10f), shape = RoundedCornerShape(4.dp)) {
+                            Text(t, fontSize = AppText.label, color = if (neg) StockDown else StockUp, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun RevenueCard(symbol: String) {
     val rev by produceState<List<com.enwei.moneymanager.net.TwData.MonthRevenue>?>(null, symbol) {

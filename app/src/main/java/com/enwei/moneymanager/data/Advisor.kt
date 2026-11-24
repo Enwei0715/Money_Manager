@@ -15,6 +15,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
@@ -125,6 +126,49 @@ object BarCache {
         if (b == null) return map[key]?.second
         map[key] = System.currentTimeMillis() to b
         return b
+    }
+}
+
+/** 全市場的估值、營收、法人資料（下載量大），個股頁共用 1 小時，避免每開一檔就重抓。 */
+private object MarketTables {
+    private var at = 0L
+    private var data: Triple<Map<String, List<com.enwei.moneymanager.net.TwMarket.Inst>>, Map<String, com.enwei.moneymanager.net.TwMarket.Valuation>, Map<String, com.enwei.moneymanager.net.TwMarket.Revenue>>? = null
+    private val lock = kotlinx.coroutines.sync.Mutex()
+    suspend fun get() = lock.withLock {
+        data?.takeIf { System.currentTimeMillis() - at < 3600_000L } ?: coroutineScope {
+            val tw = com.enwei.moneymanager.net.TwMarket
+            val a = async { runCatching { tw.institutional(10) }.getOrDefault(emptyMap()) }
+            val b = async { runCatching { tw.valuation() }.getOrDefault(emptyMap()) }
+            val c = async { runCatching { tw.revenueAll() }.getOrDefault(emptyMap()) }
+            Triple(a.await(), b.await(), c.await()).also { t ->
+                // 三份都讀不到時不快取，下次再試
+                if (t.first.isNotEmpty() || t.second.isNotEmpty() || t.third.isNotEmpty()) { data = t; at = System.currentTimeMillis() }
+            }
+        }
+    }
+}
+
+/** 單一台股的評分（與每日報告選股同一套：趨勢、籌碼、基本面、消息、風險）。 */
+suspend fun Repository.stockScore(code: String, name: String): StockEngine.Candidate? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+    if (!code.matches(Regex("[0-9]{4,6}[A-Z]?"))) return@withContext null
+    coroutineScope {
+        val barsJob = async { runCatching { BarCache.get(code, "1y") }.getOrNull() }
+        val idxJob = async { runCatching { BarCache.get("^TWII", "1y") }.getOrNull() }
+        val tablesJob = async { MarketTables.get() }
+        val revJob = async { runCatching { com.enwei.moneymanager.net.TwData.monthRevenue(code, 13) }.getOrDefault(emptyList()) }
+        val epsJob = async { runCatching { com.enwei.moneymanager.net.TwMarket.epsHistory(code).map { it.second } }.getOrDefault(emptyList()) }
+        val bars = barsJob.await() ?: return@coroutineScope null
+        val idx = idxJob.await()?.close.orEmpty()
+        val (inst, valuation, revAll) = tablesJob.await()
+        val ds = com.enwei.moneymanager.MoneyApp.instance.news
+        val st = runCatching { ds.load() }.getOrNull()
+        val ns = st?.let { s -> ds.symbols(s).firstOrNull { it.key == code } }
+        val title = st?.let { s -> ds.recent(s, 3).filter { code in it.symbols }.maxByOrNull { it.importance * 10 + it.epochSec / 86_400 }?.title }
+        val regime = StockEngine.regime(idx, null)
+        val industry = com.enwei.moneymanager.net.MarketScan.shortIndustry(com.enwei.moneymanager.net.TwData.cached().firstOrNull { it.code == code }?.industry.orEmpty())
+        StockEngine.candidate(code, name, industry, bars.close, bars.volume, com.enwei.moneymanager.net.MarketScan.ret(idx, 20),
+            inst[code].orEmpty(), revAll[code], revJob.await(), epsJob.await(), valuation[code],
+            ns?.count ?: 0, ns?.avgSentiment ?: 0.0, title, false, regime.label)
     }
 }
 
