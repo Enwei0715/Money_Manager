@@ -1647,7 +1647,7 @@ private fun PlanTab(nav: NavController) {
             Bucket("短線・目標 ${"%.0f".format(100 - settings.investPlan.longRatio * 100)}%", a.shortValue, a.shortTarget, a.shortRoom, ::m)
         }
         // ② 大盤：加權指數 K 線＋階段（可收合，預設收起；階段標籤在標題下方就看得到）
-        if (s != null) Section("大盤（${s.indexStage.label}）", collapsible = true, initiallyOpen = false) {
+        if (s != null) Section("大盤（中期${s.indexStage.label.substringBefore('（')}・短期${s.index?.close?.let { com.enwei.moneymanager.core.Technicals.shortTerm(it) } ?: "—"}）", collapsible = true, initiallyOpen = false) {
             val idx = s.index
             com.enwei.moneymanager.ui.components.AnnotatedKLine("^TWII", if (idx != null && idx.close.size >= 20) listOf(
                 Triple("壓力（60 日高）", idx.high.takeLast(60).max(), Color(0xFFAB47BC)),

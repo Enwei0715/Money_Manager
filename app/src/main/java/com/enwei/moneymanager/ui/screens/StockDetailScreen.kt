@@ -566,7 +566,9 @@ fun StockDetailScreen(nav: NavController, symbol: String) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("強弱", fontSize = AppText.section, fontWeight = FontWeight.SemiBold)
                         val stage = Technicals.stage(c)
-                        Text("${stage.label}　${stage.hint}", fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // 寫明時間尺度：中期看月線與季線（約 1～3 個月），短期看近 5 個交易日
+                        Text("中期 ${stage.label}・短期 ${Technicals.shortTerm(c)}", fontSize = AppText.body, maxLines = 1)
+                        Text(stage.hint, fontSize = AppText.caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         val idx = index?.close
                         // 個股與大盤近 60 日走勢（以 60 日前為 0%）
                         RelativeChart(c, idx)

@@ -79,8 +79,27 @@ object Technicals {
         if (v.size <= daysAgo) null else (v.last() / v[v.size - 1 - daysAgo] - 1) * 100
 
     /**
-     * 走勢階段：價格、月線（20 日）、季線（60 日）的排列與方向，
+     * 短期走勢（近 5 個交易日）：收盤相對 5 日均線與 5 日漲跌幅。
+     * 和 [stage]（中期，看月線與季線，約 1～3 個月）分開標示，避免一兩天的反彈或下殺被說成「趨勢改變」。
+     */
+    fun shortTerm(close: List<Double>): String {
+        if (close.size < 11) return "資料不足"
+        val p = close.last()
+        val ma5 = sma(close, 5)!!
+        val ch5 = change(close, 5) ?: 0.0
+        return when {
+            p > ma5 && ch5 >= 1.0 -> "反彈"
+            p < ma5 && ch5 <= -1.0 -> "續跌"
+            p > ma5 && ch5 > 0 -> "偏強整理"
+            p < ma5 && ch5 < 0 -> "偏弱整理"
+            else -> "整理"
+        }
+    }
+
+    /**
+     * 中期走勢階段（約 1～3 個月）：價格、月線（20 日）、季線（60 日）的排列與方向，
      * 搭配離季線的距離與 RSI 判斷初升／主升／末升、初跌／主跌／末跌或盤整。
+     * 「初」只看最近 10 個交易日內剛交叉的；「末」要 RSI 也到極端，不只離季線遠（避免一直卡在同一個階段）。
      */
     fun stage(close: List<Double>): MarketStage {
         if (close.size < 65) return MarketStage.UNKNOWN
@@ -91,7 +110,7 @@ object Technicals {
         val dist60 = (p / ma60 - 1) * 100
         val r = rsi(close) ?: 50.0
         // 近 20 天內月線是否剛穿越季線（剛轉多或剛轉空）
-        fun crossedRecently(up: Boolean): Boolean = (close.size - 20 until close.size - 1).any { i ->
+        fun crossedRecently(up: Boolean): Boolean = (close.size - 10 until close.size - 1).any { i ->
             val a20 = sma(close, 20, i) ?: return@any false
             val a60 = sma(close, 60, i) ?: return@any false
             if (up) a20 <= a60 else a20 >= a60
@@ -99,10 +118,10 @@ object Technicals {
         val up = p > ma20 && ma20 > ma60 && ma20 > ma20Before
         val down = p < ma20 && ma20 < ma60 && ma20 < ma20Before
         return when {
-            up && (dist60 > 15 || r > 75) -> MarketStage.LATE_UP
+            up && (r > 75 || (dist60 > 15 && r > 65)) -> MarketStage.LATE_UP
             up && crossedRecently(true) -> MarketStage.EARLY_UP
             up -> MarketStage.MAIN_UP
-            down && (dist60 < -15 || r < 25) -> MarketStage.LATE_DOWN
+            down && (r < 25 || (dist60 < -15 && r < 35)) -> MarketStage.LATE_DOWN
             down && crossedRecently(false) -> MarketStage.EARLY_DOWN
             down -> MarketStage.MAIN_DOWN
             p >= ma60 -> MarketStage.RANGE_HIGH

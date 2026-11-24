@@ -262,7 +262,8 @@ private fun describe(name: String, b: DailyBars?, stage: MarketStage): String {
     fun f(v: Double?) = v?.let { "%.0f".format(it) } ?: "?"
     fun p(v: Double?) = v?.let { "%+.1f%%".format(it) } ?: "?"
     return "$name 收 ${f(c.last())}，5 日 ${p(Technicals.change(c, 5))}、20 日 ${p(Technicals.change(c, 20))}、60 日 ${p(Technicals.change(c, 60))}；" +
-        "月線 ${f(Technicals.sma(c, 20))}、季線 ${f(Technicals.sma(c, 60))}、RSI ${f(Technicals.rsi(c))}；規則判斷：${stage.label}"
+        "月線 ${f(Technicals.sma(c, 20))}、季線 ${f(Technicals.sma(c, 60))}、RSI ${f(Technicals.rsi(c))}；" +
+        "規則判斷：中期（月線與季線，約 1～3 個月）${stage.label}；短期（近 5 個交易日）${Technicals.shortTerm(c)}"
 }
 
 /** 給 AI 的使用者狀況：大盤、資金計畫、持股與紀律（每日報告與對話共用）。 */
@@ -603,7 +604,9 @@ suspend fun Repository.buildDailyReport(ds: NewsDataset, onStep: (String) -> Uni
         if (seen.isNotEmpty()) appendLine("近幾份報告已推薦（代號×次數）：" + seen.entries.sortedByDescending { it.value }.joinToString("、") { "${it.key}×${it.value}" })
     }
     onStep("⑤ AI 判讀候選表與新聞（${candidates.size} 檔）…")
-    val r = com.enwei.moneymanager.net.GroqAi.dailyReport(situation(snap) + "\n" + table + "\n" + digest) ?: return null
+    val r0 = com.enwei.moneymanager.net.GroqAi.dailyReport(situation(snap) + "\n" + table + "\n" + digest) ?: return null
+    // 大盤階段由規則決定並寫明時間尺度（AI 自己寫的階段每天用詞不一、沒寫是短期還是中期）
+    val r = snap.index?.close?.let { c -> r0.copy(stage = "中期${snap.indexStage.label.substringBefore('（')}・短期${Technicals.shortTerm(c)}") } ?: r0
     onStep("⑥ 檢查推薦與數字…")
     // 只留候選表裡的；同產業最多 2 檔；不足 4 檔時用分數最高的補上（理由用 App 算的依據）
     val perPick = HashMap<String, Int>()
