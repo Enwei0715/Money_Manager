@@ -180,7 +180,7 @@ fun MacroEditScreen(nav: NavController, id: Long) {
         nav.popBackStack()
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()) {
         BackTopBar(if (orig == null) "新增巨集" else "編輯巨集", { d.forId = null; nav.popBackStack() }) {
             if (orig != null) TextButton(onClick = {
                 repo.settings.update { s -> s.copy(macros = s.macros.filter { it.id != orig.id }) }
@@ -191,7 +191,7 @@ fun MacroEditScreen(nav: NavController, id: Long) {
                 nav.popBackStack()
             }) { Text("刪除", color = MaterialTheme.colorScheme.error) }
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).imePadding()) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Box(Modifier.background(MaterialTheme.colorScheme.surface)) {
                 FormLine("名稱") { FormInput(d.name, { d.name = it }, placeholder = "例如：房租、發薪日") }
             }

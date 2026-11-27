@@ -96,10 +96,10 @@ fun ReportScreen(nav: NavController) {
         if (attach) { appendLine(); appendLine("——"); append(diag) }
     }
     val subject = "帳理問題回報 ${BuildConfig.VERSION_NAME}"
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).imePadding()) {
         BackTopBar("回報問題", { nav.popBackStack() })
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(16.dp),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("類型", fontSize = AppText.secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)

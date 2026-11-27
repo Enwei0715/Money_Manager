@@ -21,6 +21,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.ime
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -140,6 +144,7 @@ fun typeColor(t: TxnType): Color = when (t) {
 private fun minorToExpr(minor: Long) = Money.fromMinor(minor).stripTrailingZeros().toPlainString()
 
 /** 記一筆：上方表單、下方依欄位切換計算機鍵盤／分類格／帳戶格。 */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpochDay: Long? = null, initialAccountId: Long? = null,
     initialToAccountId: Long? = null, initialAmount: Long? = null,
@@ -692,8 +697,9 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
         },
         snackbarHost = { SnackbarHost(snack) },
     ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize()) {
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).imePadding()
+        // 鍵盤出現時可視範圍縮到鍵盤上方（之前 imePadding 加在捲動內容裡，可視範圍不變，下方欄位會被鍵盤蓋住）
+        Column(Modifier.padding(pad).consumeWindowInsets(pad).imePadding().fillMaxSize()) {
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())
                 .then(Modifier.pointerInput(Unit) { detectTapGestures { focusManager.clearFocus(); keyboard?.hide() } })) {
                 // 類型：支出／收入／轉帳（＋股票），一條分段選擇，選中的填色
                 val segs = buildList {
@@ -938,6 +944,16 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                     }
                 }
                 // 巨集步驟沒有說明欄（存不下來），不顯示
+                // 說明欄與下方推薦包在一起：鍵盤升起、停下後整組捲到看得見的位置
+                val noteBring = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+                val imeInsets = WindowInsets.ime
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                LaunchedEffect(noteFocused) {
+                    if (noteFocused) androidx.compose.runtime.snapshotFlow { imeInsets.getBottom(density) }.collectLatest { h ->
+                        if (h > 0) { kotlinx.coroutines.delay(80); noteBring.bringIntoView() }
+                    }
+                }
+                Column(Modifier.bringIntoViewRequester(noteBring)) {
                 if (!macroMode) FormRow("說明", color, noteFocused, onClick = {}) {
                     UnderlineField(note, { note = it }, "", Modifier.onFocusChanged { noteFocused = it.isFocused; if (it.isFocused) panel = Panel.NONE }, singleLine = false)
                 }
@@ -972,6 +988,7 @@ fun TxnEditScreen(nav: NavController, id: Long, initialType: String?, initialEpo
                             ) { Text(n, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, maxLines = 1) }
                         }
                     }
+                }
                 }
                 // 往來（分帳、別人先付、還款）：放在表單最後，主要欄位一路填下來不被打斷
                 // 往來功能關閉時不顯示（編輯原本就有往來資料的交易仍保留，避免無法修改）
