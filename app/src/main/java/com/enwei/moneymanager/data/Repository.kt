@@ -1820,8 +1820,17 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
             val weak = invented || merchant.isNullOrBlank() || CategoryGuesser.isGenericMerchant(merchant) || weakMerchant(merchant)
             // 分類是 AI 依那個編出來的店名猜的：位置推測可以蓋過
             val catGuessed = categoryId == null || (weak && aiNote.contains("分類由 AI 推測"))
+            val allTx = db.txns().all()
+            // 通知有店名但只寫連鎖店名或被截短（「萊爾」）：換成附近記過的那家分店（「萊爾富 永和店」）
+            val notifName = merchant
+            val branch = if (!weak && notifName != null) PlaceHints.branchNear(appCtx, here, allTx, notifName)?.takeIf { it != notifName } else null
+            if (branch != null) {
+                merchant = branch
+                suggestCategory(branch, type, occurred, p.amountMinor, account?.id)?.categoryId?.let { categoryId = it }
+                aiNote += "（依位置：通知寫「$notifName」，附近記過「$branch」）"
+                PlaceHints.note("$notifName → 「$branch」（附近記過的分店）")
+            }
             if (weak || categoryId == null) {
-                val allTx = db.txns().all()
                 val g = PlaceHints.fromHistory(appCtx, here, allTx)
                     // 已知位置的店（手動指定或用店名找到的）：離得夠近就直接用
                     // 已知位置的店只靠距離（80 公尺內最近一家）：不是確定的證據，標成不確定
@@ -1840,7 +1849,7 @@ class Repository(internal val db: AppDatabase, val settings: SettingsStore) {
                     aiNote += if (g.fromHistory) "（依位置：常在這裡記「${g.merchant}」）" else "（依位置推測：附近的「${g.merchant}」）"
                     PlaceHints.note("$amountText → 「${g.merchant}」" + if (g.fromHistory) "（過去紀錄）" else "（附近店家）")
                 } else PlaceHints.note("$amountText：這附近沒有過去紀錄，OpenStreetMap 也查不到 50 公尺內的店（已記下位置，補上店家後下次就會用）")
-            } else PlaceHints.note("${merchant}：通知已有店家與分類，不需要推測（已記下位置）")
+            } else if (branch == null) PlaceHints.note("${merchant}：通知已有店家與分類，附近沒有記過同一家的分店（已記下位置）")
         }
         // 不確定的一律放「待確認」：分類填不出來、單邊的轉入／轉出（可能是自己帳戶間的轉帳，不一定是真正的收支）、
         // 內容像促銷但被判成交易

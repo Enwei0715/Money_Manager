@@ -337,6 +337,54 @@ object PlaceHints {
         return near.firstOrNull()?.first
     }
 
+    /** 比對店名用：去掉括號、公司字尾、空白與符號 */
+    private fun normName(s: String) = s.replace(Regex("[（(].*?[)）]"), "").replace(Regex("(股份)?有限公司|企業社|商行"), "")
+        .replace(Regex("[\\s　\\-_.·・*]"), "").lowercase()
+
+    /**
+     * 通知寫的店名 [notif] 和記過的店名 [m] 是不是同一家（連鎖）店：開頭相同，且相同的部分涵蓋通知店名全部
+     * （銀行截短，例如「萊爾」對「萊爾富 永和店」）或涵蓋記過店名的第一段（「全家便利商店」對「全家 永和店」）。
+     */
+    fun sameBrand(notif: String, m: String): Boolean {
+        val a = normName(notif)
+        val b = normName(m)
+        if (a.isEmpty() || b.isEmpty()) return false
+        val first = normName(m.trim().split(' ', '　').first())
+        val p = a.commonPrefixWith(b).length
+        val han = Character.UnicodeScript.of(a[0].code) == Character.UnicodeScript.HAN
+        if (p < (if (han) 2 else 3)) return false
+        return p >= a.length || (first.isNotEmpty() && p >= first.length)
+    }
+
+    /**
+     * 通知只寫連鎖店名或被截短（「萊爾」）：在 [radius] 公尺內記過的店（付款位置紀錄、店家位置）找同一家的分店，取最近的
+     * （一樣近時取記比較多次的）。最近的就是通知寫的名字本身時回傳它（不換）。
+     */
+    fun branchNear(ctx: Context, loc: Location, txns: List<TxnEntity>, notif: String, radius: Float = 200f): String? {
+        if (normName(notif).length < 2) return null
+        val slack = loc.accuracy.coerceAtMost(60f)
+        val byId = txns.associateBy { it.id }
+        val hits = HashMap<String, Pair<Int, Float>>()
+        fun hit(m: String, d: Float, n: Int) {
+            if (d > radius + slack || !sameBrand(notif, m)) return
+            val o = hits[m]
+            hits[m] = ((o?.first ?: 0) + n) to minOf(o?.second ?: Float.MAX_VALUE, d)
+        }
+        load(ctx).forEach { s ->
+            val t = byId[s.txnId] ?: return@forEach
+            // 只用已確認的交易：待確認的店名可能本身就是推測的
+            if (t.status != TxnStatus.CONFIRMED) return@forEach
+            val m = t.merchant?.trim()?.takeIf { it.length >= 2 } ?: return@forEach
+            hit(m, dist(loc.latitude, loc.longitude, s.lat, s.lon), 1)
+        }
+        val names = txns.mapNotNull { it.merchant?.trim() }.toSet()
+        (merchantGeo().mapNotNull { (k, v) -> v?.let { k to it } }.toMap() + merchantPins()).forEach { (k, v) ->
+            if (k in names) hit(k, dist(loc.latitude, loc.longitude, v.first, v.second), 0)
+        }
+        return hits.entries.sortedWith(compareBy<Map.Entry<String, Pair<Int, Float>>> { (it.value.second / 25).toInt() }.thenByDescending { it.value.first })
+            .firstOrNull()?.key
+    }
+
     fun historyNear(ctx: Context, loc: Location, txns: List<TxnEntity>, radius: Float = 150f): List<String> {
         val byId = txns.associateBy { it.id }
         return load(ctx).mapNotNull { s ->
