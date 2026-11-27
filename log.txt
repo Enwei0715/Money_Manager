@@ -1,0 +1,63 @@
+[shot] 01_txns
+[shot] 02_txns_calendar
+[shot] 03_stats
+[shot] 04_stats_months
+[shot] 05_stats_analysis
+[shot] 06_assets
+[shot] 07_stocks
+[shot] 08_stocks_watch
+[shot] 09_assistant
+[shot] 10_assistant_discipline
+[shot] 11_tools
+[shot] 12_settings
+[shot] 13_settings_2
+[shot] 14_editor_at_cafeteria2
+[shot] 15_editor_amount_85
+[miss] 找不到「捨棄」
+[miss] 找不到「不儲存」
+[shot] 16_txns_after_notifications
+[shot] 17_txn_linepay_60
+[shot] 18_txn_kyoto_85
+[miss] 找不到「紀錄」
+[shot] 19_notif_log
+[shot] 20_holding_2330
+[shot] 21_stock_2330_mid
+[shot] 22_stock_2330_analysis
+[shot] 23_stock_2330_projection
+[shot] 24_dark_txns
+[shot] 25_dark_editor
+[miss] 找不到「捨棄」
+[shot] 26_bigfont_txns
+[shot] 27_bigfont_assets
+[shot] 28_bigfont_editor
+[anr]
+11-27 11:27:21.652   545   656 I WindowManager: ANR in ActivityRecord{a771f6a u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t7}.  Reason: Input dispatching timed out (Application does not have a focused window)
+11-27 11:27:21.653  1197  1197 W DisplayController: (CHANGE_SUPPORTED_BOUNDS) perDisplayBounds - CachedDisplayInfo{size=Point(1080, 2400), cutout=Rect(0, 128 - 0, 0), rotation=0}: [WindowBounds{bounds=Rect(0, 0 - 1080, 2400), insets=Rect(0, 128 - 0, 63), availableSize=Point(1080, 2209), rotationHint=0}, WindowBounds{bounds=Rect(0, 0 - 2400, 1080), insets=Rect(128, 74 - 0, 63), availableSize=Point(2272, 943), rotationHint=1}, WindowBounds{bounds=Rect(0, 0 - 1080, 2400), insets=Rect(0, 128 - 0, 128), availableSize=Point(1080, 2144), rotationHint=2}, WindowBounds{bounds=Rect(0, 0 - 2400, 1080), insets=Rect(0, 74 - 128, 63), availableSize=Point(2272, 943), rotationHint=3}]
+11-27 11:27:21.663  1972  3128 I FA      : App measurement initialized, version: 91004
+11-27 11:27:21.663  1972  3128 I FA      : To enable debug logging run: adb shell setprop log.tag.FA VERBOSE
+11-27 11:27:21.664  1972  3128 I FA      : To enable faster debug mode event logging run:
+11-27 11:27:21.664  1972  3128 I FA      :   adb shell setprop debug.firebase.analytics.app com.google.android.youtube
+11-27 11:27:21.687  1685  1893 I SnapshotHandler: Unable to retrieve flag snapshot for com.google.android.libraries.performance.primes#com.google.android.inputmethod.latin, using defaults.
+11-27 11:27:21.705  1594  1613 I PeopleGalProvider: Gal directories started.
+11-27 11:27:21.708  1197  1901 E OpenGLRenderer: Unable to match the desired swap behavior.
+11-27 11:27:21.718   922  1111 E RoleControllerServiceImpl: Default/fallback role holder package doesn't qualify for the role, package: com.google.android.gms.supervision, role: android.app.role.SYSTEM_SUPERVISION
+11-27 11:27:21.720  1197  1901 E FrameEvents: updateAcquireFence: Did not find frame.
+11-27 11:27:21.721  1930  1930 W ActivityThread: getPackageInfo() called with an older ApplicationInfo than the cached version for package com.google.android.googlequicksearchbox
+11-27 11:27:21.723  1930  1930 I BgTaskExecutorImpl: Starting EXCLUSIVE background task FETCH_OPT_IN_STATUSES.
+--
+11-27 11:27:28.410   545  3210 E ActivityManager: ANR in com.google.android.apps.nexuslauncher (com.google.android.apps.nexuslauncher/.NexusLauncherActivity)
+11-27 11:27:28.410   545  3210 E ActivityManager: PID: 1197
+11-27 11:27:28.410   545  3210 E ActivityManager: Reason: Input dispatching timed out (Application does not have a focused window)
+11-27 11:27:28.410   545  3210 E ActivityManager: Parent: com.google.android.apps.nexuslauncher/.NexusLauncherActivity
+11-27 11:27:28.410   545  3210 E ActivityManager: ErrorId: f38d02f6-1056-4204-9e60-bc72838226e8
+11-27 11:27:28.410   545  3210 E ActivityManager: Frozen: false
+11-27 11:27:28.410   545  3210 E ActivityManager: Load: 8.55 / 1.93 / 0.64
+11-27 11:27:28.410   545  3210 E ActivityManager: ----- Output from /proc/pressure/memory -----
+11-27 11:27:28.410   545  3210 E ActivityManager: some avg10=7.26 avg60=1.62 avg300=0.35 total=1184035
+11-27 11:27:28.410   545  3210 E ActivityManager: full avg10=0.34 avg60=0.09 avg300=0.01 total=154917
+11-27 11:27:28.410   545  3210 E ActivityManager: ----- End output from /proc/pressure/memory -----
+11-27 11:27:28.410   545  3210 E ActivityManager: ----- Output from /proc/pressure/cpu -----
+11-27 11:27:28.410   545  3210 E ActivityManager: some avg10=56.08 avg60=16.75 avg300=3.93 total=12551936
+
+[anr traces] anr_2026-11-27-11-27-22-339 
+done
